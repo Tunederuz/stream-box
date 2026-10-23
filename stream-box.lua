@@ -173,9 +173,16 @@ mp.add_hook("on_load", 50, function()
     mp.set_property("hwdec", "auto-safe")
 end)
 
+-- Écran d'accueil à la demande : plus de stream, ni de bascule automatique, jusqu'au choix d'un streamer ou d'une vidéo
+local function show_home()
+    stop_twitch()
+    set_mode("home")
+    mp.commandv("stop")
+end
+
 mp.register_event("start-file", function()
     if mp.get_property("path") == stream_url() then return end
-    if mode == "twitch" then
+    if mode == "twitch" or mode == "home" then
         -- Fichier chargé par quelqu'un d'autre (Jellyfin) : on lui laisse la place
         stop_twitch()
         set_mode("media")
@@ -227,6 +234,7 @@ local function auto_switch()
 end
 
 mp.register_event("end-file", function(e)
+    if mode == "home" then return end
     if mode == "media" then
         if e.reason == "error" then mp.osd_message("Impossible de lire cette vidéo", 5) end
         if back_timer then back_timer:kill() end
@@ -300,11 +308,11 @@ local function draw_menu()
     fs = h / 24
     repeat
         bw, bh, sp, title_h = fs * 10, fs * 1.7, fs * 0.35, fs * 2
-        local max_rows = math.max(1, math.floor((h * 0.9 - title_h - bh - sp * 4) / (bh + sp)))
+        local max_rows = math.max(1, math.floor((h * 0.9 - title_h - bh * 2 - sp * 5) / (bh + sp)))
         cols = math.ceil(n / max_rows)
         rows = math.ceil(n / cols)
         panel_w = cols * bw + (cols - 1) * sp
-        panel_h = title_h + rows * (bh + sp) + sp * 3 + bh
+        panel_h = title_h + rows * (bh + sp) + sp * 4 + bh * 2
         local fits = panel_w <= w * 0.9
         if not fits then fs = fs * 0.9 end
     until fits or fs < 10
@@ -348,6 +356,7 @@ local function draw_menu()
     button(x0, y, bh, "", false, toggle_chat, chat_visible)   -- case : afficher / masquer le chat
     button(x0 + bh + sp, y, panel_w - bh - sp, "Chat : " .. CORNER_LABELS[corner], false, toggle_corner, nil,
            chat_visible and "FFFFFF" or "808080")
+    button(x0, y + bh + sp, panel_w, "⌂ Écran d'accueil", mode == "home", show_home)
 
     menu.res_x, menu.res_y = w, h
     menu.data = table.concat(out, "\n")
@@ -622,14 +631,15 @@ local function on_key(key)
         elseif key == "ok" then
             if keyboard_nav and items[sel] then
                 items[sel].action()
-                if mode == "twitch" and sel <= #streamers then hide_menu() else show_menu(true) end
+                -- Streamer ou écran d'accueil choisis : le menu se ferme ; réglages du chat : il reste ouvert
+                if mode == "home" or (mode == "twitch" and sel <= #streamers) then hide_menu() else show_menu(true) end
             else
                 show_menu(true)
             end
         else
             hide_menu()
         end
-    elseif mode == "twitch" then
+    elseif mode == "twitch" or mode == "home" then
         if key == "up" or key == "down" then
             zap(key == "down" and 1 or -1)
         elseif key == "ok" or key == "home" then
@@ -684,6 +694,7 @@ mp.register_script_message("streambox-channel", from_remote(start_channel))
 mp.register_script_message("streambox-toggle-chat", from_remote(toggle_chat))
 mp.register_script_message("streambox-cycle-corner", from_remote(toggle_corner))
 mp.register_script_message("streambox-play", play_media)
+mp.register_script_message("streambox-home", from_remote(show_home))
 mp.register_script_message("streambox-twitch", from_remote(function() start_channel(channel) end))
 
 -- Réglages numériques du chat, modifiables depuis la télécommande : défaut, minimum, maximum
@@ -739,7 +750,8 @@ local function aurora(w, h)
 end
 
 local function ambient_wanted()
-    return mode == "twitch" and (offline or #streamers == 0) and not mp.get_property_native("video-params")
+    return (mode == "home" or (mode == "twitch" and (offline or #streamers == 0)))
+        and not mp.get_property_native("video-params")
 end
 
 local function draw_ambient()
