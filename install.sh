@@ -126,6 +126,9 @@ as_box '
   mkdir -p ~/.local/bin ~/.local/share ~/.local/state/stream-box
   [ -x ~/.local/share/streamlink-venv/bin/pip ] || python3 -m venv ~/.local/share/streamlink-venv
   ~/.local/share/streamlink-venv/bin/pip install -q -U pip streamlink
+  # Appli Qt Quick qui embarque mpv (ui.py, lecteur choisi dans ~/.config/stream-box/player, voir player.sh)
+  [ -x ~/.local/share/ui-venv/bin/pip ] || python3 -m venv ~/.local/share/ui-venv
+  ~/.local/share/ui-venv/bin/pip install -q -U pip PySide6-Essentials python-mpv
   [ -x ~/.local/share/media-venv/bin/pip ] || python3 -m venv ~/.local/share/media-venv
   ~/.local/share/media-venv/bin/pip install -q -U pip '"$MEDIA_VENV_PACKAGES"'
   ln -sf ~/.local/share/streamlink-venv/bin/streamlink ~/.local/bin/streamlink

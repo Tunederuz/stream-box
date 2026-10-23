@@ -309,3 +309,31 @@ refresh token ; retirés si Twitch refuse). Config de l'appli : `twitch-app.json
 (Helix `streams/followed`, `channels/followed` jusqu'à 500, photos par `users`), cache 60 s. `/api/channel` accepte
 aussi une chaîne suivie. Sur la TV : grille comme En direct (live d'abord), OK regarde, ou propose « Ajouter à ma
 liste » si la chaîne n'y est pas. `GET /api/qr?text=` : QR code générique (segno).
+
+## Appli Qt qui embarque mpv (ui.py, player.sh)
+
+Pour un menu rendu par la puce graphique (animations fluides) et, plus tard, deux vidéos à la fois, la fenêtre de la
+session cage n'est plus forcément mpv : `ui.py` est une appli Qt Quick (PySide6, venv `~/.local/share/ui-venv`) qui
+fait dessiner la vidéo par libmpv (render API OpenGL, python-mpv) dans un `QQuickFramebufferObject` (`MpvVideo`,
+scène `ui.qml`), le QML pouvant ensuite se poser par-dessus. `player.sh` (lancé par `start.sh`) est la boucle du
+lecteur : appli Qt si `~/.config/stream-box/player` contient `qt`, sinon mpv seul ; retour automatique à mpv si l'appli
+s'arrête trois fois de suite en moins de 30 s (journal `/tmp/stream-box-ui.log`). `ui.py` prend les mêmes options que
+la ligne de commande de mpv (`--x=y`, `--script=` cumulés, `--…-append=` par `change-list`) : scripts Lua, socket IPC,
+chat, Jellyfin, Home Assistant marchent comme avant. Points délicats, vérifiés :
+- décodage matériel : libmpv a besoin d'une connexion Wayland (`wl_display`, ici une connexion à part ouverte par
+  `wl_display_connect`) pour créer son VADisplay ; sans elle « Could not create a VA display » et décodage au processeur.
+  Avec : vaapi, 1080p60 sans image perdue, ~28 % d'un cœur comme mpv seul ;
+- PySide libérerait le `QOpenGLFramebufferObject` rendu à Qt (plantage dans `texture()`) : référence gardée ;
+- pas de retournement vertical (`setMirrorVertically`) : l'image serait à l'envers ;
+- `force-window` activé seulement une fois le contexte de rendu créé (`Bridge.ready`) : passé au démarrage, mpv ne peut
+  pas encore ouvrir sa sortie vidéo et le désactive ; sans lui, rien ne se redessine sans vidéo (écran d'ambiance et
+  chaîne hors ligne figés sur la dernière image) ;
+- touches : Qt → noms mpv (`KEYS`) ; les touches XF86 sans nom (OK de la télécommande Xiaomi : keysym 0x1008ffa0)
+  prennent le nom que mpv leur donnait, « 0x21 » + 4 derniers chiffres du keysym (`0x21ffa0`) ; souris → `mouse` ;
+- `jellyfin-mpv-shim` abandonne si le socket n'existe pas encore (l'appli l'ouvre plus tard que mpv) : `player.sh`
+  efface l'ancien socket et attend le nouveau avant de lancer le shim. Attention aux `pkill -f '[j]ellyfin-mpv-shim'`
+  de la boucle : ils tuent aussi une commande SSH qui contiendrait ce mot ;
+- streamlink (`--player-external-http`) ne sert qu'un client à la fois : pour tester une seconde fenêtre, un second
+  streamlink sur un autre port.
+Changer de lecteur sans redémarrer la box : écrire le fichier puis `quit` par l'IPC (la boucle relance). Un nouveau
+`start.sh`/`player.sh` ne s'applique qu'au démarrage suivant de la session (bash garde le script lu en mémoire).
