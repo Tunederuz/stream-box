@@ -270,7 +270,7 @@ page avec un `render(<état de /api/state>)` à la place de `refresh()`, captur�
 ## Grand menu de la TV (tv_menu.lua)
 
 Façon Android TV, ouvert par le bouton Menu de la télécommande (touche Accueil) dans tous les modes : onglets à gauche
-(En direct, Réglages, Système), contenu à droite, vidéo assombrie derrière, refermé par Menu, Retour depuis les
+(En direct, Rediffusions, Historique, Réglages, Système), contenu à droite, vidéo assombrie derrière, refermé par Menu, Retour depuis les
 onglets, ou au bout de 90 s sans touche. Script séparé, chargé par `start.sh` (`--script` en second). Tant qu'il est
 ouvert (`user-data/streambox/tvmenu`, que `chat_overlay.py` suit aussi pour masquer le chat, sinon dessiné
 par-dessus), `stream-box.lua` lui transmet toutes les touches (`streambox-tvmenu-key`) ;
@@ -283,4 +283,10 @@ pixels de l'écran), préparées par `GET /api/tvimage?src=&w=&h=&round=` (ffmpe
 BGRA à alpha prémultiplié, cache `/tmp/stream-box-images`, seulement les serveurs d'images Twitch et YouTube).
 Tester : `keypress HOMEPAGE`, `keypress DOWN`… par l'IPC, puis `/api/preview`. Pour recharger le script sans
 redémarrer la session : relancer mpv puis `load-script` une seule fois (un second `load-script` en ferait deux).
-Prochaines étapes : rediffusions et historique avec miniatures, puis finitions.
+Rediffusions : puces des streamers (défilement à la largeur), puis rangées « Rediffusions » et « Clips de la
+semaine » de `/api/replays` (4 cartes visibles, ◀ ▶ défilent). Historique : grille de `/api/history`, 2 rangées
+visibles. Cartes vidéo : miniature à coins arrondis (`radius` de `/api/tvimage`), barre de progression et textes
+dessous (rien ne se dessine sur une image posée). OK sur une vidéo commencée ouvre une fenêtre d'actions (Reprendre à
+…, Depuis le début, et Retirer de l'historique dans l'historique) ; les images sont retirées tant qu'elle est ouverte,
+sinon elles passeraient par-dessus. La miniature d'un live en cours (`vod-secure.twitch.tv`, image « en cours de
+traitement ») n'est pas autorisée : la carte garde son ▶ dessiné. Prochaine étape : finitions.

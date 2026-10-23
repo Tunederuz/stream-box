@@ -396,20 +396,31 @@ def ambient_loop():
 TV_IMAGE_DIR = "/tmp/stream-box-images"
 
 
-def tv_image(src, width, height, round_):
+def tv_image(src, width, height, round_, radius=0):
+    """Image prête pour overlay-add : round_ = disque, sinon coins arrondis de radius pixels (0 : carrés)."""
     host = urllib.parse.urlsplit(src).hostname or ""
-    if not (host.endswith(".jtvnw.net") or host == "i.ytimg.com"):
+    if not (host.endswith(".jtvnw.net") or host in ("i.ytimg.com", "clips-media-assets2.twitch.tv")):
         raise ValueError("image refusée")
     width, height = max(8, min(1280, width)), max(8, min(1280, height))
-    key = hashlib.sha1(f"{src}|{width}|{height}|{round_}".encode()).hexdigest()[:24]
+    radius = max(0, min(radius, width // 2, height // 2))
+    key = hashlib.sha1(f"{src}|{width}|{height}|{round_}|{radius}".encode()).hexdigest()[:24]
     path = os.path.join(TV_IMAGE_DIR, f"{key}.bgra")
     if not os.path.exists(path):
         os.makedirs(TV_IMAGE_DIR, exist_ok=True)
         with urllib.request.urlopen(src, timeout=10) as r:
             data = r.read(8_000_000)
         vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},format=rgba"
-        if round_:   # disque aux bords adoucis ; alpha prémultiplié : les couleurs suivent l'opacité
-            vf += (",geq=a='clip(255*(W/2+0.5-hypot(X+0.5-W/2,Y+0.5-H/2)),0,255)'"
+        # Bords adoucis : disque, ou coins arrondis (distance au centre du quart de cercle du coin le plus proche).
+        # Alpha prémultiplié : les couleurs suivent l'opacité.
+        alpha = None
+        if round_:
+            alpha = "clip(255*(W/2+0.5-hypot(X+0.5-W/2,Y+0.5-H/2)),0,255)"
+        elif radius:
+            r = radius
+            alpha = (f"clip(255*({r}+0.5-hypot(max(0,max({r}-X-0.5,X+0.5-W+{r})),"
+                     f"max(0,max({r}-Y-0.5,Y+0.5-H+{r})))),0,255)")
+        if alpha:
+            vf += (f",geq=a='{alpha}'"
                    ":r='r(X,Y)*alpha(X,Y)/255':g='g(X,Y)*alpha(X,Y)/255':b='b(X,Y)*alpha(X,Y)/255'")
         tmp = f"{path}.{threading.get_ident()}.tmp"
         subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", "pipe:0", "-vf", vf, "-frames:v", "1",
@@ -1003,7 +1014,7 @@ class Handler(BaseHTTPRequestHandler):
                 q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
                 try:
                     self.send(200, tv_image(q.get("src", [""])[0], int(q.get("w", ["0"])[0]), int(q.get("h", ["0"])[0]),
-                                            q.get("round", ["0"])[0] == "1"))
+                                            q.get("round", ["0"])[0] == "1", int(q.get("radius", ["0"])[0])))
                 except (ValueError, subprocess.SubprocessError) as e:
                     self.send(400, {"error": str(e)})
             elif self.path == "/api/account":
