@@ -668,14 +668,19 @@ local KEYS = {
     UP = "up", DOWN = "down", LEFT = "left", RIGHT = "right",
     ENTER = "ok", KP_ENTER = "ok", ["0x21ffa0"] = "ok",
     HOMEPAGE = "home", GO_BACK = "back", ESC = "back", ["0x2111a0"] = "menu",
-    PLAY = "play", PLAYPAUSE = "play",   -- sans ce lien, mpv les traduit en pause, ce qui figeait le direct
+    WWW = "homescreen",
+    PLAY = "corner", PLAYPAUSE = "corner",   -- sans ce lien, mpv les traduit en pause, ce qui figeait le direct
 }
 local DIRECTIONS = { up = { 0, -1 }, down = { 0, 1 }, left = { -1, 0 }, right = { 1, 0 } }
 
 local function on_key(key)
-    if key == "play" then   -- écran d'accueil, depuis n'importe quel mode
+    if key == "homescreen" then   -- écran d'accueil, depuis n'importe quel mode
         if menu_visible then hide_menu() end
         if mode ~= "home" then show_home() end
+        return
+    elseif key == "corner" then   -- coin suivant pour le chat, menu ouvert ou non
+        toggle_corner()
+        if menu_visible then show_menu(keyboard_nav) else mp.osd_message("Chat : " .. CORNER_LABELS[corner], 2) end
         return
     end
     if toast_channel and (key == "ok" or key == "back") then
