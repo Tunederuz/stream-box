@@ -14,6 +14,9 @@ télécommande web installable sur téléphone (PWA).
 - **Retour en arrière dans le direct** (quelques minutes gardées en mémoire), pause en différé.
 - **Qui est en live** dans le menu et la télécommande, **notification** quand un streamer de la liste lance son live.
 - **Écran d'ambiance** quand rien ne joue : horloge, date, météo et prochains lives prévus (plannings Twitch).
+- **Sondages et prédictions** de la chaîne regardée affichés sur la TV, avec le temps restant et les résultats.
+- **QR code de la télécommande** sur l'écran d'ambiance et dans le menu, pour les invités.
+- **Mode nuit** : son compressé (sons forts atténués, voix remontées) pour regarder à faible volume.
 - **Compte Twitch** facultatif : plus de pubs sur les chaînes où l'on est abonné, VOD réservées aux abonnés.
 - **Historique et reprise de lecture** : chaque vidéo reprend où on s'était arrêté ; les rediffusions Twitch sont
   synchronisées avec le compte Twitch connecté.
@@ -61,6 +64,7 @@ Les options sont facultatives (`sudo bash install.sh --help`) :
 | Option | Rôle |
 |---|---|
 | `--city VILLE` | Météo de l'écran d'ambiance |
+| `--remote-url URL` | Adresse de la télécommande web montrée en QR code (sinon `http://<IP de la box>:8080`) |
 | `--streamers a,b,c` | Liste de départ (elle se remplit aussi depuis la télécommande web) |
 | `--allow-from IP` | Ouvre le port 8080 à cette adresse (reverse proxy HTTPS) si le pare-feu ufw est actif |
 | `--static-ip IP/PRÉFIXE --gateway IP [--dns IP]` | IP fixe sur la connexion Ethernet |

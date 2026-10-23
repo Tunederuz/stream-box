@@ -10,6 +10,7 @@ La box s'annonce toute seule dans Home Assistant par la **découverte MQTT** (`m
 |---|---|
 | `select.stream_box_streamer` | Streamer en cours (options = la liste de la box) |
 | `switch.stream_box_chat`, `switch.stream_box_pause` | Chat affiché, pause |
+| `switch.stream_box_auto_switch`, `switch.stream_box_night`, `switch.stream_box_events` | Bascule automatique, mode nuit, sondages et prédictions à l'écran |
 | `number.stream_box_volume` | Volume de mpv |
 | `button.stream_box_retour_au_stream`, `button.stream_box_revenir_au_direct`, `button.stream_box_eteindre` | Actions |
 | `text.stream_box_lire_un_lien` | Écrire une URL la lance sur la TV |

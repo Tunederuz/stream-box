@@ -153,8 +153,8 @@
 
   <section>
     <h2>Streamers</h2>
+    <button data-action="home" id="home" style="width: 100%; margin-bottom: 8px">⌂ Écran d'accueil</button>
     <div class="grid" id="streamers"></div>
-    <button data-action="home" id="home" style="width: 100%; margin-top: 8px">⌂ Écran d'accueil</button>
     <div id="timeshift" hidden>
       <div class="times" style="margin: 12px 0 6px"><span>Direct</span><span id="delay"></span></div>
       <div class="row">
@@ -176,6 +176,7 @@
       <button data-action="mute" id="mute">Couper le son</button>
       <button data-action="pause" id="pause">Pause</button>
     </div>
+    <button id="night" style="width: 100%; margin-top: 8px" aria-pressed="false">Mode nuit : désactivé</button>
   </section>
 
   <section>
@@ -242,6 +243,11 @@
     <p>Quand le streamer regardé est hors ligne depuis une minute, passer tout seul sur le premier streamer en live de
       la liste.</p>
     <button id="auto-switch" style="width: 100%" aria-pressed="true">Bascule automatique : activée</button>
+    <p style="margin-top: 14px">Pendant un direct, afficher en haut de la TV les sondages et prédictions en cours sur
+      la chaîne.</p>
+    <button id="events" style="width: 100%" aria-pressed="true">Sondages et prédictions : affichés</button>
+    <p style="margin-top: 14px">Le mode nuit (dans Télécommande → Lecture) atténue les sons forts et remonte les
+      voix, pour baisser le volume sans perdre les dialogues.</p>
   </section>
 
   <section>
@@ -370,6 +376,12 @@ function render(s) {
   $("auto-switch").textContent = `Bascule automatique : ${s.auto_switch ? "activée" : "désactivée"}`;
   $("auto-switch").classList.toggle("current", s.auto_switch);
   $("auto-switch").setAttribute("aria-pressed", String(s.auto_switch));
+  for (const [id, on, label] of [["night", s.night, `Mode nuit : ${s.night ? "activé" : "désactivé"}`],
+                                 ["events", s.events, `Sondages et prédictions : ${s.events ? "affichés" : "masqués"}`]]) {
+    $(id).textContent = label;
+    $(id).classList.toggle("current", on);
+    $(id).setAttribute("aria-pressed", String(on));
+  }
   settings.chat_bg = s.chat_bg;
   settings.chat_size = s.chat_size;
   $("chat_bg-value").textContent = `${s.chat_bg} %`;
@@ -688,6 +700,8 @@ $("preview").ontoggle = () => previewTick();
 document.addEventListener("visibilitychange", () => previewTick());
 $("history").ontoggle = () => { if ($("history").open) loadHistory(); };
 $("auto-switch").onclick = () => send("auto_switch", { enabled: !lastState?.auto_switch });
+$("night").onclick = () => send("flag", { key: "night", enabled: !lastState?.night });
+$("events").onclick = () => send("flag", { key: "events", enabled: !lastState?.events });
 $("replays").ontoggle = () => {
   if ($("replays").open) loadReplays(replaysLogin ?? lastState?.channel ?? lastState?.streamers?.[0]);
 };
