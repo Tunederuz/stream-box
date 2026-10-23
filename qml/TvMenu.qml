@@ -19,6 +19,7 @@ Item {
     readonly property var tabs: [
         { id: "live", label: "En direct" }, { id: "follows", label: "Suivis" },
         { id: "replays", label: "Rediffusions" }, { id: "youtube", label: "YouTube" },
+        { id: "jellyfin", label: "Jellyfin" },
         { id: "history", label: "Historique" },
         { id: "settings", label: "Réglages" }, { id: "system", label: "Système" }]
     readonly property var corners: ({ tl: "↖ haut gauche", tr: "↗ haut droite", br: "↘ bas droite", bl: "↙ bas gauche" })
@@ -38,12 +39,15 @@ Item {
     // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
     property var yt: null
     // Couleurs selon l'onglet : violet pour Twitch (direct, suivis, rediffusions), rouge pour YouTube, neutre
-    // (anthracite, halo blanc) pour ce qui n'appartient à aucun service (historique, réglages, système)
-    readonly property string theme: tabId === "youtube" ? "youtube"
+    // (anthracite, halo blanc) pour ce qui n'appartient à aucun service (historique, réglages, système), bleu Jellyfin
+    readonly property string theme: tabId === "youtube" || tabId === "jellyfin" ? tabId
         : ["live", "follows", "replays"].indexOf(tabId) >= 0 ? "twitch" : "neutral"
     readonly property var pal: theme === "youtube"
         ? { accent: "#ff0033", veil: "#180407", rail: "#1a0709", glow: 0.22, sheet: "#261216", key: "#3a1f24",
             surface: "#33171c", surfaceFocus: "#4a2027", label: "#c9a3aa" }
+        : theme === "jellyfin"
+        ? { accent: "#00a4dc", veil: "#030f17", rail: "#06131c", glow: 0.20, sheet: "#0f202c", key: "#173244",
+            surface: "#12293a", surfaceFocus: "#1b3c54", label: "#9cc3d8" }
         : theme === "twitch"
         ? { accent: "#9146ff", veil: "#0a0612", rail: "#100b17", glow: 0.10, sheet: "#21182c", key: "#33283f",
             surface: "#2a2034", surfaceFocus: "#3a2c4e", label: "#a99fc0" }
@@ -56,6 +60,19 @@ Item {
     property bool ytSearching: false
     property int ytRow: 0                    // 0 : ligne de recherche, puis résultats (s'il y en a) et chaînes
     property var ytSel: ({})
+    // Jellyfin : accueil (/api/jellyfin), recherche, épisodes d'une série ouverte, rangée et choix par rangée
+    property var jf: null
+    property var jfResults: null             // { query, results } ou null
+    property var jfPreview: null             // série ouverte : { id, name, episodes, first }
+    property bool jfSearching: false
+    property int jfRow: 0
+    property var jfSel: ({})
+    // Onglets à rangées (YouTube, Jellyfin) : même page, même clavier, état propre à chacun
+    readonly property bool jfTab: tabId === "jellyfin"
+    readonly property int mRow: jfTab ? jfRow : ytRow
+    readonly property var mSel: jfTab ? jfSel : ytSel
+    readonly property bool mSearching: jfTab ? jfSearching : ytSearching
+    readonly property var mResults: jfTab ? jfResults : ytResults
     // Clavier à l'écran (recherche) : texte, ligne et colonne choisies
     property bool kbOpen: false
     property string kbText: ""
@@ -185,6 +202,84 @@ Item {
         return days <= 0 ? "aujourd'hui" : days === 1 ? "hier" : days < 7 ? "il y a " + days + " j"
             : days < 31 ? "il y a " + Math.floor(days / 7) + " sem." : new Date(iso).toLocaleDateString(Qt.locale("fr_FR"), "d MMM")
     }
+    function loadJellyfin() {
+        call("GET", "/api/jellyfin", undefined, function (d) { jf = d || { error: true } })
+    }
+    function jfSearch(q) {
+        q = q.trim()
+        if (!q) return
+        jfResults = { query: q, results: [] }   // avant jfSearching : le texte de la ligne de recherche lit query
+        jfSearching = true
+        jfPreview = null
+        call("GET", "/api/jellyfin_search?q=" + encodeURIComponent(q), undefined, function (d) {
+            jfSearching = false
+            jfResults = { query: q, results: d && d.results ? d.results : [], error: !d }
+            jfRow = 1; var s = Object.assign({}, jfSel); s["search"] = 0; jfSel = s
+        })
+    }
+    // Rangées de l'onglet Jellyfin : recherche, série ouverte, résultats, reprendre, prochains épisodes, ajouts récents
+    function jfRows() {
+        var rows = [{ kind: "search" }]
+        if (jfPreview)
+            rows.push({ kind: "preview", key: "preview", title: jfPreview.name + " · épisodes", items: jfPreview.episodes || [],
+                        loading: jfPreview.episodes === null })
+        if (jfResults) rows.push({ kind: "results", key: "search", title: "Résultats pour « " + jfResults.query + " »", items: jfResults.results })
+        if (jf && jf.configured) {
+            if (jf.resume.length) rows.push({ kind: "jf", key: "resume", title: "Reprendre", items: jf.resume })
+            if (jf.nextup.length) rows.push({ kind: "jf", key: "nextup", title: "Prochains épisodes", items: jf.nextup })
+            for (var i = 0; i < jf.libraries.length; i++)
+                rows.push({ kind: "jf", key: "lib:" + jf.libraries[i].id, title: jf.libraries[i].name + " · ajouts récents", items: jf.libraries[i].items })
+        }
+        return rows
+    }
+    function mediaRows() { return jfTab ? jfRows() : ytRows() }
+    // Série (ou saison) choisie : ses épisodes dans une rangée juste sous la recherche, focus sur le premier pas vu
+    function jfOpenSeries(item) {
+        jfPreview = { id: item.series, name: item.title, episodes: null }
+        jfRow = 1
+        call("GET", "/api/jellyfin_series?id=" + encodeURIComponent(item.series), undefined, function (d) {
+            if (!jfPreview || jfPreview.id !== item.series) return
+            jfPreview = Object.assign({}, jfPreview, { episodes: d ? d.episodes : [] })
+            var s = Object.assign({}, jfSel); s["preview"] = d ? d.first : 0; jfSel = s
+        })
+    }
+    function jfPlay(item, fromStart) {
+        call("POST", "/api/jellyfin_play", { id: item.id, from_start: !!fromStart }, function () { refreshSoon.restart() })
+        close()
+    }
+    function jfChoose(item) {
+        if (item.type === "Series" || item.type === "Season") return jfOpenSeries(item)
+        var name = item.episode ? item.title + " · " + item.episode : item.title
+        var items = []
+        if (Fmt.resumable(item.position, item.seconds, item.finished)) {
+            items.push({ label: "▶  Reprendre à " + Fmt.clock(item.position), ok: function () { jfPlay(item) } })
+            items.push({ label: "↺  Depuis le début", ok: function () { jfPlay(item, true) } })
+        } else items.push({ label: item.finished ? "↺  Revoir" : "▶  Lire", ok: function () { jfPlay(item, true) } })
+        if (item.type === "Episode" && item.series && !(jfPreview && jfPreview.id === item.series))
+            items.push({ label: "☰  Tous les épisodes", ok: function () { jfOpenSeries({ series: item.series, title: item.title }) } })
+        openModal(name, items)
+    }
+    // Ligne d'infos d'une carte des onglets à rangées
+    function hm(t) {
+        var h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60
+        return h > 0 ? h + " h " + (m < 10 ? "0" : "") + m : m + " min"
+    }
+    function cardMeta(row, it) {
+        var parts
+        if (jfTab)
+            parts = it.type === "Series" ? [it.unplayed ? it.unplayed + " à voir" : "Série", it.year]
+                : it.episode ? [it.episode] : [it.year, it.seconds ? hm(it.seconds) : ""]
+        else if (row.kind === "results")
+            parts = [it.channel, it.seconds ? Fmt.clock(it.seconds) : "", it.views ? Fmt.big(it.views) + " vues" : ""]
+        else
+            parts = [ago(it.date), it.views ? Fmt.big(it.views) + " vues" : ""]
+        return parts.filter(function (t) { return !!t }).join(" · ") + (it.finished ? " · vu" : "")
+    }
+    function searchLabel() {
+        var r = mResults
+        return mSearching ? "Recherche de « " + r.query + " »…" : r ? "Nouvelle recherche  (« " + r.query + " »)"
+            : jfTab ? "Rechercher dans Jellyfin" : "Rechercher sur YouTube"
+    }
     function loadHistory() { call("GET", "/api/history", undefined, function (d) { history = d || [] }) }
     function play(url, fromStart) {
         call("POST", "/api/play", { url: url, from_start: !!fromStart }, function () { refreshSoon.restart() })
@@ -209,7 +304,8 @@ Item {
         if (isOpen) return
         tab = 0; area = "content"; shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0
         follows = null; replays = ({}); history = null; rpLogin = ""; rpRow = 0; rpSel = [0, 0, 0]
-        yt = null; ytRow = 0; ytSel = ({}); kbOpen = false   // les résultats de recherche restent d'une ouverture à l'autre
+        yt = null; ytRow = 0; ytSel = ({}); kbOpen = false
+        jf = null; jfRow = 0; jfSel = ({})   // les résultats de recherche restent d'une ouverture à l'autre
         var list = st.streamers || []
         liveSel = Math.max(0, list.indexOf(st.channel))
         startFocus = true
@@ -423,6 +519,11 @@ Item {
             if (!yt) return "Chargement…"
             return yt.channels.length ? yt.channels.length + (yt.channels.length === 1 ? " chaîne" : " chaînes") + " · dernières vidéos"
                 : "Recherche une vidéo, ou ajoute des chaînes depuis la télécommande"
+        case "jellyfin":
+            if (!jf) return "Chargement…"
+            if (jf.error) return "Jellyfin injoignable pour l'instant"
+            if (!jf.configured) return "Ta bibliothèque Jellyfin"
+            return jf.server + " · la progression suit sur tous tes appareils"
         case "settings": return "◀ ▶ pour changer une valeur"
         }
         return ""
@@ -436,6 +537,7 @@ Item {
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
         if (id === "youtube" && yt === null) loadYoutube()
+        if (id === "jellyfin" && jf === null) loadJellyfin()
         if (id === "replays") {
             if (!rpLogin) rpLogin = st.channel || (st.streamers || [])[0] || ""
             loadReplays(rpLogin)
@@ -476,14 +578,14 @@ Item {
         case "live": return keyLive(k)
         case "follows": return keyFollows(k)
         case "replays": return keyReplays(k)
-        case "youtube": return keyYoutube(k)
+        case "youtube": case "jellyfin": return keyMedia(k)
         case "history": return keyHistory(k)
         case "settings": return keyRows(k, settingsRows())
         case "system": return keyRows(k, systemRows())
         }
     }
     function enterContent() {
-        if (tabId === "youtube") { area = "content"; ytRow = 0; return }
+        if (tabId === "youtube" || tabId === "jellyfin") { area = "content"; setRow(0); return }
         if (tabId === "follows" && (!follows || !follows.configured)) return
         if (tabId === "history" && !(history && history.length)) return
         area = "content"
@@ -539,22 +641,28 @@ Item {
             } else if (row.items[sel]) chooseVideo(row.items[sel])
         }
     }
-    function keyYoutube(k) {
-        var rows = ytRows()
-        ytRow = Math.min(ytRow, rows.length - 1)
-        var row = rows[ytRow]
+    function setRow(v) { if (jfTab) jfRow = v; else ytRow = v }
+    function setMediaSel(s) { if (jfTab) jfSel = s; else ytSel = s }   // (setSel est la ligne choisie des Réglages)
+    function keyMedia(k) {
+        var rows = mediaRows()
+        var r = Math.min(mRow, rows.length - 1)
+        var row = rows[r]
         if (row.kind === "search") {
             if (k === "ok") { kbOpen = true; kbRow = 0; kbCol = 0 }
-            else if (k === "down" && rows.length > 1) ytRow = 1
+            else if (k === "down" && rows.length > 1) setRow(1)
             else if (k === "left") area = "rail"
             return
         }
-        var sel = ytSel[row.key] || 0, s = Object.assign({}, ytSel)
-        if (k === "up") ytRow--
-        else if (k === "down") ytRow = Math.min(rows.length - 1, ytRow + 1)
-        else if (k === "left") { if (sel === 0) area = "rail"; else { s[row.key] = sel - 1; ytSel = s } }
-        else if (k === "right") { s[row.key] = Math.min(row.items.length - 1, sel + 1); ytSel = s }
-        else if (k === "ok" && row.items[sel]) { if (row.kind === "chans") ytChannelMenu(row.items[sel]); else chooseVideo(row.items[sel]) }
+        var sel = Math.min(mSel[row.key] || 0, Math.max(0, row.items.length - 1)), s = Object.assign({}, mSel)
+        if (k === "up") setRow(r - 1)
+        else if (k === "down") setRow(Math.min(rows.length - 1, r + 1))
+        else if (k === "left") { if (sel === 0) area = "rail"; else { s[row.key] = sel - 1; setMediaSel(s) } }
+        else if (k === "right") { s[row.key] = Math.min(row.items.length - 1, sel + 1); setMediaSel(s) }
+        else if (k === "ok" && row.items[sel]) {
+            if (row.kind === "chans") ytChannelMenu(row.items[sel])
+            else if (jfTab) jfChoose(row.items[sel])
+            else chooseVideo(row.items[sel])
+        }
     }
     function keyKeyboard(k) {
         var rows = kbKeys
@@ -568,7 +676,7 @@ Item {
             if (key === "Espace") kbText += " "
             else if (key === "Effacer") kbText = kbText.slice(0, -1)
             else if (key === "Tout effacer") kbText = ""
-            else if (key === "Rechercher") { if (kbText.trim()) { kbOpen = false; ytSearch(kbText) } }
+            else if (key === "Rechercher") { if (kbText.trim()) { kbOpen = false; if (jfTab) jfSearch(kbText); else ytSearch(kbText) } }
             else if (kbText.length < 80) kbText += key
         }
     }
@@ -619,10 +727,11 @@ Item {
         Behavior on color { ColorAnimation { duration: 400 } }
         Behavior on opacity { NumberAnimation { duration: 400 } }
     }
-    Rectangle {   // seconde lueur rouge, en bas, sur l'onglet YouTube seulement
+    Rectangle {   // seconde lueur, en bas, sur les onglets YouTube et Jellyfin
         x: 500; y: 780; width: 1100; height: 600; radius: 300
-        color: "#ff0033"
-        opacity: menu.ytTheme ? 0.11 : 0
+        color: menu.accent
+        opacity: menu.theme === "youtube" ? 0.11 : menu.theme === "jellyfin" ? 0.10 : 0
+        Behavior on color { ColorAnimation { duration: 400 } }
         Behavior on opacity { NumberAnimation { duration: 400 } }
     }
 
@@ -632,8 +741,8 @@ Item {
     Logo { x: 56; y: 62 }
     Text { x: 126; y: 88 - height / 2; text: "Stream Box"; color: "white"; font.pixelSize: 28; font.bold: true }
     Rectangle {   // pastille de l'onglet : glisse d'un onglet à l'autre
-        x: 40; width: 320; height: 72; radius: 36
-        y: 220 + menu.tab * 92
+        x: 40; width: 320; height: 64; radius: 32
+        y: 206 + menu.tab * 76   // 9 onglets entre le logo et « En cours sur la TV »
         color: "white"
         opacity: menu.area === "rail" ? 1 : 0.10
         Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
@@ -642,7 +751,7 @@ Item {
     Repeater {
         model: menu.tabs.length
         Item {
-            x: 40; y: 220 + index * 92; width: 320; height: 72
+            x: 40; y: 206 + index * 76; width: 320; height: 64
             readonly property bool cur: index === menu.tab
             Rectangle {   // onglet en cours, focus dans le contenu : point de la couleur de l'onglet
                 visible: cur && menu.area !== "rail"
@@ -897,32 +1006,33 @@ Item {
             }
         }
 
-        // --- YouTube
+        // --- YouTube et Jellyfin : ligne de recherche, puis rangées horizontales de cartes
         Item {
             id: ytPage
             anchors.fill: parent
-            visible: menu.tabId === "youtube"
-            readonly property var rows: menu.ytRows()
+            visible: menu.tabId === "youtube" || menu.tabId === "jellyfin"
+            readonly property var rows: menu.mediaRows()
             // Rangées de hauteur fixe ; défilement vertical pour garder la rangée choisie à l'écran
             readonly property real rowH: 360   // deux rangées entières au-dessus de l'aide en bas
-            readonly property real scrollY: Math.max(0, (menu.ytRow - 1) * rowH)
+            readonly property real scrollY: Math.max(0, (menu.mRow - 1) * rowH)
             Item {   // ligne de recherche
                 y: 200; width: 760; height: 66
-                readonly property bool foc: menu.area === "content" && menu.ytRow === 0 && !menu.kbOpen
+                readonly property bool foc: menu.area === "content" && menu.mRow === 0 && !menu.kbOpen
                 scale: foc ? 1.03 : 1
                 Behavior on scale { NumberAnimation { duration: 160 } }
                 FocusFrame { active: parent.foc; radius: 35; glow: menu.accent }
-                Rectangle { anchors.fill: parent; radius: 35; color: parent.foc ? "#4a2027" : "#33171c" }
+                Rectangle { anchors.fill: parent; radius: 35; color: parent.foc ? menu.pal.surfaceFocus : menu.pal.surface }
                 Text {
                     x: 34; anchors.verticalCenter: parent.verticalCenter
-                    text: menu.ytSearching ? "Recherche de « " + menu.ytResults.query + " »…"
-                          : menu.ytResults ? "Nouvelle recherche  (« " + menu.ytResults.query + " »)" : "Rechercher sur YouTube"
+                    text: menu.searchLabel()
                     color: "white"; font.pixelSize: 27
                 }
             }
             Text {
-                visible: !!menu.yt && menu.yt.channels.length === 0 && !menu.ytResults
-                y: 320; text: "Ajoute des chaînes YouTube depuis la télécommande web (Réglages → Chaînes YouTube)."
+                visible: menu.jfTab ? !!menu.jf && !menu.jf.configured && !menu.jf.error
+                                    : !!menu.yt && menu.yt.channels.length === 0 && !menu.ytResults
+                y: 320; text: menu.jfTab ? "Jellyfin n'est pas associé à la box : dans l'appli Jellyfin, « Lire sur… » → la box."
+                                         : "Ajoute des chaînes YouTube depuis la télécommande web (Réglages → Chaînes YouTube)."
                 color: "#b4afc2"; font.pixelSize: 27
             }
             Item {   // rangées, sous la ligne de recherche
@@ -944,8 +1054,8 @@ Item {
                         }
                         Text {
                             visible: !!row && row.items.length === 0
-                            y: 70; text: row && row.kind === "results" ? (menu.ytSearching ? "Recherche…" : "Aucun résultat")
-                                       : row && row.loading ? "Chargement…" : "YouTube injoignable pour l'instant"
+                            y: 70; text: row && row.kind === "results" ? (menu.mSearching ? "Recherche…" : "Aucun résultat")
+                                       : row && row.loading ? "Chargement…" : menu.jfTab ? "Rien ici" : "YouTube injoignable pour l'instant"
                             color: "#8a85a0"; font.pixelSize: 24
                         }
                         ListView {   // chaînes trouvées : photo ronde, nom, abonnés, « dans ta liste »
@@ -954,12 +1064,12 @@ Item {
                             orientation: ListView.Horizontal; spacing: 30; interactive: false; clip: false
                             leftMargin: 40
                             model: visible ? row.items.length : 0
-                            currentIndex: visible ? (menu.ytSel["chans"] || 0) : 0
+                            currentIndex: visible ? (menu.mSel["chans"] || 0) : 0
                             onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
                             Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                             delegate: Item {
                                 readonly property var c: row.items[index] || {}
-                                readonly property bool foc: menu.area === "content" && menu.ytRow === r && index === (menu.ytSel["chans"] || 0)
+                                readonly property bool foc: menu.area === "content" && menu.mRow === r && index === (menu.mSel["chans"] || 0)
                                 width: 240; height: 302
                                 z: foc ? 2 : 1
                                 Item {
@@ -989,7 +1099,7 @@ Item {
                             orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
                             leftMargin: 40
                             model: visible ? row.items.length : 0
-                            currentIndex: visible ? (menu.ytSel[row.key] || 0) : 0
+                            currentIndex: visible ? (menu.mSel[row.key] || 0) : 0
                             onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
                             Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                             delegate: VideoCard {
@@ -999,13 +1109,10 @@ Item {
                                 Behavior on opacity { NumberAnimation { duration: 150 } }
                                 title: it.title || ""
                                 thumb: it.thumb || ""
-                                meta: (row.kind === "results"
-                                       ? [it.channel, it.seconds ? Fmt.clock(it.seconds) : "", it.views ? Fmt.big(it.views) + " vues" : ""]
-                                       : [menu.ago(it.date), it.views ? Fmt.big(it.views) + " vues" : ""])
-                                      .filter(function (t) { return !!t }).join(" · ") + (it.finished ? " · vu" : "")
+                                meta: menu.cardMeta(row, it)
                                 progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
                                 accent: menu.accent
-                                focused: menu.area === "content" && menu.ytRow === r && index === (menu.ytSel[row.key] || 0)
+                                focused: menu.area === "content" && menu.mRow === r && index === (menu.mSel[row.key] || 0)
                             }
                         }
                     }
@@ -1106,13 +1213,13 @@ Item {
         Rectangle {
             width: 1180; height: 690; radius: 30
             anchors.centerIn: parent
-            color: "#261216"
+            color: menu.pal.sheet
             scale: menu.kbOpen ? 1 : 0.95
             Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-            Text { x: 48; y: 36; text: "Rechercher sur YouTube"; color: "#c9a3aa"; font.pixelSize: 22; font.bold: true }
+            Text { x: 48; y: 36; text: menu.jfTab ? "Rechercher dans Jellyfin" : "Rechercher sur YouTube"; color: menu.pal.label; font.pixelSize: 22; font.bold: true }
             Rectangle {   // texte tapé
                 x: 44; y: 78; width: parent.width - 88; height: 76; radius: 18
-                color: "#14080a"; border.color: "#4a2027"; border.width: 2
+                color: Qt.darker(menu.pal.sheet, 1.8); border.color: menu.pal.surfaceFocus; border.width: 2
                 Text {
                     x: 26; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 52; elide: Text.ElideLeft
                     text: menu.kbText + "▏"; color: menu.kbText ? "white" : "#8a85a0"; font.pixelSize: 34
@@ -1132,7 +1239,7 @@ Item {
                                 readonly property bool foc: menu.kbRow === r && menu.kbCol === index
                                 readonly property bool wide: label.length > 1
                                 width: wide ? (r === 5 ? 348 : 312) : 96; height: 72; radius: 16   // 10 touches de large : 1068
-                                color: foc ? "white" : label === "Rechercher" ? "#e0002d" : "#3a1f24"   // rouge YouTube
+                                color: foc ? "white" : label === "Rechercher" ? menu.accent : menu.pal.key
                                 scale: foc ? 1.06 : 1
                                 Behavior on scale { NumberAnimation { duration: 120 } }
                                 Text {
