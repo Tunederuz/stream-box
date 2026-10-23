@@ -18,10 +18,10 @@
     --surface-3: rgba(255, 255, 255, .16); --line: rgba(255, 255, 255, .12);
     --text: #f6f4fb; --muted: #c2bdd3; --faint: #8a85a0;
     /* Verre : fond translucide flouté, reflet en haut, bord clair, ombre portée */
-    --glass: linear-gradient(160deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, .04) 60%);
-    --glass-edge: rgba(255, 255, 255, .16);
-    --glass-blur: blur(22px) saturate(130%);
-    --glass-shadow: 0 10px 34px rgba(5, 0, 20, .35), inset 0 1px 0 rgba(255, 255, 255, .18);
+    --glass: linear-gradient(160deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, .035) 60%);
+    --glass-edge: rgba(255, 255, 255, .12);
+    --glass-blur: blur(22px) saturate(115%);
+    --glass-shadow: 0 10px 34px rgba(5, 0, 20, .35), inset 0 1px 0 rgba(255, 255, 255, .12);
     --accent: #9146ff; --accent-2: #b67bff; --live: #ff4f5e; --error: #ff6b6b;
     --grad: linear-gradient(135deg, #8a3ffc 0%, #b062ff 100%);
     --radius: 20px; --radius-sm: 14px;
@@ -40,16 +40,16 @@
   }
   body::before {
     background:
-      radial-gradient(45% 32% at 15% 10%, rgba(138, 63, 252, .45), transparent 72%),
-      radial-gradient(42% 30% at 92% 35%, rgba(43, 107, 255, .26), transparent 72%),
-      radial-gradient(44% 30% at 15% 68%, rgba(255, 63, 142, .22), transparent 72%);
+      radial-gradient(45% 32% at 15% 10%, rgba(138, 63, 252, .30), transparent 72%),
+      radial-gradient(42% 30% at 92% 35%, rgba(43, 107, 255, .16), transparent 72%),
+      radial-gradient(44% 30% at 15% 68%, rgba(255, 63, 142, .13), transparent 72%);
     animation: drift-a 45s ease-in-out infinite alternate;
   }
   body::after {
     background:
-      radial-gradient(42% 30% at 80% 88%, rgba(176, 98, 255, .32), transparent 72%),
-      radial-gradient(36% 24% at 62% 4%, rgba(255, 79, 94, .16), transparent 72%),
-      radial-gradient(36% 26% at 50% 48%, rgba(80, 60, 255, .16), transparent 72%);
+      radial-gradient(42% 30% at 80% 88%, rgba(176, 98, 255, .20), transparent 72%),
+      radial-gradient(36% 24% at 62% 4%, rgba(255, 79, 94, .09), transparent 72%),
+      radial-gradient(36% 26% at 50% 48%, rgba(80, 60, 255, .09), transparent 72%);
     animation: drift-b 55s ease-in-out infinite alternate;
   }
   @keyframes drift-a { to { transform: translate(6%, 8%) rotate(8deg); } }
