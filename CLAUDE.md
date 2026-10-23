@@ -204,8 +204,9 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   télécommande qui annoncerait ces touches est à ajouter à `IGNORE` dans `boot-mode.py`. cage transmet ses touches à mpv ; stream-box.lua les lie (`KEYS`, `on_key`) : OK = `0x21ffa0`, Menu ≡ =
   `0x2111a0` (codes de la télécommande Xiaomi : à adapter pour une autre), Retour = `GO_BACK`, Accueil = `HOMEPAGE`, flèches, volume (actions par défaut de mpv). Menu fermé en
   Twitch : haut/bas zappent, OK affiche/retire le bandeau d'infos (titre, « EN DIRECT » ou retard), Accueil ouvre
-  le menu (OK aussi sur l'écran d'accueil), Menu ≡ affiche/masque le chat. Play (`PLAY`/`PLAYPAUSE`, lié exprès : sinon
-  mpv met en pause, ce qui figeait le direct) affiche l'écran d'accueil, dans tous les modes. En vidéo : OK pause, ←/→ ±10 s,
+  le menu (OK aussi sur l'écran d'accueil), Menu ≡ affiche/masque le chat. Dans tous les modes : WWW (le bouton
+  « navigateur ») affiche l'écran d'accueil, Play (`PLAY`/`PLAYPAUSE`, lié exprès : sinon mpv met en pause, ce qui
+  figeait le direct) fait changer le chat de coin. En vidéo : OK pause, ←/→ ±10 s,
   ↑ affiche/retire la barre de lecture (↓ la retire), Menu ≡ change de sous-titres, Retour ×2 revient au stream. Menu ouvert : flèches = sélection (le bouton
   le plus proche dans la direction), OK valide, Retour/Accueil ferment. Power éteint la box (logind).
   Appairage : mettre la télécommande en mode appairage (Xiaomi : Accueil + Retour jusqu'au clignotement), puis
