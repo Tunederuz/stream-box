@@ -87,8 +87,6 @@
   #preview-img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border-radius: 8px; background: #000;
                  display: block; }
   #preview-note { text-align: center; padding: 40px 0; color: var(--muted); background: #000; border-radius: 8px; }
-  .check { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; color: var(--muted); }
-  .check input { width: auto; min-height: auto; margin: 0; accent-color: var(--accent); }
   .replay .bar { height: 4px; border-radius: 2px; background: var(--bg); margin-top: 6px; overflow: hidden; }
   .replay .bar i { display: block; height: 100%; background: var(--accent); }
   .history-item { margin-top: 6px; }
@@ -193,7 +191,6 @@
       <div id="preview-box">
         <img id="preview-img" alt="Aperçu de l'écran de la TV" hidden>
         <div id="preview-note">Chargement…</div>
-        <label class="check"><input type="checkbox" id="preview-overlay" checked> Avec le chat et le menu</label>
       </div>
     </details>
   </section>
@@ -653,7 +650,7 @@ async function previewTick() {
   clearTimeout(previewTimer);
   if (!previewActive()) return;
   try {
-    const r = await fetch(`/api/preview?overlay=${$("preview-overlay").checked ? 1 : 0}`, { cache: "no-store" });
+    const r = await fetch("/api/preview", { cache: "no-store" });   // écran entier, comme sur la TV
     if (r.status === 204) {
       $("preview-img").hidden = true;
       $("preview-note").hidden = false;
@@ -676,7 +673,6 @@ async function previewTick() {
   if (previewActive()) previewTimer = setTimeout(previewTick, 1500);
 }
 $("preview").ontoggle = () => previewTick();
-$("preview-overlay").onchange = () => previewTick();
 document.addEventListener("visibilitychange", () => previewTick());
 $("history").ontoggle = () => { if ($("history").open) loadHistory(); };
 $("replays").ontoggle = () => {
