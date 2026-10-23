@@ -289,4 +289,9 @@ visibles. Cartes vidéo : miniature à coins arrondis (`radius` de `/api/tvimage
 dessous (rien ne se dessine sur une image posée). OK sur une vidéo commencée ouvre une fenêtre d'actions (Reprendre à
 …, Depuis le début, et Retirer de l'historique dans l'historique) ; les images sont retirées tant qu'elle est ouverte,
 sinon elles passeraient par-dessus. La miniature d'un live en cours (`vod-secure.twitch.tv`, image « en cours de
-traitement ») n'est pas autorisée : la carte garde son ▶ dessiné. Prochaine étape : finitions.
+traitement ») n'est pas autorisée : la carte garde son ▶ dessiné.
+Finitions : halo violet flou autour de l'élément choisi (`focus_ring`), textes trop longs qui défilent après une
+pause (`marquee` : largeur estimée à 0,52 em par caractère, `\clip` à la largeur, redessin à 15 images/s seulement
+tant qu'un texte défile, reparti du début à chaque touche ; menu ouvert ≈ +30 % d'un cœur), « En cours sur la TV »
+en bas du rail, météo de l'écran d'ambiance à côté de l'heure, carte du streamer regardé teintée de violet. Textes
+dimensionnés pour une TV vue du canapé (titres de cartes vidéo 33 px, infos 27 px, en 1920x1080).

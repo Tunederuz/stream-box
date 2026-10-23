@@ -88,6 +88,40 @@ local function label(x, y, size, color, s, align, extra)
 end
 
 
+-- Élément sélectionné : halo violet flou, puis cadre blanc (dessinés sous l'élément, qui les recouvre au centre)
+local function focus_ring(x, y, w, h, r)
+    return rrect(x - 10, y - 10, w + 20, h + 20, r + 8, VIOLET, "70", "\\blur14") .. "\n"
+        .. rrect(x, y, w, h, r, "FFFFFF", "00")
+end
+
+-- Texte trop long pour sa place : il défile après une pause, coupé à la largeur par \clip ; sinon affiché tel quel.
+-- ASS ne sait pas mesurer un texte : largeur estimée à 0,52 em par caractère, et \clip dans tous les cas.
+local MARQUEE_SPEED, MARQUEE_PAUSE, MARQUEE_GAP = 70, 1.5, 90   -- pixels par seconde, secondes, pixels
+local marquee_start, marquee_active = 0, false
+
+local function text_width(s, size)
+    local n = 0
+    for _ in tostring(s):gmatch("[^\128-\191]") do n = n + 1 end
+    return n * size * 0.52
+end
+
+local function marquee(out, x, y, width, size, color, s, extra)
+    s = tostring(s or "")
+    local clip = ("\\clip(%d,%d,%d,%d)"):format(x, y - size, x + width, y + size)
+    local tw = text_width(s, size)
+    if tw <= width then
+        out[#out + 1] = label(x, y, size, color, ass_escape(s), 4, (extra or "") .. clip)
+        return
+    end
+    marquee_active = true
+    local t = (mp.get_time() - marquee_start) % ((tw + MARQUEE_GAP) / MARQUEE_SPEED + MARQUEE_PAUSE)
+    local offset = math.max(0, t - MARQUEE_PAUSE) * MARQUEE_SPEED
+    for _, dx in ipairs({ 0, tw + MARQUEE_GAP }) do   -- deux copies : la seconde arrive quand la première part
+        out[#out + 1] = label(x - offset + dx, y, size, color, ass_escape(s), 4, (extra or "") .. clip)
+    end
+end
+
+
 -- API de remote.py
 
 local function api(method, path, body, callback)
@@ -360,14 +394,26 @@ local function draw_rail(out)
                                   i == tab and "\\b1" or "")
         end
     end
-    out[#out + 1] = label(56, H - 60, 22, "A0858A",
+    local live = state.live or {}
+    local now = state.mode == "twitch" and state.channel
+        and (state.channel .. "  ·  " .. (live[state.channel] and live[state.channel].title or "hors ligne"))
+        or state.mode == "media" and (state.title or "Vidéo") or nil
+    if now then
+        out[#out + 1] = label(56, H - 172, 21, "C09FA9", "EN COURS SUR LA TV", 4, "\\b1\\fsp2")
+        marquee(out, 56, H - 130, 310, 28, "FFFFFF", now)
+    end
+    out[#out + 1] = label(56, H - 60, 24, "A0858A",
         "▲▼◀▶ se déplacer   ·   OK valider   ·   Retour revenir   ·   Menu fermer", 4)
 end
 
 local function draw_header(out, title, subtitle)
     out[#out + 1] = label(460, 100, 52, "FFFFFF", ass_escape(title), 4, "\\b1")
-    if subtitle then out[#out + 1] = label(460, 152, 26, "C2AFB4", ass_escape(subtitle), 4) end
+    if subtitle then out[#out + 1] = label(460, 158, 32, "C2AFB4", ass_escape(subtitle), 4) end
     out[#out + 1] = label(W - 80, 100, 40, "FFFFFF", os.date("%H:%M"), 6)
+    local wx = (mp.get_property_native("user-data/streambox/ambient") or {}).weather
+    if wx and wx.temp then
+        out[#out + 1] = label(W - 215, 102, 32, "C2AFB4", ass_escape(("%d°  %s"):format(wx.temp, wx.text or "")), 6)
+    end
 end
 
 local function draw_live(out, imgs)
@@ -377,7 +423,7 @@ local function draw_live(out, imgs)
     draw_header(out, "En direct", n_live == 0 and "Aucun streamer de la liste n'est en live"
         or n_live == 1 and "1 streamer en live" or (n_live .. " streamers en live"))
     if #list == 0 then
-        out[#out + 1] = label(460, 260, 30, "C2AFB4", "La liste est vide : ajoute des streamers depuis la télécommande web.")
+        out[#out + 1] = label(460, 280, 34, "C2AFB4", "La liste est vide : ajoute des streamers depuis la télécommande web.")
         return
     end
     local cw, ch, gap, x0, y0 = 330, 150, 26, 460, 310
@@ -385,11 +431,11 @@ local function draw_live(out, imgs)
     local sx = x0
     for i, sc in ipairs(shortcuts()) do
         local focused = area == "content" and shortcut == i
-        local sw = 64 + #sc.label * 13
-        if focused then out[#out + 1] = rrect(sx - 5, 205, sw + 10, 74, 37, "FFFFFF", "00") end
+        local sw = 72 + #sc.label * 15
+        if focused then out[#out + 1] = focus_ring(sx - 5, 205, sw + 10, 74, 37) end
         out[#out + 1] = rrect(sx, 210, sw, 64, 32, sc.current and VIOLET or (focused and "4E2C3A" or "34202A"),
                               (focused or sc.current) and "00" or "30")
-        out[#out + 1] = label(sx + sw / 2, 242, 28, "FFFFFF", ass_escape(sc.label), 5, sc.current and "\\b1" or "")
+        out[#out + 1] = label(sx + sw / 2, 242, 31, "FFFFFF", ass_escape(sc.label), 5, sc.current and "\\b1" or "")
         sx = sx + sw + 20
     end
     local focus_row = area == "content" and not shortcut and math.floor((index - 1) / LIVE_COLS) or 0
@@ -401,8 +447,10 @@ local function draw_live(out, imgs)
             local focused = area == "content" and not shortcut and i == index
             local info = live[name]
             local current = state.mode == "twitch" and state.channel == name
-            if focused then out[#out + 1] = rrect(x - 6, y - 6, cw + 12, ch + 12, 26, "FFFFFF", "00") end
-            out[#out + 1] = rrect(x, y, cw, ch, 22, focused and "4E2C3A" or "34202A", focused and "00" or "30")
+            if focused then out[#out + 1] = focus_ring(x - 6, y - 6, cw + 12, ch + 12, 26) end
+            -- Streamer en cours : carte teintée de violet (un badge chevaucherait le nom)
+            out[#out + 1] = rrect(x, y, cw, ch, 22, current and "8A3C6B" or (focused and "4E2C3A" or "34202A"),
+                                  (focused or current) and "00" or "30")
             -- Photo : disque de couleur avec l'initiale, recouvert par l'image quand elle est prête
             local ax, ay, as = x + 22, y + 30, 90
             if info then out[#out + 1] = rrect(ax - 5, ay - 5, as + 10, as + 10, (as + 10) / 2, LIVE_RED, "00") end
@@ -412,16 +460,16 @@ local function draw_live(out, imgs)
                 imgs[#imgs + 1] = { src = state.avatars[name], x = ax, y = ay, w = as, h = as, round = true }
             end
             local tx = ax + as + 20
-            out[#out + 1] = label(tx, y + 44, 30, "FFFFFF", ass_escape(shorten(name, 14)), 4, "\\b1")
+            out[#out + 1] = label(tx, y + 40, 34, "FFFFFF", ass_escape(shorten(name, 12)), 4, "\\b1")
             if info then
-                out[#out + 1] = label(tx, y + 80, 22, LIVE_RED, "● " .. viewers(info.viewers), 4, "\\b1")
-                out[#out + 1] = label(tx, y + 110, 20, "C2AFB4", ass_escape(shorten(info.game or info.title or "", 18)), 4)
+                out[#out + 1] = label(tx, y + 82, 27, LIVE_RED, "● " .. viewers(info.viewers), 4, "\\b1")
+                if focused then
+                    marquee(out, tx, y + 116, x + cw - tx - 16, 25, "C2AFB4", info.game or info.title)
+                else
+                    out[#out + 1] = label(tx, y + 116, 25, "C2AFB4", ass_escape(shorten(info.game or info.title or "", 14)), 4)
+                end
             else
-                out[#out + 1] = label(tx, y + 80, 22, "A0858A", "Hors ligne", 4)
-            end
-            if current then
-                out[#out + 1] = rrect(x + cw - 120, y + 12, 104, 30, 15, VIOLET, "00")
-                out[#out + 1] = label(x + cw - 68, y + 27, 18, "FFFFFF", "EN COURS", 5, "\\b1")
+                out[#out + 1] = label(tx, y + 82, 27, "A0858A", "Hors ligne", 4)
             end
         end
     end
@@ -429,16 +477,15 @@ local function draw_live(out, imgs)
     local name = area == "content" and not shortcut and list[index]
     local info = name and live[name]
     if info and info.title then
-        out[#out + 1] = label(460, y0 + rows_visible * (ch + gap) + 20, 26, "E0C8D0",
-                              ass_escape(shorten(name .. "  ·  " .. info.title, 110)), 4)
+        marquee(out, 460, y0 + rows_visible * (ch + gap) + 24, W - 500, 31, "E0C8D0", name .. "  ·  " .. info.title)
     end
 end
 
 -- Carte vidéo : miniature (image posée par-dessus un fond), barre de progression dessous, titre, ligne d'infos
-local CARD_W, CARD_IMG_H, CARD_H, CARD_GAP = 330, 186, 270, 26
+local CARD_W, CARD_IMG_H, CARD_H, CARD_GAP = 330, 186, 302, 26
 
 local function video_card(out, imgs, x, y, item, focused, meta, progress)
-    if focused then out[#out + 1] = rrect(x - 6, y - 6, CARD_W + 12, CARD_IMG_H + 12, 22, "FFFFFF", "00") end
+    if focused then out[#out + 1] = focus_ring(x - 6, y - 6, CARD_W + 12, CARD_IMG_H + 12, 22) end
     out[#out + 1] = rrect(x, y, CARD_W, CARD_IMG_H, 16, "34202A", "00")
     out[#out + 1] = "{\\an5\\pos(" .. math.floor(x + CARD_W / 2) .. "," .. math.floor(y + CARD_IMG_H / 2)
         .. ")\\fs60\\bord0\\shad0\\1c&H68505A&\\p1}m -14 -20 l 22 0 -14 20{\\p0}"   -- ▶ en attendant l'image
@@ -449,9 +496,12 @@ local function video_card(out, imgs, x, y, item, focused, meta, progress)
         out[#out + 1] = rrect(x, y + CARD_IMG_H + 10, CARD_W, 6, 3, "5C3D4A", "00")
         out[#out + 1] = rrect(x, y + CARD_IMG_H + 10, math.max(6, CARD_W * math.min(1, progress)), 6, 3, VIOLET, "00")
     end
-    out[#out + 1] = label(x, y + CARD_IMG_H + 38, 23, focused and "FFFFFF" or "EADAE0",
-                          ass_escape(shorten(item.title or "", 30)), 4, focused and "\\b1" or "")
-    if meta then out[#out + 1] = label(x, y + CARD_IMG_H + 68, 19, "C09FA9", ass_escape(meta), 4) end
+    if focused then
+        marquee(out, x, y + CARD_IMG_H + 46, CARD_W, 33, "FFFFFF", item.title, "\\b1")
+    else
+        out[#out + 1] = label(x, y + CARD_IMG_H + 46, 33, "EADAE0", ass_escape(shorten(item.title or "", 19)), 4)
+    end
+    if meta then out[#out + 1] = label(x, y + CARD_IMG_H + 88, 27, "C09FA9", ass_escape(meta), 4) end
 end
 
 -- Premier élément visible d'une rangée qui défile, pour garder sel à l'écran
@@ -480,7 +530,7 @@ local function draw_replays(out, imgs)
     local chips = rows[1].items
     local csel = rp_sel.chips or 1
     local x, focused_row = 460, area == "content" and rp_row or nil
-    local function chip_w(name) return 96 + #name * 15 end
+    local function chip_w(name) return 96 + #name * 17 end
     -- Défilement à la largeur : la puce choisie et celle du streamer affiché doivent tenir dans la ligne
     local keep = focused_row == 1 and csel or 1
     for i, name in ipairs(chips) do if focused_row ~= 1 and name == rp_login then keep = i end end
@@ -498,21 +548,21 @@ local function draw_replays(out, imgs)
         if x + cw > W - 40 then break end
         local focused = focused_row == 1 and i == csel
         local current = name == rp_login
-        if focused then out[#out + 1] = rrect(x - 5, 185, cw + 10, 74, 37, "FFFFFF", "00") end
+        if focused then out[#out + 1] = focus_ring(x - 5, 185, cw + 10, 74, 37) end
         out[#out + 1] = rrect(x, 190, cw, 64, 32, current and VIOLET or (focused and "4E2C3A" or "34202A"),
                               (current or focused) and "00" or "30")
         out[#out + 1] = rrect(x + 10, 198, 48, 48, 24, "5C3D4A", "00")
         if state.avatars and state.avatars[name] then
             imgs[#imgs + 1] = { src = state.avatars[name], x = x + 10, y = 198, w = 48, h = 48, round = true }
         end
-        out[#out + 1] = label(x + 70, 222, 24, "FFFFFF", ass_escape(name), 4, current and "\\b1" or "")
+        out[#out + 1] = label(x + 70, 222, 28, "FFFFFF", ass_escape(name), 4, current and "\\b1" or "")
         x = x + cw + 16
     end
     -- Rediffusions et clips
     local y = 300
     for r = 2, #rows do
         local row = rows[r]
-        out[#out + 1] = label(462, y, 22, "C09FA9", ass_escape(row.title:upper()), 4, "\\b1\\fsp2")
+        out[#out + 1] = label(462, y, 25, "C09FA9", ass_escape(row.title:upper()), 4, "\\b1\\fsp2")
         local sel = rp_sel[row.kind] or 1
         rp_first[row.kind] = scroll(rp_first[row.kind], sel, 4)
         for i = rp_first[row.kind], math.min(#row.items, rp_first[row.kind] + 3) do
@@ -527,7 +577,7 @@ local function draw_replays(out, imgs)
         if #row.items > rp_first[row.kind] + 3 then
             out[#out + 1] = label(W - 40, y + 26 + CARD_IMG_H / 2, 40, "C09FA9", "›", 6)
         end
-        y = y + CARD_H + 40
+        y = y + CARD_H + 34
     end
 end
 
@@ -567,12 +617,12 @@ local function draw_modal(out)
     local mx, my = (W - mw) / 2, (H - mh) / 2
     out[#out + 1] = rrect(0, 0, W, H, 0, "0A0305", "50")
     out[#out + 1] = rrect(mx, my, mw, mh, 28, "2C1821", "00")
-    out[#out + 1] = label(mx + 44, my + 62, 30, "FFFFFF", ass_escape(shorten(modal.title or "", 46)), 4, "\\b1")
+    marquee(out, mx + 44, my + 62, mw - 88, 35, "FFFFFF", modal.title, "\\b1")
     for i, it in ipairs(modal.items) do
         local by = my + 112 + (i - 1) * 92
         local focused = i == modal.sel
         out[#out + 1] = rrect(mx + 30, by, mw - 60, 76, 38, focused and "FFFFFF" or "3F2833", "00")
-        out[#out + 1] = label(mx + 70, by + 38, 28, focused and "20101A" or (it.danger and "8F8FFF" or "FFFFFF"),
+        out[#out + 1] = label(mx + 70, by + 38, 33, focused and "20101A" or (it.danger and "8F8FFF" or "FFFFFF"),
                               ass_escape(it.label), 4, focused and "\\b1" or "")
     end
 end
@@ -584,7 +634,7 @@ local function draw_rows(out, rows, title, subtitle, width)
     local x, y, rw = 460, 210, width or 980
     -- Défilement : on part de la ligne qui garde l'élément choisi dans les 760 px disponibles
     local heights = {}
-    for i, r in ipairs(rows) do heights[i] = r.header and 64 or (r.hint and 98 or 78) end
+    for i, r in ipairs(rows) do heights[i] = r.header and 68 or (r.hint and 110 or 84) end
     local first, used = 1, 0
     if focused_row then
         for i = focused_row, 1, -1 do
@@ -597,22 +647,22 @@ local function draw_rows(out, rows, title, subtitle, width)
         local r = rows[i]
         if y + heights[i] > H - 60 then break end
         if r.header then
-            out[#out + 1] = label(x + 4, y + 40, 22, "C09FA9", ass_escape(r.header:upper()), 4, "\\b1\\fsp2")
+            out[#out + 1] = label(x + 4, y + 42, 25, "C09FA9", ass_escape(r.header:upper()), 4, "\\b1\\fsp2")
         else
             local focused = i == focused_row
             local h = heights[i]
-            if focused then out[#out + 1] = rrect(x - 5, y - 5, rw + 10, h + 10, 24, "FFFFFF", "00") end
+            if focused then out[#out + 1] = focus_ring(x - 5, y - 5, rw + 10, h + 10, 24) end
             out[#out + 1] = rrect(x, y, rw, h, 20, focused and "4E2C3A" or "34202A", focused and "00" or "30")
-            local ty = r.hint and y + 34 or y + h / 2
-            out[#out + 1] = label(x + 30, ty, 30, r.danger and "8F8FFF" or "FFFFFF", ass_escape(r.label), 4)
-            if r.hint then out[#out + 1] = label(x + 30, y + 70, 21, "C2AFB4", ass_escape(r.hint), 4) end
+            local ty = r.hint and y + 38 or y + h / 2
+            out[#out + 1] = label(x + 30, ty, 34, r.danger and "8F8FFF" or "FFFFFF", ass_escape(r.label), 4)
+            if r.hint then out[#out + 1] = label(x + 30, y + 78, 25, "C2AFB4", ass_escape(r.hint), 4) end
             if r.toggle ~= nil then   -- interrupteur dessiné
                 local sx, sy = x + rw - 110, y + h / 2 - 20
                 out[#out + 1] = rrect(sx, sy, 76, 40, 20, r.toggle and VIOLET or "68505A", "00")
                 out[#out + 1] = rrect(sx + (r.toggle and 40 or 4), sy + 4, 32, 32, 16, "FFFFFF", "00")
             elseif r.value then
                 local arrows = focused and r.step
-                out[#out + 1] = label(x + rw - 30, y + h / 2, 28, "F4E2E8",
+                out[#out + 1] = label(x + rw - 30, y + h / 2, 32, "F4E2E8",
                                       (arrows and "◀  " or "") .. ass_escape(r.value) .. (arrows and "  ▶" or ""), 6)
             end
         end
@@ -647,6 +697,7 @@ end
 
 function draw()
     if not is_open then return end
+    marquee_active = false
     -- Voile sur la vidéo ; opaque sans vidéo, pour cacher l'écran d'ambiance (horloge, QR code)
     local out = { rrect(0, 0, W, H, 0, "12060A", mp.get_property_native("video-params") and "1C" or "00") }
     out[#out + 1] = "{\\an7\\pos(0,0)\\bord0\\shad0\\1c&HFF4691&\\1a&HD8&\\blur120\\p1}m 1400 -200 l 2200 -200 2200 500 1400 500{\\p0}"
@@ -672,9 +723,9 @@ function draw()
         -- QR code de la télécommande web : pour tout ce qui demande de taper du texte
         local side = draw_qr(out, 1340, 230, 300)
         if side then
-            out[#out + 1] = label(1340, 230 + side + 40, 26, "FFFFFF", "Télécommande sur le téléphone", 4, "\\b1")
-            out[#out + 1] = label(1340, 230 + side + 78, 21, "C2AFB4", "Lien à lire, nouveau streamer, compte Twitch…", 4)
-            out[#out + 1] = label(1340, 230 + side + 110, 21, "C2AFB4",
+            out[#out + 1] = label(1340, 230 + side + 44, 30, "FFFFFF", "Télécommande sur le téléphone", 4, "\\b1")
+            out[#out + 1] = label(1340, 230 + side + 86, 25, "C2AFB4", "Lien, streamer, compte Twitch…", 4)
+            out[#out + 1] = label(1340, 230 + side + 124, 25, "C2AFB4",
                                   ass_escape((qr.url or ""):gsub("^https?://", ""):gsub("/$", "")), 4)
         end
     end
@@ -743,6 +794,7 @@ end
 
 local function on_key(key)
     arm_idle()
+    marquee_start = mp.get_time()
     if key == "home" then return close_menu() end
     if key == "homescreen" then
         act("home")
@@ -899,5 +951,6 @@ mp.register_script_message("streambox-tvmenu-close", close_menu)
 mp.register_script_message("streambox-tvmenu-key", on_key)
 mp.observe_property("osd-dimensions", "native", function() if is_open then draw() end end)
 mp.add_periodic_timer(20, function() if is_open then draw() end end)   -- heure
+mp.add_periodic_timer(1 / 15, function() if is_open and marquee_active then draw() end end)   -- textes défilants
 mp.set_property_native("user-data/streambox/tvmenu", false)
 refresh()
