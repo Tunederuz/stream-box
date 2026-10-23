@@ -1,10 +1,12 @@
 -- Stream Box : grand menu façon Android TV, ouvert par le bouton Menu de la télécommande (touche Accueil).
--- Onglets à gauche, contenu à droite : streamers en direct, réglages, système. La vidéo continue derrière, assombrie.
+-- Onglets à gauche, contenu à droite : streamers en direct, rediffusions et clips, historique, réglages, système.
+-- La vidéo continue derrière, assombrie.
 --
 -- Les données et les actions passent par l'API de remote.py (comme la page web) : menu, page et Home Assistant restent
 -- d'accord. Les touches arrivent de stream-box.lua (script-message streambox-tvmenu-key), qui les transmet tant que
--- user-data/streambox/tvmenu est vrai. Les photos sont des images brutes (overlay-add) préparées par remote.py
--- (/api/tvimage), posées par-dessus le dessin ASS.
+-- user-data/streambox/tvmenu est vrai. Les photos et miniatures sont des images brutes (overlay-add) préparées par
+-- remote.py (/api/tvimage), posées par-dessus le dessin ASS : rien ne peut se dessiner sur elles, d'où les barres de
+-- progression sous les miniatures et les images retirées quand une fenêtre d'actions s'ouvre.
 local mp = require "mp"
 local utils = require "mp.utils"
 
@@ -14,8 +16,10 @@ local IDLE_CLOSE = 90          -- secondes sans touche avant de refermer le menu
 local REFRESH = 5              -- secondes entre deux relevés de l'état pendant que le menu est ouvert
 local MAX_IMAGES = 48          -- overlay-add accepte les identifiants 0 à 63
 
-local TABS = { { id = "live", label = "En direct" }, { id = "settings", label = "Réglages" },
+local TABS = { { id = "live", label = "En direct" }, { id = "replays", label = "Rediffusions" },
+               { id = "history", label = "Historique" }, { id = "settings", label = "Réglages" },
                { id = "system", label = "Système" } }
+local KINDS = { youtube = "YouTube", ["twitch-vod"] = "Rediffusion Twitch", ["twitch-clip"] = "Clip Twitch", link = "Lien" }
 local CORNERS = { tl = "↖ haut gauche", tr = "↗ haut droite", br = "↘ bas droite", bl = "↙ bas gauche" }
 local CORNER_ORDER = { "tl", "tr", "br", "bl" }   -- même ordre que stream-box.lua
 local QR_MODES = { { "always", "Toujours" }, { "timed", "30 secondes" }, { "never", "Jamais" } }
@@ -31,6 +35,11 @@ local pending_display = nil                         -- résolution choisie aux f
 local poweroff_until = 0
 local idle_timer, refresh_timer
 local images, shown = {}, {}                        -- cache des images préparées ; overlays posés (id → signature)
+local replays, rp_login = {}, nil                   -- rediffusions par streamer (/api/replays) ; streamer affiché
+local rp_row, rp_sel, rp_first = 1, {}, {}          -- rangée choisie (puces, rediffusions, clips), choix, défilement
+local history = nil                                 -- /api/history, relu à chaque ouverture du menu
+local modal = nil                                   -- fenêtre d'actions : { title, items = { { label, ok } }, sel }
+local history_loading = false
 local draw, close_menu
 
 
@@ -51,6 +60,12 @@ end
 local function viewers(v)
     v = tonumber(v) or 0
     return v >= 1000 and (("%.1f k"):format(v / 1000):gsub("%.", ",")) or tostring(v)
+end
+
+local function clock(t)
+    t = math.max(0, math.floor(tonumber(t) or 0))
+    local h, m, sec = math.floor(t / 3600), math.floor(t / 60) % 60, t % 60
+    return h > 0 and ("%d:%02d:%02d"):format(h, m, sec) or ("%d:%02d"):format(m, sec)
 end
 
 local function url_encode(s)
@@ -102,7 +117,8 @@ local function act(name, body)
 end
 
 
--- Images (photos des streamers) : préparées par remote.py à la taille exacte en pixels de l'écran
+-- Images (photos, miniatures) : préparées par remote.py à la taille exacte en pixels de l'écran.
+-- { src, x, y, w, h } en coordonnées 1920x1080, et round (disque) ou radius (coins arrondis)
 
 local function place_images(list)
     local w = mp.get_osd_size()
@@ -111,12 +127,14 @@ local function place_images(list)
     for i, im in ipairs(list) do
         if i > MAX_IMAGES then break end
         local id = i - 1
-        local size = math.floor(im.size * scale)
-        local key = im.src .. "|" .. size
+        local iw, ih = math.floor(im.w * scale), math.floor(im.h * scale)
+        local radius = math.floor((im.radius or 0) * scale)
+        local key = ("%s|%d|%d|%s|%d"):format(im.src, iw, ih, im.round and "1" or "0", radius)
         local c = images[key]
         if c == nil then
             images[key] = "loading"
-            api("GET", ("/api/tvimage?src=%s&w=%d&h=%d&round=1"):format(url_encode(im.src), size, size), nil, function(d)
+            api("GET", ("/api/tvimage?src=%s&w=%d&h=%d&round=%s&radius=%d")
+                :format(url_encode(im.src), iw, ih, im.round and "1" or "0", radius), nil, function(d)
                 images[key] = d and d.path and d or false   -- false : échec, on garde l'initiale dessinée dessous
                 if is_open then draw() end
             end)
@@ -136,6 +154,62 @@ local function place_images(list)
             mp.commandv("overlay-remove", tostring(id))
             shown[id] = nil
         end
+    end
+end
+
+
+-- Rediffusions et historique : chargés à la première visite de l'onglet
+
+local function load_replays(login)
+    if not login or replays[login] ~= nil then return end
+    replays[login] = "loading"
+    api("GET", "/api/replays?login=" .. url_encode(login), nil, function(d)
+        replays[login] = d and d.vods and d or false
+        if is_open then draw() end
+    end)
+end
+
+local function load_history()
+    api("GET", "/api/history", nil, function(d)
+        history, history_loading = type(d) == "table" and d or {}, false
+        if is_open then draw() end
+    end)
+end
+
+local function play(url, from_start)
+    api("POST", "/api/play", { url = url, from_start = from_start or false }, function() mp.add_timeout(0.3, refresh) end)
+    close_menu()
+end
+
+-- Vidéo commencée et pas finie : reprise possible
+local function resumable(position, duration, finished)
+    return not finished and (tonumber(position) or 0) >= 30 and (not duration or position < duration)
+end
+
+-- Rangées de l'onglet Rediffusions : streamers, puis rediffusions et clips s'il y en a
+local function replay_rows()
+    local rows = { { kind = "chips", items = state.streamers or {} } }
+    local d = replays[rp_login]
+    if type(d) == "table" then
+        if #d.vods > 0 then rows[#rows + 1] = { kind = "vods", title = "Rediffusions", items = d.vods } end
+        if #d.clips > 0 then rows[#rows + 1] = { kind = "clips", title = "Clips de la semaine", items = d.clips } end
+    end
+    return rows
+end
+
+local function open_modal(title, items)
+    modal = { title = title, items = items, sel = 1 }
+end
+
+-- Lecture d'une vidéo : reprise proposée si elle est commencée, sinon lancée tout de suite
+local function choose_video(item, seconds)
+    if resumable(item.position, seconds, item.finished) then
+        open_modal(item.title, {
+            { label = "▶  Reprendre à " .. clock(item.position), ok = function() play(item.url) end },
+            { label = "↺  Depuis le début", ok = function() play(item.url, true) end },
+        })
+    else
+        play(item.url, true)
     end
 end
 
@@ -335,7 +409,7 @@ local function draw_live(out, imgs)
             out[#out + 1] = rrect(ax, ay, as, as, as / 2, "4A3D5C", "00")
             out[#out + 1] = label(ax + as / 2, ay + as / 2, 40, "D0C8E0", ass_escape(name:sub(1, 1):upper()), 5, "\\b1")
             if state.avatars and state.avatars[name] then
-                imgs[#imgs + 1] = { src = state.avatars[name], x = ax, y = ay, size = as }
+                imgs[#imgs + 1] = { src = state.avatars[name], x = ax, y = ay, w = as, h = as, round = true }
             end
             local tx = ax + as + 20
             out[#out + 1] = label(tx, y + 44, 30, "FFFFFF", ass_escape(shorten(name, 14)), 4, "\\b1")
@@ -357,6 +431,149 @@ local function draw_live(out, imgs)
     if info and info.title then
         out[#out + 1] = label(460, y0 + rows_visible * (ch + gap) + 20, 26, "D0C8E0",
                               ass_escape(shorten(name .. "  ·  " .. info.title, 110)), 4)
+    end
+end
+
+-- Carte vidéo : miniature (image posée par-dessus un fond), barre de progression dessous, titre, ligne d'infos
+local CARD_W, CARD_IMG_H, CARD_H, CARD_GAP = 330, 186, 270, 26
+
+local function video_card(out, imgs, x, y, item, focused, meta, progress)
+    if focused then out[#out + 1] = rrect(x - 6, y - 6, CARD_W + 12, CARD_IMG_H + 12, 22, "FFFFFF", "00") end
+    out[#out + 1] = rrect(x, y, CARD_W, CARD_IMG_H, 16, "2A2034", "00")
+    out[#out + 1] = "{\\an5\\pos(" .. math.floor(x + CARD_W / 2) .. "," .. math.floor(y + CARD_IMG_H / 2)
+        .. ")\\fs60\\bord0\\shad0\\1c&H5A5068&\\p1}m -14 -20 l 22 0 -14 20{\\p0}"   -- ▶ en attendant l'image
+    if item.thumb then
+        imgs[#imgs + 1] = { src = item.thumb, x = x, y = y, w = CARD_W, h = CARD_IMG_H, radius = 16 }
+    end
+    if progress and progress > 0 then
+        out[#out + 1] = rrect(x, y + CARD_IMG_H + 10, CARD_W, 6, 3, "4A3D5C", "00")
+        out[#out + 1] = rrect(x, y + CARD_IMG_H + 10, math.max(6, CARD_W * math.min(1, progress)), 6, 3, VIOLET, "00")
+    end
+    out[#out + 1] = label(x, y + CARD_IMG_H + 38, 23, focused and "FFFFFF" or "E0DAEA",
+                          ass_escape(shorten(item.title or "", 30)), 4, focused and "\\b1" or "")
+    if meta then out[#out + 1] = label(x, y + CARD_IMG_H + 68, 19, "A99FC0", ass_escape(meta), 4) end
+end
+
+-- Premier élément visible d'une rangée qui défile, pour garder sel à l'écran
+local function scroll(first, sel, visible)
+    first = first or 1
+    if sel < first then first = sel end
+    if sel > first + visible - 1 then first = sel - visible + 1 end
+    return math.max(1, first)
+end
+
+local function date_fr(iso)
+    local y, m, d = tostring(iso or ""):match("(%d+)-(%d+)-(%d+)")
+    local months = { "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc." }
+    return d and ("%d %s"):format(tonumber(d), months[tonumber(m)]) or ""
+end
+
+local function draw_replays(out, imgs)
+    local rows = replay_rows()
+    rp_row = math.min(rp_row, #rows)
+    local d = replays[rp_login]
+    draw_header(out, "Rediffusions", d == "loading" and ((rp_login or "") .. " · chargement…")
+        or d == false and "Twitch injoignable pour l'instant"
+        or (type(d) == "table" and #rows == 1) and ((rp_login or "") .. " : rien cette semaine")
+        or ((rp_login or "") .. " · rediffusions et clips de la semaine"))
+    -- Puces des streamers
+    local chips = rows[1].items
+    local csel = rp_sel.chips or 1
+    local x, focused_row = 460, area == "content" and rp_row or nil
+    local function chip_w(name) return 96 + #name * 15 end
+    -- Défilement à la largeur : la puce choisie et celle du streamer affiché doivent tenir dans la ligne
+    local keep = focused_row == 1 and csel or 1
+    for i, name in ipairs(chips) do if focused_row ~= 1 and name == rp_login then keep = i end end
+    local first = math.min(rp_first.chips or 1, keep)
+    local function fits(from)
+        local used = 0
+        for i = from, keep do used = used + chip_w(chips[i]) + 16 end
+        return 460 + used <= W - 40
+    end
+    while first < keep and not fits(first) do first = first + 1 end
+    rp_first.chips = first
+    for i = rp_first.chips, #chips do
+        local name = chips[i]
+        local cw = chip_w(name)
+        if x + cw > W - 40 then break end
+        local focused = focused_row == 1 and i == csel
+        local current = name == rp_login
+        if focused then out[#out + 1] = rrect(x - 5, 185, cw + 10, 74, 37, "FFFFFF", "00") end
+        out[#out + 1] = rrect(x, 190, cw, 64, 32, current and VIOLET or (focused and "3A2C4E" or "2A2034"),
+                              (current or focused) and "00" or "30")
+        out[#out + 1] = rrect(x + 10, 198, 48, 48, 24, "4A3D5C", "00")
+        if state.avatars and state.avatars[name] then
+            imgs[#imgs + 1] = { src = state.avatars[name], x = x + 10, y = 198, w = 48, h = 48, round = true }
+        end
+        out[#out + 1] = label(x + 70, 222, 24, "FFFFFF", ass_escape(name), 4, current and "\\b1" or "")
+        x = x + cw + 16
+    end
+    -- Rediffusions et clips
+    local y = 300
+    for r = 2, #rows do
+        local row = rows[r]
+        out[#out + 1] = label(462, y, 22, "A99FC0", ass_escape(row.title:upper()), 4, "\\b1\\fsp2")
+        local sel = rp_sel[row.kind] or 1
+        rp_first[row.kind] = scroll(rp_first[row.kind], sel, 4)
+        for i = rp_first[row.kind], math.min(#row.items, rp_first[row.kind] + 3) do
+            local item = row.items[i]
+            local cx = 460 + (i - rp_first[row.kind]) * (CARD_W + CARD_GAP)
+            local meta = row.kind == "vods" and (date_fr(item.date) .. " · " .. clock(item.seconds))
+                or (clock(item.seconds) .. " · " .. viewers(item.views) .. " vues")
+            if item.finished then meta = meta .. " · vu" end
+            video_card(out, imgs, cx, y + 26, item, focused_row == r and i == sel, meta,
+                       item.finished and 1 or (item.position and item.seconds and item.position / item.seconds) or 0)
+        end
+        if #row.items > rp_first[row.kind] + 3 then
+            out[#out + 1] = label(W - 40, y + 26 + CARD_IMG_H / 2, 40, "A99FC0", "›", 6)
+        end
+        y = y + CARD_H + 40
+    end
+end
+
+local HIST_COLS, HIST_ROWS = 4, 2
+
+local function draw_history(out, imgs)
+    local list = history or {}
+    draw_header(out, "Historique", history == nil and "Chargement…"
+        or #list == 0 and "Les vidéos lancées sur la TV s'afficheront ici"
+        or (#list == 1 and "1 vidéo" or (#list .. " vidéos")) .. " · OK pour reprendre ou retirer")
+    local focus_row = area == "content" and math.floor((index - 1) / HIST_COLS) or 0
+    local first_row = math.max(0, focus_row - HIST_ROWS + 1)
+    for i, e in ipairs(list) do
+        local row, col = math.floor((i - 1) / HIST_COLS) - first_row, (i - 1) % HIST_COLS
+        if row >= 0 and row < HIST_ROWS then
+            local started = resumable(e.position, e.duration, e.finished)
+            local meta = KINDS[e.kind] or ""
+            if e.finished then
+                meta = meta .. " · vu"
+            elseif e.duration and e.duration > 0 then
+                meta = meta .. " · " .. clock(e.position) .. " / " .. clock(e.duration)
+            end
+            video_card(out, imgs, 460 + col * (CARD_W + CARD_GAP), 210 + row * (CARD_H + 30), e,
+                       area == "content" and i == index, meta,
+                       e.finished and 1 or (started and e.duration and e.duration > 0 and e.position / e.duration) or 0)
+        end
+    end
+    if math.ceil(#list / HIST_COLS) > first_row + HIST_ROWS then
+        out[#out + 1] = label(460 + 2 * (CARD_W + CARD_GAP) - CARD_GAP / 2, 210 + HIST_ROWS * (CARD_H + 30), 26,
+                              "A99FC0", "▼", 5)
+    end
+end
+
+local function draw_modal(out)
+    local n = #modal.items
+    local mw, mh = 820, 150 + n * 92
+    local mx, my = (W - mw) / 2, (H - mh) / 2
+    out[#out + 1] = rrect(0, 0, W, H, 0, "05030A", "50")
+    out[#out + 1] = rrect(mx, my, mw, mh, 28, "21182C", "00")
+    out[#out + 1] = label(mx + 44, my + 62, 30, "FFFFFF", ass_escape(shorten(modal.title or "", 46)), 4, "\\b1")
+    for i, it in ipairs(modal.items) do
+        local by = my + 112 + (i - 1) * 92
+        local focused = i == modal.sel
+        out[#out + 1] = rrect(mx + 30, by, mw - 60, 76, 38, focused and "FFFFFF" or "33283F", "00")
+        out[#out + 1] = label(mx + 70, by + 38, 28, focused and "1A1020" or (it.danger and "8F8FFF" or "FFFFFF"),
+                              ass_escape(it.label), 4, focused and "\\b1" or "")
     end
 end
 
@@ -438,6 +655,16 @@ function draw()
     local id = TABS[tab].id
     if id == "live" then
         draw_live(out, imgs)
+    elseif id == "replays" then
+        rp_login = rp_login or state.channel or (state.streamers or {})[1]
+        load_replays(rp_login)
+        draw_replays(out, imgs)
+    elseif id == "history" then
+        if history == nil and not history_loading then
+            history_loading = true
+            load_history()
+        end
+        draw_history(out, imgs)
     elseif id == "settings" then
         draw_rows(out, settings_rows(), "Réglages", "◀ ▶ pour changer une valeur")
     else
@@ -450,6 +677,10 @@ function draw()
             out[#out + 1] = label(1340, 230 + side + 110, 21, "B4AFC2",
                                   ass_escape((qr.url or ""):gsub("^https?://", ""):gsub("/$", "")), 4)
         end
+    end
+    if modal then
+        draw_modal(out)
+        imgs = {}   -- les images passeraient par-dessus la fenêtre
     end
     osd.data = table.concat(out, "\n")
     osd:update()
@@ -467,7 +698,7 @@ end
 function close_menu()
     if not is_open then return end
     is_open = false
-    pending_display, poweroff_until = nil, 0
+    pending_display, poweroff_until, modal = nil, 0, nil
     osd:remove()
     place_images({})
     if idle_timer then idle_timer:kill() end
@@ -479,6 +710,8 @@ local function open_menu()
     if is_open then return end
     is_open = true
     tab, area, index, shortcut = 1, "content", 1, nil
+    -- Relus à chaque ouverture : l'historique change, remote.py garde les rediffusions 5 min en cache
+    history, history_loading, replays, rp_login, rp_row, rp_sel, rp_first = nil, false, {}, nil, 1, {}, {}
     -- Focus de départ : le streamer regardé
     for i, name in ipairs(state.streamers or {}) do
         if name == state.channel then index = i end
@@ -496,13 +729,14 @@ end
 
 local function content_count()
     local id = TABS[tab].id
-    if id == "live" then return #(state.streamers or {}) end
+    if id == "live" or id == "replays" then return #(state.streamers or {}) end
+    if id == "history" then return #(history or {}) end
     return #selectable(id == "settings" and settings_rows() or system_rows())
 end
 
 local function current_row()
     local id = TABS[tab].id
-    if id == "live" then return nil end
+    if id == "live" or id == "replays" or id == "history" then return nil end
     local rows = id == "settings" and settings_rows() or system_rows()
     return rows[selectable(rows)[index]]
 end
@@ -518,12 +752,29 @@ local function on_key(key)
         act("corner")
         return
     end
+    if modal then
+        if key == "up" or key == "down" then
+            modal.sel = math.max(1, math.min(#modal.items, modal.sel + (key == "down" and 1 or -1)))
+        elseif key == "ok" then
+            local it = modal.items[modal.sel]
+            modal = nil
+            it.ok()
+        elseif key == "back" or key == "left" then
+            modal = nil
+        end
+        if is_open then draw() end
+        return
+    end
     if area == "rail" then
         if key == "up" or key == "down" then
             tab = math.max(1, math.min(#TABS, tab + (key == "down" and 1 or -1)))
             index, shortcut = 1, nil
         elseif (key == "right" or key == "ok") and content_count() > 0 then
             area, index, shortcut = "content", 1, nil
+            if TABS[tab].id == "replays" then
+                rp_row = 1
+                for i, name in ipairs(state.streamers or {}) do if name == rp_login then rp_sel.chips = i end end
+            end
         elseif key == "back" then
             return close_menu()
         end
@@ -545,6 +796,63 @@ local function on_key(key)
         elseif key == "ok" then
             list[shortcut].ok()
             if not is_open then return end
+        end
+    elseif id == "replays" then
+        local rows = replay_rows()
+        rp_row = math.min(rp_row, #rows)
+        local row = rows[rp_row]
+        local sel = rp_sel[row.kind] or 1
+        if key == "up" then
+            rp_row = math.max(1, rp_row - 1)
+        elseif key == "down" then
+            rp_row = math.min(#rows, rp_row + 1)
+        elseif key == "left" then
+            if sel == 1 then area = "rail" else rp_sel[row.kind] = sel - 1 end
+        elseif key == "right" then
+            rp_sel[row.kind] = math.min(#row.items, sel + 1)
+        elseif key == "ok" then
+            if row.kind == "chips" then
+                local name = row.items[sel]
+                if name and name ~= rp_login then
+                    rp_login, rp_sel.vods, rp_sel.clips, rp_first.vods, rp_first.clips = name, 1, 1, 1, 1
+                    load_replays(name)
+                end
+            else
+                local item = row.items[sel]
+                if item then choose_video(item, item.seconds) end
+            end
+        end
+    elseif id == "history" then
+        local list = history or {}
+        local col = (index - 1) % HIST_COLS
+        if key == "left" then
+            if col == 0 then area = "rail" else index = index - 1 end
+        elseif key == "right" then
+            if col < HIST_COLS - 1 and index < #list then index = index + 1 end
+        elseif key == "up" then
+            if index > HIST_COLS then index = index - HIST_COLS end
+        elseif key == "down" then
+            if index + HIST_COLS <= #list then
+                index = index + HIST_COLS
+            elseif math.ceil(index / HIST_COLS) < math.ceil(#list / HIST_COLS) then
+                index = #list
+            end
+        elseif key == "ok" and list[index] then
+            local e = list[index]
+            local items = {}
+            if resumable(e.position, e.duration, e.finished) then
+                items[#items + 1] = { label = "▶  Reprendre à " .. clock(e.position), ok = function() play(e.url) end }
+                items[#items + 1] = { label = "↺  Depuis le début", ok = function() play(e.url, true) end }
+            else
+                items[#items + 1] = { label = e.finished and "↺  Revoir" or "▶  Lire", ok = function() play(e.url, true) end }
+            end
+            items[#items + 1] = { label = "✕  Retirer de l'historique", danger = true, ok = function()
+                api("POST", "/api/history", { action = "remove", key = e.key }, function() load_history() end)
+                table.remove(list, index)
+                index = math.max(1, math.min(index, #list))
+                if #list == 0 then area = "rail" end
+            end }
+            open_modal(e.title, items)
         end
     elseif id == "live" then
         local col = (index - 1) % LIVE_COLS
