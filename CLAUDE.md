@@ -14,9 +14,9 @@ appli), fait la même chose depuis un téléphone, plus le volume et la pause.
 - **Session dédiée sans bureau** : Plasma Login connecte automatiquement `media` dans la session
   `/usr/share/wayland-sessions/stream-box.desktop` → `cage -s -- /home/media/stream-box/start.sh`
   (cage = compositeur Wayland « kiosque » ; `-s` garde Ctrl+Alt+F2 pour une console). Installée par
-  `setup-session.sh`. Pour Plasma : démarrer avec un clavier branché et se connecter en <admin> (session Plasma).
+  `install.sh`. Pour Plasma : démarrer avec un clavier branché et se connecter en <admin> (session Plasma).
 - **Mode selon le clavier** : `stream-box-boot-mode.service` (root, avant plasmalogin) lance
-  `/usr/local/lib/stream-box/boot-mode.py` (copie root de `boot-mode.py`, installée par `setup-boot-mode.sh`). Un
+  `/usr/local/lib/stream-box/boot-mode.py` (copie root de `boot-mode.py`, installée par `install.sh`, qui lui passe `--dropin` selon le gestionnaire de connexion). Un
   périphérique avec des touches de lettres (Q, A, Z, espace) = clavier. Sans clavier, il écrit
   `/etc/plasmalogin.conf.d/50-stream-box.conf` (autologin media + session Stream Box). Avec clavier, il le supprime
   et l'écran de connexion s'affiche. `/etc/plasmalogin.conf` ne contient plus d'autologin : il passerait avant le
@@ -171,7 +171,7 @@ appli), fait la même chose depuis un téléphone, plus le volume et la pause.
   pour la souris et en conflit avec notre menu.
 - Icône d'extinction en haut à droite de la page (confirmation « Éteindre la box ? ») → `POST /api/poweroff` →
   `systemctl poweroff` en tant que media. Autorisé sans mot de passe par `/etc/polkit-1/rules.d/50-stream-box.rules`
-  (installée par `setup-poweroff.sh`), y compris quand une autre session est ouverte (SSH).
+  (installée par `install.sh`), y compris quand une autre session est ouverte (SSH).
 - PWA : grâce au HTTPS de NPM, Chrome Android propose « Installer l'application » ; sur iPhone, « Sur l'écran
   d'accueil ». En HTTP direct (:8080), Android ne donnerait qu'un raccourci.
 - `streamers.txt` : un pseudo par ligne, `#` pour les commentaires. Relu à chaque ouverture du menu, pas besoin de redémarrer.

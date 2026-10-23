@@ -35,20 +35,26 @@ télécommande web installable sur téléphone (PWA).
 | `display.py` | Résolution de la sortie vidéo (wlr-randr), jamais en dessous de 60 Hz |
 | `mqtt_bridge.py` | Pont MQTT vers Home Assistant (découverte automatique) |
 | `update.sh`, `systemd/` | Mises à jour, jetons anti-robot YouTube, pont MQTT |
-| `setup-*.sh`, `boot-mode.py` | Installation : session dédiée, mode selon le clavier, extinction depuis la page |
+| `install.sh`, `boot-mode.py` | Installation et mise à jour ; mode selon le clavier au démarrage |
 | `CLAUDE.md` | Documentation technique détaillée (décisions, pièges, comment tester) |
 
 ## Installation (résumé)
 
-Pensé pour une distribution Arch (testé sur CachyOS) avec Plasma Login comme gestionnaire de connexion.
+Pensé pour une distribution Arch (testé sur CachyOS) avec Plasma Login comme gestionnaire de connexion. SDDM, dont
+Plasma Login dérive, est pris en charge par le script mais n'a pas encore été essayé.
 
-1. Copier le dépôt dans `/home/media/stream-box` et `streamers.example.txt` en `streamers.txt` (un pseudo par ligne).
-2. Depuis le compte d'admin : `sudo bash setup-session.sh` (crée l'utilisateur `media`, installe cage, streamlink et
-   la session dédiée), puis `sudo bash setup-boot-mode.sh` et `sudo bash setup-poweroff.sh`.
-3. Pour le mode vidéo et Home Assistant : un venv `~/.local/share/media-venv` avec `yt-dlp[default] deno
-   nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt`, et les unités de `systemd/` dans
-   `~/.config/systemd/user/` (mises à jour, jetons anti-robot YouTube, pont MQTT).
-4. Pour la télécommande web en HTTPS (nécessaire à l'installation de la PWA sur Android) : un reverse proxy vers le
-   port 8080.
+Depuis un compte d'admin, dans une copie du dépôt :
+
+```
+git clone https://github.com/Tunederuz/stream-box.git && cd stream-box
+sudo bash install.sh --city "Ta ville" --streamers chaine1,chaine2
+```
+
+Le script installe les paquets, crée l'utilisateur `media` qui fait tourner la box, y copie le dépôt, installe
+streamlink, yt-dlp, jellyfin-mpv-shim et le reste dans des venvs, active les services et met en place la session
+sans bureau. Il peut être relancé pour mettre à jour une installation (`git pull`, puis `sudo bash install.sh`).
+Les deux options sont facultatives : la liste des streamers se remplit aussi depuis la télécommande web. À la fin,
+il affiche les réglages restants (compte Twitch, HTTPS pour installer la télécommande sur Android, Jellyfin, Home
+Assistant, Wake-on-LAN).
 
 Les détails, et les raisons de chaque choix, sont dans `CLAUDE.md`.
