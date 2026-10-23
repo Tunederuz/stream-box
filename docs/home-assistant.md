@@ -22,8 +22,16 @@ Quand la box est éteinte, toutes ses entités passent à `unavailable` (message
 ## Allumer la box et la TV quand un streamer lance son live
 
 La box éteinte ne voit rien : c'est Home Assistant qui surveille Twitch (intégration **Twitch**, capteur
-`sensor.<streamer>` à `streaming` / `offline`). Il faut aussi le **Wake-on-LAN** sur la box (BIOS + carte réseau, en
-Ethernet) et l'intégration `wake_on_lan` dans Home Assistant.
+`sensor.<streamer>` à `streaming` / `offline`). Il faut aussi le **Wake-on-LAN** sur la box, en Ethernet :
+
+- BIOS : réveil par le réseau activé, veille profonde désactivée (sur un Dell : *Wake on LAN = LAN Only*,
+  *Deep Sleep Control = Disabled*) ;
+- Linux : `sudo nmcli connection modify "<connexion filaire>" 802-3-ethernet.wake-on-lan magic`.
+
+Dans Home Assistant, le plus simple est l'intégration **Wake on LAN** ajoutée par l'interface (MAC de la box et
+adresse de diffusion du réseau) : elle crée un bouton, qui sert aussi à allumer la box à la main. L'action
+`wake_on_lan.send_magic_packet` n'existe que si `wake_on_lan:` est déclaré dans `configuration.yaml` (redémarrage
+complet nécessaire).
 
 ```yaml
 automation:
@@ -37,9 +45,9 @@ automation:
         entity_id: select.stream_box_streamer
         state: unavailable
     actions:
-      - action: wake_on_lan.send_magic_packet
-        data:
-          mac: "<mac-ethernet-de-la-box>"
+      - action: button.press              # bouton créé par l'intégration Wake on LAN
+        target:
+          entity_id: button.wake_on_lan_<mac>
       - action: media_player.turn_on        # facultatif : la TV, si elle s'allume depuis Home Assistant
         target:
           entity_id: media_player.<tv>
