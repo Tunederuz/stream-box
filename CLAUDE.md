@@ -471,9 +471,14 @@ Liste de chaînes dans `~/.config/stream-box/youtube.json` (id UC…, nom, @, ph
 `yt-dlp --flat-playlist -J --playlist-items 0` (~1 s). `GET /api/youtube` : 15 dernières vidéos par chaîne d'après le
 flux RSS public (`feeds/videos.xml?channel_id=`, sans clé, Shorts écartés, cache 20 min), fusionnées avec
 l'historique (position, vu). `GET /api/youtube_search?q=` : `yt-dlp --flat-playlist -J ytsearch20:` (~1,6 s, cache
-10 min, vidéos seulement : la recherche renvoie aussi chaînes et playlists). Peu de requêtes : YouTube a déjà limité
+10 min, `youtube:lang=fr` sinon titres traduits en anglais) : vidéos, et chaînes dont le nom correspond (même
+requête ; id UC…, abonnés, photo, `saved`), playlists écartées. `GET /api/youtube_channel?id=UC…` : dernières vidéos
+d'une chaîne trouvée, même hors de la liste. Peu de requêtes : YouTube a déjà limité
 l'adresse IP de la box.
 Page : bloc YouTube de l'onglet Télécommande (recherche, une puce par chaîne) et « Chaînes YouTube » dans Réglages.
 TV (onglet YouTube du menu QML) : ligne de recherche → clavier à l'écran (grille de 10 de large, ↑↓←→ et OK, Retour
-ferme), puis une rangée de résultats et une rangée par chaîne ; OK lance (ou propose la reprise, `chooseVideo`).
+ferme), puis les chaînes trouvées (photos rondes ; OK : « Voir ses dernières vidéos », rangée `preview` juste dessous, ou
+« Ajouter / Retirer de mes chaînes »), les vidéos trouvées et une rangée par chaîne de la liste ; OK sur une vidéo
+lance (ou propose la reprise, `chooseVideo`). Page : chaînes trouvées en tête des résultats (toucher : leurs vidéos,
+« + Ajouter »).
 Les résultats restent d'une ouverture du menu à l'autre (pas d'un redémarrage du lecteur).

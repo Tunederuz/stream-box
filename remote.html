@@ -237,6 +237,8 @@
   .replay .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
   .replay .bar { height: 4px; border-radius: 2px; background: var(--surface-3); margin-top: 6px; overflow: hidden; }
   .replay .bar i { display: block; height: 100%; background: var(--grad); }
+  .yt-channel { cursor: pointer; }
+  .yt-channel small { color: var(--muted); font-weight: normal; }
   .replays-title { font-size: 12px; color: var(--muted); margin: 14px 0 0; text-transform: uppercase;
                    letter-spacing: .1em; font-weight: 700; }
   .history-item { margin-top: 8px; }
@@ -1296,7 +1298,7 @@ $("app-change").onclick = () => { followsChanging = true; refreshFollows(); };
 refreshFollows();
 
 // YouTube : dernières vidéos des chaînes de la liste, recherche, gestion de la liste
-let ytHome = null, ytChannel = null;
+let ytHome = null, ytChannel = null, ytMode = "channel";   // ytMode : "search" pendant une recherche affichée
 const ago = (iso) => {
   const days = Math.floor((Date.now() - new Date(iso)) / 86400000);
   return days <= 0 ? "aujourd'hui" : days === 1 ? "hier" : days < 7 ? `il y a ${days} j` : days < 31 ? `il y a ${Math.floor(days / 7)} sem.`
@@ -1318,12 +1320,13 @@ async function loadYoutube() {
     return;
   }
   if (!chans.some((c) => c.id === ytChannel)) ytChannel = chans[0].id;
-  showYoutubeChannel();
+  showYoutubeChannel(ytMode === "search");   // une chaîne ajoutée depuis la recherche ne remplace pas les résultats
 }
-function showYoutubeChannel() {
+function showYoutubeChannel(chipsOnly = false) {
   const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
-  $("yt-who").replaceChildren(...ytHome.channels.map((c) => el("button", { className: c.id === ytChannel ? "current" : "",
-    onclick: () => { ytChannel = c.id; showYoutubeChannel(); } }, c.name)));
+  $("yt-who").replaceChildren(...ytHome.channels.map((c) => el("button", { className: c.id === ytChannel && !chipsOnly ? "current" : "",
+    onclick: () => { ytChannel = c.id; ytMode = "channel"; showYoutubeChannel(); } }, c.name)));
+  if (chipsOnly) return;
   const c = ytHome.channels.find((x) => x.id === ytChannel);
   $("yt-list").replaceChildren(...(c.videos === null ? [el("p", { textContent: "YouTube injoignable pour l'instant." })]
     : c.videos.map((v) => ytCard(v, `${ago(v.date)}${v.views != null ? " · " + viewers(v.views) + " vues" : ""}`))));
@@ -1332,15 +1335,52 @@ async function ytSearch() {
   const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
   const q = $("yt-query").value.trim();
   if (!q) return;
+  ytMode = "search";
   $("yt-who").querySelectorAll("button").forEach((b) => b.classList.remove("current"));
   $("yt-list").replaceChildren(el("p", { textContent: "Recherche…" }));
   try {
     const r = await fetch(`/api/youtube_search?q=${encodeURIComponent(q)}`);
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    $("yt-list").replaceChildren(el("p", { className: "replays-title", textContent: `Résultats pour « ${q} »` }),
+    $("yt-list").replaceChildren(...(d.channels.length ? [el("p", { className: "replays-title", textContent: "Chaînes" }),
+                                                          ...d.channels.map(ytChannelRow)] : []),
+      el("p", { className: "replays-title", textContent: `Résultats pour « ${q} »` }),
       ...d.results.map((v) => ytCard(v, [v.channel, v.seconds ? length(v.seconds) : "", v.views != null ? viewers(v.views) + " vues" : ""]
         .filter(Boolean).join(" · "))));
+  } catch (e) {
+    $("yt-list").replaceChildren(el("p", { className: "status error", textContent: e.message || "Box injoignable" }));
+  }
+}
+// Chaîne trouvée par la recherche : ses dernières vidéos au toucher, et l'ajout à la liste (ou le retrait)
+function ytChannelRow(c) {
+  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
+  const pic = c.avatar ? el("img", { className: "avatar", src: c.avatar, alt: "" })
+                       : el("span", { className: "avatar", textContent: c.name.charAt(0).toUpperCase() });
+  const add = el("button", { textContent: c.saved ? "✓ Ajoutée" : "+ Ajouter", disabled: c.saved });
+  add.onclick = async (e) => {
+    e.stopPropagation();
+    add.disabled = true;
+    await editYoutube("add", c.id);
+    add.textContent = "✓ Ajoutée";
+  };
+  const row = el("div", { className: "manage-row yt-channel" }, pic,
+    el("span", { className: "name" }, c.name,
+       el("small", { textContent: c.followers ? ` · ${viewers(c.followers)} abonnés` : "" })), add);
+  row.onclick = () => ytShowFound(c);
+  return row;
+}
+async function ytShowFound(c) {
+  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
+  $("yt-list").replaceChildren(el("p", { textContent: "Chargement…" }));
+  try {
+    const r = await fetch(`/api/youtube_channel?id=${encodeURIComponent(c.id)}`);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    const back = el("button", { textContent: "← Résultats" });
+    back.onclick = ytSearch;
+    $("yt-list").replaceChildren(el("div", { className: "chips" }, back), ytChannelRow({ ...c, saved: d.saved }),
+      el("p", { className: "replays-title", textContent: "Dernières vidéos" }),
+      ...d.videos.map((v) => ytCard(v, `${ago(v.date)}${v.views != null ? " · " + viewers(v.views) + " vues" : ""}`)));
   } catch (e) {
     $("yt-list").replaceChildren(el("p", { className: "status error", textContent: e.message || "Box injoignable" }));
   }

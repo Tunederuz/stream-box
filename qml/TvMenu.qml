@@ -37,7 +37,8 @@ Item {
     property var health: null                // /api/health, relu toutes les 5 s sur l'onglet Système
     // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
     property var yt: null
-    property var ytResults: null             // { query, results } ou null
+    property var ytResults: null             // { query, results, channels } ou null
+    property var ytPreview: null             // chaîne trouvée ouverte : { id, name, avatar, followers, videos, saved }
     property bool ytSearching: false
     property int ytRow: 0                    // 0 : ligne de recherche, puis résultats (s'il y en a) et chaînes
     property var ytSel: ({})
@@ -121,21 +122,49 @@ Item {
         q = q.trim()
         if (!q) return
         ytSearching = true
-        ytResults = { query: q, results: [] }
+        ytResults = { query: q, results: [], channels: [] }
+        ytPreview = null
         call("GET", "/api/youtube_search?q=" + encodeURIComponent(q), undefined, function (d) {
             ytSearching = false
-            ytResults = { query: q, results: d && d.results ? d.results : [], error: !d }
+            ytResults = { query: q, results: d && d.results ? d.results : [], channels: d && d.channels ? d.channels : [], error: !d }
             ytRow = 1; var s = Object.assign({}, ytSel); s["search"] = 0; ytSel = s
         })
     }
     // Rangées de l'onglet YouTube : recherche, résultats, une par chaîne
     function ytRows() {
         var rows = [{ kind: "search" }]
+        if (ytResults && ytResults.channels.length)
+            rows.push({ kind: "chans", key: "chans", title: "Chaînes", items: ytResults.channels })
+        if (ytPreview)
+            rows.push({ kind: "preview", key: "preview", title: ytPreview.name + " · dernières vidéos", avatar: ytPreview.avatar,
+                        items: ytPreview.videos || [], loading: ytPreview.videos === null })
         if (ytResults) rows.push({ kind: "results", key: "search", title: "Résultats pour « " + ytResults.query + " »", items: ytResults.results })
         var chans = yt ? yt.channels : []
         for (var i = 0; i < chans.length; i++)
             rows.push({ kind: "channel", key: chans[i].id, title: chans[i].name, avatar: chans[i].avatar, items: chans[i].videos || [] })
         return rows
+    }
+    // Chaîne trouvée par la recherche : voir ses vidéos (rangée juste sous les chaînes), l'ajouter ou la retirer
+    function ytChannelMenu(c) {
+        openModal(c.name + (c.followers ? " · " + Fmt.big(c.followers) + " abonnés" : ""), [
+            { label: "▶  Voir ses dernières vidéos", ok: function () { ytOpenChannel(c) } },
+            { label: c.saved ? "✕  Retirer de mes chaînes" : "+  Ajouter à mes chaînes", ok: function () { ytToggleSaved(c) } }])
+    }
+    function ytOpenChannel(c) {
+        ytPreview = { id: c.id, name: c.name, avatar: c.avatar, videos: null }
+        var s = Object.assign({}, ytSel); s["preview"] = 0; ytSel = s
+        ytRow = 2   // recherche, chaînes, puis cette rangée
+        call("GET", "/api/youtube_channel?id=" + encodeURIComponent(c.id), undefined, function (d) {
+            if (ytPreview && ytPreview.id === c.id) ytPreview = Object.assign({}, ytPreview, { videos: d ? d.videos : [] })
+        })
+    }
+    function ytToggleSaved(c) {
+        call("POST", "/api/youtube_channels", { action: c.saved ? "remove" : "add", channel: c.id }, function (d) {
+            if (d && ytResults)
+                ytResults = Object.assign({}, ytResults, { channels: ytResults.channels.map(function (x) {
+                    return x.id === c.id ? Object.assign({}, x, { saved: !c.saved }) : x }) })
+            loadYoutube()
+        })
     }
     function ago(iso) {
         var days = Math.floor((Date.now() - new Date(iso)) / 86400000)
@@ -511,7 +540,7 @@ Item {
         else if (k === "down") ytRow = Math.min(rows.length - 1, ytRow + 1)
         else if (k === "left") { if (sel === 0) area = "rail"; else { s[row.key] = sel - 1; ytSel = s } }
         else if (k === "right") { s[row.key] = Math.min(row.items.length - 1, sel + 1); ytSel = s }
-        else if (k === "ok" && row.items[sel]) chooseVideo(row.items[sel])
+        else if (k === "ok" && row.items[sel]) { if (row.kind === "chans") ytChannelMenu(row.items[sel]); else chooseVideo(row.items[sel]) }
     }
     function keyKeyboard(k) {
         var rows = kbKeys
@@ -891,15 +920,52 @@ Item {
                         }
                         Text {
                             visible: !!row && row.items.length === 0
-                            y: 70; text: row && row.kind === "results" ? (menu.ytSearching ? "Recherche…" : "Aucun résultat") : "YouTube injoignable pour l'instant"
+                            y: 70; text: row && row.kind === "results" ? (menu.ytSearching ? "Recherche…" : "Aucun résultat")
+                                       : row && row.loading ? "Chargement…" : "YouTube injoignable pour l'instant"
                             color: "#8a85a0"; font.pixelSize: 24
                         }
+                        ListView {   // chaînes trouvées : photo ronde, nom, abonnés, « dans ta liste »
+                            visible: !!row && row.kind === "chans"
+                            y: 50; x: -40; width: 1500; height: 302
+                            orientation: ListView.Horizontal; spacing: 30; interactive: false; clip: false
+                            leftMargin: 40
+                            model: visible ? row.items.length : 0
+                            currentIndex: visible ? (menu.ytSel["chans"] || 0) : 0
+                            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                            Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                            delegate: Item {
+                                readonly property var c: row.items[index] || {}
+                                readonly property bool foc: menu.area === "content" && menu.ytRow === r && index === (menu.ytSel["chans"] || 0)
+                                width: 240; height: 302
+                                z: foc ? 2 : 1
+                                Item {
+                                    x: 30; y: 6; width: 180; height: 180
+                                    scale: parent.foc ? 1.06 : 1
+                                    Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                                    FocusFrame { active: parent.parent.foc; radius: 90 }
+                                    RoundImage {
+                                        anchors.fill: parent; circle: true; placeholder: "#2a2034"; source: c.avatar || ""
+                                        Text { anchors.centerIn: parent; z: -1; text: (c.name || "?").charAt(0).toUpperCase(); color: "#d0c8e0"; font.pixelSize: 64; font.bold: true }
+                                    }
+                                }
+                                Text {
+                                    y: 206; width: parent.width; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
+                                    text: c.name || ""; color: "white"; font.pixelSize: 25; font.bold: parent.foc
+                                }
+                                Text {
+                                    y: 242; width: parent.width; horizontalAlignment: Text.AlignHCenter
+                                    text: (c.followers ? Fmt.big(c.followers) + " abonnés" : "") + (c.saved ? (c.followers ? " · " : "") + "✓ suivie" : "")
+                                    color: c.saved ? "#b67bff" : "#b4afc2"; font.pixelSize: 20
+                                }
+                            }
+                        }
                         ListView {
+                            visible: !!row && row.kind !== "chans"
                             y: 50; x: -40; width: 1500; height: 302
                             orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
                             leftMargin: 40
-                            model: row ? row.items.length : 0
-                            currentIndex: row ? (menu.ytSel[row.key] || 0) : 0
+                            model: visible ? row.items.length : 0
+                            currentIndex: visible ? (menu.ytSel[row.key] || 0) : 0
                             onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
                             Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                             delegate: VideoCard {

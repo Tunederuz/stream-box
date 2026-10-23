@@ -862,29 +862,55 @@ def youtube_home():
 
 
 def yt_search(query):
+    """Vidéos et chaînes trouvées : la même requête renvoie les chaînes dont le nom correspond bien"""
     query = " ".join(query.split())[:100]
     if not query:
-        return []
+        return {"results": [], "channels": []}
     cached = yt_searches.get(query.lower())
     if cached and time.time() - cached[0] < YT_SEARCH_CACHE:
-        return with_progress(cached[1])
-    r = subprocess.run([YTDLP, "--flat-playlist", "-J", "--no-warnings", f"ytsearch20:{query}"],
+        return yt_search_out(*cached[1:])
+    # lang=fr : titres d'origine (sinon YouTube renvoie ses traductions automatiques en anglais)
+    r = subprocess.run([YTDLP, "--flat-playlist", "-J", "--no-warnings", "--extractor-args", "youtube:lang=fr",
+                        f"ytsearch20:{query}"],
                        capture_output=True, text=True, timeout=60)
     try:
         entries = json.loads(r.stdout).get("entries") or []
     except ValueError:
         raise ValueError("Recherche YouTube impossible pour l'instant.") from None
-    results = []
+    results, channels = [], []
     for e in entries:
-        # Vidéos seulement : la recherche renvoie aussi des chaînes et des playlists (identifiants plus longs)
+        if re.fullmatch(r"UC[\w-]{22}", e.get("id") or ""):
+            thumbs = [t.get("url") or "" for t in e.get("thumbnails") or []]
+            avatar = thumbs[-1] if thumbs else ""
+            channels.append({"id": e["id"], "name": e.get("title") or e.get("channel") or "",
+                             "handle": e.get("uploader_id") or "", "followers": e.get("channel_follower_count"),
+                             "avatar": "https:" + avatar if avatar.startswith("//") else avatar or None})
+            continue
+        # Sinon des vidéos seulement (les playlists, aux identifiants plus longs, sont écartées)
         if not re.fullmatch(r"[\w-]{11}", e.get("id") or "") or e.get("live_status") == "is_upcoming":
             continue
         results.append({"id": e["id"], "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or "",
                         "seconds": e.get("duration"), "views": e.get("view_count"),
                         "thumb": f"https://i.ytimg.com/vi/{e['id']}/mqdefault.jpg",
                         "url": f"https://www.youtube.com/watch?v={e['id']}"})
-    yt_searches[query.lower()] = (time.time(), results)
-    return with_progress(results)
+    yt_searches[query.lower()] = (time.time(), results, channels)
+    return yt_search_out(results, channels)
+
+
+def yt_search_out(results, channels):
+    saved = {c["id"] for c in yt_channels()}
+    return {"results": with_progress(results), "channels": [{**c, "saved": c["id"] in saved} for c in channels]}
+
+
+def yt_channel_videos(channel_id):
+    """Dernières vidéos d'une chaîne trouvée par la recherche, qu'elle soit dans la liste ou non"""
+    if not re.fullmatch(r"UC[\w-]{22}", channel_id):
+        raise ValueError("chaîne invalide")
+    try:
+        videos = with_progress(yt_feed(channel_id))
+    except OSError:
+        raise ValueError("YouTube injoignable pour l'instant.") from None
+    return {"id": channel_id, "videos": videos, "saved": any(c["id"] == channel_id for c in yt_channels())}
 
 
 def finished(position, duration):
@@ -1656,7 +1682,13 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path.startswith("/api/youtube_search?"):
                 q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("q", [""])[0]
                 try:
-                    self.send(200, {"query": q, "results": yt_search(q)})
+                    self.send(200, {"query": q, **yt_search(q)})
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
+            elif self.path.startswith("/api/youtube_channel?"):
+                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("id", [""])[0]
+                try:
+                    self.send(200, yt_channel_videos(q))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif self.path == "/api/health":

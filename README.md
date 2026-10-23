@@ -25,7 +25,7 @@ télécommande web installable sur téléphone (PWA).
   synchronisées avec le compte Twitch connecté.
 - **Mode vidéo** : liens YouTube et autres (yt-dlp, sous-titres), rediffusions et clips Twitch, partage Android
   « Partager → Stream Box », et **Jellyfin** (« Lire sur… ») via jellyfin-mpv-shim.
-- **YouTube** : liste de chaînes avec leurs dernières vidéos et recherche de vidéos, sur la TV (clavier à l'écran)
+- **YouTube** : liste de chaînes avec leurs dernières vidéos et recherche de vidéos et de chaînes, sur la TV (clavier à l'écran)
   et dans la télécommande, sans clé d'API. Barre de lecture rouge pour YouTube, bleue pour Jellyfin.
 - **Grand menu sur la TV** façon Android TV (bouton Menu de la télécommande), animé et rendu par la puce graphique :
   streamers en direct, chaînes suivies, rediffusions, YouTube, historique, réglages, système.
