@@ -530,4 +530,8 @@ carte gardées pour YouTube et Jellyfin ; Suivis s'ouvre sur le rail). mpv garda
 `play_media` et `start_channel` la retirent.
 Fond du menu : deux lueurs floues (RectangularShadow, pas de forme nette) de la couleur de l'onglet, en haut à droite
 (`pal.glow`) et en bas (`pal.glowLow`), sur tous les thèmes ; presque invisibles en neutre.
+Menu Lua (mpv seul, tv_menu.lua) : onglets YouTube et Jellyfin (rangées de cartes, reprise, épisodes d'une série ;
+pas de recherche, faute de clavier : elle passe par la page), réglages des sous-titres, onglet gardé à la
+réouverture. Tailles de texte ×1,2 (`FONT`) pour le même aspect que l'appli Qt. `/api/tvimage` accepte aussi les
+images du serveur Jellyfin.
 
