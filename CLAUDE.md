@@ -160,7 +160,7 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   (Reprendre / Depuis le début / ✕, tout effacer) et barres de progression dans les rediffusions (`GET /api/history`,
   `POST /api/history {action: remove|clear}`, `POST /api/play {url, from_start}`). Limite connue : certaines
   rediffusions Twitch (playlist `EVENT`) démarrent une minute après le début même sans reprise, mpv nu compris.
-- **Aperçu de la TV** dans la page (bloc replié, onglet Télécommande) : `GET /api/preview?overlay=1|0` →
+- **Aperçu de la TV** dans la page (bloc replié, onglet Télécommande ; toujours l'écran entier) : `GET /api/preview?overlay=1|0` →
   écran entier par **grim** (protocole wlr-screencopy de cage : écran d'ambiance, menu et bandeaux compris, réduit à
   960 px par `-s`) ; vidéo seule (`overlay=0`), ou faute de grim, `screenshot-to-file` de mpv réduit par ffmpeg. Une
   capture à la fois, gardée 1 s pour plusieurs téléphones. La page en redemande une 1,5 s après chaque réponse,
