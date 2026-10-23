@@ -528,4 +528,6 @@ de stream-box.lua (`apply_sub_style`), `POST /api/set`, onglet Réglages de la T
 Le menu QML rouvre sur le dernier onglet (`open()` ne remet plus `tab` à 0 ; données relues par `loadTab`, rangée et
 carte gardées pour YouTube et Jellyfin ; Suivis s'ouvre sur le rail). mpv gardant la pause d'un fichier à l'autre,
 `play_media` et `start_channel` la retirent.
+Fond du menu : deux lueurs floues (RectangularShadow, pas de forme nette) de la couleur de l'onglet, en haut à droite
+(`pal.glow`) et en bas (`pal.glowLow`), sur tous les thèmes ; presque invisibles en neutre.
 

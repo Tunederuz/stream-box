@@ -44,15 +44,15 @@ Item {
     readonly property string theme: tabId === "youtube" || tabId === "jellyfin" ? tabId
         : ["live", "follows", "replays"].indexOf(tabId) >= 0 ? "twitch" : "neutral"
     readonly property var pal: theme === "youtube"
-        ? { accent: "#ff0033", veil: "#180407", rail: "#1a0709", glow: 0.22, sheet: "#261216", key: "#3a1f24",
+        ? { accent: "#ff0033", veil: "#180407", rail: "#1a0709", glow: 0.42, glowLow: 0.30, sheet: "#261216", key: "#3a1f24",
             surface: "#33171c", surfaceFocus: "#4a2027", label: "#c9a3aa" }
         : theme === "jellyfin"
-        ? { accent: "#00a4dc", veil: "#030f17", rail: "#06131c", glow: 0.20, sheet: "#0f202c", key: "#173244",
+        ? { accent: "#00a4dc", veil: "#030f17", rail: "#06131c", glow: 0.40, glowLow: 0.28, sheet: "#0f202c", key: "#173244",
             surface: "#12293a", surfaceFocus: "#1b3c54", label: "#9cc3d8" }
         : theme === "twitch"
-        ? { accent: "#9146ff", veil: "#0a0612", rail: "#100b17", glow: 0.10, sheet: "#21182c", key: "#33283f",
+        ? { accent: "#9146ff", veil: "#0a0612", rail: "#100b17", glow: 0.32, glowLow: 0.20, sheet: "#21182c", key: "#33283f",
             surface: "#2a2034", surfaceFocus: "#3a2c4e", label: "#a99fc0" }
-        : { accent: "#e8e8ee", veil: "#0b0b0d", rail: "#121214", glow: 0.05, sheet: "#1e1e22", key: "#2f2f35",
+        : { accent: "#e8e8ee", veil: "#0b0b0d", rail: "#121214", glow: 0.10, glowLow: 0.06, sheet: "#1e1e22", key: "#2f2f35",
             surface: "#232327", surfaceFocus: "#35353c", label: "#a3a3ad" }
     readonly property bool ytTheme: theme === "youtube"
     readonly property color accent: pal.accent
@@ -733,18 +733,19 @@ Item {
         opacity: box.videoActive ? 0.89 : 1
         Behavior on color { ColorAnimation { duration: 400 } }
     }
-    Rectangle {   // lueur en haut à droite, de la couleur de l'onglet
-        x: 1350; y: -350; width: 900; height: 700; radius: 450
+    RectangularShadow {   // lueur floue en haut à droite, de la couleur de l'onglet
+        x: 1380; y: -320; width: 820; height: 640; radius: 320
+        blur: 240; spread: 0
         color: menu.accent
         opacity: menu.pal.glow
         Behavior on color { ColorAnimation { duration: 400 } }
         Behavior on opacity { NumberAnimation { duration: 400 } }
     }
-    RectangularShadow {   // seconde lueur, en bas, sur les onglets YouTube et Jellyfin : floue (une forme nette faisait tache)
+    RectangularShadow {   // seconde lueur floue, en bas, plus discrète
         x: 600; y: 860; width: 900; height: 420; radius: 210
         blur: 220; spread: 0
         color: menu.accent
-        opacity: menu.theme === "youtube" ? 0.30 : menu.theme === "jellyfin" ? 0.28 : 0
+        opacity: menu.pal.glowLow
         Behavior on color { ColorAnimation { duration: 400 } }
         Behavior on opacity { NumberAnimation { duration: 400 } }
     }
