@@ -502,7 +502,9 @@ TV : onglet « Jellyfin » (thème bleu) sur la même page que YouTube (`mediaRo
 propre `jfRow`/`jfSel`) : recherche au clavier à l'écran, épisodes d'une série ouverte, Reprendre, Prochains
 épisodes, ajouts récents ; OK sur un film ou un épisode : Reprendre / Depuis le début / Tous les épisodes. Rail
 resserré (pas de 76) pour 9 onglets. Rangées
-horizontales : défilement carte par carte aligné à gauche (`first`, `fits`), cartes coupées cachées (jamais sous le rail). Piège QML : une fonction ne doit pas reprendre le nom d'une propriété
+horizontales : défilement carte par carte aligné à gauche (`first`, `fits`), rangée découpée 28 px avant le contenu
+(`clip` sur une enveloppe plus haute que les cartes, pour le halo) et cartes affichées d'après la fenêtre visée, pas
+leur position animée : celle qui sort s'efface en 90 ms sans passer sous le rail. Piège QML : une fonction ne doit pas reprendre le nom d'une propriété
 (`setSel` existait : les touches de l'onglet échouaient en silence, sauf dans le journal).
 Page : bloc Jellyfin de l'onglet Télécommande (puces par rangée, recherche, épisodes d'une série).
 
