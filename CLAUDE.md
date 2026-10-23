@@ -449,3 +449,13 @@ la droite, ligne de temps restant), `PollsOverlay.qml` (barres animées, ★ gag
 Aperçu YouTube : à chaque lecture YouTube, remote.py lance `yt-dlp -J` une fois et publie la planche de miniatures
 (`storyboard` : fragments d'images en grille rows × columns, chacun couvrant `duration` s) ; la case affichée est
 choisie d'après la position. Piège QML encore : `left` (FINAL) ne peut pas servir de nom de propriété.
+
+### État de la box (page, Réglages → Système)
+
+`GET /api/health` : températures (hwmon `coretemp`/`k10temp` et `nvme`), processeur (% sur 5 s, `health_loop`) et
+charge, mémoire, disque, réseau (interface de la route par défaut, vitesse du lien, débits sur 5 s), lecture (lecteur
+réellement actif, décodage, taille, images/s, images perdues), services utilisateur (MQTT, jetons YouTube :
+`systemctl --user is-active`), mises à jour (en cours, prochaine d'après le minuteur, dernière d'après
+`update.log`). `POST /api/update` lance `stream-box-update.service` (`--no-block`). La page relit toutes les 5 s tant
+que l'onglet Réglages est affiché ; tuiles en orange ou rouge au-delà des seuils (70 °C, 85 °C, mémoire, disque,
+service arrêté, décodage par le processeur).

@@ -1111,6 +1111,135 @@ def follows_logout():
         follows_cache.update(at=0.0, data=None)
 
 
+# État de la box (page, Réglages → Système) : températures, processeur, mémoire, disque, réseau, lecteur, services,
+# mises à jour. Le processeur et le débit réseau se mesurent sur un intervalle : relevés toutes les 5 s par un fil.
+
+UPDATE_LOG = os.path.expanduser("~/.local/state/stream-box/update.log")
+health_rates = {"cpu": None, "rx": None, "tx": None}
+
+
+def default_iface():
+    try:
+        with open("/proc/net/route") as f:
+            for line in f.readlines()[1:]:
+                parts = line.split()
+                if parts[1] == "00000000":
+                    return parts[0]
+    except OSError:
+        pass
+    return None
+
+
+def read_int(path, default=None):
+    try:
+        with open(path) as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return default
+
+
+def health_loop():
+    prev = None
+    while True:
+        try:
+            with open("/proc/stat") as f:
+                cpu = [int(v) for v in f.readline().split()[1:]]
+            iface = default_iface()
+            rx = read_int(f"/sys/class/net/{iface}/statistics/rx_bytes", 0) if iface else 0
+            tx = read_int(f"/sys/class/net/{iface}/statistics/tx_bytes", 0) if iface else 0
+            now = time.time()
+            if prev:
+                busy, total = sum(cpu) - cpu[3] - cpu[4], sum(cpu)
+                pbusy, ptotal = sum(prev[0]) - prev[0][3] - prev[0][4], sum(prev[0])
+                dt = now - prev[3]
+                health_rates.update(cpu=100 * (busy - pbusy) / max(1, total - ptotal),
+                                    rx=(rx - prev[1]) * 8 / dt, tx=(tx - prev[2]) * 8 / dt)   # bits/s
+            prev = (cpu, rx, tx, now)
+        except OSError:
+            pass
+        time.sleep(5)
+
+
+def temperatures():
+    out = {}
+    for h in sorted(os.listdir("/sys/class/hwmon")) if os.path.isdir("/sys/class/hwmon") else []:
+        base = f"/sys/class/hwmon/{h}"
+        try:
+            name = open(f"{base}/name").read().strip()
+        except OSError:
+            continue
+        t = read_int(f"{base}/temp1_input")
+        if t is not None and name in ("coretemp", "k10temp", "zenpower", "nvme"):
+            out["cpu" if name != "nvme" else "disk"] = round(t / 1000)
+    return out
+
+
+def user_systemctl(*args):
+    env = {**os.environ, "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")}
+    r = subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True, timeout=10, env=env)
+    return r.stdout.strip()
+
+
+def last_update():
+    """Dernière mise à jour d'après update.log : date et lignes de ce passage"""
+    try:
+        with open(UPDATE_LOG, encoding="utf-8", errors="replace") as f:
+            text = f.read()[-20000:]
+    except OSError:
+        return None
+    runs = text.split("=== ")
+    if len(runs) < 2:
+        return None
+    date, _, body = runs[-1].partition("\n")
+    lines = [l for l in body.splitlines() if l.strip()]
+    failed = any("échec" in l.lower() or "ÉCHEC" in l for l in lines)
+    return {"date": date.strip(), "lines": lines[-12:], "ok": not failed}
+
+
+def health():
+    with open("/proc/meminfo") as f:
+        mem = {k: int(v.split()[0]) for k, v in (l.split(":", 1) for l in f)}
+    disk = shutil.disk_usage(os.path.expanduser("~"))
+    with open("/proc/uptime") as f:
+        uptime = float(f.read().split()[0])
+    iface = default_iface()
+    try:
+        hwdec, drops, fps, width, height, vo = mpv(
+            ["get_property", "hwdec-current"], ["get_property", "frame-drop-count"],
+            ["get_property", "estimated-vf-fps"], ["get_property", "video-params/w"],
+            ["get_property", "video-params/h"], ["get_property", "current-vo"])
+    except OSError:
+        hwdec = drops = fps = width = height = vo = None
+    services = {}
+    for unit, label in (("stream-box-mqtt.service", "mqtt"), ("stream-box-pot.service", "youtube_tokens")):
+        try:
+            services[label] = user_systemctl("is-active", unit) or "inconnu"
+        except (OSError, subprocess.SubprocessError):
+            services[label] = "inconnu"
+    try:
+        props = dict(l.split("=", 1) for l in user_systemctl(
+            "show", "stream-box-update.service", "-p", "ActiveState").splitlines() if "=" in l)
+        timer = user_systemctl("show", "stream-box-update.timer", "-p", "NextElapseUSecRealtime")
+        next_run = timer.split("=", 1)[1] if "=" in timer else ""
+    except (OSError, subprocess.SubprocessError):
+        props, next_run = {}, ""
+    return {
+        "temps": temperatures(), "cpu": health_rates["cpu"], "load": os.getloadavg()[0], "cores": os.cpu_count(),
+        "memory": {"total": mem.get("MemTotal", 0) * 1024, "available": mem.get("MemAvailable", 0) * 1024},
+        "disk": {"total": disk.total, "free": disk.free}, "uptime": uptime,
+        "network": {"iface": iface, "speed": read_int(f"/sys/class/net/{iface}/speed") if iface else None,
+                    "rx": health_rates["rx"], "tx": health_rates["tx"]},
+        "player": {"choice": player_choice(), "running": "qt" if vo == "libmpv" else "mpv", "hwdec": hwdec,
+                   "dropped": drops, "fps": fps, "size": f"{width}x{height}" if width else None},
+        "services": services,
+        "update": {"running": props.get("ActiveState") == "activating", "next": next_run, "last": last_update()},
+    }
+
+
+def start_update():
+    user_systemctl("start", "--no-block", "stream-box-update.service")
+
+
 # Compte Twitch
 
 account = {"login": None, "expired": False}   # dernier résultat connu, pour ne pas interroger Twitch à chaque requête
@@ -1278,6 +1407,8 @@ def action(name, body):
         predict(str(body.get("event", "")), str(body.get("outcome", "")), int(body.get("points", 0)))
     elif name == "player":
         set_player(str(body.get("mode", "")))
+    elif name == "update":
+        start_update()
     elif name == "qr":
         # Affichage du QR code de la télécommande sur la TV
         if body.get("mode") not in ("always", "timed", "never"):
@@ -1378,6 +1509,8 @@ class Handler(BaseHTTPRequestHandler):
                                             q.get("round", ["0"])[0] == "1", int(q.get("radius", ["0"])[0])))
                 except (ValueError, subprocess.SubprocessError) as e:
                     self.send(400, {"error": str(e)})
+            elif self.path == "/api/health":
+                self.send(200, health())
             elif self.path == "/api/events":
                 try:
                     self.send(200, events_for_page())
@@ -1422,4 +1555,5 @@ threading.Thread(target=live_loop, daemon=True).start()
 threading.Thread(target=ambient_loop, daemon=True).start()
 threading.Thread(target=history_loop, daemon=True).start()
 threading.Thread(target=events_loop, daemon=True).start()
+threading.Thread(target=health_loop, daemon=True).start()
 ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
