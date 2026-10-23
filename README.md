@@ -13,6 +13,7 @@ télécommande web installable sur téléphone (PWA).
 - **Chat Twitch en overlay** (lecture anonyme), dans le coin de son choix, avec fond et taille réglables.
 - **Retour en arrière dans le direct** (quelques minutes gardées en mémoire), pause en différé.
 - **Qui est en live** dans le menu et la télécommande, **notification** quand un streamer de la liste lance son live.
+- **Écran d'ambiance** quand rien ne joue : horloge, date, météo et prochains lives prévus (plannings Twitch).
 - **Compte Twitch** facultatif : plus de pubs sur les chaînes où l'on est abonné, VOD réservées aux abonnés.
 - **Mode vidéo** : liens YouTube et autres (yt-dlp, sous-titres), rediffusions et clips Twitch, partage Android
   « Partager → Stream Box », et **Jellyfin** (« Lire sur… ») via jellyfin-mpv-shim.

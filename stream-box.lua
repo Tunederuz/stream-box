@@ -27,6 +27,7 @@ local server, port_n = nil, os.time() % 50
 local attempts, retry_timer = 0, nil
 local mode, back_timer = "twitch", nil
 local live, offline, channel_since = {}, false, 0   -- live : relevé de remote.py (user-data/streambox/live)
+local ambient_visible, status_text = false, ""    -- écran d'ambiance affiché ; dernier message d'état
 local menu = mp.create_osd_overlay("ass-events")
 local status = mp.create_osd_overlay("ass-events")
 local menu_visible, hide_timer, items = false, nil, {}
@@ -70,7 +71,8 @@ local function write_state(name, value)
 end
 
 local function set_status(text)
-    if text == "" then
+    status_text = text
+    if text == "" or ambient_visible then   -- l'écran d'ambiance affiche lui-même ce message, en petit
         status:remove()
         return
     end
@@ -685,6 +687,88 @@ local function set_number(key, value)
     mp.set_property_native("user-data/streambox/" .. key, n)
 end
 mp.register_script_message("streambox-set", set_number)
+
+-- Écran d'ambiance : quand rien ne joue (chaîne hors ligne, liste vide), horloge, date, météo et prochains lives
+-- (données de remote.py dans user-data/streambox/ambient). Le contenu se déplace un peu chaque minute, pour ne pas
+-- marquer l'écran de la TV.
+local WEEKDAYS = { "dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi" }   -- os.date : 1 = dimanche
+local MONTHS = { "janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+                 "novembre", "décembre" }
+local ambient = mp.create_osd_overlay("ass-events")
+ambient.z = -10   -- sous le menu et les notifications
+local ambient_data, ambient_drawn = {}, nil
+
+local function ambient_wanted()
+    return mode == "twitch" and (offline or #streamers == 0) and not mp.get_property_native("video-params")
+end
+
+local function draw_ambient()
+    local w, h = mp.get_osd_size()
+    if not w or w == 0 then return end
+    local t = os.date("*t")
+    local minute = math.floor(os.time() / 60)
+    local cx = w / 2 + math.sin(minute * 0.7) * w * 0.04
+    local cy = h * 0.40 + math.cos(minute * 0.5) * h * 0.04
+    local fs = math.floor(h / 26)
+    local function line(y, size, color, raw)
+        return ("{\\an8\\pos(%d,%d)\\fs%d\\bord0\\shad0\\1c&H%s&}%s"):format(cx, y, size, color, raw)
+    end
+    local out = {
+        line(cy - h * 0.30, math.floor(h * 0.22), "FFFFFF", ("%02d:%02d"):format(t.hour, t.min)),
+        line(cy - h * 0.06, math.floor(fs * 1.2), "B0B0B0",
+             ass_escape(("%s %d %s"):format(WEEKDAYS[t.wday], t.day, MONTHS[t.month]))),
+    }
+    local wx = ambient_data.weather
+    if wx then
+        local parts = { wx.city, ("%d°"):format(wx.temp), wx.text, ("%d° / %d°"):format(wx.min, wx.max) }
+        if (tonumber(wx.rain) or 0) >= 30 then parts[#parts + 1] = ("pluie %d %%"):format(wx.rain) end
+        local kept = {}
+        for _, part in ipairs(parts) do if part and part ~= "" then kept[#kept + 1] = part end end
+        out[#out + 1] = line(cy + h * 0.01, fs, "D0D0D0", ass_escape(table.concat(kept, "  ·  ")))
+    end
+    local schedule = ambient_data.schedule or {}
+    if #schedule > 0 then
+        local y = cy + h * 0.10
+        out[#out + 1] = line(y, math.floor(fs * 0.75), "808080", "PROCHAINS LIVES")
+        for _, item in ipairs(schedule) do
+            y = y + fs * 1.35
+            local title = item.title or ""
+            if #title > 40 then title = title:sub(1, 37) .. "…" end
+            out[#out + 1] = line(y, math.floor(fs * 0.85), "FFFFFF",
+                "{\\b1}" .. ass_escape(item.login) .. "{\\b0\\1c&HB0B0B0&}  ·  " .. ass_escape(item.when)
+                .. (title ~= "" and ("  ·  " .. ass_escape(title)) or ""))
+        end
+    end
+    if status_text ~= "" then
+        out[#out + 1] = line(h * 0.93, math.floor(fs * 0.7), "707070", ass_escape(status_text))
+    end
+    ambient.res_x, ambient.res_y = w, h
+    ambient.data = table.concat(out, "\n")
+    ambient:update()
+end
+
+local function update_ambient(force)
+    if ambient_wanted() then
+        local key = os.date("%H:%M") .. status_text
+        if not ambient_visible then
+            ambient_visible = true
+            status:remove()
+        end
+        if force or key ~= ambient_drawn then
+            ambient_drawn = key
+            draw_ambient()
+        end
+    elseif ambient_visible then
+        ambient_visible, ambient_drawn = false, nil
+        ambient:remove()
+        set_status(status_text)   -- remet le message d'état (« Chargement… ») s'il y en a un
+    end
+end
+mp.add_periodic_timer(2, function() update_ambient(false) end)
+mp.observe_property("user-data/streambox/ambient", "native", function(_, value)
+    ambient_data = value or {}
+    if ambient_visible then update_ambient(true) end
+end)
 
 mp.observe_property("user-data/streambox/live", "native", function(_, value)
     live = value or {}

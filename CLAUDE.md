@@ -141,6 +141,13 @@ appli), fait la même chose depuis un téléphone, plus le volume et la pause.
   commandes reçues avant (sinon le choix du streamer envoyé par HA au réveil était perdu). 14 entités par
   découverte (`homeassistant/…/stream_box/…`), réannoncées quand HA redémarre ou que la liste change. Config locale
   `~/.config/stream-box/mqtt.json` + `mqtt-password` (600). Entités et automatisation d'exemple : `docs/home-assistant.md`.
+- **Écran d'ambiance** (stream-box.lua, `draw_ambient`) quand rien ne joue (chaîne hors ligne, liste vide) : horloge,
+  date en français, météo, prochains lives prévus, et le message d'état en petit en bas. Il se déplace un peu chaque
+  minute (TV). Données de `remote.py` (`ambient_loop`, toutes les 10 min, republiées chaque minute dans
+  `user-data/streambox/ambient`) : météo Open-Meteo (lieu dans `~/.config/stream-box/ambient.json`, `city`,
+  `latitude`, `longitude`, `timezone` ; sans ce fichier, pas de météo) et plannings Twitch (GQL `schedule.segments`,
+  créneaux de la semaine en cours : un créneau passé est reporté d'une semaine). Les captures de mpv sont vides quand
+  rien ne joue : vérifier l'écran sur la TV.
 - **Mises à jour** : `update.sh` (timer systemd utilisateur `stream-box-update.timer`, lundi ~5 h, rattrapé au démarrage)
   met à jour streamlink, yt-dlp, Deno, Node, le plugin de jetons et jellyfin-mpv-shim (et recompile le serveur de jetons si sa version change), teste chaque venv et remet les versions d'avant si le test
   échoue. Journal : `~media/.local/state/stream-box/update.log`.
