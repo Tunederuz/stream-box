@@ -47,13 +47,14 @@ def entities(streamers):
                               "value_template": "{{ value_json.volume }}"}),
         ("button", "back_to_stream", {"name": "Retour au stream", "icon": "mdi:twitch",
                                       "command_topic": cmd("back_to_stream")}),
+        ("button", "home", {"name": "Écran d'accueil", "icon": "mdi:home", "command_topic": cmd("home")}),
         ("button", "go_live", {"name": "Revenir au direct", "icon": "mdi:skip-forward", "command_topic": cmd("go_live")}),
         ("button", "poweroff", {"name": "Éteindre", "icon": "mdi:power",
                                 "command_topic": cmd("poweroff")}),
         ("text", "play_url", {"name": "Lire un lien", "icon": "mdi:play-box", "mode": "text", "max": 255,
                               "command_topic": cmd("play"), "state_topic": f"{BASE}/play_url"}),
         ("sensor", "mode", {"name": "Mode", "icon": "mdi:television-play", "state_topic": state,
-                            "value_template": "{{ 'Vidéo' if value_json.mode == 'media' else 'Twitch' }}"}),
+                            "value_template": "{{ {'media': 'Vidéo', 'home': 'Accueil'}.get(value_json.mode, 'Twitch') }}"}),
         ("sensor", "now_playing", {"name": "En cours", "icon": "mdi:play", "state_topic": state,
                                    "value_template": "{{ value_json.title or value_json.channel or '' }}"}),
         ("sensor", "live_count", {"name": "Streamers en live", "icon": "mdi:access-point", "state_topic": state,
@@ -125,6 +126,8 @@ class Bridge:
                 api("/api/volume", {"delta": max(-20, min(20, round(float(payload)) - int(s.get("volume", 0))))})
             elif command == "back_to_stream":
                 api("/api/twitch", {})
+            elif command == "home":
+                api("/api/home", {})
             elif command == "go_live":
                 api("/api/live_seek", {"delta": "live"})
             elif command == "poweroff":

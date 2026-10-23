@@ -154,6 +154,7 @@
   <section>
     <h2>Streamers</h2>
     <div class="grid" id="streamers"></div>
+    <button data-action="home" id="home" style="width: 100%; margin-top: 8px">⌂ Écran d'accueil</button>
     <div id="timeshift" hidden>
       <div class="times" style="margin: 12px 0 6px"><span>Direct</span><span id="delay"></span></div>
       <div class="row">
@@ -313,7 +314,8 @@ function render(s) {
   if (!$("tab-settings").hidden) renderManage();
   $("dot").classList.toggle("on", s.playing);
   $("status").className = "status";
-  $("status").textContent = s.playing ? "" : `${s.channel ?? "…"} n'est pas en live (ou chargement en cours)`;
+  $("status").textContent = s.playing || s.mode === "home" ? "" : `${s.channel ?? "…"} n'est pas en live (ou chargement en cours)`;
+  $("home").classList.toggle("current", s.mode === "home");
 
   const media = s.mode === "media";
   $("media-section").hidden = !media;
@@ -354,7 +356,7 @@ function render(s) {
     } else {
       b.append(span("live-info offline", "hors ligne"));
     }
-    b.classList.toggle("current", !media && name === s.channel);
+    b.classList.toggle("current", s.mode === "twitch" && name === s.channel);
     b.onclick = () => send("channel", { name });
     return b;
   }));

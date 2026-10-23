@@ -24,6 +24,7 @@ COOKIES_DIR = os.path.expanduser("~/.config/stream-box")
 COOKIES_FILE = os.path.join(COOKIES_DIR, "twitch-cookies.txt")
 CHECK_EVERY = 1800   # secondes entre deux vérifications du jeton auprès de Twitch
 LIVE_EVERY = 60      # secondes entre deux relevés « qui est en live »
+PUBLISH_EVERY = 10   # secondes entre deux envois à mpv des données déjà connues : un mpv relancé les reçoit vite
 TWITCH_WEB_CLIENT_ID = "kimne78kx3ncx6brgo4mv6wki5h1ko"   # celui du site twitch.tv, public (streamlink l'utilise aussi)
 # Fichiers servis tels quels : la page et ce qu'il faut pour l'installer comme une appli (PWA)
 STATIC = {
@@ -92,18 +93,25 @@ def fetch_live(logins):
 
 def live_loop():
     global live_now
-    first = True
+    first, fetched = True, 0.0
     while True:
+        went_live = []
+        if time.time() - fetched >= LIVE_EVERY:
+            fetched = time.time()
+            try:
+                previous, live_now = live_now, fetch_live(read_streamers())
+                # Streamers qui viennent de lancer leur live (pas au premier relevé : ils étaient déjà en live)
+                went_live = [] if first else [login for login in live_now if login not in previous]
+                first = False
+            except (OSError, ValueError, KeyError, TypeError):
+                pass   # Twitch injoignable : on garde le dernier relevé
         try:
-            previous, live_now = live_now, fetch_live(read_streamers())
             mpv(["set_property", "user-data/streambox/live", live_now])
-            # Streamers qui viennent de lancer leur live (pas au premier relevé : ils étaient déjà en live)
-            for login in ([] if first else [l for l in live_now if l not in previous]):
+            for login in went_live:
                 mpv(["script-message", "streambox-went-live", login])
-            first = False
-        except (OSError, ValueError, KeyError, TypeError):
-            pass   # Twitch ou mpv injoignable : on garde le dernier relevé
-        time.sleep(LIVE_EVERY)
+        except OSError:
+            pass
+        time.sleep(PUBLISH_EVERY)
 
 
 # Rediffusions et clips de la semaine d'un streamer, pour la page (cache de 5 min par streamer)
@@ -229,11 +237,11 @@ def ambient_loop():
                 except (OSError, ValueError, KeyError, TypeError):
                     pass   # service injoignable : on garde la dernière valeur
             fetched = time.time()
-        try:   # republié chaque minute : un mpv relancé le reçoit vite
+        try:
             mpv(["set_property", "user-data/streambox/ambient", data])
         except OSError:
             pass
-        time.sleep(60)
+        time.sleep(PUBLISH_EVERY)
 
 
 # Aperçu de la TV pour la page, seulement quand la page le demande (bloc ouvert) : l'écran entier, écran d'ambiance et
@@ -707,6 +715,8 @@ def action(name, body):
         edit_history(str(body.get("action", "")), str(body.get("key", "")))
     elif name == "twitch":
         mpv(["script-message", "streambox-twitch"])
+    elif name == "home":
+        mpv(["script-message", "streambox-home"])
     elif name == "sub":
         sid = body.get("id")
         mpv(["set_property", "sid", int(sid) if str(sid).isdigit() else "no"])

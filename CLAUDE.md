@@ -143,10 +143,13 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   commandes reçues avant (sinon le choix du streamer envoyé par HA au réveil était perdu). 14 entités par
   découverte (`homeassistant/…/stream_box/…`), réannoncées quand HA redémarre ou que la liste change. Config locale
   `~/.config/stream-box/mqtt.json` + `mqtt-password` (600). Entités et automatisation d'exemple : `docs/home-assistant.md`.
-- **Écran d'ambiance** (stream-box.lua, `draw_ambient`) quand rien ne joue (chaîne hors ligne, liste vide) : horloge,
+- **Écran d'accueil à la demande** : mode `home` (`show_home`, script-message `streambox-home`, `POST /api/home`,
+  bouton dans la page, dernière ligne du menu de la TV, bouton MQTT) : stream arrêté, écran d'ambiance affiché, pas
+  de bascule automatique ni de chien de garde ; on en sort en choisissant un streamer ou une vidéo, ou par Jellyfin.
+- **Écran d'ambiance** (stream-box.lua, `draw_ambient`) quand rien ne joue (chaîne hors ligne, liste vide, mode `home`) : horloge,
   date en français, météo, prochains lives prévus, et le message d’état en petit en bas, sur un fond « aurore » (`AURORA` :
   trois taches très floues qui dérivent, redessinées toutes les 2 s, ~2 % de CPU). Le texte se déplace un peu chaque
-  minute (TV). Données de `remote.py` (`ambient_loop`, toutes les 10 min, republiées chaque minute dans
+  minute (TV). Données de `remote.py` (`ambient_loop`, toutes les 10 min, republiées toutes les 10 s dans
   `user-data/streambox/ambient`) : météo Open-Meteo (lieu dans `~/.config/stream-box/ambient.json`, `city`,
   `latitude`, `longitude`, `timezone` ; sans ce fichier, pas de météo) et plannings Twitch (GQL `schedule.segments`,
   créneaux de la semaine en cours : un créneau passé est reporté d'une semaine). Les captures de mpv sont vides quand
