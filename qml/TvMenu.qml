@@ -4,6 +4,7 @@
 // ferme), homescreen (WWW), corner (Play), menu (≡ : options de la carte choisie, dont le second stream). Coordonnées
 // en 1920x1080, mises à l'échelle par ui.qml. Second stream : objet « pip » de ui.py.
 import QtQuick
+import QtQuick.Effects
 import "fmt.js" as Fmt
 
 Item {
@@ -739,10 +740,11 @@ Item {
         Behavior on color { ColorAnimation { duration: 400 } }
         Behavior on opacity { NumberAnimation { duration: 400 } }
     }
-    Rectangle {   // seconde lueur, en bas, sur les onglets YouTube et Jellyfin
-        x: 500; y: 780; width: 1100; height: 600; radius: 300
+    RectangularShadow {   // seconde lueur, en bas, sur les onglets YouTube et Jellyfin : floue (une forme nette faisait tache)
+        x: 600; y: 860; width: 900; height: 420; radius: 210
+        blur: 220; spread: 0
         color: menu.accent
-        opacity: menu.theme === "youtube" ? 0.11 : menu.theme === "jellyfin" ? 0.10 : 0
+        opacity: menu.theme === "youtube" ? 0.30 : menu.theme === "jellyfin" ? 0.28 : 0
         Behavior on color { ColorAnimation { duration: 400 } }
         Behavior on opacity { NumberAnimation { duration: 400 } }
     }
