@@ -712,9 +712,10 @@ def edit_streamers(action, raw, delta=0):
 
 
 def find_url(*texts):
-    """Premier lien http(s) trouvé : les applis partagent souvent « titre + lien » dans le champ texte."""
+    """Premier lien http(s) trouvé : les applis partagent souvent « titre + lien » dans le champ texte. Aussi
+    « jellyfin:ID », le lien des vidéos Jellyfin dans l'historique."""
     for text in texts:
-        match = re.search(r"https?://\S+", text or "")
+        match = re.search(r"https?://\S+|\bjellyfin:[0-9a-f]{32}\b", text or "")
         if match:
             return match.group(0)
     return None
