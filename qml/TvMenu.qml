@@ -982,7 +982,7 @@ Item {
             visible: menu.tabId === "replays"
             readonly property var rows: menu.replayRows()
             ListView {   // puces des streamers
-                y: 196; x: -40; width: 1500; height: 64
+                y: 196; x: -40; width: 1440; height: 64   // s'arrête avant le bord de l'écran
                 orientation: ListView.Horizontal; spacing: 16; interactive: false; clip: false
                 leftMargin: 40
                 model: (menu.st.streamers || []).length
@@ -997,7 +997,8 @@ Item {
                     TextMetrics { id: chipMetrics; text: login; font.pixelSize: chipText.font.pixelSize; font.bold: true }
                     width: Math.ceil(chipMetrics.advanceWidth) + 100; height: 64
                     readonly property real rel: x - ListView.view.contentX
-                    opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0   // fenêtre visée
+                    // puces de largeurs variables : cachées si elles sortent de la ligne (pas de fenêtre first/fits ici)
+                    opacity: rel > -20 && rel + width < ListView.view.width + 20 ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 90 } }
                     scale: foc ? 1.05 : 1
                     Behavior on scale { NumberAnimation { duration: 160 } }
