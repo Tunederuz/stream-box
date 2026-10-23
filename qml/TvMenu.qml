@@ -594,17 +594,28 @@ Item {
 
     Rectangle {   // voile sur la vidéo ; opaque sans vidéo, pour cacher l'écran d'ambiance
         anchors.fill: parent
-        color: "#0a0612"
+        // Onglet YouTube : fond teinté de rouge
+        color: menu.tabId === "youtube" ? "#14060a" : "#0a0612"
         opacity: box.videoActive ? 0.89 : 1
+        Behavior on color { ColorAnimation { duration: 400 } }
     }
-    Rectangle {   // lueur violette en haut à droite
+    Rectangle {   // lueur en haut à droite : violette, rouge sur l'onglet YouTube
         x: 1350; y: -350; width: 900; height: 700; radius: 450
-        color: "#9146ff"; opacity: 0.10
+        color: menu.tabId === "youtube" ? "#ff0033" : "#9146ff"
+        opacity: menu.tabId === "youtube" ? 0.16 : 0.10
+        Behavior on color { ColorAnimation { duration: 400 } }
+        Behavior on opacity { NumberAnimation { duration: 400 } }
+    }
+    Rectangle {   // seconde lueur rouge, en bas, sur l'onglet YouTube seulement
+        x: 500; y: 780; width: 1100; height: 600; radius: 300
+        color: "#ff0033"
+        opacity: menu.tabId === "youtube" ? 0.07 : 0
+        Behavior on opacity { NumberAnimation { duration: 400 } }
     }
 
     // Rail des onglets
     Rectangle { width: 400; height: parent.height; color: "#100b17"; opacity: 0.55 }
-    Rectangle { x: 56; y: 62; width: 52; height: 52; radius: 14; color: "#9146ff"
+    Rectangle { x: 56; y: 62; width: 52; height: 52; radius: 14; color: "#2d7ff9"   // logo : bleu, comme l'icône
         Text { anchors.centerIn: parent; anchors.horizontalCenterOffset: 2; text: "▶"; color: "white"; font.pixelSize: 20 } }
     Text { x: 126; y: 88 - height / 2; text: "Stream Box"; color: "white"; font.pixelSize: 28; font.bold: true }
     Rectangle {   // pastille de l'onglet : glisse d'un onglet à l'autre
@@ -1105,7 +1116,7 @@ Item {
                                 readonly property bool foc: menu.kbRow === r && menu.kbCol === index
                                 readonly property bool wide: label.length > 1
                                 width: wide ? (r === 5 ? 348 : 312) : 96; height: 72; radius: 16   // 10 touches de large : 1068
-                                color: foc ? "white" : label === "Rechercher" ? "#9146ff" : "#33283f"
+                                color: foc ? "white" : label === "Rechercher" ? "#e0002d" : "#33283f"   // rouge YouTube
                                 scale: foc ? 1.06 : 1
                                 Behavior on scale { NumberAnimation { duration: 120 } }
                                 Text {
