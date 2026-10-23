@@ -508,10 +508,10 @@ Item {
             }
             GridView {
                 id: liveGrid
-                y: 270; x: -40; width: 1500; height: 3 * 176 + 60
+                y: 270; x: -13; width: 1460; height: 3 * 176 + 60
                 cellWidth: 356; cellHeight: 176
                 interactive: false; clip: false
-                topMargin: 27; leftMargin: 27
+                topMargin: 27
                 model: (menu.st.streamers || []).length
                 currentIndex: menu.liveSel
                 onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
@@ -592,9 +592,9 @@ Item {
             }
             GridView {
                 visible: !!followsPage.f.authorized
-                y: 176; x: -40; width: 1500; height: 4 * 176 + 60
+                y: 176; x: -13; width: 1460; height: 4 * 176 + 60
                 cellWidth: 356; cellHeight: 176
-                interactive: false; clip: false; topMargin: 27; leftMargin: 27
+                interactive: false; clip: false; topMargin: 27
                 model: menu.followList().length
                 currentIndex: menu.followSel
                 onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
@@ -625,9 +625,9 @@ Item {
             visible: menu.tabId === "replays"
             readonly property var rows: menu.replayRows()
             ListView {   // puces des streamers
-                y: 166; x: -40; width: 1500; height: 116
+                y: 196; x: -40; width: 1500; height: 64
                 orientation: ListView.Horizontal; spacing: 16; interactive: false; clip: false
-                leftMargin: 40; topMargin: 26
+                leftMargin: 40
                 model: (menu.st.streamers || []).length
                 currentIndex: menu.rpSel[0]
                 onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
@@ -655,12 +655,12 @@ Item {
                 Item {
                     readonly property int r: index + 1
                     readonly property var row: parent.rows[r]
-                    y: 290 + index * 372; width: 1460; height: 360
+                    y: 300 + index * 366; width: 1460; height: 350
                     Text { x: 2; text: row ? row.title.toUpperCase() : ""; color: "#c09fa9"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 2 }
                     ListView {
-                        y: 4; x: -40; width: 1500; height: 370
+                        y: 40; x: -40; width: 1500; height: 302
                         orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
-                        leftMargin: 40; topMargin: 38
+                        leftMargin: 40
                         model: row ? row.items.length : 0
                         currentIndex: menu.rpSel[r] || 0
                         onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
@@ -685,9 +685,9 @@ Item {
         // --- Historique
         GridView {
             visible: menu.tabId === "history"
-            y: 176; x: -40; width: 1500; height: 2 * 340 + 60
+            y: 176; x: -13; width: 1460; height: 2 * 340 + 60
             cellWidth: 356; cellHeight: 340
-            interactive: false; clip: false; topMargin: 27; leftMargin: 27
+            interactive: false; clip: false; topMargin: 27
             model: (menu.history || []).length
             currentIndex: menu.histSel
             onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
@@ -719,13 +719,13 @@ Item {
                 readonly property var rows: modelData === "settings" ? menu.settingsRows() : menu.systemRows()
                 readonly property var sel: menu.selectable(rows)
                 readonly property int focusedRow: menu.area === "content" ? sel[modelData === "settings" ? menu.setSel : menu.sysSel] : -1
-                y: 180; x: -40; width: modelData === "settings" ? 1060 : 890; height: 880
-                spacing: 10; interactive: false; clip: false; topMargin: 30; leftMargin: 40
+                y: 180; x: 0; width: modelData === "settings" ? 980 : 810; height: 880
+                spacing: 10; interactive: false; clip: false; topMargin: 30
                 model: rows.length
                 onFocusedRowChanged: if (focusedRow >= 0) positionViewAtIndex(focusedRow, ListView.Contain)
                 Behavior on contentY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                 delegate: SettingRow {
-                    width: rowsView.width - 80
+                    width: rowsView.width
                     readonly property real rel: y - rowsView.contentY
                     opacity: rel > -height / 2 && rel + height / 2 < rowsView.height ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 150 } }
