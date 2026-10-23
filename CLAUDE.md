@@ -270,7 +270,7 @@ page avec un `render(<état de /api/state>)` à la place de `refresh()`, captur�
 ## Grand menu de la TV (tv_menu.lua)
 
 Façon Android TV, ouvert par le bouton Menu de la télécommande (touche Accueil) dans tous les modes : onglets à gauche
-(En direct, Rediffusions, Historique, Réglages, Système), contenu à droite, vidéo assombrie derrière, refermé par Menu, Retour depuis les
+(En direct, Suivis, Rediffusions, Historique, Réglages, Système), contenu à droite, vidéo assombrie derrière, refermé par Menu, Retour depuis les
 onglets, ou au bout de 90 s sans touche. Script séparé, chargé par `start.sh` (`--script` en second). Tant qu'il est
 ouvert (`user-data/streambox/tvmenu`, que `chat_overlay.py` suit aussi pour masquer le chat, sinon dessiné
 par-dessus), `stream-box.lua` lui transmet toutes les touches (`streambox-tvmenu-key`) ;
@@ -295,3 +295,17 @@ pause (`marquee` : largeur estimée à 0,52 em par caractère, `\clip` à la lar
 tant qu'un texte défile, reparti du début à chaque touche ; menu ouvert ≈ +30 % d'un cœur), « En cours sur la TV »
 en bas du rail, météo de l'écran d'ambiance à côté de l'heure, carte du streamer regardé teintée de violet. Textes
 dimensionnés pour une TV vue du canapé (titres de cartes vidéo 33 px, infos 27 px, en 1920x1080).
+
+## Chaînes suivies (onglet Suivis)
+
+Twitch refuse la liste des chaînes suivies au jeton du site : GQL `currentUser.follows` / `followedLiveUsers` →
+« service error » (probablement réservé au vrai navigateur, contrôle d'intégrité), Helix → « Missing scope:
+user:read:follows ». D'où une appli Twitch à soi (dev.twitch.tv/console/apps, redirect `http://localhost` jamais
+utilisée, type Public sans secret ou Confidentiel avec secret) et l'autorisation par code (device code flow) :
+`POST /api/follows_login` → code à taper sur twitch.tv/activate (affiché sur la TV avec un QR code, et dans la page),
+`follows_poll` attend la validation, jetons dans `~/.config/stream-box/twitch-follows-token.json` (600, renouvelés par
+refresh token ; retirés si Twitch refuse). Config de l'appli : `twitch-app.json` (600), écrite par la page
+(`POST /api/follows_app {client_id, client_secret?}`, Réglages → Chaînes suivies). `GET /api/follows` : état et listes
+(Helix `streams/followed`, `channels/followed` jusqu'à 500, photos par `users`), cache 60 s. `/api/channel` accepte
+aussi une chaîne suivie. Sur la TV : grille comme En direct (live d'abord), OK regarde, ou propose « Ajouter à ma
+liste » si la chaîne n'y est pas. `GET /api/qr?text=` : QR code générique (segno).

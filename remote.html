@@ -528,6 +528,48 @@
     <div class="status" id="account-status"></div>
   </section>
 
+  <section>
+    <h2>Chaînes suivies</h2>
+    <!-- Twitch ne donne pas cette liste au jeton du site : il faut une appli Twitch à soi et une autorisation par code -->
+    <div id="follows-setup" hidden>
+      <p>Pour l'onglet <b>Suivis</b> du menu de la TV, la box a besoin de ta propre appli Twitch (gratuit, une fois).</p>
+      <details>
+        <summary>Créer l'appli</summary>
+        <ol>
+          <li>Ouvre <code>dev.twitch.tv/console/apps</code> → <b>Register Your Application</b> (la double
+            authentification doit être active sur ton compte).</li>
+          <li>Nom au choix (unique sur Twitch), OAuth Redirect URL <code>http://localhost</code>, catégorie
+            <b>Other</b>.</li>
+          <li>Type de client <b>Public</b> : seul le Client ID est utile. En <b>Confidentiel</b>, colle aussi le secret.</li>
+          <li>Copie le <b>Client ID</b> ici.</li>
+        </ol>
+      </details>
+      <div class="stack">
+        <input id="app-id" autocomplete="off" autocapitalize="none" placeholder="Client ID" aria-label="Client ID">
+        <input id="app-secret" type="password" autocomplete="off" placeholder="Secret (appli confidentielle seulement)"
+               aria-label="Secret de l'appli">
+        <button id="app-save" class="current">Enregistrer</button>
+      </div>
+    </div>
+    <div id="follows-auth" hidden>
+      <p>Appli enregistrée. Autorise la box à lire tes chaînes suivies (lecture seule).</p>
+      <button id="follows-login" class="current" style="width: 100%">Autoriser la box</button>
+      <div id="follows-code" hidden style="margin-top: 12px; text-align: center">
+        <p style="margin-bottom: 6px">Sur <b>twitch.tv/activate</b>, tape ce code :</p>
+        <div id="follows-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
+        <a id="follows-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Ouvrir la page d'activation</a>
+      </div>
+    </div>
+    <div id="follows-ok" hidden>
+      <p id="follows-summary"></p>
+      <div class="row">
+        <button id="follows-logout">Retirer l'autorisation</button>
+        <button id="app-change">Changer d'appli</button>
+      </div>
+    </div>
+    <div class="status" id="follows-status"></div>
+  </section>
+
   </div>
 
   <div class="status" id="status"></div>
@@ -1003,6 +1045,58 @@ $("poweroff").onclick = async () => {
 };
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); refreshAccount(); } });
 refreshAccount();
+
+// Chaînes suivies : appli Twitch, autorisation par code, état
+let followsTimer = null, followsChanging = false;
+async function refreshFollows() {
+  clearTimeout(followsTimer);
+  try {
+    const r = await fetch("/api/follows");
+    const f = await r.json();
+    if (!r.ok) throw new Error(f.error);
+    const pending = f.pending && !f.authorized;
+    $("follows-setup").hidden = f.configured && !followsChanging;
+    $("follows-auth").hidden = !f.configured || f.authorized || followsChanging;
+    $("follows-ok").hidden = !f.authorized || followsChanging;
+    $("follows-code").hidden = !pending || !!f.pending.error;
+    if (pending) {
+      $("follows-user-code").textContent = f.pending.user_code;
+      $("follows-link").href = f.pending.verification_uri;
+    }
+    $("follows-status").className = f.pending?.error ? "status error" : "status";
+    $("follows-status").textContent = f.pending?.error ? `Autorisation refusée : ${f.pending.error}` : "";
+    if (f.authorized) {
+      $("follows-summary").textContent = `Autorisé · ${f.live.length + f.offline.length} chaînes suivies, ${f.live.length} en live.`;
+    }
+    if (pending && !f.pending.error) followsTimer = setTimeout(refreshFollows, 3000);   // en attente du code
+  } catch (e) {
+    $("follows-status").className = "status error";
+    $("follows-status").textContent = e.message || "Box injoignable";
+  }
+}
+async function followsAction(action, body = {}) {
+  $("follows-status").className = "status";
+  $("follows-status").textContent = "";
+  try {
+    const r = await fetch(`/api/${action}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+  } catch (e) {
+    $("follows-status").className = "status error";
+    $("follows-status").textContent = e.message || "Box injoignable";
+  }
+  refreshFollows();
+}
+$("app-save").onclick = async () => {
+  followsChanging = false;
+  await followsAction("follows_app", { client_id: $("app-id").value, client_secret: $("app-secret").value });
+  $("app-secret").value = "";
+};
+$("follows-login").onclick = () => followsAction("follows_login");
+$("follows-logout").onclick = () => { if (confirm("Retirer l'autorisation des chaînes suivies ?")) followsAction("follows_logout"); };
+$("app-change").onclick = () => { followsChanging = true; refreshFollows(); };
+refreshFollows();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});   // HTTPS seulement
 refresh();
 </script>

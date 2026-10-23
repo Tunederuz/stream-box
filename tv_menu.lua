@@ -16,7 +16,8 @@ local IDLE_CLOSE = 90          -- secondes sans touche avant de refermer le menu
 local REFRESH = 5              -- secondes entre deux relevés de l'état pendant que le menu est ouvert
 local MAX_IMAGES = 48          -- overlay-add accepte les identifiants 0 à 63
 
-local TABS = { { id = "live", label = "En direct" }, { id = "replays", label = "Rediffusions" },
+local TABS = { { id = "live", label = "En direct" }, { id = "follows", label = "Suivis" },
+               { id = "replays", label = "Rediffusions" },
                { id = "history", label = "Historique" }, { id = "settings", label = "Réglages" },
                { id = "system", label = "Système" } }
 local KINDS = { youtube = "YouTube", ["twitch-vod"] = "Rediffusion Twitch", ["twitch-clip"] = "Clip Twitch", link = "Lien" }
@@ -40,6 +41,8 @@ local rp_row, rp_sel, rp_first = 1, {}, {}          -- rangée choisie (puces, r
 local history = nil                                 -- /api/history, relu à chaque ouverture du menu
 local modal = nil                                   -- fenêtre d'actions : { title, items = { { label, ok } }, sel }
 local history_loading = false
+local follows, follows_loading, follows_qr = nil, false, nil   -- /api/follows ; QR code du lien d'activation
+local follows_timer = nil
 local draw, close_menu
 
 
@@ -208,6 +211,41 @@ local function load_history()
         history, history_loading = type(d) == "table" and d or {}, false
         if is_open then draw() end
     end)
+end
+
+-- Chaînes suivies : liste à plat, en live d'abord (triées par spectateurs côté remote.py)
+local function load_follows()
+    if follows_loading then return end
+    follows_loading = true
+    api("GET", "/api/follows", nil, function(d)
+        follows_loading = false
+        follows = d or { error = true }
+        local p = follows.pending
+        if p and p.verification_uri and not p.error then
+            if not follows_qr or follows_qr.text ~= p.verification_uri then
+                api("GET", "/api/qr?text=" .. url_encode(p.verification_uri), nil, function(q)
+                    follows_qr = q and { text = p.verification_uri, rows = q.rows } or nil
+                    if is_open then draw() end
+                end)
+            end
+            -- En attente du code tapé sur twitch.tv/activate : on relit l'état
+            if follows_timer then follows_timer:kill() end
+            follows_timer = mp.add_timeout(3, function() if is_open then load_follows() end end)
+        end
+        if is_open then draw() end
+    end)
+end
+
+local function follows_list()
+    local out = {}
+    for _, c in ipairs(follows and follows.live or {}) do out[#out + 1] = c end
+    for _, c in ipairs(follows and follows.offline or {}) do out[#out + 1] = c end
+    return out
+end
+
+local function in_list(name)
+    for _, n in ipairs(state.streamers or {}) do if n == name then return true end end
+    return false
 end
 
 local function play(url, from_start)
@@ -416,6 +454,39 @@ local function draw_header(out, title, subtitle)
     end
 end
 
+-- Carte de streamer (En direct, Suivis) : photo (anneau rouge en live), nom, spectateurs, jeu
+local SCARD_W, SCARD_H, SCARD_GAP = 330, 150, 26
+
+local function streamer_card(out, imgs, x, y, name, avatar, info, focused, current)
+    local cw, ch = SCARD_W, SCARD_H
+    if focused then out[#out + 1] = focus_ring(x - 6, y - 6, cw + 12, ch + 12, 26) end
+    -- Streamer en cours : carte teintée de violet (un badge chevaucherait le nom)
+    out[#out + 1] = rrect(x, y, cw, ch, 22, current and "8A3C6B" or (focused and "4E2C3A" or "34202A"),
+                          (focused or current) and "00" or "30")
+    -- Photo : disque de couleur avec l'initiale, recouvert par l'image quand elle est prête
+    local ax, ay, as = x + 22, y + 30, 90
+    if info then out[#out + 1] = rrect(ax - 5, ay - 5, as + 10, as + 10, (as + 10) / 2, LIVE_RED, "00") end
+    out[#out + 1] = rrect(ax, ay, as, as, as / 2, "5C3D4A", "00")
+    out[#out + 1] = label(ax + as / 2, ay + as / 2, 40, "E0C8D0", ass_escape(name:sub(1, 1):upper()), 5, "\\b1")
+    if avatar then imgs[#imgs + 1] = { src = avatar, x = ax, y = ay, w = as, h = as, round = true } end
+    local tx = ax + as + 20
+    if focused then
+        marquee(out, tx, y + 40, x + cw - tx - 16, 34, "FFFFFF", name, "\\b1")
+    else
+        out[#out + 1] = label(tx, y + 40, 34, "FFFFFF", ass_escape(shorten(name, 12)), 4, "\\b1")
+    end
+    if info then
+        out[#out + 1] = label(tx, y + 82, 27, LIVE_RED, "● " .. viewers(info.viewers), 4, "\\b1")
+        if focused then
+            marquee(out, tx, y + 116, x + cw - tx - 16, 25, "C2AFB4", info.game or info.title)
+        else
+            out[#out + 1] = label(tx, y + 116, 25, "C2AFB4", ass_escape(shorten(info.game or info.title or "", 14)), 4)
+        end
+    else
+        out[#out + 1] = label(tx, y + 82, 27, "A0858A", "Hors ligne", 4)
+    end
+end
+
 local function draw_live(out, imgs)
     local list, live = state.streamers or {}, state.live or {}
     local n_live = 0
@@ -426,7 +497,7 @@ local function draw_live(out, imgs)
         out[#out + 1] = label(460, 280, 34, "C2AFB4", "La liste est vide : ajoute des streamers depuis la télécommande web.")
         return
     end
-    local cw, ch, gap, x0, y0 = 330, 150, 26, 460, 310
+    local cw, ch, gap, x0, y0 = SCARD_W, SCARD_H, SCARD_GAP, 460, 310
     local rows_visible = 3
     local sx = x0
     for i, sc in ipairs(shortcuts()) do
@@ -443,34 +514,9 @@ local function draw_live(out, imgs)
     for i, name in ipairs(list) do
         local row, col = math.floor((i - 1) / LIVE_COLS) - first_row, (i - 1) % LIVE_COLS
         if row >= 0 and row < rows_visible then
-            local x, y = x0 + col * (cw + gap), y0 + row * (ch + gap)
-            local focused = area == "content" and not shortcut and i == index
-            local info = live[name]
-            local current = state.mode == "twitch" and state.channel == name
-            if focused then out[#out + 1] = focus_ring(x - 6, y - 6, cw + 12, ch + 12, 26) end
-            -- Streamer en cours : carte teintée de violet (un badge chevaucherait le nom)
-            out[#out + 1] = rrect(x, y, cw, ch, 22, current and "8A3C6B" or (focused and "4E2C3A" or "34202A"),
-                                  (focused or current) and "00" or "30")
-            -- Photo : disque de couleur avec l'initiale, recouvert par l'image quand elle est prête
-            local ax, ay, as = x + 22, y + 30, 90
-            if info then out[#out + 1] = rrect(ax - 5, ay - 5, as + 10, as + 10, (as + 10) / 2, LIVE_RED, "00") end
-            out[#out + 1] = rrect(ax, ay, as, as, as / 2, "5C3D4A", "00")
-            out[#out + 1] = label(ax + as / 2, ay + as / 2, 40, "E0C8D0", ass_escape(name:sub(1, 1):upper()), 5, "\\b1")
-            if state.avatars and state.avatars[name] then
-                imgs[#imgs + 1] = { src = state.avatars[name], x = ax, y = ay, w = as, h = as, round = true }
-            end
-            local tx = ax + as + 20
-            out[#out + 1] = label(tx, y + 40, 34, "FFFFFF", ass_escape(shorten(name, 12)), 4, "\\b1")
-            if info then
-                out[#out + 1] = label(tx, y + 82, 27, LIVE_RED, "● " .. viewers(info.viewers), 4, "\\b1")
-                if focused then
-                    marquee(out, tx, y + 116, x + cw - tx - 16, 25, "C2AFB4", info.game or info.title)
-                else
-                    out[#out + 1] = label(tx, y + 116, 25, "C2AFB4", ass_escape(shorten(info.game or info.title or "", 14)), 4)
-                end
-            else
-                out[#out + 1] = label(tx, y + 82, 27, "A0858A", "Hors ligne", 4)
-            end
+            streamer_card(out, imgs, x0 + col * (cw + gap), y0 + row * (ch + gap), name, (state.avatars or {})[name],
+                          live[name], area == "content" and not shortcut and i == index,
+                          state.mode == "twitch" and state.channel == name)
         end
     end
     -- Titre du live sélectionné, en entier, sous la grille
@@ -578,6 +624,87 @@ local function draw_replays(out, imgs)
             out[#out + 1] = label(W - 40, y + 26 + CARD_IMG_H / 2, 40, "C09FA9", "›", 6)
         end
         y = y + CARD_H + 34
+    end
+end
+
+local FOLLOW_ROWS = 4
+
+local function draw_qr_rows(out, rows, x, y, size)
+    local n = #(rows or {})
+    local m = n > 0 and math.floor(size / (n + 4)) or 0
+    if m < 2 then return end
+    local paths = {}
+    for r, row in ipairs(rows) do
+        local c = 1
+        while c <= n do
+            if row:sub(c, c) == "1" then
+                local s0 = c
+                while c <= n and row:sub(c, c) == "1" do c = c + 1 end
+                paths[#paths + 1] = ("m %d %d l %d %d %d %d %d %d"):format((s0 + 1) * m, (r + 1) * m, (c + 1) * m,
+                    (r + 1) * m, (c + 1) * m, (r + 2) * m, (s0 + 1) * m, (r + 2) * m)
+            else
+                c = c + 1
+            end
+        end
+    end
+    local side = (n + 4) * m
+    out[#out + 1] = rrect(x, y, side, side, 18, "E8E8E8", "00")
+    out[#out + 1] = ("{\\an7\\pos(%d,%d)\\bord0\\shad0\\1c&H101010&\\1a&H00&\\p1}%s{\\p0}")
+        :format(x, y, table.concat(paths, " "))
+    return side
+end
+
+local function draw_follows(out, imgs)
+    local f = follows
+    if f == nil then
+        draw_header(out, "Suivis", "Chargement…")
+        return
+    end
+    if f.error then
+        draw_header(out, "Suivis", "Twitch injoignable pour l'instant")
+        return
+    end
+    if not f.configured then
+        draw_header(out, "Suivis", "Tes chaînes suivies sur Twitch")
+        out[#out + 1] = label(460, 280, 34, "FFFFFF", "Pour les afficher, la box a besoin de ta propre appli Twitch.")
+        out[#out + 1] = label(460, 336, 28, "C2AFB4", "Télécommande web → Réglages → Chaînes suivies : tout y est expliqué.")
+        return
+    end
+    if not f.authorized then
+        local p = f.pending
+        draw_header(out, "Suivis", "Autorise la box à lire tes chaînes suivies (lecture seule)")
+        if p and p.user_code and not p.error then
+            out[#out + 1] = label(460, 290, 34, "FFFFFF", "Sur ton téléphone, ouvre twitch.tv/activate et tape :")
+            out[#out + 1] = label(460, 400, 96, "FFFFFF", ass_escape(p.user_code), 4, "\\b1\\fsp12")
+            out[#out + 1] = label(460, 500, 28, "C2AFB4", "ou scanne le QR code. La TV se met à jour toute seule.")
+            if follows_qr and follows_qr.rows then draw_qr_rows(out, follows_qr.rows, 1400, 240, 360) end
+        else
+            if p and p.error then
+                out[#out + 1] = label(460, 250, 28, "8F8FFF", ass_escape("Autorisation refusée : " .. p.error))
+            end
+            local focused = area == "content"
+            if focused then out[#out + 1] = focus_ring(455, 295, 450, 84, 42) end
+            out[#out + 1] = rrect(460, 300, 440, 74, 37, VIOLET, "00")
+            out[#out + 1] = label(680, 337, 32, "FFFFFF", "Autoriser la box", 5, "\\b1")
+        end
+        return
+    end
+    local list = follows_list()
+    draw_header(out, "Suivis", (#f.live == 0 and "Personne en live" or (#f.live .. " en live")) .. "  ·  "
+        .. (#list .. " chaînes suivies"))
+    local focus_row = area == "content" and math.floor((index - 1) / LIVE_COLS) or 0
+    local first_row = math.max(0, focus_row - FOLLOW_ROWS + 1)
+    for i, c in ipairs(list) do
+        local row, col = math.floor((i - 1) / LIVE_COLS) - first_row, (i - 1) % LIVE_COLS
+        if row >= 0 and row < FOLLOW_ROWS then
+            streamer_card(out, imgs, 460 + col * (SCARD_W + SCARD_GAP), 210 + row * (SCARD_H + SCARD_GAP), c.login,
+                          c.avatar, c.viewers and c or nil, area == "content" and i == index,
+                          state.mode == "twitch" and state.channel == c.login)
+        end
+    end
+    if math.ceil(#list / LIVE_COLS) > first_row + FOLLOW_ROWS then
+        out[#out + 1] = label(460 + 2 * (SCARD_W + SCARD_GAP) - SCARD_GAP / 2,
+                              210 + FOLLOW_ROWS * (SCARD_H + SCARD_GAP) + 10, 26, "C09FA9", "▼", 5)
     end
 end
 
@@ -706,6 +833,9 @@ function draw()
     local id = TABS[tab].id
     if id == "live" then
         draw_live(out, imgs)
+    elseif id == "follows" then
+        if follows == nil then load_follows() end
+        draw_follows(out, imgs)
     elseif id == "replays" then
         rp_login = rp_login or state.channel or (state.streamers or {})[1]
         load_replays(rp_login)
@@ -763,6 +893,7 @@ local function open_menu()
     tab, area, index, shortcut = 1, "content", 1, nil
     -- Relus à chaque ouverture : l'historique change, remote.py garde les rediffusions 5 min en cache
     history, history_loading, replays, rp_login, rp_row, rp_sel, rp_first = nil, false, {}, nil, 1, {}, {}
+    follows = nil
     -- Focus de départ : le streamer regardé
     for i, name in ipairs(state.streamers or {}) do
         if name == state.channel then index = i end
@@ -781,13 +912,17 @@ end
 local function content_count()
     local id = TABS[tab].id
     if id == "live" or id == "replays" then return #(state.streamers or {}) end
+    if id == "follows" then
+        if not follows or not follows.configured then return 0 end
+        return follows.authorized and #follows_list() or 1
+    end
     if id == "history" then return #(history or {}) end
     return #selectable(id == "settings" and settings_rows() or system_rows())
 end
 
 local function current_row()
     local id = TABS[tab].id
-    if id == "live" or id == "replays" or id == "history" then return nil end
+    if id == "live" or id == "replays" or id == "history" or id == "follows" then return nil end
     local rows = id == "settings" and settings_rows() or system_rows()
     return rows[selectable(rows)[index]]
 end
@@ -872,6 +1007,46 @@ local function on_key(key)
             else
                 local item = row.items[sel]
                 if item then choose_video(item, item.seconds) end
+            end
+        end
+    elseif id == "follows" then
+        if not follows.authorized then
+            if key == "left" then
+                area = "rail"
+            elseif key == "ok" and not (follows.pending and follows.pending.user_code and not follows.pending.error) then
+                api("POST", "/api/follows_login", nil, function() load_follows() end)
+            end
+        else
+            local list = follows_list()
+            local col = (index - 1) % LIVE_COLS
+            if key == "left" then
+                if col == 0 then area = "rail" else index = index - 1 end
+            elseif key == "right" then
+                if col < LIVE_COLS - 1 and index < #list then index = index + 1 end
+            elseif key == "up" then
+                if index > LIVE_COLS then index = index - LIVE_COLS end
+            elseif key == "down" then
+                if index + LIVE_COLS <= #list then
+                    index = index + LIVE_COLS
+                elseif math.ceil(index / LIVE_COLS) < math.ceil(#list / LIVE_COLS) then
+                    index = #list
+                end
+            elseif key == "ok" and list[index] then
+                local name = list[index].login
+                local watch = function()
+                    act("channel", { name = name })
+                    close_menu()
+                end
+                if in_list(name) then
+                    watch()
+                    return
+                end
+                open_modal(name, {
+                    { label = "▶  Regarder", ok = watch },
+                    { label = "＋  Ajouter à ma liste", ok = function()
+                        api("POST", "/api/streamers", { action = "add", login = name }, function() refresh() end)
+                    end },
+                })
             end
         end
     elseif id == "history" then

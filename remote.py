@@ -348,18 +348,23 @@ def remote_url():
 qr_cache = {}   # adresse -> lignes du QR code
 
 
-def remote_qr():
-    url = remote_url()
-    if url not in qr_cache:
+def qr_rows(text):
+    if text not in qr_cache:
         try:
             r = subprocess.run([MEDIA_PYTHON, "-I", "-c", "import segno, sys\n"
                                 "for row in segno.make(sys.argv[1], error='m', micro=False).matrix:\n"
-                                "    print(''.join(str(int(bool(v))) for v in row))", url],
+                                "    print(''.join(str(int(bool(v))) for v in row))", text],
                                capture_output=True, text=True, timeout=20, check=True)
-            qr_cache[url] = r.stdout.split()
+            qr_cache[text] = r.stdout.split()
         except (OSError, subprocess.SubprocessError):
-            qr_cache[url] = None   # segno absent : pas de nouvel essai avant le prochain démarrage
-    return {"url": url, "rows": qr_cache[url]} if qr_cache[url] else None
+            qr_cache[text] = None   # segno absent : pas de nouvel essai avant le prochain démarrage
+    return qr_cache[text]
+
+
+def remote_qr():
+    url = remote_url()
+    rows = qr_rows(url)
+    return {"url": url, "rows": rows} if rows else None
 
 
 def ambient_loop():
@@ -772,6 +777,217 @@ def edit_history(action, key=""):
         write_history(entries)
 
 
+# Chaînes suivies (onglet Suivis du menu de la TV). Twitch refuse cette liste au jeton du site (GQL : « service error »,
+# Helix : il manque le droit user:read:follows) : il faut une appli Twitch à soi (dev.twitch.tv), de type Publique (sans
+# secret) ou Confidentielle (avec secret), et une autorisation par code (« device code flow ») : la TV ou la page
+# affichent un code à taper sur twitch.tv/activate. Config dans twitch-app.json ({"client_id", "client_secret"?}),
+# jetons dans twitch-follows-token.json, tous deux en 600 dans ~/.config/stream-box.
+
+TWITCH_APP_FILE = os.path.join(COOKIES_DIR, "twitch-app.json")
+FOLLOWS_TOKEN_FILE = os.path.join(COOKIES_DIR, "twitch-follows-token.json")
+FOLLOWS_SCOPE = "user:read:follows"
+FOLLOWS_CACHE = 60   # secondes entre deux relevés de la liste
+follows_lock = threading.Lock()
+follows_pending = {}           # autorisation en cours : user_code, verification_uri, expires_at, error
+follows_cache = {"at": 0.0, "data": None}
+
+
+def read_json_file(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def write_private_json(path, data):
+    os.makedirs(COOKIES_DIR, mode=0o700, exist_ok=True)
+    tmp = path + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    os.replace(tmp, path)
+
+
+def twitch_oauth(path, fields):
+    """POST sur id.twitch.tv ; renvoie (code HTTP, réponse JSON)."""
+    req = urllib.request.Request(f"https://id.twitch.tv/oauth2/{path}", data=urllib.parse.urlencode(fields).encode())
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status, json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.load(e)
+        except ValueError:
+            return e.code, {}
+
+
+def app_fields():
+    app = read_json_file(TWITCH_APP_FILE)
+    if not app.get("client_id"):
+        raise ValueError("aucune appli Twitch configurée")
+    fields = {"client_id": app["client_id"]}
+    if app.get("client_secret"):
+        fields["client_secret"] = app["client_secret"]
+    return fields
+
+
+def save_follows_token(d):
+    write_private_json(FOLLOWS_TOKEN_FILE, {"access_token": d["access_token"], "refresh_token": d.get("refresh_token"),
+                                            "expires_at": time.time() + int(d.get("expires_in") or 3600)})
+
+
+def follows_poll(device_code, interval, expires_at):
+    """Attend que l'utilisateur tape le code sur twitch.tv/activate (fil séparé)."""
+    while time.time() < expires_at:
+        time.sleep(interval)
+        try:
+            code, d = twitch_oauth("token", {**app_fields(), "scopes": FOLLOWS_SCOPE, "device_code": device_code,
+                                              "grant_type": "urn:ietf:params:oauth:grant-type:device_code"})
+        except (OSError, ValueError):
+            continue
+        if code == 200 and d.get("access_token"):
+            save_follows_token(d)
+            with follows_lock:
+                follows_pending.clear()
+                follows_cache.update(at=0.0, data=None)
+            return
+        message = d.get("message", "")
+        if message == "slow_down":
+            interval += 5
+        elif message != "authorization_pending":
+            with follows_lock:
+                follows_pending.update(error=message or f"refus de Twitch ({code})")
+            return
+    with follows_lock:
+        follows_pending.update(error="code expiré")
+
+
+def follows_start():
+    code, d = twitch_oauth("device", {"client_id": app_fields()["client_id"], "scopes": FOLLOWS_SCOPE})
+    if code != 200 or not d.get("device_code"):
+        raise ValueError(f"Twitch refuse l'appli : {d.get('message') or code} (vérifie le Client ID)")
+    expires_at = time.time() + int(d.get("expires_in") or 1800)
+    with follows_lock:
+        follows_pending.clear()
+        follows_pending.update(user_code=d["user_code"], verification_uri=d["verification_uri"], expires_at=expires_at)
+    threading.Thread(target=follows_poll, args=(d["device_code"], int(d.get("interval") or 5), expires_at),
+                     daemon=True).start()
+
+
+def follows_token():
+    """Jeton valide pour Helix, renouvelé si besoin ; None si la box n'est pas autorisée."""
+    tok = read_json_file(FOLLOWS_TOKEN_FILE)
+    if not tok.get("access_token"):
+        return None
+    if time.time() > tok.get("expires_at", 0) - 120:
+        if not tok.get("refresh_token"):
+            return None
+        code, d = twitch_oauth("token", {**app_fields(), "grant_type": "refresh_token",
+                                         "refresh_token": tok["refresh_token"]})
+        if code != 200 or not d.get("access_token"):
+            if code in (400, 401):   # autorisation retirée sur Twitch : il faudra recommencer
+                os.remove(FOLLOWS_TOKEN_FILE)
+            return None
+        save_follows_token(d)
+        tok = read_json_file(FOLLOWS_TOKEN_FILE)
+    return tok["access_token"]
+
+
+def helix(path, token):
+    req = urllib.request.Request(f"https://api.twitch.tv/helix/{path}",
+                                 headers={"Client-Id": app_fields()["client_id"], "Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.load(r)
+
+
+def fetch_follows(token):
+    me = validate_helix(token)
+    live = []
+    for st in helix(f"streams/followed?user_id={me}&first=100", token).get("data", []):
+        live.append({"login": st["user_login"], "title": st.get("title"), "viewers": st.get("viewer_count"),
+                     "game": st.get("game_name"),
+                     "thumb": (st.get("thumbnail_url") or "").replace("{width}", "640").replace("{height}", "360")
+                     + f"?t={int(time.time()) // FOLLOWS_CACHE}"})
+    logins, cursor = [], ""
+    for _ in range(5):   # jusqu'à 500 chaînes suivies
+        d = helix(f"channels/followed?user_id={me}&first=100" + (f"&after={cursor}" if cursor else ""), token)
+        logins += [c["broadcaster_login"] for c in d.get("data", [])]
+        cursor = (d.get("pagination") or {}).get("cursor")
+        if not cursor:
+            break
+    avatars_map = {}
+    for i in range(0, len(logins), 100):
+        query = "&".join(f"login={urllib.parse.quote(l)}" for l in logins[i:i + 100])
+        for u in helix(f"users?{query}", token).get("data", []):
+            avatars_map[u["login"]] = u.get("profile_image_url")
+    avatars.update({k: v for k, v in avatars_map.items() if v})
+    live_logins = {c["login"] for c in live}
+    for c in live:
+        c["avatar"] = avatars_map.get(c["login"])
+    offline = [{"login": l, "avatar": avatars_map.get(l)} for l in logins if l not in live_logins]
+    return {"live": sorted(live, key=lambda c: -(c["viewers"] or 0)), "offline": offline}
+
+
+def validate_helix(token):
+    req = urllib.request.Request("https://id.twitch.tv/oauth2/validate", headers={"Authorization": f"OAuth {token}"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.load(r)["user_id"]
+
+
+def follows_status():
+    """État pour la page et le menu : appli configurée, autorisation en cours, liste."""
+    app = read_json_file(TWITCH_APP_FILE)
+    out = {"configured": bool(app.get("client_id")), "confidential": bool(app.get("client_secret")),
+           "authorized": False, "pending": None, "live": [], "offline": []}
+    with follows_lock:
+        if follows_pending and follows_pending.get("expires_at", 0) > time.time():
+            out["pending"] = {k: follows_pending.get(k) for k in ("user_code", "verification_uri", "error")}
+    if not out["configured"]:
+        return out
+    token = follows_token()
+    if not token:
+        return out
+    out["authorized"] = True
+    with follows_lock:
+        if follows_cache["data"] is None or time.time() - follows_cache["at"] > FOLLOWS_CACHE:
+            follows_cache.update(at=time.time(), data=fetch_follows(token))
+        out.update(follows_cache["data"])
+    return out
+
+
+def follows_logins():
+    data = follows_cache["data"] or {}
+    return {c["login"] for c in data.get("live", []) + data.get("offline", [])}
+
+
+def set_twitch_app(client_id, client_secret):
+    client_id = client_id.strip()
+    if not re.fullmatch(r"[a-z0-9]{20,40}", client_id):
+        raise ValueError("Ce n'est pas un Client ID Twitch (30 lettres et chiffres).")
+    app = {"client_id": client_id}
+    if client_secret.strip():
+        app["client_secret"] = client_secret.strip()
+    write_private_json(TWITCH_APP_FILE, app)
+    for path in (FOLLOWS_TOKEN_FILE,):   # nouvelle appli : l'ancienne autorisation ne vaut plus
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+    with follows_lock:
+        follows_pending.clear()
+        follows_cache.update(at=0.0, data=None)
+
+
+def follows_logout():
+    try:
+        os.remove(FOLLOWS_TOKEN_FILE)
+    except FileNotFoundError:
+        pass
+    with follows_lock:
+        follows_cache.update(at=0.0, data=None)
+
+
 # Compte Twitch
 
 account = {"login": None, "expired": False}   # dernier résultat connu, pour ne pas interroger Twitch à chaque requête
@@ -888,7 +1104,8 @@ def logout():
 
 def action(name, body):
     if name == "channel":
-        if body.get("name") not in read_streamers():
+        # Streamer de la liste, ou chaîne suivie (onglet Suivis du menu de la TV)
+        if body.get("name") not in read_streamers() and body.get("name") not in follows_logins():
             raise ValueError("streamer inconnu")
         mpv(["script-message", "streambox-channel", body["name"]])
     elif name == "chat":
@@ -945,6 +1162,12 @@ def action(name, body):
         login(str(body.get("token", "")))
     elif name == "logout":
         logout()
+    elif name == "follows_app":
+        set_twitch_app(str(body.get("client_id", "")), str(body.get("client_secret", "")))
+    elif name == "follows_login":
+        follows_start()
+    elif name == "follows_logout":
+        follows_logout()
     elif name == "poweroff":
         # Autorisé sans mot de passe pour media par /etc/polkit-1/rules.d/50-stream-box.rules
         r = subprocess.run(["systemctl", "poweroff"], capture_output=True, text=True, timeout=10)
@@ -1017,6 +1240,14 @@ class Handler(BaseHTTPRequestHandler):
                                             q.get("round", ["0"])[0] == "1", int(q.get("radius", ["0"])[0])))
                 except (ValueError, subprocess.SubprocessError) as e:
                     self.send(400, {"error": str(e)})
+            elif self.path == "/api/follows":
+                try:
+                    self.send(200, follows_status())
+                except (OSError, ValueError, KeyError) as e:
+                    self.send(503, {"error": f"Twitch injoignable : {e}"})
+            elif self.path.startswith("/api/qr?"):
+                text = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("text", [""])[0]
+                self.send(200, {"rows": qr_rows(text)})
             elif self.path == "/api/account":
                 with account_lock:
                     self.send(200, dict(account))
