@@ -23,6 +23,7 @@ télécommande web installable sur téléphone (PWA).
 - **Compte Twitch** facultatif : plus de pubs sur les chaînes où l'on est abonné, VOD réservées aux abonnés.
 - **Historique et reprise de lecture** : chaque vidéo reprend où on s'était arrêté ; les rediffusions Twitch sont
   synchronisées avec le compte Twitch connecté.
+- **Sous-titres et piste audio** au choix pendant une vidéo (bouton ≡), y compris les sous-titres à part de Jellyfin.
 - **Mode vidéo** : liens YouTube et autres (yt-dlp, sous-titres), rediffusions et clips Twitch, partage Android
   « Partager → Stream Box », et **Jellyfin** (« Lire sur… ») via jellyfin-mpv-shim.
 - **YouTube** : liste de chaînes avec leurs dernières vidéos et recherche de vidéos et de chaînes, sur la TV (clavier à l'écran)

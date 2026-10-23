@@ -81,6 +81,7 @@ Item {
         PollsOverlay {}
         InfoBar {}
         Toast {}
+        TracksPanel {}
         TvMenu {
             objectName: "tvMenu"
         }

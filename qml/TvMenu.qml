@@ -25,7 +25,7 @@ Item {
     readonly property var corners: ({ tl: "↖ haut gauche", tr: "↗ haut droite", br: "↘ bas droite", bl: "↙ bas gauche" })
     readonly property var cornerOrder: ["tl", "tr", "br", "bl"]
     readonly property var qrModes: [["always", "Toujours"], ["timed", "30 secondes"], ["never", "Jamais"]]
-    readonly property var kinds: ({ youtube: "YouTube", "twitch-vod": "Rediffusion Twitch", "twitch-clip": "Clip Twitch", link: "Lien" })
+    readonly property var kinds: ({ youtube: "YouTube", "twitch-vod": "Rediffusion Twitch", "twitch-clip": "Clip Twitch", link: "Lien", jellyfin: "Jellyfin" })
 
     // Données (relues à l'ouverture ; réaffectées en entier pour que les liaisons suivent)
     property var st: ({})

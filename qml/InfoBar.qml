@@ -88,6 +88,11 @@ Item {
                                     : (root.pb.title || "")
                     pixelSize: 31; bold: true; running: root.shown
                 }
+                Text {   // vidéo : rappel de la touche des sous-titres
+                    visible: !root.live
+                    text: "≡  sous-titres et audio"
+                    color: "#b4afc2"; font.pixelSize: 21
+                }
                 Text {
                     visible: root.live && !!root.info
                     text: root.info ? [root.info.game, Fmt.viewers(root.info.viewers) + " spectateurs",

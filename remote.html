@@ -864,7 +864,7 @@ function playVideo(item, fromStart = false) {
   $("media-status").textContent = `Chargement de « ${item.title} » sur la TV…`;
 }
 
-const KINDS = { youtube: "YouTube", "twitch-vod": "Rediffusion Twitch", "twitch-clip": "Clip Twitch", link: "Lien" };
+const KINDS = { youtube: "YouTube", "twitch-vod": "Rediffusion Twitch", "twitch-clip": "Clip Twitch", link: "Lien", jellyfin: "Jellyfin" };
 async function loadHistory() {
   const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
   try {

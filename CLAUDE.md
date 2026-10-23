@@ -496,7 +496,10 @@ par saison) ; `GET /api/jellyfin_search?q=`, `GET /api/jellyfin_series?id=` (ép
 `POST /api/jellyfin_play` {id, from_start} : flux direct `/Videos/{id}/stream?static=true&api_key=…`, reprise à la
 position du serveur, titre passé à mpv (`streambox-play url start titre` → `force-media-title`, longueur en
 préfixe %n%). Progression renvoyée au serveur : `Sessions/Playing` au lancement, `/Progress` toutes les 10 s par
-history_loop, `/Stopped` à l'arrêt (le serveur décide du « vu ») ; pas d'entrée dans l'historique de la box. Les
+history_loop, `/Stopped` à l'arrêt (le serveur décide du « vu »). Entrée dans l'historique de la box sous
+« jellyfin:ID » (sans jeton ; `play()` la relance par jellyfin_play), aussi pour les lectures lancées par le shim
+(« Lire sur… », `shim_video` : le shim rend compte lui-même). Sous-titres externes (.srt à côté du fichier) absents du
+flux direct : ajoutés par `sub-add` une fois la vidéo ouverte (`jf_add_subtitles`). Les
 images du serveur sont publiques (pas de jeton dans leurs liens).
 TV : onglet « Jellyfin » (thème bleu) sur la même page que YouTube (`mediaRows`, `mRow`/`mSel`, `keyMedia`, état
 propre `jfRow`/`jfSel`) : recherche au clavier à l'écran, épisodes d'une série ouverte, Reprendre, Prochains
@@ -510,4 +513,13 @@ autour pour le halo) qui s'arrête sous le titre et au-dessus de l'aide en bas ;
 d'après la rangée visée. Piège QML : une fonction ne doit pas reprendre le nom d'une propriété
 (`setSel` existait : les touches de l'onglet échouaient en silence, sauf dans le journal).
 Page : bloc Jellyfin de l'onglet Télécommande (puces par rangée, recherche, épisodes d'une série).
+
+### Sous-titres et audio pendant une vidéo (touche ≡, appli Qt)
+
+stream-box.lua : en mode vidéo, ≡ ouvre la liste (track-list : « Désactivés », sous-titres, puis pistes audio s'il y en
+a plusieurs ; langues en français, « (forcés) », « (d'origine) ») et affiche la barre ; tant qu'elle est ouverte
+(`tracks_open`), ↑ ↓ choisissent, OK règle `sid`/`aid` et ferme, toute autre touche ferme. État publié dans
+`user-data/streambox/tracks` {open, items, sel}, relayé par ui.py (`osd.tracks`), dessiné par `qml/TracksPanel.qml`
+au-dessus de la barre, à droite. La barre rappelle « ≡ sous-titres et audio ». Avec mpv seul, ≡ passe aux
+sous-titres suivants (comme avant).
 
