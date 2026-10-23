@@ -1012,6 +1012,8 @@ Item {
                             property int first: 0
                             readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
                             onCurrentIndexChanged: {
+                                // -1 pendant que la rangée se recharge (liste vide) : ignoré, sinon la rangée restait décalée d'une carte
+                                if (currentIndex < 0 || fits <= 0) return
                                 if (currentIndex < first) first = currentIndex
                                 else if (currentIndex >= first + fits) first = currentIndex - fits + 1
                                 contentX = -leftMargin + first * 356
@@ -1102,6 +1104,8 @@ Item {
                                     property int first: 0
                                     readonly property int fits: Math.floor((width - leftMargin + spacing) / 270)
                                     onCurrentIndexChanged: {
+                                        // -1 pendant que la rangée se recharge (liste vide) : ignoré, sinon la rangée restait décalée d'une carte
+                                        if (currentIndex < 0 || fits <= 0) return
                                         if (currentIndex < first) first = currentIndex
                                         else if (currentIndex >= first + fits) first = currentIndex - fits + 1
                                         contentX = -leftMargin + first * 270
@@ -1150,6 +1154,8 @@ Item {
                                     property int first: 0
                                     readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
                                     onCurrentIndexChanged: {
+                                        // -1 pendant que la rangée se recharge (liste vide) : ignoré, sinon la rangée restait décalée d'une carte
+                                        if (currentIndex < 0 || fits <= 0) return
                                         if (currentIndex < first) first = currentIndex
                                         else if (currentIndex >= first + fits) first = currentIndex - fits + 1
                                         contentX = -leftMargin + first * 356
