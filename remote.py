@@ -7,7 +7,7 @@ Les changements de streamer et de chat passent par les script-messages de stream
 Compte Twitch : le jeton du site (cookie auth-token) est rangé dans la config Twitch de streamlink, que
 streamlink lit tout seul. Twitch ne retire les pubs des abonnements qu'avec ce jeton-là.
 """
-import json, os, re, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request
+import datetime, json, os, re, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import display   # display.py, même dossier
@@ -139,6 +139,96 @@ def replays(login):
         cached = (time.time(), fetch_replays(login))
         replays_cache[login] = cached
     return cached[1]
+
+
+# Écran d'ambiance (dessiné par stream-box.lua quand rien ne joue) : météo et prochains lives prévus, publiés dans
+# user-data/streambox/ambient. La météo vient d'Open-Meteo (sans compte) ; lieu dans ~/.config/stream-box/ambient.json :
+# {"city": "...", "latitude": ..., "longitude": ..., "timezone": "Europe/..."} (sans ce fichier : pas de météo).
+
+AMBIENT_FILE = os.path.join(COOKIES_DIR, "ambient.json")
+AMBIENT_FETCH = 600   # secondes entre deux récupérations (météo, plannings)
+WEATHER = [((0,), "Ciel dégagé"), ((1,), "Plutôt dégagé"), ((2,), "Partiellement nuageux"), ((3,), "Couvert"),
+           ((45, 48), "Brouillard"), ((51, 53, 55), "Bruine"), ((56, 57), "Bruine verglaçante"), ((61,), "Pluie faible"),
+           ((63,), "Pluie"), ((65,), "Forte pluie"), ((66, 67), "Pluie verglaçante"), ((71,), "Neige faible"),
+           ((73,), "Neige"), ((75,), "Forte neige"), ((77,), "Grésil"), ((80, 81, 82), "Averses"),
+           ((85, 86), "Averses de neige"), ((95,), "Orage"), ((96, 99), "Orage et grêle")]
+DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+
+
+def ambient_conf():
+    try:
+        with open(AMBIENT_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def fetch_weather(conf):
+    if "latitude" not in conf:
+        return None
+    query = urllib.parse.urlencode({
+        "latitude": conf["latitude"], "longitude": conf["longitude"], "timezone": conf.get("timezone", "auto"),
+        "current": "temperature_2m,weather_code", "forecast_days": 1,
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max"})
+    with urllib.request.urlopen(f"https://api.open-meteo.com/v1/forecast?{query}", timeout=10) as r:
+        d = json.load(r)
+    code = d["current"]["weather_code"]
+    return {"city": conf.get("city"), "temp": round(d["current"]["temperature_2m"]),
+            "text": next((t for codes, t in WEATHER if code in codes), ""),
+            "min": round(d["daily"]["temperature_2m_min"][0]), "max": round(d["daily"]["temperature_2m_max"][0]),
+            "rain": d["daily"]["precipitation_probability_max"][0]}
+
+
+def fetch_schedule(logins, tz):
+    """Prochain créneau prévu de chaque streamer (plannings Twitch, hebdomadaires), du plus proche au plus lointain."""
+    if not logins:
+        return []
+    query = "query($l:[String!]){users(logins:$l){login channel{schedule{segments{startAt endAt title}}}}}"
+    req = urllib.request.Request(
+        "https://gql.twitch.tv/gql", data=json.dumps({"query": query, "variables": {"l": logins}}).encode(),
+        headers={"Client-ID": TWITCH_WEB_CLIENT_ID, "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        users = json.load(r)["data"]["users"]
+    now, upcoming = datetime.datetime.now(tz), []
+    for u in users:
+        best = None
+        for seg in ((((u or {}).get("channel") or {}).get("schedule") or {}).get("segments") or []):
+            start = datetime.datetime.fromisoformat(seg["startAt"].replace("Z", "+00:00")).astimezone(tz)
+            while start < now - datetime.timedelta(hours=1):   # créneau passé : même heure la semaine suivante
+                start += datetime.timedelta(days=7)
+            if not best or start < best[0]:
+                best = (start, seg.get("title") or "")
+        if best:
+            upcoming.append((best[0], u["login"], best[1]))
+    out = []
+    for start, login, title in sorted(upcoming)[:4]:
+        days = (start.date() - now.date()).days
+        day = "aujourd'hui" if days == 0 else "demain" if days == 1 else DAYS[start.weekday()]
+        out.append({"login": login, "when": f"{day} {start:%H:%M}", "title": title})
+    return out
+
+
+def ambient_loop():
+    data, fetched = {}, 0
+    while True:
+        if time.time() - fetched > AMBIENT_FETCH:
+            conf = ambient_conf()
+            try:
+                tz = zoneinfo.ZoneInfo(conf.get("timezone", "Europe/Brussels"))
+            except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+                tz = None
+            for key, fetch in (("weather", lambda: fetch_weather(conf)),
+                               ("schedule", lambda: fetch_schedule(read_streamers(), tz))):
+                try:
+                    data[key] = fetch()
+                except (OSError, ValueError, KeyError, TypeError):
+                    pass   # service injoignable : on garde la dernière valeur
+            fetched = time.time()
+        try:   # republié chaque minute : un mpv relancé le reçoit vite
+            mpv(["set_property", "user-data/streambox/ambient", data])
+        except OSError:
+            pass
+        time.sleep(60)
 
 
 def state():
@@ -520,4 +610,5 @@ class Handler(BaseHTTPRequestHandler):
 write_cookies(read_token())   # au démarrage : cookies alignés sur le jeton enregistré
 threading.Thread(target=account_loop, daemon=True).start()
 threading.Thread(target=live_loop, daemon=True).start()
+threading.Thread(target=ambient_loop, daemon=True).start()
 ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
