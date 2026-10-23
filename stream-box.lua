@@ -668,10 +668,16 @@ local KEYS = {
     UP = "up", DOWN = "down", LEFT = "left", RIGHT = "right",
     ENTER = "ok", KP_ENTER = "ok", ["0x21ffa0"] = "ok",
     HOMEPAGE = "home", GO_BACK = "back", ESC = "back", ["0x2111a0"] = "menu",
+    PLAY = "play", PLAYPAUSE = "play",   -- sans ce lien, mpv les traduit en pause, ce qui figeait le direct
 }
 local DIRECTIONS = { up = { 0, -1 }, down = { 0, 1 }, left = { -1, 0 }, right = { 1, 0 } }
 
 local function on_key(key)
+    if key == "play" then   -- écran d'accueil, depuis n'importe quel mode
+        if menu_visible then hide_menu() end
+        if mode ~= "home" then show_home() end
+        return
+    end
     if toast_channel and (key == "ok" or key == "back") then
         local name = toast_channel
         hide_toast()
@@ -696,6 +702,9 @@ local function on_key(key)
     elseif mode == "twitch" or mode == "home" then
         if key == "up" or key == "down" then
             zap(key == "down" and 1 or -1)
+        elseif key == "ok" and mode == "twitch" then
+            -- Bandeau d'infos : streamer, titre du live, « EN DIRECT » ou retard ; le menu s'ouvre par Accueil
+            if bar_visible then hide_bar() else show_bar() end
         elseif key == "ok" or key == "home" then
             show_menu(true)
         elseif key == "left" or key == "right" then
