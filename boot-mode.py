@@ -5,11 +5,13 @@ Sans clavier : connexion automatique de « media » dans la session Stream Box.
 Avec clavier : pas de connexion automatique, l'écran de connexion s'affiche (compte et session au choix).
 
 Lancé en root par stream-box-boot-mode.service, depuis /usr/local/lib/stream-box/ (copie non modifiable
-par media). --dry-run : affiche la décision sans rien changer.
+par media). --dry-run : affiche la décision sans rien changer. --dropin <fichier> : fichier d'autologin à créer ou
+supprimer, dans le dossier .conf.d du gestionnaire de connexion (Plasma Login par défaut, ou SDDM).
 """
 import os, re, subprocess, sys, time
 
-DROPIN = "/etc/plasmalogin.conf.d/50-stream-box.conf"
+DROPIN = (sys.argv[sys.argv.index("--dropin") + 1] if "--dropin" in sys.argv
+          else "/etc/plasmalogin.conf.d/50-stream-box.conf")
 AUTOLOGIN = "[Autologin]\nUser=media\nSession=stream-box.desktop\n"
 WAIT = 3   # secondes laissées aux claviers USB pour apparaître
 # Périphériques qui se déclarent clavier sans en être un (certains récepteurs de souris) : morceaux de nom à ignorer

@@ -1,0 +1,240 @@
+#!/usr/bin/env bash
+# Stream Box : installation, ou mise à jour d'une installation existante (le script peut être relancé).
+#
+#   sudo bash install.sh [--city VILLE] [--streamers a,b,c] [--skip-system]
+#
+# À lancer depuis un compte d'admin, sur une distribution Arch avec Plasma Login ou SDDM comme gestionnaire de
+# connexion. Crée l'utilisateur « media » qui fait tourner la box, y installe ce dépôt et tout ce dont il a besoin,
+# et met en place la session sans bureau (connexion automatique quand aucun clavier n'est branché au démarrage).
+#   --city VILLE        météo de l'écran d'ambiance (coordonnées trouvées par Open-Meteo)
+#   --streamers a,b,c   liste de départ des streamers (sinon : liste vide, à remplir depuis la télécommande web)
+#   --skip-system       ne touche ni à la session, ni au gestionnaire de connexion, ni à polkit (tests, conteneurs)
+set -euo pipefail
+
+BOX_USER=media
+BOX_HOME=/home/$BOX_USER
+BOX_DIR=$BOX_HOME/stream-box
+SRC=$(cd "$(dirname "$0")" && pwd)
+MEDIA_VENV_PACKAGES="yt-dlp[default] deno nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt"
+POT_REPO=https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git
+
+CITY="" STREAMERS="" SKIP_SYSTEM=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --city) CITY=${2:?--city attend un nom de ville}; shift 2 ;;
+    --streamers) STREAMERS=${2:?--streamers attend une liste}; shift 2 ;;
+    --skip-system) SKIP_SYSTEM=1; shift ;;
+    -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Option inconnue : $1 (voir --help)" >&2; exit 2 ;;
+  esac
+done
+
+step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+die() { echo "Erreur : $*" >&2; exit 1; }
+# Commande en tant que media, depuis son dossier (celui de root, où l'on est peut-être, lui est interdit)
+as_box() { (cd "$BOX_HOME" && runuser -u "$BOX_USER" -- env HOME="$BOX_HOME" bash -c "$1"); }
+
+[ "$(id -u)" -eq 0 ] || die "à lancer avec sudo"
+command -v pacman > /dev/null || die "pensé pour une distribution Arch (pacman introuvable)"
+
+# Gestionnaire de connexion : la connexion automatique passe par son dossier .conf.d
+DM="" DM_CONF="" DM_DIR=""
+if [ "$SKIP_SYSTEM" -eq 0 ]; then
+  if systemctl list-unit-files plasmalogin.service > /dev/null 2>&1 && [ -e /usr/bin/plasmalogin ]; then
+    DM=plasmalogin DM_CONF=/etc/plasmalogin.conf DM_DIR=/etc/plasmalogin.conf.d
+  elif [ -e /usr/bin/sddm ]; then
+    DM=sddm DM_CONF=/etc/sddm.conf DM_DIR=/etc/sddm.conf.d
+  else
+    die "gestionnaire de connexion non pris en charge (Plasma Login ou SDDM attendu) ; --skip-system pour l'ignorer"
+  fi
+fi
+
+step "Paquets système"
+pacman -S --needed --noconfirm mpv cage wlr-randr python git curl polkit
+
+step "Utilisateur $BOX_USER"
+id "$BOX_USER" > /dev/null 2>&1 || useradd -m -s /bin/bash "$BOX_USER"
+# Pas de mot de passe utilisable (« * » et non « ! », pour que la connexion SSH par clé reste possible)
+usermod -p '*' "$BOX_USER"
+ADMIN_HOME=$( [ -n "${SUDO_USER:-}" ] && getent passwd "$SUDO_USER" | cut -d: -f6 || true)
+if [ -n "$ADMIN_HOME" ] && [ -f "$ADMIN_HOME/.ssh/authorized_keys" ] && [ ! -f "$BOX_HOME/.ssh/authorized_keys" ]; then
+  # Même clé SSH que le compte d'admin, pour la maintenance : ssh media@<box>
+  install -d -m 700 -o "$BOX_USER" -g "$BOX_USER" "$BOX_HOME/.ssh"
+  install -m 600 -o "$BOX_USER" -g "$BOX_USER" "$ADMIN_HOME/.ssh/authorized_keys" "$BOX_HOME/.ssh/authorized_keys"
+fi
+
+step "Code de la box ($BOX_DIR)"
+if [ "$SRC" != "$BOX_DIR" ]; then
+  if [ -d "$BOX_DIR/.git" ] && [ -d "$SRC/.git" ]; then
+    git -c safe.directory='*' -C "$BOX_DIR" pull --ff-only "$SRC" HEAD
+  elif [ -d "$SRC/.git" ]; then
+    git -c safe.directory='*' clone -q "$SRC" "$BOX_DIR"
+  else   # dépôt téléchargé en archive, sans git
+    install -d "$BOX_DIR" && cp -r "$SRC"/. "$BOX_DIR"/
+  fi
+fi
+if [ ! -f "$BOX_DIR/streamers.txt" ]; then
+  cp "$BOX_DIR/streamers.example.txt" "$BOX_DIR/streamers.txt"
+  [ -n "$STREAMERS" ] && tr ',' '\n' <<< "$STREAMERS" | tr -d ' ' | tr '[:upper:]' '[:lower:]' | grep . >> "$BOX_DIR/streamers.txt"
+fi
+chown -R "$BOX_USER:$BOX_USER" "$BOX_DIR"
+chmod +x "$BOX_DIR"/*.sh "$BOX_DIR"/*.py
+
+step "streamlink, yt-dlp, jellyfin-mpv-shim… (venvs de $BOX_USER)"
+as_box '
+  set -e
+  mkdir -p ~/.local/bin ~/.local/share ~/.local/state/stream-box
+  [ -x ~/.local/share/streamlink-venv/bin/pip ] || python3 -m venv ~/.local/share/streamlink-venv
+  ~/.local/share/streamlink-venv/bin/pip install -q -U pip streamlink
+  [ -x ~/.local/share/media-venv/bin/pip ] || python3 -m venv ~/.local/share/media-venv
+  ~/.local/share/media-venv/bin/pip install -q -U pip '"$MEDIA_VENV_PACKAGES"'
+  ln -sf ~/.local/share/streamlink-venv/bin/streamlink ~/.local/bin/streamlink
+  for tool in yt-dlp deno jellyfin-mpv-shim; do ln -sf ~/.local/share/media-venv/bin/$tool ~/.local/bin/$tool; done
+  echo "streamlink $(~/.local/bin/streamlink --version | cut -d" " -f2), yt-dlp $(~/.local/bin/yt-dlp --version)"
+'
+
+step "Serveur de jetons anti-robot YouTube"
+as_box '
+  set -e
+  export PATH="$HOME/.local/share/media-venv/bin:$PATH"
+  dir=~/.local/share/bgutil-pot-provider
+  want=$(pip show bgutil-ytdlp-pot-provider | awk "/^Version/{print \$2}")
+  have=$(git -C "$dir" describe --tags 2>/dev/null || true)
+  if [ "$want" != "$have" ]; then
+    rm -rf "$dir.new"
+    git clone -q --depth 1 --branch "$want" '"$POT_REPO"' "$dir.new"
+    (cd "$dir.new/server" && npm ci --no-audit --no-fund --loglevel=error && npx tsc)
+    rm -rf "$dir" && mv "$dir.new" "$dir"
+    echo "version $want compilée"
+  else
+    echo "version $want déjà en place"
+  fi
+'
+
+step "Configuration de $BOX_USER"
+as_box 'install -d -m 700 ~/.config/stream-box ~/.config/jellyfin-mpv-shim'
+if [ ! -f "$BOX_HOME/.config/jellyfin-mpv-shim/conf.json" ]; then
+  # jellyfin-mpv-shim pilote le mpv de la box au lieu d'ouvrir le sien ; connexion à faire à la main (voir CLAUDE.md)
+  as_box 'cat > ~/.config/jellyfin-mpv-shim/conf.json' << 'JSON'
+{
+  "player_name": "Stream Box",
+  "enable_gui": false,
+  "headless": true,
+  "fullscreen": true,
+  "hwdec": "auto-safe",
+  "mpv_ext": true,
+  "mpv_ext_start": false,
+  "mpv_ext_ipc": "/tmp/stream-box-mpv.sock",
+  "mpv_ext_no_ovr": true,
+  "mpv_idle_quit": false
+}
+JSON
+fi
+if [ -n "$CITY" ]; then
+  # Coordonnées et fuseau de la ville pour la météo de l'écran d'ambiance
+  CITY="$CITY" as_box 'python3 -I -' << 'PY'
+import json, os, urllib.parse, urllib.request
+city = os.environ["CITY"]
+url = "https://geocoding-api.open-meteo.com/v1/search?" + urllib.parse.urlencode({"name": city, "count": 1, "language": "fr"})
+found = (json.load(urllib.request.urlopen(url, timeout=15)).get("results") or [None])[0]
+if not found:
+    raise SystemExit(f"Ville introuvable : {city}")
+conf = {"city": found["name"], "latitude": found["latitude"], "longitude": found["longitude"], "timezone": found["timezone"]}
+path = os.path.expanduser("~/.config/stream-box/ambient.json")
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(conf, f, ensure_ascii=False)
+print(f"météo : {found['name']} ({found.get('country', '')}), {found['latitude']:.2f}, {found['longitude']:.2f}, {found['timezone']}")
+PY
+fi
+
+step "Services utilisateur (mises à jour, jetons YouTube, pont MQTT)"
+as_box '
+  set -e
+  units=~/.config/systemd/user
+  mkdir -p "$units/default.target.wants" "$units/timers.target.wants"
+  cp ~/stream-box/systemd/*.service ~/stream-box/systemd/*.timer "$units/"
+  # Activation sans gestionnaire utilisateur en marche : les liens que créerait « systemctl --user enable »
+  ln -sf "$units/stream-box-pot.service" "$units/default.target.wants/"
+  ln -sf "$units/stream-box-mqtt.service" "$units/default.target.wants/"
+  ln -sf "$units/stream-box-update.timer" "$units/timers.target.wants/"
+'
+# Box déjà en service : on recharge ses services tout de suite
+if systemctl --user --machine="$BOX_USER@" daemon-reload 2> /dev/null; then
+  systemctl --user --machine="$BOX_USER@" restart stream-box-pot.service stream-box-mqtt.service 2> /dev/null || true
+fi
+
+if [ "$SKIP_SYSTEM" -eq 1 ]; then
+  step "Partie système ignorée (--skip-system)"
+else
+  step "Session sans bureau et connexion automatique ($DM)"
+  # -s : garde Ctrl+Alt+F2… pour passer sur une console texte
+  cat > /usr/share/wayland-sessions/stream-box.desktop << DESKTOP
+[Desktop Entry]
+Name=Stream Box
+Comment=Stream Twitch en plein écran (cage + mpv), sans bureau
+Exec=cage -s -- $BOX_DIR/start.sh
+Type=Application
+DesktopNames=StreamBox
+DESKTOP
+
+  # Le mode (connexion automatique ou écran de connexion) se décide au démarrage selon qu'un clavier est branché.
+  # Copie en root : le service tourne en root, le script ne doit pas être modifiable par media.
+  install -D -m 755 -o root -g root "$BOX_DIR/boot-mode.py" /usr/local/lib/stream-box/boot-mode.py
+  install -d "$DM_DIR"
+  cat > /etc/systemd/system/stream-box-boot-mode.service << UNIT
+[Unit]
+Description=Stream Box : connexion automatique seulement sans clavier
+Before=$DM.service
+After=systemd-udevd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/lib/stream-box/boot-mode.py --dropin $DM_DIR/50-stream-box.conf
+
+[Install]
+WantedBy=graphical.target
+UNIT
+  # Une section [Autologin] dans le fichier principal passerait avant le dossier .conf.d : on la retire
+  if [ -f "$DM_CONF" ] && grep -q '^\[Autologin\]' "$DM_CONF"; then
+    [ -e "$DM_CONF.bak-stream-box" ] || cp "$DM_CONF" "$DM_CONF.bak-stream-box"
+    python3 -I - "$DM_CONF" << 'PY'
+import re, sys
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read()
+text = re.sub(r"^\[Autologin\]\n(?:(?!\[).*\n?)*", "", text, flags=re.M)
+open(path, "w", encoding="utf-8").write(text)
+PY
+  fi
+  systemctl daemon-reload
+  systemctl is-enabled --quiet "$DM.service" || systemctl enable "$DM.service" \
+    || echo "Attention : $DM.service n'a pas pu être activé (un autre gestionnaire de connexion l'est déjà ?)" >&2
+  systemctl enable stream-box-boot-mode.service
+  /usr/bin/python3 -I /usr/local/lib/stream-box/boot-mode.py --dropin "$DM_DIR/50-stream-box.conf"
+
+  step "Extinction depuis la télécommande web (polkit)"
+  install -d /etc/polkit-1/rules.d
+  cat > /etc/polkit-1/rules.d/50-stream-box.rules << 'RULES'
+// Stream Box : le bouton d'extinction de la télécommande (utilisateur media)
+polkit.addRule(function (action, subject) {
+    if (subject.user == "media" &&
+        (action.id == "org.freedesktop.login1.power-off" ||
+         action.id == "org.freedesktop.login1.power-off-multiple-sessions" ||
+         action.id == "org.freedesktop.login1.power-off-ignore-inhibit")) {
+        return polkit.Result.YES;
+    }
+});
+RULES
+  chmod 644 /etc/polkit-1/rules.d/50-stream-box.rules
+fi
+
+step "Terminé"
+cat << END
+La box est installée dans $BOX_DIR. Redémarre la machine : sans clavier branché, elle démarre directement sur le stream.
+
+Ensuite, selon les besoins (détails dans CLAUDE.md et docs/) :
+  - streamers et compte Twitch : télécommande web, http://<box>:8080 (onglet Réglages)
+  - HTTPS (installation de la télécommande sur Android) : reverse proxy vers le port 8080
+  - Jellyfin : en tant que $BOX_USER, jellyfin-mpv-shim --no-gui --server <url> --quick-connect
+  - Home Assistant : ~/.config/stream-box/mqtt.json et mqtt-password chez $BOX_USER (docs/home-assistant.md)
+  - Wake-on-LAN : BIOS, puis nmcli connection modify <connexion> 802-3-ethernet.wake-on-lan magic
+END
