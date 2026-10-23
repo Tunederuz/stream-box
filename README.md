@@ -35,7 +35,8 @@ télécommande web installable sur téléphone (PWA).
 | `display.py` | Résolution de la sortie vidéo (wlr-randr), jamais en dessous de 60 Hz |
 | `mqtt_bridge.py` | Pont MQTT vers Home Assistant (découverte automatique) |
 | `update.sh`, `systemd/` | Mises à jour, jetons anti-robot YouTube, pont MQTT |
-| `install.sh`, `boot-mode.py` | Installation et mise à jour ; mode selon le clavier au démarrage |
+| `install.sh`, `backup.sh`, `boot-mode.py` | Installation, mise à jour, sauvegarde ; mode selon le clavier au démarrage |
+| `audio.py` | Sortie son sur l'HDMI de la TV au démarrage |
 | `CLAUDE.md` | Documentation technique détaillée (décisions, pièges, comment tester) |
 
 ## Installation (résumé)
@@ -53,8 +54,27 @@ sudo bash install.sh --city "Ta ville" --streamers chaine1,chaine2
 Le script installe les paquets, crée l'utilisateur `media` qui fait tourner la box, y copie le dépôt, installe
 streamlink, yt-dlp, jellyfin-mpv-shim et le reste dans des venvs, active les services et met en place la session
 sans bureau. Il peut être relancé pour mettre à jour une installation (`git pull`, puis `sudo bash install.sh`).
-Les deux options sont facultatives : la liste des streamers se remplit aussi depuis la télécommande web. À la fin,
-il affiche les réglages restants (compte Twitch, HTTPS pour installer la télécommande sur Android, Jellyfin, Home
-Assistant, Wake-on-LAN).
+Les options sont facultatives (`sudo bash install.sh --help`) :
+
+| Option | Rôle |
+|---|---|
+| `--city VILLE` | Météo de l'écran d'ambiance |
+| `--streamers a,b,c` | Liste de départ (elle se remplit aussi depuis la télécommande web) |
+| `--allow-from IP` | Ouvre le port 8080 à cette adresse (reverse proxy HTTPS) si le pare-feu ufw est actif |
+| `--static-ip IP/PRÉFIXE --gateway IP [--dns IP]` | IP fixe sur la connexion Ethernet |
+| `--wol` | Wake-on-LAN sur la connexion Ethernet (à activer aussi dans le BIOS) |
+| `--restore ARCHIVE` | Remet les réglages et connexions sauvegardés par `backup.sh` |
+
+À la fin, il affiche les réglages restants (compte Twitch, HTTPS, Jellyfin, Home Assistant).
+
+### Sauvegarde et réinstallation
+
+`sudo bash backup.sh` crée une archive de tout ce qui est propre à la box : liste des streamers, réglages, jeton
+Twitch, connexion Jellyfin, configuration MQTT et météo, son, appairages Bluetooth. Elle contient des secrets : elle
+n'est lisible que par celui qui la crée, et n'a rien à faire dans le dépôt. Après une réinstallation du système :
+
+```
+sudo bash install.sh --restore stream-box-backup-AAAA-MM-JJ.tar.gz --static-ip … --gateway … --wol --allow-from …
+```
 
 Les détails, et les raisons de chaque choix, sont dans `CLAUDE.md`.

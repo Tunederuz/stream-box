@@ -391,7 +391,8 @@ mp.observe_property("mouse-pos", "native", function(_, m)
 end)
 
 
--- Télécommande Bluetooth (Xiaomi) : cage transmet ses touches à mpv comme celles d'un clavier
+-- Télécommande Bluetooth (testé avec celle du Xiaomi TV Stick) : cage transmet ses touches à mpv comme celles d'un
+-- clavier. OK et Menu n'ont pas de nom standard : leurs codes sont ceux de cette télécommande.
 
 -- Bouton le plus proche dans la direction (dx, dy), depuis le bouton sélectionné
 local function move_selection(dx, dy)

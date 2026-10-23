@@ -1,45 +1,41 @@
 # Stream Box
 
-> Les valeurs entre chevrons (`<ip-box>`, `<admin>`…) et les domaines `example.com` sont propres à chaque
-> installation : les vraies valeurs sont dans `CLAUDE.local.md` (non versionné).
+> Les valeurs entre chevrons (`<ip-box>`…) et les domaines `example.com` sont propres à chaque installation. Les
+> détails d'une installation donnée (réseau, matériel, comptes) vont dans `CLAUDE.local.md`, non versionné.
 
-Mini PC branché sur la TV (« <nom-de-la-machine> », <ip-box> en Ethernet). Au démarrage, il lance en plein écran le
-dernier stream Twitch regardé, avec le chat en overlay. Quand la souris bouge, un menu permet de changer
-de streamer et de régler le chat. Une télécommande web, **https://remote.example.com** (installable comme
-appli), fait la même chose depuis un téléphone, plus le volume et la pause.
+Mini PC Linux branché sur la TV. Au démarrage, il lance en plein écran le dernier stream Twitch regardé, avec le chat
+en overlay. Quand la souris bouge (ou avec une télécommande Bluetooth), un menu permet de changer de streamer et de
+régler le chat. Une télécommande web (installable comme appli) fait la même chose depuis un téléphone, et plus encore.
+Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des réglages : `backup.sh`.
 
 ## Système
-- **CachyOS**. La box tourne sous l'utilisateur dédié **`media`** (shell bash, pas de mot de passe, même clé SSH
-  qu'<admin> : `ssh media@<ip-box>`). `<admin>` (shell fish) est le compte d'admin avec sudo.
-- **Session dédiée sans bureau** : Plasma Login connecte automatiquement `media` dans la session
-  `/usr/share/wayland-sessions/stream-box.desktop` → `cage -s -- /home/media/stream-box/start.sh`
-  (cage = compositeur Wayland « kiosque » ; `-s` garde Ctrl+Alt+F2 pour une console). Installée par
-  `install.sh`. Pour Plasma : démarrer avec un clavier branché et se connecter en <admin> (session Plasma).
-- **Mode selon le clavier** : `stream-box-boot-mode.service` (root, avant plasmalogin) lance
-  `/usr/local/lib/stream-box/boot-mode.py` (copie root de `boot-mode.py`, installée par `install.sh`, qui lui passe `--dropin` selon le gestionnaire de connexion). Un
-  périphérique avec des touches de lettres (Q, A, Z, espace) = clavier. Sans clavier, il écrit
-  `/etc/plasmalogin.conf.d/50-stream-box.conf` (autologin media + session Stream Box). Avec clavier, il le supprime
-  et l'écran de connexion s'affiche. `/etc/plasmalogin.conf` ne contient plus d'autologin : il passerait avant le
-  dossier `.conf.d` (sauvegarde : `/etc/plasmalogin.conf.bak-stream-box`). Le choix se fait au démarrage seulement.
-  Après une modification de `boot-mode.py`, recopier en root (`sudo install -m 755 …`). Test : `boot-mode.py --dry-run`.
-- Sans Plasma, le bouton power est géré par logind (`HandlePowerKey=poweroff` par défaut) : extinction directe.
-  Les réglages KDE ci-dessous ne servent que si on revient à Plasma.
-- Son : carte en profil `output:hdmi-stereo` (TV Samsung), volume du système à 100 %, mémorisés par WirePlumber
-  dans `~media/.local/state/wireplumber/`. Pour un nouvel utilisateur, la carte repart sur le haut-parleur interne.
-- Réseau : **Ethernet** (`enp1s0`, MAC `<mac-ethernet>`, connexion NetworkManager « Connexion filaire 1 »), **IP fixe
-  <ip-box>/24** configurée sur la box (passerelle et DNS <ip-routeur>). Le serveur DHCP est un **Synology en
-  <ip-routeur>** (l'Archer AX55 n'est qu'un point d'accès) ; il ignorait la réservation pour la nouvelle MAC, d'où
-  l'IP fixe. La réservation `stream-box` → .90 y est gardée pour qu'il ne distribue pas cette adresse. Le dongle
-  wifi USB n'est plus utilisé.
-- Pare-feu **ufw** actif : le port 8080 n'est ouvert qu'à NPM (`ufw allow from <ip-npm> to any port 8080 proto tcp`).
-- **HTTPS** : Nginx Proxy Manager sur <ip-npm> (proxy host `remote.example.com` → `http://<ip-box>:8080`,
-  certificat Let's Encrypt `*.example.com`). Le nom ne se résout qu'en DNS local, rien n'est exposé sur Internet.
-- Verrouillage d'écran, extinction de l'écran et mise en veille désactivés (`~/.config/kscreenlockerrc`,
-  `~/.config/powerdevilrc`). Le bouton power éteint directement : `PowerButtonAction=8` et `PowerDownAction=8`
-  dans powerdevilrc (+ `confirmLogout=false` dans `~/.config/ksmserverrc`). Après un changement de powerdevilrc, il faut
-  `systemctl --user restart plasma-powerdevil` : l'appel D-Bus `reparseConfiguration` ne suffit pas pour le bouton.
-- L'ancienne installation sous <admin> (dossier, autostart Plasma, venv streamlink) a été supprimée.
-- Pas de sudo sans mot de passe. mpv et cage viennent des paquets du système. KDE Connect n'est plus utilisé.
+- **Distribution Arch** (testé sur CachyOS). La box tourne sous l'utilisateur dédié **`media`** (shell bash, pas de mot
+  de passe ; `install.sh` lui copie la clé SSH du compte d'admin : `ssh media@<ip-box>`). Un compte d'admin avec sudo
+  sert à la maintenance.
+- **Session dédiée sans bureau** : le gestionnaire de connexion (Plasma Login, ou SDDM) connecte automatiquement `media`
+  dans la session `/usr/share/wayland-sessions/stream-box.desktop` → `cage -s -- /home/media/stream-box/start.sh`
+  (cage = compositeur Wayland « kiosque » ; `-s` garde Ctrl+Alt+F2 pour une console). Pour retrouver le bureau :
+  démarrer avec un clavier branché et se connecter avec le compte d'admin.
+- **Mode selon le clavier** : `stream-box-boot-mode.service` (root, avant le gestionnaire de connexion) lance
+  `/usr/local/lib/stream-box/boot-mode.py` (copie root de `boot-mode.py`, installée par `install.sh`, qui lui passe
+  `--dropin` selon le gestionnaire de connexion). Un périphérique avec des touches de lettres (Q, A, Z, espace) =
+  clavier. Sans clavier, il écrit `<dossier .conf.d>/50-stream-box.conf` (autologin media + session Stream Box). Avec
+  clavier, il le supprime et l'écran de connexion s'affiche. Le fichier de config principal ne doit pas contenir de
+  section `[Autologin]` : elle passerait avant le dossier `.conf.d` (`install.sh` la retire, avec une sauvegarde
+  `.bak-stream-box`). Le choix se fait au démarrage seulement. Après une modification de `boot-mode.py`, relancer
+  `install.sh` (ou recopier en root). Test : `boot-mode.py --dry-run`.
+- Sans bureau, le bouton power est géré par logind (`HandlePowerKey=poweroff` par défaut) : extinction directe.
+- **Son** : `audio.py` (lancé par `start.sh`) bascule la carte son sur son profil HDMI et en fait la sortie par défaut
+  si la sortie actuelle n'est pas déjà en HDMI : un nouvel utilisateur démarre souvent sur le haut-parleur interne.
+  `~/.config/stream-box/no-hdmi-audio` désactive ce choix. WirePlumber mémorise ensuite profil et volume
+  (`~media/.local/state/wireplumber/`).
+- **Réseau** : de préférence en Ethernet avec une IP fixe (`install.sh --static-ip … --gateway …`), indispensable pour
+  le Wake-on-LAN (`--wol`, et l'option correspondante dans le BIOS).
+- **Pare-feu** : si ufw est actif, le port 8080 de la télécommande web doit être ouvert au reverse proxy
+  (`install.sh --allow-from <ip-proxy>`).
+- **HTTPS** : un reverse proxy (par exemple Nginx Proxy Manager) vers `http://<ip-box>:8080` avec un certificat,
+  sur un nom qui peut ne se résoudre qu'en DNS local. Nécessaire pour installer la télécommande sur Android.
+- Pas de sudo sans mot de passe pour `media`. mpv et cage viennent des paquets du système.
 
 ## Fichiers (`/home/media/stream-box/`)
 - `start.sh` : attend le réseau (`getent hosts www.twitch.tv`), lance `chat_overlay.py` et `remote.py` en arrière-plan,
@@ -78,8 +74,9 @@ appli), fait la même chose depuis un téléphone, plus le volume et la pause.
   20–60 px en 1920x1080, défaut 32). `POST /api/set` → script-message `streambox-set <clé> <valeur>` → `set_number` dans
   stream-box.lua (bornes, fichier d'état, `user-data/streambox/*`), que `chat_overlay.py` observe.
 - Résolution : `display.py` (wlr-randr, que cage gère ; paquet `wlr-randr` à installer). Seuls les modes ≥ 59 Hz sont
-  proposés : en HDMI, ce mini PC ne sort le 4K qu'en **30 Hz**, ce qui jetait une image sur deux des streams à 60 i/s.
-  « auto » = mode préféré de la TV s'il est à 60 Hz, sinon la plus grande définition à 60 Hz (2560x1440). Réglage dans
+  proposés : beaucoup de mini PC ne sortent le 4K qu'en **30 Hz** en HDMI, ce qui jette une image sur deux des streams
+  à 60 i/s.
+  « auto » = mode préféré de la TV s'il est à 60 Hz, sinon la plus grande définition à 60 Hz. Réglage dans
   `~media/.local/state/stream-box/display_mode`, appliqué par `start.sh` avant mpv et en direct depuis la page.
 - **Mode Média** (stream-box.lua, `user-data/streambox/mode` = `twitch` | `media`) : tout fichier qui n'est pas le flux
   streamlink (lien envoyé, Jellyfin) arrête streamlink et passe en `media` ; le chat est masqué. Fin de fichier puis
@@ -87,8 +84,9 @@ appli), fait la même chose depuis un téléphone, plus le volume et la pause.
   Script-messages `streambox-play <url>`, `streambox-twitch`. Un crochet `on_load` (avant l'ouverture de chaque fichier,
   y compris ceux de Jellyfin) règle `demuxer-max-bytes` (750 KiB pour le direct, 150 MiB pour les vidéos) et remet
   `hwdec=auto-safe` : le shim impose sa propre valeur de `hwdec` en s'accrochant (défaut `"no"`, réglé à `auto-safe`
-  dans sa `conf.json`). `--ytdl-format` : 1440p max et **pas d'AV1**, que l'UHD 630 ne décode pas (VP9 et H.264
-  passent par vaapi). Avec yt-dlp, YouTube n'envoie pas de pub. Sous-titres : `--ytdl-raw-options-append` avec
+  dans sa `conf.json`). `--ytdl-format` : par défaut 1440p max et **pas d'AV1**, que beaucoup d'iGPU ne décodent
+  pas en matériel (le VP9 et le H.264 passent par le décodage matériel) ; une autre règle peut être mise dans
+  `~/.config/stream-box/ytdl-format`. Avec yt-dlp, YouTube n'envoie pas de pub. Sous-titres : `--ytdl-raw-options-append` avec
   `sub-langs=fr,fr-FR,fr-orig,en,en-US,en-GB,en-orig` + `write-subs`/`write-auto-subs` (`fr.*` ramènerait plus de 100
   traductions automatiques). À chaud, passer `ytdl-raw-options` en objet JSON : la forme texte est coupée aux virgules.
   Les sous-titres **automatiques** (`kind=asr`) ont des répliques qui se chevauchent (deux toujours à l'écran) :
@@ -127,7 +125,7 @@ appli), fait la même chose depuis un téléphone, plus le volume et la pause.
 - **Retour en arrière dans le direct** : `on_load` garde `LIVE_BACK` (400 MiB ≈ 7-8 min en 1080p60) avec
   `demuxer-seekable-cache=yes`. `live_window()` lit `demuxer-cache-state.seekable-ranges`. En différé ou en pause,
   `set_live_buffer` passe le tampon avant à 150 MiB (sinon mpv cesse de lire le flux et le retard fond) ; retour au
-  direct → 750 KiB. Télécommande Xiaomi : ←/→ ±10 s, Retour = direct. Page : −30 s / +30 s / Direct
+  direct → 750 KiB. Télécommande Bluetooth : ←/→ ±10 s, Retour = direct. Page : −30 s / +30 s / Direct
   (`POST /api/live_seek {delta|"live"}` → script-message `streambox-live-seek`), retard dans `/api/state` (`delay`).
   La barre de lecture affiche « −0:42 » ou « ● EN DIRECT ».
 - **Notification de live** : `remote.py` repère les streamers qui viennent de passer en live (pas au premier relevé)
@@ -156,15 +154,15 @@ appli), fait la même chose depuis un téléphone, plus le volume et la pause.
   échoue. Journal : `~media/.local/state/stream-box/update.log`.
 - **git** : `/home/media/stream-box` est un dépôt git (pas de secret dedans : jeton Twitch et identifiants Jellyfin
   sont ailleurs). Committer après chaque modification.
-- **Télécommande Bluetooth Xiaomi** (« MI RC », `<adresse-télécommande>`, appairée et de confiance pour `media`) sur un
-  dongle USB CSR (`0a12:0001`, clone : hoquets « hardware error » possibles mais il s'en remet). Linux la voit comme
-  « Xiaomi RC Keyboard » / « Consumer Control » sans les touches Q et A : la règle de démarrage ne la prend pas pour un
-  clavier. cage transmet ses touches à mpv ; stream-box.lua les lie (`KEYS`, `on_key`) : OK = `0x21ffa0`, Menu ≡ =
-  `0x2111a0`, Retour = `GO_BACK`, Accueil = `HOMEPAGE`, flèches, volume (actions par défaut de mpv). Menu fermé en
+- **Télécommande Bluetooth** (testé avec celle du Xiaomi TV Stick, appairée et de confiance pour `media`). Linux la
+  voit comme un clavier sans les touches Q et A : la règle de démarrage ne la prend pas pour un vrai clavier. Une autre
+  télécommande qui annoncerait ces touches est à ajouter à `IGNORE` dans `boot-mode.py`. cage transmet ses touches à mpv ; stream-box.lua les lie (`KEYS`, `on_key`) : OK = `0x21ffa0`, Menu ≡ =
+  `0x2111a0` (codes de la télécommande Xiaomi : à adapter pour une autre), Retour = `GO_BACK`, Accueil = `HOMEPAGE`, flèches, volume (actions par défaut de mpv). Menu fermé en
   Twitch : haut/bas zappent, OK/Accueil ouvrent le menu, Menu ≡ affiche/masque le chat. En vidéo : OK pause, ←/→ ±10 s,
   ↑ affiche/retire la barre de lecture (↓ la retire), Menu ≡ change de sous-titres, Retour ×2 revient au stream. Menu ouvert : flèches = sélection (le bouton
   le plus proche dans la direction), OK valide, Retour/Accueil ferment. Power éteint la box (logind).
-  Pour réappairer : maintenir Accueil + Retour jusqu'au clignotement, `bluetoothctl` → `scan on`, `pair`, `trust`.
+  Appairage : mettre la télécommande en mode appairage (Xiaomi : Accueil + Retour jusqu'au clignotement), puis
+  `bluetoothctl` → `scan on`, `pair`, `trust`. Les appairages sont dans la sauvegarde de `backup.sh`.
 - **Barre de lecture des vidéos** (stream-box.lua, `draw_bar`) façon YouTube : bandeau en bas (titre, partie lue en
   violet, partie chargée, temps). Affichée `BAR_SECONDS` (5 s) par ↑, ←/→ ou OK ; ↑ ou ↓ la retirent ; toujours
   visible pendant la pause (symbole pause dessiné). Préférée à l'OSC de mpv, désactivée (`--osc=no`) car pensée
@@ -172,7 +170,7 @@ appli), fait la même chose depuis un téléphone, plus le volume et la pause.
 - Icône d'extinction en haut à droite de la page (confirmation « Éteindre la box ? ») → `POST /api/poweroff` →
   `systemctl poweroff` en tant que media. Autorisé sans mot de passe par `/etc/polkit-1/rules.d/50-stream-box.rules`
   (installée par `install.sh`), y compris quand une autre session est ouverte (SSH).
-- PWA : grâce au HTTPS de NPM, Chrome Android propose « Installer l'application » ; sur iPhone, « Sur l'écran
+- PWA : grâce au HTTPS du reverse proxy, Chrome Android propose « Installer l'application » ; sur iPhone, « Sur l'écran
   d'accueil ». En HTTP direct (:8080), Android ne donnerait qu'un raccourci.
 - `streamers.txt` : un pseudo par ligne, `#` pour les commentaires. Relu à chaque ouverture du menu, pas besoin de redémarrer.
 
@@ -201,7 +199,7 @@ quand Twitch change quelque chose. Mise à jour : `~/.local/share/streamlink-ven
 - Déployer par renommage (copie dans un dossier temporaire puis `mv`), pas en écrasant : bash relit `start.sh`
   pendant qu'il tourne.
 - Simuler la souris par l'IPC : `{"command":["mouse",x,y]}` pour bouger, `["mouse",x,y,0,"single"]` pour cliquer.
-  Les coordonnées sont en pixels écran (2560x1440).
+  Les coordonnées sont en pixels de l'écran (`osd-dimensions`).
 - Captures : `["screenshot-to-file","/tmp/x.png","window"]`. Elles sortent vides tant qu'aucune vidéo ne joue.
 - Quelqu'un peut cliquer devant la TV pendant un test : l'état peut changer pendant que tu testes.
 
