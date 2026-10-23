@@ -107,7 +107,7 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   La pause de mpv survit au changement de fichier : `load_stream` la retire, sinon le direct reste figé. Pour se reconnecter : `jellyfin-mpv-shim clear`, puis
   `jellyfin-mpv-shim --no-gui --server https://jellyfin.example.com --quick-connect` et approuver le code affiché.
 - **Qui est en live** : `remote.py` interroge Twitch (GQL, client-id public du site) chaque minute pour toute la
-  liste, publie le résultat dans `user-data/streambox/live` (menu de la TV : point rouge + spectateurs) et le renvoie
+  liste (avec les photos de profil, `avatars` de `/api/state`, et la miniature du live, `thumb`, pour la page), publie le résultat dans `user-data/streambox/live` (menu de la TV : point rouge + spectateurs) et le renvoie
   dans `/api/state` (page : spectateurs, jeu, titre). Après un redémarrage de mpv, le menu le reçoit au relevé suivant.
 - **Bascule automatique** (stream-box.lua, `auto_switch`, désactivable : onglet Réglages → Lecture, `POST /api/auto_switch
   {enabled}`, interrupteur MQTT, état dans `user-data/streambox/auto_switch` et le fichier d'état `auto_switch`) : si
@@ -251,3 +251,13 @@ quand Twitch change quelque chose. Mise à jour : `~/.local/share/streamlink-ven
 ## Pistes
 - Emotes en image (`overlay-add` avec des bitmaps BGRA bruts) : nettement plus complexe.
 - Indiquer dans le menu qui est en live.
+
+## Page web (remote.html)
+
+Thème sombre à dégradés violets, sans dépendance externe : en-tête avec l'état de la TV, carte « Sur la TV »
+(miniature du live, streamer, titre, retour en arrière ; compacte pour l'écran d'accueil et une chaîne hors ligne),
+streamers en cartes avec photo (anneau rouge en live), boutons à icônes SVG en ligne, interrupteurs (`button.toggle`
+avec `aria-pressed`, dessinés en CSS). Version précédente de la page : tag git `page-v1` (`git show
+page-v1:remote.html > remote.html` pour revenir en arrière). Pour juger d'un changement sans téléphone : copie de la
+page avec un `render(<état de /api/state>)` à la place de `refresh()`, capturée par `firefox --headless --screenshot`
+(il n'attend pas les requêtes de la page).
