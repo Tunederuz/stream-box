@@ -25,3 +25,17 @@ function resumable(position, duration, finished) {
     position = Number(position) || 0
     return !finished && position >= 30 && (!duration || position < duration)
 }
+
+// Gros nombres : 16617298 → « 16,6 M », 4500 → « 4,5 k »
+function big(v) {
+    v = Number(v) || 0
+    if (v >= 1e6) return (v / 1e6).toFixed(1).replace(".", ",") + " M"
+    return viewers(v)
+}
+
+// Durée d'un live : « 2 h 14 », « 35 min »
+function since(epochSeconds) {
+    var s = Math.max(0, Date.now() / 1000 - (Number(epochSeconds) || 0))
+    var h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60
+    return h > 0 ? h + " h " + (m < 10 ? "0" : "") + m : m + " min"
+}
