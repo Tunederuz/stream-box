@@ -964,7 +964,7 @@ Item {
                     TextMetrics { id: chipMetrics; text: login; font.pixelSize: chipText.font.pixelSize; font.bold: true }
                     width: Math.ceil(chipMetrics.advanceWidth) + 100; height: 64
                     readonly property real rel: x - ListView.view.contentX
-                    opacity: rel > -width / 2 && rel + width / 2 < ListView.view.width ? 1 : 0
+                    opacity: rel > -20 && rel + width < ListView.view.width + 20 ? 1 : 0   // entière, sinon cachée (pas sous le rail)
                     Behavior on opacity { NumberAnimation { duration: 150 } }
                     scale: foc ? 1.05 : 1
                     Behavior on scale { NumberAnimation { duration: 160 } }
@@ -982,17 +982,25 @@ Item {
                     y: 300 + index * 366; width: 1460; height: 350
                     Text { x: 2; text: row ? row.title.toUpperCase() : ""; color: "#a99fc0"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 2 }
                     ListView {
-                        y: 40; x: -40; width: 1500; height: 302
+                        y: 40; x: -40; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
                         orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
                         leftMargin: 40
                         model: row ? row.items.length : 0
                         currentIndex: menu.rpSel[r] || 0
-                        onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                        // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
+                        // qui laissait des cartes coupées au bord du rail ou de l'écran)
+                        property int first: 0
+                        readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
+                        onCurrentIndexChanged: {
+                            if (currentIndex < first) first = currentIndex
+                            else if (currentIndex >= first + fits) first = currentIndex - fits + 1
+                            contentX = -leftMargin + first * 356
+                        }
                         Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                         delegate: VideoCard {
                             readonly property var it: row.items[index] || {}
                             readonly property real rel: x - ListView.view.contentX
-                            opacity: rel > -width / 2 && rel + width / 2 < ListView.view.width ? 1 : 0
+                            opacity: rel > -20 && rel + width < ListView.view.width + 20 ? 1 : 0   // entière, sinon cachée (pas sous le rail)
                             Behavior on opacity { NumberAnimation { duration: 150 } }
                             title: it.title || ""
                             thumb: it.thumb || ""
@@ -1060,17 +1068,28 @@ Item {
                         }
                         ListView {   // chaînes trouvées : photo ronde, nom, abonnés, « dans ta liste »
                             visible: !!row && row.kind === "chans"
-                            y: 50; x: -40; width: 1500; height: 302
+                            y: 50; x: -40; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
                             orientation: ListView.Horizontal; spacing: 30; interactive: false; clip: false
                             leftMargin: 40
                             model: visible ? row.items.length : 0
                             currentIndex: visible ? (menu.mSel["chans"] || 0) : 0
-                            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                            // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
+                            // qui laissait des cartes coupées au bord du rail ou de l'écran)
+                            property int first: 0
+                            readonly property int fits: Math.floor((width - leftMargin + spacing) / 270)
+                            onCurrentIndexChanged: {
+                                if (currentIndex < first) first = currentIndex
+                                else if (currentIndex >= first + fits) first = currentIndex - fits + 1
+                                contentX = -leftMargin + first * 270
+                            }
                             Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                             delegate: Item {
                                 readonly property var c: row.items[index] || {}
                                 readonly property bool foc: menu.area === "content" && menu.mRow === r && index === (menu.mSel["chans"] || 0)
                                 width: 240; height: 302
+                                readonly property real rel: x - ListView.view.contentX
+                                opacity: rel > -20 && rel + width < ListView.view.width + 20 ? 1 : 0
+                                Behavior on opacity { NumberAnimation { duration: 150 } }
                                 z: foc ? 2 : 1
                                 Item {
                                     x: 30; y: 6; width: 180; height: 180
@@ -1095,17 +1114,25 @@ Item {
                         }
                         ListView {
                             visible: !!row && row.kind !== "chans"
-                            y: 50; x: -40; width: 1500; height: 302
+                            y: 50; x: -40; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
                             orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
                             leftMargin: 40
                             model: visible ? row.items.length : 0
                             currentIndex: visible ? (menu.mSel[row.key] || 0) : 0
-                            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                            // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
+                            // qui laissait des cartes coupées au bord du rail ou de l'écran)
+                            property int first: 0
+                            readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
+                            onCurrentIndexChanged: {
+                                if (currentIndex < first) first = currentIndex
+                                else if (currentIndex >= first + fits) first = currentIndex - fits + 1
+                                contentX = -leftMargin + first * 356
+                            }
                             Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                             delegate: VideoCard {
                                 readonly property var it: row.items[index] || {}
                                 readonly property real rel: x - ListView.view.contentX
-                                opacity: rel > -width / 2 && rel + width / 2 < ListView.view.width ? 1 : 0
+                                opacity: rel > -20 && rel + width < ListView.view.width + 20 ? 1 : 0   // entière, sinon cachée (pas sous le rail)
                                 Behavior on opacity { NumberAnimation { duration: 150 } }
                                 title: it.title || ""
                                 thumb: it.thumb || ""
