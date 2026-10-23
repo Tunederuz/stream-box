@@ -152,7 +152,9 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   minute (TV). Données de `remote.py` (`ambient_loop`, toutes les 10 min, republiées toutes les 10 s dans
   `user-data/streambox/ambient`) : météo Open-Meteo (lieu dans `~/.config/stream-box/ambient.json`, `city`,
   `latitude`, `longitude`, `timezone` ; sans ce fichier, pas de météo) et plannings Twitch (GQL `schedule.segments`,
-  créneaux de la semaine en cours : un créneau passé est reporté d'une semaine). Les captures de mpv sont vides quand
+  créneaux de la semaine en cours : un créneau passé est reporté d'une semaine ; créneaux annulés (`isCancelled`)
+  ignorés ; pendant une pause Twitch (`schedule.interruption`, les vacances du streamer) : « en pause jusqu'au … » ; au-delà
+  d'une semaine, la date est ajoutée au jour ; calcul testable dans `next_streams`). Les captures de mpv sont vides quand
   rien ne joue : vérifier l'écran sur la TV.
 - **Historique et reprise** (`remote.py`, `play` / `history_loop`) des vidéos lancées depuis la télécommande (liens,
   YouTube, rediffusions et clips Twitch ; Jellyfin gère sa progression). Clé stable par vidéo (`media_key` : id

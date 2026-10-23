@@ -193,22 +193,52 @@ def fetch_weather(conf):
 
 
 def fetch_schedule(logins, tz):
-    """Prochain créneau prévu de chaque streamer (plannings Twitch, hebdomadaires), du plus proche au plus lointain."""
+    """Prochains lives prévus de la liste (plannings Twitch), voir next_streams."""
     if not logins:
         return []
-    query = "query($l:[String!]){users(logins:$l){login channel{schedule{segments{startAt endAt title}}}}}"
+    query = ("query($l:[String!]){users(logins:$l){login channel{schedule{"
+             "interruption{startAt endAt} segments{startAt endAt title isCancelled}}}}}")
     req = urllib.request.Request(
         "https://gql.twitch.tv/gql", data=json.dumps({"query": query, "variables": {"l": logins}}).encode(),
         headers={"Client-ID": TWITCH_WEB_CLIENT_ID, "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=10) as r:
         users = json.load(r)["data"]["users"]
-    now, upcoming = datetime.datetime.now(tz), []
+    return next_streams(users, datetime.datetime.now(tz))
+
+
+MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre",
+          "décembre"]
+
+
+def next_streams(users, now):
+    """Prochain créneau de chaque streamer, du plus proche au plus lointain, puis les streamers en pause.
+
+    Les plannings sont hebdomadaires : un créneau passé est reporté d'une semaine. Les créneaux annulés sont ignorés,
+    et ceux qui tombent pendant une pause (« interruption » Twitch, les vacances du streamer) aussi ; un streamer en
+    pause en ce moment est affiché « en pause jusqu'au … » au lieu d'un créneau.
+    """
+    tz = now.tzinfo
+
+    def when(value):
+        return datetime.datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(tz)
+
+    upcoming, paused = [], []
     for u in users:
+        schedule = ((u or {}).get("channel") or {}).get("schedule") or {}
+        pause = schedule.get("interruption") or {}
+        pause = (when(pause["startAt"]), when(pause["endAt"])) if pause.get("startAt") and pause.get("endAt") else None
+        if pause and pause[0] <= now < pause[1]:
+            end = pause[1]
+            paused.append({"login": u["login"], "when": f"en pause jusqu'au {'1er' if end.day == 1 else end.day} "
+                                                        f"{MONTHS[end.month - 1]}", "title": ""})
+            continue
         best = None
-        for seg in ((((u or {}).get("channel") or {}).get("schedule") or {}).get("segments") or []):
-            start = datetime.datetime.fromisoformat(seg["startAt"].replace("Z", "+00:00")).astimezone(tz)
-            while start < now - datetime.timedelta(hours=1):   # créneau passé : même heure la semaine suivante
-                start += datetime.timedelta(days=7)
+        for seg in schedule.get("segments") or []:
+            if seg.get("isCancelled"):
+                continue
+            start = when(seg["startAt"])
+            while start < now - datetime.timedelta(hours=1) or (pause and pause[0] <= start < pause[1]):
+                start += datetime.timedelta(days=7)   # créneau passé, ou pendant la pause : la semaine suivante
             if not best or start < best[0]:
                 best = (start, seg.get("title") or "")
         if best:
@@ -217,8 +247,10 @@ def fetch_schedule(logins, tz):
     for start, login, title in sorted(upcoming)[:4]:
         days = (start.date() - now.date()).days
         day = "aujourd'hui" if days == 0 else "demain" if days == 1 else DAYS[start.weekday()]
+        if days >= 7:   # au-delà d'une semaine (après une pause), le jour seul serait trompeur
+            day += f" {'1er' if start.day == 1 else start.day} {MONTHS[start.month - 1]}"
         out.append({"login": login, "when": f"{day} {start:%H:%M}", "title": title})
-    return out
+    return out + paused[:2]
 
 
 def ambient_loop():
