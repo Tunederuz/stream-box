@@ -28,6 +28,8 @@ from PySide6.QtQuick import QQuickFramebufferObject, QQuickView, QQuickWindow, Q
 
 import mpv
 
+import chat_qt   # chat avec émotes (même dossier)
+
 DIR = os.path.dirname(os.path.abspath(__file__))
 CURSOR_HIDE_MS = 4000   # comme --cursor-autohide=4000 de mpv
 
@@ -148,6 +150,8 @@ class Box(QObject):
     @Slot(bool)
     def setMenuOpen(self, value):
         self.menu_open = value
+        if chat:
+            chat.set_menu_open(value)
         to_mpv(set_flag, "user-data/streambox/tvmenu", value)   # le chat se masque, la souris n'ouvre pas le petit menu
 
 
@@ -361,6 +365,48 @@ class Pip(QObject):
 pip = Pip()
 
 
+class ChatBridge(QObject):
+    """Chat avec émotes pour qml/ChatOverlay.qml : messages de chat_qt.py, réglages du lecteur principal"""
+    changed = Signal()
+    messagesChanged = Signal()
+    _messages_in = Signal(str)     # depuis les fils de chat_qt
+    _settings_in = Signal(str)     # depuis le fil de mpv (JSON des réglages)
+
+    def __init__(self):
+        super().__init__()
+        self._messages = "[]"
+        self.settings = {"channel": "", "mode": "", "corner": "bl", "chat_visible": True, "chat_bg": 60,
+                         "chat_size": 32}
+        self.menu_open = False
+        self._messages_in.connect(self._set_messages, Qt.QueuedConnection)
+        self._settings_in.connect(self._set_settings, Qt.QueuedConnection)
+        self.chat = chat_qt.Chat(lambda msgs: self._messages_in.emit(json.dumps(msgs)))
+
+    def _set_messages(self, value):
+        self._messages = value
+        self.messagesChanged.emit()
+
+    def _set_settings(self, value):
+        self.settings.update(json.loads(value))
+        self.chat.set_channel(self.settings["channel"] or None)
+        self.changed.emit()
+
+    def set_menu_open(self, value):
+        self.menu_open = value
+        self.changed.emit()
+
+    messages = Property(str, lambda self: self._messages, notify=messagesChanged)
+    corner = Property(str, lambda self: self.settings["corner"] or "bl", notify=changed)
+    bg = Property(int, lambda self: int(self.settings["chat_bg"] or 0), notify=changed)
+    size = Property(int, lambda self: int(self.settings["chat_size"] or 32), notify=changed)
+    # Masqué : case décochée, vidéo ou écran d'accueil, grand menu ouvert (comme chat_overlay.py)
+    visible = Property(bool, lambda self: bool(self.settings["chat_visible"]) and self.settings["mode"] == "twitch"
+                       and not self.menu_open, notify=changed)
+
+
+chat = None   # créé dans main(), avec l'application Qt
+
+
 class View(QQuickView):
     """Fenêtre plein écran : transmet touches et souris à mpv, masque le curseur après 4 s sans mouvement."""
 
@@ -417,6 +463,9 @@ def main():
     view = View()
     view.rootContext().setContextProperty("box", box)
     view.rootContext().setContextProperty("pip", pip)
+    global chat
+    chat = ChatBridge()
+    view.rootContext().setContextProperty("chat", chat)
     view.setSource(QUrl.fromLocalFile(os.path.join(DIR, "ui.qml")))
     qml_menu = view.status() == QQuickView.Ready and view.rootObject().findChild(QObject, "tvMenu") is not None
     if not qml_menu:
@@ -442,6 +491,9 @@ def main():
         return cb
     for key in ("channel", "mode", "corner"):
         player.observe_property(f"user-data/streambox/{key}", follow(key))
+    for key in ("channel", "mode", "corner", "chat_visible", "chat_bg", "chat_size"):
+        player.observe_property(f"user-data/streambox/{key}",
+                                lambda _n, v, key=key: v is not None and chat._settings_in.emit(json.dumps({key: v})))
 
     def dec(v):
         return v.decode() if isinstance(v, bytes) else (v or "")
@@ -459,22 +511,27 @@ def main():
         player.command("change-list", key, "append", value)
 
     @player.event_callback("shutdown")
-    def _(_event):   # mpv quitté (commande quit par l'IPC…) : l'appli aussi, start.sh le relance
-        bridge.shutdown.emit()
-
-    bridge.shutdown.connect(app.quit, Qt.QueuedConnection)
+    def _(_event):
+        # mpv quitté (commande quit par l'IPC…) : l'appli aussi, la boucle de player.sh la relance. Tout de suite, depuis
+        # ce fil : juste après, python-mpv détruit sa connexion, ce qui attend la libération du contexte de rendu tenu
+        # par le fil de rendu de Qt, et tout restait figé (socket IPC qui coupe les connexions, pas de relance).
+        if pip.proc:
+            pip.proc.terminate()
+        os._exit(0)
     if force_window:
         bridge.ready.connect(lambda: to_mpv(player.command, "set", "force-window", force_window), Qt.QueuedConnection)
     if qml_menu:
         bridge.ready.connect(lambda: to_mpv(set_flag, "user-data/streambox/tvmenu", False), Qt.QueuedConnection)
+        # Le chat est dessiné ici (avec émotes) : chat_overlay.py, qui le dessine en texte dans mpv, se tait
+        bridge.ready.connect(lambda: to_mpv(player._set_property, "user-data/streambox/chat_ui", "qml"),
+                             Qt.QueuedConnection)
     view.showFullScreen()
     threading.Thread(target=mpv_worker, daemon=True).start()
     for f in files:
         to_mpv(player.command, "loadfile", f, "append-play")
     code = app.exec()
-    # mpv a déjà quitté (événement shutdown). Pas de player.terminate() : libmpv s'arrête net (abort, code 134) si son
-    # contexte de rendu, tenu par le fil de rendu de Qt, existe encore. Ni de ménage de Python : Qt a déjà détruit les
-    # tampons d'image qu'il référence.
+    # Fenêtre fermée sans que mpv ait quitté (rare). Pas de player.terminate() : libmpv s'arrête net (abort, code 134)
+    # si son contexte de rendu, tenu par le fil de rendu de Qt, existe encore.
     os._exit(code)
 
 

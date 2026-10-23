@@ -364,6 +364,15 @@ local function settings_rows()
             s.qr = QR_MODES[i][1]
             act("qr", { mode = s.qr })
         end },
+    }
+end
+
+local function system_rows()
+    local s = state
+    local login = account and account.login
+    return {
+        { label = "Compte Twitch", value = login and ("Connecté : " .. login) or "Non connecté",
+          hint = login and "Pas de pub sur les chaînes où tu es abonné" or "Se connecte depuis la télécommande du téléphone" },
         -- Pour revenir à l'appli Qt (menu animé) depuis mpv seul, choisi ici ou retour automatique après des plantages
         { label = "Lecteur", value = (pending_player or s.player) == "qt" and "Appli Qt (menu animé)" or "mpv seul",
           hint = pending_player and pending_player ~= s.player and "OK pour appliquer : le lecteur redémarre"
@@ -377,15 +386,6 @@ local function settings_rows()
               pending_player = nil
               close_menu()
           end },
-    }
-end
-
-local function system_rows()
-    local s = state
-    local login = account and account.login
-    return {
-        { label = "Compte Twitch", value = login and ("Connecté : " .. login) or "Non connecté",
-          hint = login and "Pas de pub sur les chaînes où tu es abonné" or "Se connecte depuis la télécommande du téléphone" },
         { label = "Éteindre la box",
           hint = mp.get_time() < poweroff_until and "Appuie encore sur OK pour éteindre" or nil,
           danger = true, ok = function()

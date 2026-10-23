@@ -227,15 +227,6 @@ Item {
             { label: "QR code de la télécommande", value: qrModes[qi][1], step: function (d) {
                 act("qr", { mode: qrModes[Math.max(0, Math.min(qrModes.length - 1, qi + d))][0] })
             } },
-            { label: "Lecteur", value: (pendingPlayer || s.player) === "mpv" ? "mpv seul" : "Appli Qt (menu animé)",
-              hint: pendingPlayer && pendingPlayer !== s.player ? "OK pour appliquer : le lecteur redémarre" : undefined,
-              step: function (d) { pendingPlayer = (pendingPlayer || s.player) === "qt" ? "mpv" : "qt" },
-              ok: function () {
-                  if (!pendingPlayer || pendingPlayer === s.player) return
-                  act("player", { mode: pendingPlayer })
-                  pendingPlayer = ""
-                  close()
-              } },
         ]
     }
     Timer { id: displayReload; interval: 3000; onTriggered: menu.call("GET", "/api/display", undefined, function (d) { if (d && d.modes) menu.display = d }) }
@@ -249,6 +240,15 @@ Item {
         return [
             { label: "Compte Twitch", value: login ? "Connecté : " + login : "Non connecté",
               hint: login ? "Pas de pub sur les chaînes où tu es abonné" : "Se connecte depuis la télécommande du téléphone" },
+            { label: "Lecteur", value: (pendingPlayer || st.player) === "mpv" ? "mpv seul" : "Appli Qt (menu animé)",
+              hint: pendingPlayer && pendingPlayer !== st.player ? "OK pour appliquer : le lecteur redémarre" : undefined,
+              step: function (d) { pendingPlayer = (pendingPlayer || st.player) === "qt" ? "mpv" : "qt" },
+              ok: function () {
+                  if (!pendingPlayer || pendingPlayer === st.player) return
+                  act("player", { mode: pendingPlayer })
+                  pendingPlayer = ""
+                  close()
+              } },
             { label: "Éteindre la box", danger: true,
               hint: poweroffUntil > 0 ? "Appuie encore sur OK pour éteindre" : undefined,
               ok: function () {
