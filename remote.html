@@ -572,6 +572,22 @@
   </section>
 
   <section>
+    <h2>Sous-titres</h2>
+    <div class="setting" id="sub_size-label" style="margin-top: 0">Taille</div>
+    <div class="row stepper">
+      <button data-setting="sub_size" data-step="-10" aria-label="Sous-titres plus petits">−</button>
+      <div class="value" id="sub_size-value" aria-labelledby="sub_size-label">–</div>
+      <button data-setting="sub_size" data-step="10" aria-label="Sous-titres plus grands">+</button>
+    </div>
+    <div class="setting" id="sub_bg-label">Fond</div>
+    <div class="row stepper">
+      <button data-setting="sub_bg" data-step="-10" aria-label="Fond plus transparent">−</button>
+      <div class="value" id="sub_bg-value" aria-labelledby="sub_bg-label">–</div>
+      <button data-setting="sub_bg" data-step="10" aria-label="Fond plus sombre">+</button>
+    </div>
+  </section>
+
+  <section>
     <h2>Affichage</h2>
     <label class="setting" for="display" style="margin-top: 0">Résolution de la TV</label>
     <select id="display" disabled><option>Chargement…</option></select>
@@ -682,8 +698,8 @@ let refreshTimer;
 let previewTimer = null, previewUrl = null;   // aperçu de la TV (voir previewTick)
 let lastState = null, replaysLogin = null;
 let progress = null;   // dernière position connue, pour faire avancer la barre entre deux rafraîchissements
-const settings = {};   // dernières valeurs connues de chat_bg et chat_size
-const LIMITS = { chat_bg: [0, 100], chat_size: [20, 60] };   // mêmes bornes que NUMBERS dans stream-box.lua
+const settings = {};   // dernières valeurs connues de chat_bg, chat_size, sub_size et sub_bg
+const LIMITS = { chat_bg: [0, 100], chat_size: [20, 60], sub_size: [50, 200], sub_bg: [0, 100] };   // mêmes bornes que NUMBERS dans stream-box.lua
 
 // Photo de profil du streamer, ou son initiale ; anneau rouge en live, grisée hors ligne
 function avatar(s, name, extra = "") {
@@ -808,6 +824,10 @@ function render(s) {
   settings.chat_size = s.chat_size;
   $("chat_bg-value").textContent = `${s.chat_bg} %`;
   $("chat_size-value").textContent = `${s.chat_size} px`;
+  settings.sub_size = s.sub_size;
+  settings.sub_bg = s.sub_bg;
+  $("sub_size-value").textContent = `${s.sub_size} %`;
+  $("sub_bg-value").textContent = s.sub_bg ? `${s.sub_bg} %` : "Aucun";
 }
 
 async function refreshDisplay() {
