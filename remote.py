@@ -7,7 +7,7 @@ Les changements de streamer et de chat passent par les script-messages de stream
 Compte Twitch : le jeton du site (cookie auth-token) est rangé dans la config Twitch de streamlink, que
 streamlink lit tout seul. Twitch ne retire les pubs des abonnements qu'avec ce jeton-là.
 """
-import datetime, hashlib, json, os, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
+import datetime, hashlib, json, os, uuid, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import display   # display.py, même dossier
@@ -127,11 +127,17 @@ EVENTS_EVERY = 10    # secondes entre deux relevés, seulement pendant un direct
 RESULT_FOR = 60      # secondes d'affichage du résultat d'un sondage ou d'une prédiction terminés
 EVENTS_QUERY = (
     "query($l:String!){user(login:$l){"
-    "viewablePoll{id title status startedAt durationSeconds totalVoters choices{title votes{total}}} "
+    "viewablePoll{id title status startedAt durationSeconds totalVoters choices{id title votes{total}}} "
     "channel{activePredictionEvents{...p} lockedPredictionEvents{...p} "
     "resolvedPredictionEvents(first:1){edges{node{...p endedAt winningOutcome{id}}}}}}}"
     "fragment p on PredictionEvent{id title status createdAt predictionWindowSeconds "
     "outcomes{id title color totalPoints totalUsers}}")
+# Avec le compte connecté : son pari en cours et son solde de points de chaîne (pour voter depuis la page)
+EVENTS_SELF = "query($l:String!){user(login:$l){channel{self{communityPoints{balance}} " \
+    "activePredictionEvents{id self{prediction{points outcome{id}}}} " \
+    "lockedPredictionEvents{id self{prediction{points outcome{id}}}}}}}"
+events_now = {"channel": None, "at": 0.0, "data": {"poll": None, "prediction": None}}   # dernier relevé
+poll_votes = {}   # id du sondage → choix voté depuis la box (Twitch ne le redonne pas)
 
 
 def epoch(value):
@@ -147,9 +153,11 @@ def fetch_events(login, seen):
     if p and p.get("status") in ("ACTIVE", "COMPLETED", "TERMINATED"):
         ended = p["status"] != "ACTIVE"
         if not ended or now - seen.setdefault(p["id"], now) < RESULT_FOR:
-            out["poll"] = {"title": p["title"], "ended": ended, "voters": p.get("totalVoters") or 0,
+            out["poll"] = {"id": p["id"], "title": p["title"], "ended": ended, "voters": p.get("totalVoters") or 0,
                            "ends_at": epoch(p["startedAt"]) + (p.get("durationSeconds") or 0),
-                           "choices": [{"title": c["title"], "votes": (c.get("votes") or {}).get("total") or 0}
+                           "mine": poll_votes.get(p["id"]),
+                           "choices": [{"id": c["id"], "title": c["title"],
+                                        "votes": (c.get("votes") or {}).get("total") or 0}
                                        for c in p.get("choices") or []]}
     channel = user.get("channel") or {}
     events = (channel.get("activePredictionEvents") or []) + (channel.get("lockedPredictionEvents") or [])
@@ -159,12 +167,75 @@ def fetch_events(login, seen):
     if events:
         e = events[0]
         winner = (e.get("winningOutcome") or {}).get("id")
-        out["prediction"] = {"title": e["title"], "status": e["status"],
+        out["prediction"] = {"id": e["id"], "title": e["title"], "status": e["status"],
                              "ends_at": epoch(e["createdAt"]) + (e.get("predictionWindowSeconds") or 0),
-                             "outcomes": [{"title": o["title"], "color": o.get("color"), "points": o.get("totalPoints") or 0,
-                                           "users": o.get("totalUsers") or 0, "winner": o["id"] == winner}
+                             "outcomes": [{"id": o["id"], "title": o["title"], "color": o.get("color"),
+                                           "points": o.get("totalPoints") or 0, "users": o.get("totalUsers") or 0,
+                                           "winner": o["id"] == winner}
                                           for o in e.get("outcomes") or []]}
+    if read_token() and (out["poll"] or out["prediction"]):
+        try:   # pari en cours et solde, seulement s'il y a de quoi voter
+            ch = (twitch_gql(EVENTS_SELF, {"l": login}).get("user") or {}).get("channel") or {}
+            out["balance"] = ((ch.get("self") or {}).get("communityPoints") or {}).get("balance")
+            for ev in (ch.get("activePredictionEvents") or []) + (ch.get("lockedPredictionEvents") or []):
+                mine = ((ev.get("self") or {}).get("prediction")) or None
+                if out["prediction"] and ev["id"] == out["prediction"]["id"] and mine:
+                    out["prediction"]["mine"] = {"outcome": (mine.get("outcome") or {}).get("id"), "points": mine.get("points")}
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
     return out
+
+
+def current_user_id():
+    me = twitch_gql("{currentUser{id}}").get("currentUser")
+    if not me:
+        raise ValueError("Connecte ton compte Twitch (Réglages) pour voter.")
+    return me["id"]
+
+
+VOTE_ERRORS = {"POLL_NOT_FOUND": "Ce sondage est terminé.", "POLL_NOT_ACTIVE": "Ce sondage est terminé.",
+               "INVALID_CHOICE_INDEX": "Choix inconnu.", "NOT_ENOUGH_POINTS": "Pas assez de points de chaîne.",
+               "EVENT_NOT_ACTIVE": "Les paris sont fermés.", "EVENT_LOCKED": "Les paris sont fermés.",
+               "NOT_FOUND": "Cette prédiction est terminée.", "MULTI_OUTCOME_PREDICTION": "Tu as déjà parié sur l'autre choix."}
+
+
+def vote_poll(poll_id, choice_id):
+    if not read_token():
+        raise ValueError("Connecte ton compte Twitch (Réglages) pour voter.")
+    d = twitch_gql("mutation($i:VoteInPollInput!){voteInPoll(input:$i){error{code}}}",
+                   {"i": {"pollID": poll_id, "choiceID": choice_id, "userID": current_user_id(),
+                          "voteID": uuid.uuid4().hex}})
+    code = ((d.get("voteInPoll") or {}).get("error") or {}).get("code")
+    if code:
+        raise ValueError(VOTE_ERRORS.get(code, f"Twitch refuse le vote ({code})."))
+    poll_votes[poll_id] = choice_id
+    events_now["at"] = 0.0   # relevé à refaire
+
+
+def predict(event_id, outcome_id, points):
+    if not read_token():
+        raise ValueError("Connecte ton compte Twitch (Réglages) pour parier.")
+    if points < 1:
+        raise ValueError("Nombre de points invalide.")
+    d = twitch_gql("mutation($i:MakePredictionInput!){makePrediction(input:$i){error{code}}}",
+                   {"i": {"eventID": event_id, "outcomeID": outcome_id, "points": points,
+                          "transactionID": uuid.uuid4().hex}})
+    code = ((d.get("makePrediction") or {}).get("error") or {}).get("code")
+    if code:
+        raise ValueError(VOTE_ERRORS.get(code, f"Twitch refuse le pari ({code})."))
+    events_now["at"] = 0.0
+
+
+def events_for_page():
+    """Sondage et prédiction de la chaîne regardée, pour la page ; relevés ici si le relevé régulier ne tourne pas
+    (encart désactivé), au plus toutes les EVENTS_EVERY secondes"""
+    user = mpv(["get_property", "user-data/streambox"])[0] or {}
+    login = user.get("channel") if user.get("mode") == "twitch" else None
+    if not login:
+        return {"channel": None, "poll": None, "prediction": None, "logged_in": bool(read_token())}
+    if events_now["channel"] != login or time.time() - events_now["at"] > EVENTS_EVERY:
+        events_now.update(channel=login, at=time.time(), data=fetch_events(login, {}))
+    return {"channel": login, **events_now["data"], "logged_in": bool(read_token())}
 
 
 def events_loop():
@@ -175,10 +246,12 @@ def events_loop():
             user, playing = mpv(["get_property", "user-data/streambox"], ["get_property", "video-params"])
             user = user or {}
             login = user.get("channel")
-            if user.get("mode") == "twitch" and user.get("events", True) and playing and login in live_now:
+            # Toute chaîne en direct (aussi une chaîne suivie ou un second stream inversé, hors de la liste)
+            if user.get("mode") == "twitch" and user.get("events", True) and playing and login:
                 if login != current:
                     seen, current = {}, login
                 data = fetch_events(login, seen)
+                events_now.update(channel=login, at=time.time(), data=data)
             mpv(["set_property", "user-data/streambox/polls", data])
         except (OSError, ValueError, KeyError, TypeError):
             pass   # mpv ou Twitch injoignable : on réessaie au prochain tour
@@ -1173,6 +1246,10 @@ def action(name, body):
         if action == "open" and not re.fullmatch(r"[a-z0-9_]{2,25}", login):
             raise ValueError("chaîne invalide")
         mpv(["script-message", "streambox-pip", action, login, str(body.get("layout", "pip"))])
+    elif name == "vote":
+        vote_poll(str(body.get("poll", "")), str(body.get("choice", "")))
+    elif name == "predict":
+        predict(str(body.get("event", "")), str(body.get("outcome", "")), int(body.get("points", 0)))
     elif name == "player":
         set_player(str(body.get("mode", "")))
     elif name == "qr":
@@ -1275,6 +1352,11 @@ class Handler(BaseHTTPRequestHandler):
                                             q.get("round", ["0"])[0] == "1", int(q.get("radius", ["0"])[0])))
                 except (ValueError, subprocess.SubprocessError) as e:
                     self.send(400, {"error": str(e)})
+            elif self.path == "/api/events":
+                try:
+                    self.send(200, events_for_page())
+                except (OSError, ValueError, KeyError) as e:
+                    self.send(503, {"error": f"Twitch injoignable : {e}"})
             elif self.path == "/api/follows":
                 try:
                     self.send(200, follows_status())

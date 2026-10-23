@@ -421,3 +421,17 @@ graphique) qui dérivent sur une minute ou plus ; contenu qui dérive de ±36 px
 fr_FR), météo avec `WeatherIcon.qml` (icône dessinée et animée d'après le code WMO, `code` ajouté par remote.py ; lune
 de 20 h à 7 h), « En live maintenant » (streamers de la liste en live hors celui regardé, `/api/state`), prochains
 lives en cartes de verre avec photos, QR code (toujours, 30 s à chaque arrivée, jamais).
+
+### Voter aux sondages et prédictions depuis la page
+
+Helix n'a rien pour un spectateur : GQL du site avec le jeton du compte connecté, sans contrôle d'intégrité (vérifié
+avec des identifiants factices : `POLL_NOT_FOUND`, `NOT_FOUND`). Sondage : `voteInPoll(input: {pollID, choiceID,
+userID, voteID})` ; prédiction : `makePrediction(input: {eventID, outcomeID, points, transactionID})`. Le relevé
+(`fetch_events`) donne maintenant les identifiants, le pari en cours (`PredictionEvent.self.prediction`) et le solde de
+points (`channel.self.communityPoints.balance`) ; Twitch ne redonne pas le choix fait dans un sondage : `poll_votes`
+retient ceux faits depuis la box. `GET /api/events` (relevé fait sur place si l'encart de la TV est désactivé),
+`POST /api/vote {poll, choice}`, `POST /api/predict {event, outcome, points}` (codes d'erreur traduits, `VOTE_ERRORS`).
+Page : carte « Sondage / Prédiction » sous « Sur la TV », relevée toutes les 3 s pendant un direct ; mise 10, 100, 1000,
+Tout ou libre, confirmation avant de parier. Le relevé régulier suit maintenant toute chaîne en direct, pas seulement
+celles de la liste. Non testé en vrai (pas de sondage ouvert, et un pari dépense des points) : affichage vérifié avec
+des données simulées.
