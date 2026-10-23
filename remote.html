@@ -262,6 +262,19 @@
                     flex: 0 0 88px; }
   .stepper button { flex: 0 0 56px; border-radius: 50%; min-height: 56px; font-size: 22px; padding: 0; }
   .stepper { justify-content: space-between; }
+  /* Sondage et prédiction de la chaîne regardée */
+  .vote-choice { width: 100%; position: relative; overflow: hidden; justify-content: space-between; margin-top: 8px;
+                 padding: 10px 16px; }
+  .vote-choice .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); opacity: .28; }
+  .vote-choice.blue .fill { background: #387aff; opacity: .4; }
+  .vote-choice.pink .fill { background: #f5009b; opacity: .4; }
+  .vote-choice span { position: relative; }
+  .vote-choice.mine { border-color: #fff; }
+  .vote-meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .stakes { display: flex; gap: 6px; margin-top: 10px; }
+  .stakes[hidden] { display: none; }
+  .stakes button { flex: 1; min-height: 40px; font-size: 14px; }
+  .stakes input { flex: 1.4; min-height: 40px; }
   .segmented { display: flex; gap: 4px; padding: 4px; background: rgba(0, 0, 0, .25); border: 1px solid var(--line);
                border-radius: 16px; }
   .segmented button { flex: 1; min-height: 42px; border: 0; background: transparent; color: var(--muted); font-size: 14px;
@@ -316,6 +329,21 @@
         <button data-action="live_seek" data-delta="live" id="go-live">Direct</button>
       </div>
     </div>
+  </section>
+
+  <section id="vote-section" hidden>
+    <h2 id="vote-kind">Sondage</h2>
+    <p class="account-name" id="vote-title" style="font-size: 17px"></p>
+    <div id="vote-choices"></div>
+    <div class="stakes" id="vote-stakes" hidden>
+      <button data-stake="10">10</button>
+      <button data-stake="100">100</button>
+      <button data-stake="1000">1000</button>
+      <button data-stake="all">Tout</button>
+      <input id="vote-points" type="number" inputmode="numeric" min="1" placeholder="points" aria-label="Points à parier">
+    </div>
+    <div class="vote-meta"><span id="vote-left"></span><span id="vote-balance"></span></div>
+    <div class="status" id="vote-status"></div>
   </section>
 
   <section class="hero" id="media-section" hidden>
@@ -837,6 +865,7 @@ async function loadReplays(login) {
 }
 
 function viewers(n) {
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(".", ",")} M`;
   return n >= 1000 ? `${(n / 1000).toFixed(1).replace(".", ",")} k` : String(n);
 }
 
@@ -1049,6 +1078,98 @@ document.querySelectorAll("[data-player]").forEach(b => b.onclick = () => {
   $("player-status").textContent = "Le lecteur redémarre…";
   send("player", { mode: b.dataset.player });
 });
+// Sondage et prédiction : relevés toutes les 3 s tant que la page montre un direct
+let events = null, eventsTimer = null;
+async function refreshEvents() {
+  clearTimeout(eventsTimer);
+  if (document.hidden || $("tab-remote").hidden || lastState?.mode !== "twitch") {
+    $("vote-section").hidden = true;
+    eventsTimer = setTimeout(refreshEvents, 5000);
+    return;
+  }
+  try {
+    const r = await fetch("/api/events");
+    if (r.ok) { events = await r.json(); renderEvents(); }
+  } catch (e) { /* la page affiche déjà l'état de la box */ }
+  eventsTimer = setTimeout(refreshEvents, 3000);
+}
+function renderEvents() {
+  const poll = events?.poll, pred = events?.prediction;
+  $("vote-section").hidden = !poll && !pred;
+  if (!poll && !pred) return;
+  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
+  const left = (endsAt) => Math.max(0, Math.round(endsAt - Date.now() / 1000));
+  if (poll) {   // un sondage passe avant une prédiction (plus court)
+    $("vote-kind").textContent = "Sondage";
+    $("vote-title").textContent = poll.title;
+    const total = poll.choices.reduce((n, c) => n + c.votes, 0) || 1;
+    $("vote-choices").replaceChildren(...poll.choices.map((c) => {
+      const pct = Math.round(100 * c.votes / total);
+      const b = el("button", { className: "vote-choice" + (poll.mine === c.id ? " mine" : ""), disabled: poll.ended },
+        el("i", { className: "fill" }), el("span", { textContent: (poll.mine === c.id ? "✓ " : "") + c.title }),
+        el("span", { textContent: `${pct} %` }));
+      b.firstChild.style.width = `${pct}%`;
+      b.onclick = () => castVote({ poll: poll.id, choice: c.id });
+      return b;
+    }));
+    $("vote-stakes").hidden = true;
+    $("vote-left").textContent = poll.ended ? "Résultats" : `${clock(left(poll.ends_at))} restantes · ${poll.voters} votants`;
+    $("vote-balance").textContent = "";
+    return;
+  }
+  const open = pred.status === "ACTIVE" && left(pred.ends_at) > 0;
+  $("vote-kind").textContent = "Prédiction";
+  $("vote-title").textContent = pred.title;
+  const total = pred.outcomes.reduce((n, o) => n + o.points, 0) || 1;
+  $("vote-choices").replaceChildren(...pred.outcomes.map((o) => {
+    const pct = Math.round(100 * o.points / total);
+    const mine = pred.mine && pred.mine.outcome === o.id;
+    const b = el("button", { className: `vote-choice ${(o.color || "").toLowerCase()}` + (mine ? " mine" : ""),
+                             disabled: !open || (pred.mine && !mine) },
+      el("i", { className: "fill" }),
+      el("span", { textContent: (o.winner ? "★ " : mine ? "✓ " : "") + o.title }),
+      el("span", { textContent: `${pct} % · ${viewers(o.points)} pts · ${o.users}` }));
+    b.firstChild.style.width = `${pct}%`;
+    b.onclick = () => {
+      const points = stake();
+      if (!points) { $("vote-status").className = "status error"; $("vote-status").textContent = "Choisis une mise."; return; }
+      if (confirm(`Parier ${points} points sur « ${o.title} » ?`)) castVote({ event: pred.id, outcome: o.id, points }, "predict");
+    };
+    return b;
+  }));
+  $("vote-stakes").hidden = !open || !events.logged_in;
+  $("vote-left").textContent = pred.status === "RESOLVED" ? "Résultat" : pred.status === "CANCELED" ? "Annulée"
+    : open ? `Paris : ${clock(left(pred.ends_at))}` : "Paris fermés";
+  $("vote-balance").textContent = pred.mine ? `Ton pari : ${viewers(pred.mine.points)} points`
+    : events.balance != null ? `${viewers(events.balance)} points` : "";
+  if (!events.logged_in) $("vote-balance").textContent = "Connecte ton compte Twitch pour parier";
+}
+let chosenStake = null;
+function stake() {
+  const typed = parseInt($("vote-points").value, 10);
+  if (typed > 0) return typed;
+  if (chosenStake === "all") return events?.balance || 0;
+  return chosenStake;
+}
+document.querySelectorAll("[data-stake]").forEach((b) => b.onclick = () => {
+  chosenStake = b.dataset.stake === "all" ? "all" : Number(b.dataset.stake);
+  $("vote-points").value = "";
+  document.querySelectorAll("[data-stake]").forEach((x) => x.classList.toggle("current", x === b));
+});
+async function castVote(body, action = "vote") {
+  $("vote-status").className = "status";
+  $("vote-status").textContent = "Envoi à Twitch…";
+  try {
+    const r = await fetch(`/api/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error((await r.json()).error);
+    $("vote-status").textContent = action === "vote" ? "Vote envoyé." : "Pari enregistré.";
+  } catch (e) {
+    $("vote-status").className = "status error";
+    $("vote-status").textContent = e.message || "Box injoignable";
+  }
+  refreshEvents();
+}
+refreshEvents();
 $("pip-swap").onclick = () => send("pip", { action: "swap" });
 $("pip-close").onclick = () => send("pip", { action: "close" });
 $("pip-layout").onclick = () => send("pip", { action: "layout", layout: lastState?.pip?.layout === "split" ? "pip" : "split" });

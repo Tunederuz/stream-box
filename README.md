@@ -13,6 +13,7 @@ télécommande web installable sur téléphone (PWA).
 - **Chat Twitch en overlay** (lecture anonyme), dans le coin de son choix, avec fond et taille réglables, et les
   émotes Twitch, 7TV, BTTV et FFZ (animées) avec l'appli Qt.
 - **Retour en arrière dans le direct** (quelques minutes gardées en mémoire), pause en différé.
+- **Sondages et prédictions** affichés sur la TV, et vote ou pari en points de chaîne depuis le téléphone.
 - **Qui est en live** dans le menu et la télécommande, **notification** quand un streamer de la liste lance son live.
 - **Écran d'ambiance** quand rien ne joue : horloge, date, météo et prochains lives prévus (plannings Twitch).
 - **Sondages et prédictions** de la chaîne regardée affichés sur la TV, avec le temps restant et les résultats.
