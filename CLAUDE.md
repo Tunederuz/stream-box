@@ -525,4 +525,7 @@ sous-titres suivants (comme avant).
 Réglages « Taille des sous-titres » (`sub_size`, 50–200 %, → `sub-scale`) et « Fond des sous-titres » (`sub_bg`,
 0–100 % : bandeau noir `sub-border-style=background-box` + `sub-back-color` #AA000000, 0 = contour habituel) : NUMBERS
 de stream-box.lua (`apply_sub_style`), `POST /api/set`, onglet Réglages de la TV et section Sous-titres de la page.
+Le menu QML rouvre sur le dernier onglet (`open()` ne remet plus `tab` à 0 ; données relues par `loadTab`, rangée et
+carte gardées pour YouTube et Jellyfin ; Suivis s'ouvre sur le rail). mpv gardant la pause d'un fichier à l'autre,
+`play_media` et `start_channel` la retirent.
 
