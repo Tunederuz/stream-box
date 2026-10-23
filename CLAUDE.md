@@ -140,7 +140,7 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   Lit `/api/state` toutes les 2 s et publie `stream-box/state` (+ `stream-box/live`, `stream-box/status` online/offline
   en dernière volonté) ; les commandes `stream-box/cmd/*` deviennent des appels à l'API de `remote.py`. Le pont démarre
   bien avant mpv : il n'annonce `online` qu'une fois l'API prête et le Lua chargé (chaîne publiée), et garde 2 min les
-  commandes reçues avant (sinon le choix du streamer envoyé par HA au réveil était perdu). 18 entités par
+  commandes reçues avant (sinon le choix du streamer envoyé par HA au réveil était perdu). 19 entités par
   découverte (`homeassistant/…/stream_box/…`), réannoncées quand HA redémarre ou que la liste change. Config locale
   `~/.config/stream-box/mqtt.json` + `mqtt-password` (600). Entités et automatisation d'exemple : `docs/home-assistant.md`.
 - **Écran d'accueil à la demande** : mode `home` (`show_home`, script-message `streambox-home`, `POST /api/home`,
@@ -162,6 +162,9 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   dans `user-data/streambox/ambient` (`qr` : adresse + lignes de « 0 »/« 1 »). `qr_code()` du Lua le dessine en un
   seul tracé ASS, en gris clair (moins marquant que du blanc) : en bas à droite de l'écran d'ambiance (il dérive avec
   le reste) et à droite du menu quand l'écran d'ambiance n'est pas affiché.
+  Affichage réglable (Réglages → Affichage, `POST /api/qr {mode}`, select MQTT, script-message `streambox-qr`, fichier
+  d'état `qr`) : `always`, `timed` (`QR_SECONDS` = 30 s à chaque arrivée sur l'écran d'ambiance et ouverture du menu),
+  `never` ; le test se fait dans `qr_code()`.
 - **Sondages et prédictions** (`remote.py`, `events_loop` / `fetch_events`) : plus de PubSub pour un spectateur, donc
   relevé GQL toutes les 10 s, seulement pendant un direct de la liste avec l'encart activé : `user.viewablePoll`
   (sondage en cours ou terminé ; pas d'heure de fin, on montre le résultat 60 s après l'avoir vu terminé),

@@ -452,7 +452,7 @@ def state():
         "chat_visible": user.get("chat_visible", True), "corner": user.get("corner", "bl"),
         "chat_bg": user.get("chat_bg", 60), "chat_size": user.get("chat_size", 32),
         "auto_switch": user.get("auto_switch", True), "night": user.get("night", False),
-        "events": user.get("events", True),
+        "events": user.get("events", True), "qr": user.get("qr", "always"),
         "volume": round(volume or 0), "mute": bool(mute), "pause": bool(pause), "playing": bool(video),
         "live": live_now, "mode": user.get("mode", "twitch"), "delay": delay, "title": title if media else None,
         "position": position if media else None, "duration": duration if media else None,
@@ -877,6 +877,11 @@ def action(name, body):
         if body.get("key") not in ("night", "events"):
             raise ValueError("réglage inconnu")
         mpv(["script-message", "streambox-flag", body["key"], "yes" if body.get("enabled") else "no"])
+    elif name == "qr":
+        # Affichage du QR code de la télécommande sur la TV
+        if body.get("mode") not in ("always", "timed", "never"):
+            raise ValueError("mode inconnu")
+        mpv(["script-message", "streambox-qr", body["mode"]])
     elif name == "set":
         # Bornes et enregistrement gérés par stream-box.lua (set_number)
         if body.get("key") not in ("chat_bg", "chat_size"):
