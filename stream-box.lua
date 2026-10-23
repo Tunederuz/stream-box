@@ -698,6 +698,27 @@ local ambient = mp.create_osd_overlay("ass-events")
 ambient.z = -10   -- sous le menu et les notifications
 local ambient_data, ambient_drawn = {}, nil
 
+-- Fond « aurore » : trois grandes taches très floues qui dérivent lentement sur un fond presque noir.
+-- { couleur BGR, opacité ASS (00 = opaque), vitesse, phase }
+local AURORA = { { "FF4691", "B0", 0.011, 0.0 },    -- violet Twitch
+                 { "6A2A12", "A0", 0.008, 2.1 },    -- bleu nuit
+                 { "7A2A5E", "B8", 0.006, 4.2 } }   -- prune
+
+local function aurora(w, h)
+    local t, r = os.time(), math.floor(h * 0.42)
+    local out = { ("{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H0D0808&\\p1}m 0 0 l %d 0 %d %d 0 %d{\\p0}"):format(w, w, h, h) }
+    for _, a in ipairs(AURORA) do
+        local x = w / 2 + math.sin(t * a[3] + a[4]) * w * 0.32
+        local y = h / 2 + math.cos(t * a[3] * 1.3 + a[4]) * h * 0.25
+        local k, d = r * 0.5523, 2 * r
+        out[#out + 1] = ("{\\an5\\pos(%d,%d)\\bord0\\shad0\\blur%d\\1c&H%s&\\1a&H%s&\\p1}"
+            .. "m %d 0 b %d 0 %d %d %d %d b %d %d %d %d %d %d b %d %d %d %d 0 %d b 0 %d %d 0 %d 0{\\p0}")
+            :format(x, y, math.floor(h * 0.12), a[1], a[2],
+                    r, r + k, d, r - k, d, r, d, r + k, r + k, d, r, d, r - k, d, 0, r + k, r, r - k, r - k, r)
+    end
+    return table.concat(out, "\n")
+end
+
 local function ambient_wanted()
     return mode == "twitch" and (offline or #streamers == 0) and not mp.get_property_native("video-params")
 end
@@ -714,6 +735,7 @@ local function draw_ambient()
         return ("{\\an8\\pos(%d,%d)\\fs%d\\bord0\\shad0\\1c&H%s&}%s"):format(cx, y, size, color, raw)
     end
     local out = {
+        aurora(w, h),
         line(cy - h * 0.30, math.floor(h * 0.22), "FFFFFF", ("%02d:%02d"):format(t.hour, t.min)),
         line(cy - h * 0.06, math.floor(fs * 1.2), "B0B0B0",
              ass_escape(("%s %d %s"):format(WEEKDAYS[t.wday], t.day, MONTHS[t.month]))),
@@ -749,7 +771,7 @@ end
 
 local function update_ambient(force)
     if ambient_wanted() then
-        local key = os.date("%H:%M") .. status_text
+        local key = os.time() .. status_text   -- redessiné toutes les 2 s : le fond bouge en continu
         if not ambient_visible then
             ambient_visible = true
             status:remove()
