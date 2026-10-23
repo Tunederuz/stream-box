@@ -76,18 +76,24 @@ def mpv(*commands):
 # Qui est en live : relevé chaque minute pour toute la liste, publié dans user-data/streambox/live pour stream-box.lua
 # (menu de la TV, bascule automatique) et renvoyé par /api/state
 
-live_now = {}   # pseudo -> {"title", "viewers", "game"}, streamers en live seulement
+live_now = {}   # pseudo -> {"title", "viewers", "game", "thumb"}, streamers en live seulement
+avatars = {}    # pseudo -> photo de profil Twitch, pour la page (en live ou non)
 
 
 def fetch_live(logins):
-    query = "query($l:[String!]){users(logins:$l){login stream{title viewersCount game{displayName}}}}"
+    query = ("query($l:[String!]){users(logins:$l){login profileImageURL(width:70) "
+             "stream{title viewersCount game{displayName} previewImageURL(width:640,height:360)}}}")
     req = urllib.request.Request(
         "https://gql.twitch.tv/gql", data=json.dumps({"query": query, "variables": {"l": logins}}).encode(),
         headers={"Client-ID": TWITCH_WEB_CLIENT_ID, "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=10) as r:
         users = json.load(r)["data"]["users"]
+    avatars.update({u["login"]: u["profileImageURL"] for u in users if u and u.get("profileImageURL")})
+    # Miniature du live : même adresse d'une minute à l'autre, l'heure du relevé force le téléphone à la recharger
     return {u["login"]: {"title": u["stream"]["title"], "viewers": u["stream"]["viewersCount"],
-                         "game": (u["stream"].get("game") or {}).get("displayName")}
+                         "game": (u["stream"].get("game") or {}).get("displayName"),
+                         "thumb": f"{u['stream']['previewImageURL']}?t={int(time.time()) // LIVE_EVERY}"
+                         if u["stream"].get("previewImageURL") else None}
             for u in users if u and u.get("stream")}
 
 
@@ -448,7 +454,7 @@ def state():
     ranges = (cache or {}).get("seekable-ranges") or []
     delay = max(0.0, ranges[0]["end"] - position) if ranges and position is not None and not media else None
     return {
-        "streamers": read_streamers(), "channel": user.get("channel"),
+        "streamers": read_streamers(), "channel": user.get("channel"), "avatars": avatars,
         "chat_visible": user.get("chat_visible", True), "corner": user.get("corner", "bl"),
         "chat_bg": user.get("chat_bg", 60), "chat_size": user.get("chat_size", 32),
         "auto_switch": user.get("auto_switch", True), "night": user.get("night", False),

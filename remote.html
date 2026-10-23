@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0e0e10">
+<meta name="theme-color" content="#0b0a10">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Stream Box">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon-192.png">
@@ -13,115 +14,246 @@
 <title>Stream Box</title>
 <style>
   :root {
-    --bg: #0e0e10; --panel: #1f1f23; --button: #2f2f35; --button-active: #3f3f46;
-    --text: #efeff1; --muted: #adadb8; --accent: #9146ff; --error: #eb0400;
+    --bg: #0b0a10; --surface: rgba(255, 255, 255, .045); --surface-2: rgba(255, 255, 255, .07);
+    --surface-3: rgba(255, 255, 255, .11); --line: rgba(255, 255, 255, .08);
+    --text: #f3f1f8; --muted: #a9a5b8; --faint: #6f6b7e;
+    --accent: #9146ff; --accent-2: #b67bff; --live: #ff4f5e; --error: #ff6b6b;
+    --grad: linear-gradient(135deg, #8a3ffc 0%, #b062ff 100%);
+    --radius: 20px; --radius-sm: 14px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { background: var(--bg); }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+    margin: 0; color: var(--text); min-height: 100vh;
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: max(14px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom));
+    background:
+      radial-gradient(120% 60% at 0% -10%, rgba(145, 70, 255, .30), transparent 60%),
+      radial-gradient(90% 50% at 110% 0%, rgba(255, 79, 94, .12), transparent 60%),
+      var(--bg);
+    background-attachment: fixed;
   }
-  main { max-width: 480px; margin: 0 auto; display: grid; gap: 16px; }
-  h1 { font-size: 20px; margin: 4px 0; display: flex; align-items: center; gap: 8px; }
-  h1 .power {
-    margin-left: auto; min-height: 44px; width: 44px; padding: 0; display: grid; place-items: center;
-    background: transparent; color: var(--muted);
+  main { max-width: 520px; margin: 0 auto; display: grid; gap: 14px; }
+  svg { flex: 0 0 auto; }
+
+  /* En-tête : logo, nom, état de la TV, bouton d'extinction */
+  .top { display: flex; align-items: center; gap: 12px; padding: 4px 2px; }
+  .logo { width: 42px; height: 42px; border-radius: 12px; box-shadow: 0 6px 18px rgba(145, 70, 255, .35); }
+  .top h1 { font-size: 19px; margin: 0; letter-spacing: -.01em; }
+  .tv-state { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .dot.on { background: var(--live); box-shadow: 0 0 0 4px rgba(255, 79, 94, .18); animation: pulse 2s infinite; }
+  .dot.error { background: var(--error); }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(255, 79, 94, 0); } }
+  .power {
+    margin-left: auto; width: 44px; height: 44px; min-height: 0; padding: 0; border-radius: 50%;
+    display: grid; place-items: center; color: var(--muted);
   }
-  h1 .power:active { background: var(--button); color: var(--error); }
-  h1 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
-  h1 .dot.on { background: var(--accent); }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; }
-  section { background: var(--panel); border-radius: 14px; padding: 14px; }
-  .grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .power:active { color: var(--error); }
+
+  /* Onglets : contrôle segmenté */
+  .tabs { display: flex; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--line);
+          border-radius: 16px; }
+  .tabs button { flex: 1; min-height: 42px; background: transparent; border: 0; color: var(--muted); font-weight: 600; }
+  .tabs button[aria-selected="true"] { background: var(--grad); color: #fff; box-shadow: 0 4px 14px rgba(145, 70, 255, .35); }
+  .tab { display: grid; gap: 14px; }
+  .tab[hidden] { display: none; }
+
+  section {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 0 0 12px;
+       font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  h2 svg { color: var(--accent-2); }
+  p { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
   .row { display: flex; gap: 8px; align-items: center; }
   .row > * { flex: 1; }
+  .stack { display: grid; gap: 8px; }
+
   button {
-    font: inherit; color: var(--text); background: var(--button); border: 0; border-radius: 10px;
-    min-height: 52px; padding: 8px 12px; cursor: pointer; overflow-wrap: anywhere;
+    font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: var(--radius-sm); min-height: 52px; padding: 8px 12px; cursor: pointer; overflow-wrap: anywhere;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    transition: transform .12s ease, background-color .15s ease;
   }
-  button:active { background: var(--button-active); }
-  button.current { background: var(--accent); font-weight: 600; }
-  #streamers button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-  #streamers button.current .name::before { content: "▶ "; }
-  .live-info { font-size: 12px; color: var(--muted); line-height: 1.3; }
-  button.current .live-info { color: var(--text); }
-  .live-dot { color: #ff4848; font-weight: 600; }
-  .offline { opacity: .55; }
-  .volume { text-align: center; font-size: 22px; font-variant-numeric: tabular-nums; flex: 0 0 72px; }
+  button:active { transform: scale(.97); background: var(--surface-3); }
+  button:disabled { opacity: .4; }
+  button.current { background: var(--grad); border-color: transparent; font-weight: 600;
+                   box-shadow: 0 6px 18px rgba(145, 70, 255, .30); }
+  button.ghost { background: transparent; }
+  .icon-alt { display: none; }
+  .on > .icon-main { display: none; }
+  .on > .icon-alt { display: inline; }
+
+  /* Interrupteurs (réglages oui / non) : bouton pleine largeur, libellé à gauche, interrupteur dessiné à droite */
+  button.toggle { width: 100%; justify-content: space-between; text-align: left; padding: 12px 14px; gap: 14px; }
+  button.toggle .label { display: grid; gap: 2px; }
+  button.toggle small { color: var(--muted); font-size: 13px; line-height: 1.35; }
+  button.toggle::after {
+    content: ""; flex: 0 0 48px; height: 28px; border-radius: 14px;
+    background: radial-gradient(circle at 14px 50%, #fff 10px, transparent 10.5px), rgba(255, 255, 255, .16);
+  }
+  button.toggle[aria-pressed="true"]::after {
+    background: radial-gradient(circle at 34px 50%, #fff 10px, transparent 10.5px), var(--grad);
+  }
+
+  /* Carte « Sur la TV » */
+  .hero { padding: 0; overflow: hidden; }
+  .hero-media { position: relative; aspect-ratio: 16 / 9; background:
+      radial-gradient(80% 90% at 30% 20%, rgba(145, 70, 255, .45), transparent 70%),
+      radial-gradient(70% 80% at 90% 100%, rgba(255, 79, 94, .25), transparent 70%), #14111c; }
+  .hero-media.compact { aspect-ratio: auto; height: 110px; }
+  .hero-media.compact .placeholder { display: none; }
+  .hero-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .hero-media::after { content: ""; position: absolute; inset: 0;
+                       background: linear-gradient(180deg, transparent 45%, rgba(11, 10, 16, .92)); }
+  .hero-media .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255, 255, 255, .35); }
+  .badge { position: absolute; top: 12px; left: 12px; z-index: 1; font-size: 12px; font-weight: 700;
+           letter-spacing: .06em; padding: 4px 9px; border-radius: 8px; background: rgba(0, 0, 0, .55); color: #fff;
+           backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  .badge.live { background: var(--live); }
+  .hero-info { position: relative; z-index: 1; margin-top: -54px; padding: 0 16px; display: flex; align-items: flex-end;
+               gap: 12px; }
+  .hero-info .avatar { width: 56px; height: 56px; border: 3px solid var(--bg); }
+  .hero-name { font-size: 20px; font-weight: 700; line-height: 1.2; }
+  .hero-meta { font-size: 13px; color: var(--muted); }
+  .hero-title { color: var(--text); font-size: 14px; margin: 10px 16px 0; display: -webkit-box; -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical; overflow: hidden; }
+  .hero-title:empty { display: none; }
+  .hero-body { padding: 14px 16px 16px; }
+  #now { padding-bottom: 16px; }
+  #timeshift { padding-bottom: 0; }
+  .hero-body[hidden] { display: none; }
+  #now-avatar.home { background: var(--grad); color: #fff; font-size: 24px; }
+
+  /* Avatars des streamers */
+  .avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: var(--surface-3);
+            flex: 0 0 auto; display: grid; place-items: center; font-weight: 700; color: var(--muted); }
+  .avatar.live { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--live); }
+  .avatar.off { filter: grayscale(1); opacity: .55; }
+
+  .grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); margin-top: 8px; }
+  button.streamer { justify-content: flex-start; text-align: left; gap: 9px; padding: 10px 8px; min-height: 64px; }
+  .streamer .avatar { width: 38px; height: 38px; }
+  .streamer .who { display: grid; min-width: 0; }
+  .streamer .name { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .live-info { font-size: 12px; color: var(--muted); line-height: 1.3; overflow: hidden; text-overflow: ellipsis;
+               white-space: nowrap; }
+  button.current .live-info { color: rgba(255, 255, 255, .85); }
+  .live-dot { color: var(--live); font-weight: 700; }
+  button.current .live-dot { color: #fff; }
+  .offline { opacity: .7; }
+  #home { width: 100%; }
+
+  /* Volume */
+  .volume { text-align: center; flex: 0 0 96px; display: grid; gap: 6px; justify-items: center; }
+  .volume b { font-size: 24px; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .meter { width: 72px; height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--grad); transition: width .2s; }
+  .round { min-height: 56px; border-radius: 50%; flex: 0 0 56px; padding: 0; }
+
   .status { color: var(--muted); font-size: 14px; min-height: 20px; }
+  .status:empty { min-height: 0; }
   .status.error { color: var(--error); }
-  p { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
-  details { color: var(--muted); font-size: 14px; margin-bottom: 10px; }
-  summary { cursor: pointer; color: var(--text); }
+  /* Message général (erreurs, extinction) : bulle en bas de l'écran */
+  #status { position: fixed; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); z-index: 10;
+            max-width: 488px; margin: 0 auto; padding: 12px 16px; border-radius: 14px; text-align: center;
+            background: rgba(30, 26, 40, .92); border: 1px solid var(--line); color: var(--text);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0, 0, 0, .4); }
+  #status.error { color: #ffd0d0; border-color: rgba(255, 107, 107, .4); }
+  #status:empty { display: none; }
+
+  /* Blocs repliables */
+  details > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
+                      font-weight: 600; color: var(--text); min-height: 28px; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary svg { color: var(--accent-2); }
+  details > summary::after { content: ""; margin-left: auto; width: 8px; height: 8px; border: solid var(--muted);
+                             border-width: 0 2px 2px 0; transform: rotate(45deg); transition: transform .2s; }
+  details[open] > summary::after { transform: rotate(-135deg); }
+  details[open] > summary { margin-bottom: 12px; }
+  details details { color: var(--muted); font-size: 14px; margin-bottom: 10px; }
+  details details > summary { font-weight: 500; font-size: 14px; }
   ol { padding-left: 20px; margin: 8px 0 0; }
-  code { background: var(--button); border-radius: 4px; padding: 1px 4px; color: var(--text); }
-  input {
-    font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--button-active);
-    border-radius: 10px; min-height: 52px; padding: 8px 12px; width: 100%; margin-bottom: 8px;
+  code { background: var(--surface-3); border-radius: 6px; padding: 1px 5px; color: var(--text); font-size: 13px; }
+
+  input, select {
+    font: inherit; color: var(--text); background: rgba(0, 0, 0, .25); border: 1px solid var(--line);
+    border-radius: var(--radius-sm); min-height: 52px; padding: 8px 14px; width: 100%;
   }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(145, 70, 255, .25); }
+  select { margin-top: 6px; }
+  .field { display: flex; gap: 8px; }
+  .field input { flex: 1; }
+  .field button { flex: 0 0 auto; padding: 8px 18px; }
   .account-name { font-weight: 600; color: var(--text); }
-  #send-link, #replays { margin-bottom: 0; }
-  .tabs { display: flex; gap: 8px; }
-  .tabs button { flex: 1; min-height: 44px; }
-  .tabs button[aria-selected="true"] { background: var(--accent); font-weight: 600; }
-  .tab { display: grid; gap: 16px; }
-  .tab[hidden] { display: none; }
-  .manage-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0;
-                border-top: 1px solid var(--button); color: var(--text); }
-  .manage-row button { min-height: 40px; width: 44px; padding: 0; background: transparent; color: var(--muted); }
-  .manage-row .name { flex: 1; }
-  .manage-row button:disabled { opacity: .25; }
+
+  .manage-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .manage-row:first-child { border-top: 0; }
+  .manage-row .avatar { width: 34px; height: 34px; font-size: 14px; }
+  .manage-row .name { flex: 1; font-weight: 500; }
+  .manage-row .rank { color: var(--faint); font-variant-numeric: tabular-nums; width: 18px; text-align: right; }
+  .manage-row button { min-height: 40px; width: 40px; padding: 0; background: transparent; border: 0; color: var(--muted); }
   .manage-row button:active { color: var(--error); }
-  #replays[open] summary { margin-bottom: 4px; }
-  .chips { display: flex; gap: 6px; overflow-x: auto; margin: 10px 0 4px; padding-bottom: 4px; }
-  .chips button { min-height: 36px; padding: 4px 12px; border-radius: 18px; flex: 0 0 auto; font-size: 14px; }
-  .replay { display: flex; gap: 10px; align-items: center; text-align: left; width: 100%; min-height: auto;
-            padding: 6px; margin-top: 6px; }
-  .replay img { width: 120px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; flex: 0 0 auto;
-                background: var(--bg); }
+  #manage-list { margin-top: 10px; }
+
+  .chips { display: flex; gap: 6px; overflow-x: auto; margin: 0 -16px 6px; padding: 0 16px 6px; scrollbar-width: none; }
+  .chips button { min-height: 36px; padding: 4px 14px; border-radius: 18px; flex: 0 0 auto; font-size: 14px; }
+  .replay { display: flex; gap: 12px; align-items: center; text-align: left; width: 100%; min-height: auto;
+            padding: 6px; margin-top: 8px; justify-content: flex-start; }
+  .replay img { width: 128px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; flex: 0 0 auto;
+                background: var(--surface-3); }
+  .replay > div { min-width: 0; flex: 1; }
   .replay .t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-               font-size: 14px; }
+               font-size: 14px; font-weight: 500; }
   .replay .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
-  #preview-box { margin-top: 10px; }
-  #preview-img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border-radius: 8px; background: #000;
-                 display: block; }
-  #preview-note { text-align: center; padding: 40px 0; color: var(--muted); background: #000; border-radius: 8px; }
-  .replay .bar { height: 4px; border-radius: 2px; background: var(--bg); margin-top: 6px; overflow: hidden; }
-  .replay .bar i { display: block; height: 100%; background: var(--accent); }
-  .history-item { margin-top: 6px; }
-  .history-item .actions { display: flex; gap: 6px; margin-top: 4px; }
+  .replay .bar { height: 4px; border-radius: 2px; background: var(--surface-3); margin-top: 6px; overflow: hidden; }
+  .replay .bar i { display: block; height: 100%; background: var(--grad); }
+  .replays-title { font-size: 12px; color: var(--muted); margin: 14px 0 0; text-transform: uppercase;
+                   letter-spacing: .1em; font-weight: 700; }
+  .history-item { margin-top: 8px; }
+  .history-item .actions { display: flex; gap: 6px; margin-top: 6px; }
   .history-item .actions button { min-height: 40px; flex: 1; font-size: 14px; }
   .history-item .actions button.remove { flex: 0 0 44px; color: var(--muted); }
   #history-clear { width: 100%; margin-top: 12px; min-height: 44px; font-size: 14px; color: var(--muted); }
-  .replays-title { font-size: 13px; color: var(--muted); margin: 12px 0 0; text-transform: uppercase;
-                   letter-spacing: .08em; }
-  #send-link[open] summary { margin-bottom: 4px; }
-  #media-status:empty { display: none; }   /* pas de ligne vide sous « Lire un lien » */
+
+  #preview-img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border-radius: 12px; background: #000;
+                 display: block; }
+  #preview-note { text-align: center; padding: 48px 0; color: var(--muted); background: #000; border-radius: 12px; }
+  #media-status:empty { display: none; }
+
   /* Barre de lecture : on la touche pour sauter (pas de glisser, qui partirait en faisant défiler la page) */
-  .seek { position: relative; height: 32px; margin: 4px 0 6px; border-radius: 16px; background: var(--button);
-          overflow: hidden; cursor: pointer; touch-action: manipulation; }
-  .seek-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); }
-  .times { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px;
+  .seek { position: relative; height: 10px; margin: 6px 0 8px; border-radius: 5px; background: var(--surface-3);
+          cursor: pointer; touch-action: manipulation; }
+  .seek::before { content: ""; position: absolute; inset: -12px 0; }   /* zone de toucher plus haute que la barre */
+  .seek-fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 5px; background: var(--grad); }
+  .times { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px;
            font-variant-numeric: tabular-nums; margin-bottom: 10px; }
-  .setting { display: block; margin-top: 14px; font-size: 14px; color: var(--muted); }
-  .stepper { margin-top: 6px; }
-  .stepper .value { text-align: center; font-size: 18px; font-variant-numeric: tabular-nums; flex: 0 0 88px; }
-  select {
-    font: inherit; color: var(--text); background: var(--button); border: 0; border-radius: 10px;
-    min-height: 52px; padding: 8px 12px; width: 100%; margin-top: 6px;
-  }
+  .setting { display: block; margin: 16px 0 6px; font-size: 14px; color: var(--muted); }
+  .stepper .value { text-align: center; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums;
+                    flex: 0 0 88px; }
+  .stepper button { flex: 0 0 56px; border-radius: 50%; min-height: 56px; font-size: 22px; padding: 0; }
+  .stepper { justify-content: space-between; }
+  .segmented { display: flex; gap: 4px; padding: 4px; background: rgba(0, 0, 0, .25); border: 1px solid var(--line);
+               border-radius: 16px; }
+  .segmented button { flex: 1; min-height: 42px; border: 0; background: transparent; color: var(--muted); font-size: 14px; }
+  .segmented button.current { color: #fff; }
 </style>
 </head>
 <body>
 <main>
-  <h1>
-    <span class="dot" id="dot"></span>Stream Box
-    <button class="power" id="poweroff" aria-label="Éteindre la box" title="Éteindre la box">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+  <header class="top">
+    <img class="logo" src="/icon-192.png" alt="">
+    <div>
+      <h1>Stream Box</h1>
+      <div class="tv-state"><span class="dot" id="dot"></span><span id="tv-state">Connexion…</span></div>
+    </div>
+    <button class="power ghost" id="poweroff" aria-label="Éteindre la box" title="Éteindre la box">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
            stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></svg>
     </button>
-  </h1>
+  </header>
 
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="remote">Télécommande</button>
@@ -130,10 +262,39 @@
 
   <div class="tab" id="tab-remote">
 
-  <section id="media-section" hidden>
-    <h2>En cours</h2>
-    <div>
-      <p class="account-name" id="media-title"></p>
+  <section class="hero" id="now" hidden>
+    <div class="hero-media">
+      <img id="now-thumb" alt="" hidden>
+      <div class="placeholder" id="now-placeholder">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      </div>
+      <span class="badge" id="now-badge" hidden></span>
+    </div>
+    <div class="hero-info">
+      <span class="avatar" id="now-avatar"></span>
+      <div>
+        <div class="hero-name" id="now-name"></div>
+        <div class="hero-meta" id="now-meta"></div>
+      </div>
+    </div>
+    <p class="hero-title" id="now-title"></p>
+    <div class="hero-body" id="timeshift" hidden>
+      <div class="times"><span>Retour en arrière</span><span id="delay"></span></div>
+      <div class="row">
+        <button data-action="live_seek" data-delta="-30" aria-label="Reculer de 30 secondes">−30 s</button>
+        <button data-action="live_seek" data-delta="30" aria-label="Avancer de 30 secondes">+30 s</button>
+        <button data-action="live_seek" data-delta="live" id="go-live">Direct</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="hero" id="media-section" hidden>
+    <div class="hero-body">
+      <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M8 5v14l11-7z"/></svg>Vidéo en cours</h2>
+      <p class="account-name" id="media-title" style="font-size: 17px"></p>
       <div class="seek" id="seek" role="slider" aria-label="Position dans la vidéo" hidden>
         <div class="seek-fill" id="seek-fill"></div>
       </div>
@@ -147,49 +308,72 @@
         <label class="setting" for="subs">Sous-titres</label>
         <select id="subs"></select>
       </div>
-      <button data-action="twitch" style="width: 100%; margin-top: 8px">Retour au stream</button>
+      <button data-action="twitch" style="width: 100%; margin-top: 8px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/>
+          <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Retour au stream</button>
     </div>
   </section>
 
   <section>
-    <h2>Streamers</h2>
-    <button data-action="home" id="home" style="width: 100%; margin-bottom: 8px">⌂ Écran d'accueil</button>
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Streamers</h2>
+    <button data-action="home" id="home">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+      Écran d'accueil</button>
     <div class="grid" id="streamers"></div>
-    <div id="timeshift" hidden>
-      <div class="times" style="margin: 12px 0 6px"><span>Direct</span><span id="delay"></span></div>
-      <div class="row">
-        <button data-action="live_seek" data-delta="-30" aria-label="Reculer de 30 secondes">−30 s</button>
-        <button data-action="live_seek" data-delta="30" aria-label="Avancer de 30 secondes">+30 s</button>
-        <button data-action="live_seek" data-delta="live" id="go-live">Direct</button>
-      </div>
-    </div>
   </section>
 
   <section>
-    <h2>Lecture</h2>
-    <div class="row">
-      <button data-action="volume" data-delta="-5" aria-label="Baisser le volume">− Vol</button>
-      <div class="volume" id="volume">–</div>
-      <button data-action="volume" data-delta="5" aria-label="Monter le volume">+ Vol</button>
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/>
+      <path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>Son et lecture</h2>
+    <div class="row" style="justify-content: space-between">
+      <button class="round" data-action="volume" data-delta="-5" aria-label="Baisser le volume">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+      <div class="volume"><b id="volume">–</b><span class="meter"><i id="volume-meter"></i></span></div>
+      <button class="round" data-action="volume" data-delta="5" aria-label="Monter le volume">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
     </div>
-    <div class="row" style="margin-top: 8px">
-      <button data-action="mute" id="mute">Couper le son</button>
-      <button data-action="pause" id="pause">Pause</button>
+    <div class="row" style="margin-top: 12px">
+      <button data-action="mute" id="mute">
+        <svg class="icon-main" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/>
+          <path d="m23 9-6 6M17 9l6 6"/></svg>
+        <svg class="icon-alt" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/>
+          <path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+        <span>Couper le son</span></button>
+      <button data-action="pause" id="pause">
+        <svg class="icon-main" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+        <svg class="icon-alt" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M8 5v14l11-7z"/></svg>
+        <span>Pause</span></button>
     </div>
-    <button id="night" style="width: 100%; margin-top: 8px" aria-pressed="false">Mode nuit : désactivé</button>
+    <button class="toggle" id="night" style="margin-top: 8px" aria-pressed="false">
+      <span class="label">Mode nuit<small>Sons forts atténués, voix remontées</small></span></button>
   </section>
 
   <section>
-    <h2>Chat</h2>
-    <div class="row">
-      <button data-action="chat" id="chat">Chat affiché</button>
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat</h2>
+    <div class="stack">
+      <button class="toggle" data-action="chat" id="chat" aria-pressed="true">
+        <span class="label">Chat sur la TV</span></button>
       <button data-action="corner" id="corner">Coin</button>
     </div>
   </section>
 
   <section>
     <details id="preview">
-      <summary>Aperçu de la TV</summary>
+      <summary><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+          <circle cx="12" cy="12" r="3"/></svg>Aperçu de la TV</summary>
       <div id="preview-box">
         <img id="preview-img" alt="Aperçu de l'écran de la TV" hidden>
         <div id="preview-note">Chargement…</div>
@@ -199,7 +383,9 @@
 
   <section>
     <details id="replays">
-      <summary>Rediffusions et clips</summary>
+      <summary><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/>
+          <path d="m10 9 5 3-5 3z"/></svg>Rediffusions et clips</summary>
       <div class="chips" id="replays-who"></div>
       <div id="replays-list"></div>
     </details>
@@ -207,18 +393,24 @@
 
   <section>
     <details id="history">
-      <summary>Historique</summary>
+      <summary><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
+          <path d="M3 3v5h5M12 7v5l3 2"/></svg>Historique</summary>
       <div id="history-list"></div>
     </details>
   </section>
 
   <section>
     <details id="send-link">
-      <summary>Lire un lien sur la TV</summary>
-      <p style="margin-top: 10px">YouTube, clip Twitch… Sur Android, le plus simple : <b>Partager → Stream Box</b>
+      <summary><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/>
+          <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>Lire un lien sur la TV</summary>
+      <p>YouTube, clip Twitch… Sur Android, le plus simple : <b>Partager → Stream Box</b>
         depuis l'appli. Pour Jellyfin : <b>Lire sur → Stream Box</b>.</p>
-      <input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://…" aria-label="Lien de la vidéo">
-      <button id="play" style="width: 100%">Lire sur la TV</button>
+      <div class="field">
+        <input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://…" aria-label="Lien de la vidéo">
+        <button id="play" class="current">Lire</button>
+      </div>
     </details>
     <div class="status" id="media-status"></div>
   </section>
@@ -231,23 +423,24 @@
     <h2>Liste des streamers</h2>
     <p>L'ordre compte : c'est celui du menu de la TV, du zapping (haut / bas) et de la bascule automatique vers
       un streamer en live.</p>
+    <div class="field">
       <input id="new-streamer" autocomplete="off" autocapitalize="none" placeholder="Pseudo ou lien Twitch"
-           aria-label="Streamer à ajouter">
-    <button id="add-streamer" style="width: 100%">Ajouter</button>
+             aria-label="Streamer à ajouter">
+      <button id="add-streamer" class="current">Ajouter</button>
+    </div>
     <div class="status" id="manage-status"></div>
     <div id="manage-list"></div>
   </section>
 
   <section>
     <h2>Lecture</h2>
-    <p>Quand le streamer regardé est hors ligne depuis une minute, passer tout seul sur le premier streamer en live de
-      la liste.</p>
-    <button id="auto-switch" style="width: 100%" aria-pressed="true">Bascule automatique : activée</button>
-    <p style="margin-top: 14px">Pendant un direct, afficher en haut de la TV les sondages et prédictions en cours sur
-      la chaîne.</p>
-    <button id="events" style="width: 100%" aria-pressed="true">Sondages et prédictions : affichés</button>
-    <p style="margin-top: 14px">Le mode nuit (dans Télécommande → Lecture) atténue les sons forts et remonte les
-      voix, pour baisser le volume sans perdre les dialogues.</p>
+    <div class="stack">
+      <button class="toggle" id="auto-switch" aria-pressed="true">
+        <span class="label">Bascule automatique<small>Streamer hors ligne depuis une minute : passer au premier
+          streamer en live de la liste</small></span></button>
+      <button class="toggle" id="events" aria-pressed="true">
+        <span class="label">Sondages et prédictions<small>Affichés en haut de la TV pendant un direct</small></span></button>
+    </div>
   </section>
 
   <section>
@@ -273,7 +466,7 @@
     <select id="display" disabled><option>Chargement…</option></select>
     <div class="status" id="display-status"></div>
     <div class="setting">QR code de la télécommande (pour les invités)</div>
-    <div class="row" id="qr-modes">
+    <div class="segmented" id="qr-modes">
       <button data-qr="always">Toujours</button>
       <button data-qr="timed">30 secondes</button>
       <button data-qr="never">Jamais</button>
@@ -284,7 +477,7 @@
     <h2>Compte Twitch</h2>
     <div id="account-on" hidden>
       <p>Connecté : <span class="account-name" id="account-name"></span>. Pas de pub sur les chaînes où tu es abonné.</p>
-      <button id="logout">Se déconnecter</button>
+      <button id="logout" style="width: 100%">Se déconnecter</button>
     </div>
     <div id="account-off" hidden>
       <p id="account-intro">Connecte ton compte pour profiter de tes abonnements sans pub.</p>
@@ -299,14 +492,15 @@
         <p style="margin-top: 8px">Ce jeton donne accès à ton compte : il reste sur la box et n'est jamais réaffiché.
           Il cesse de marcher si tu te déconnectes de Twitch sur ce navigateur.</p>
       </details>
-      <input id="token" type="password" autocomplete="off" placeholder="Jeton auth-token" aria-label="Jeton Twitch">
-      <button id="login">Connecter</button>
+      <div class="field">
+        <input id="token" type="password" autocomplete="off" placeholder="Jeton auth-token" aria-label="Jeton Twitch">
+        <button id="login" class="current">Connecter</button>
+      </div>
     </div>
     <div class="status" id="account-status"></div>
   </section>
 
   </div>
-
 
   <div class="status" id="status"></div>
 </main>
@@ -321,15 +515,56 @@ let progress = null;   // dernière position connue, pour faire avancer la barre
 const settings = {};   // dernières valeurs connues de chat_bg et chat_size
 const LIMITS = { chat_bg: [0, 100], chat_size: [20, 60] };   // mêmes bornes que NUMBERS dans stream-box.lua
 
+// Photo de profil du streamer, ou son initiale ; anneau rouge en live, grisée hors ligne
+function avatar(s, name, extra = "") {
+  const url = s.avatars?.[name];
+  const el = document.createElement(url ? "img" : "span");
+  el.className = `avatar ${extra}`;
+  if (url) Object.assign(el, { src: url, alt: "", loading: "lazy" });
+  else el.textContent = (name ?? "?").charAt(0).toUpperCase();
+  return el;
+}
+
+function setToggle(id, on) {
+  $(id).setAttribute("aria-pressed", String(!!on));
+}
+
+// Carte « Sur la TV » : le live en cours (miniature, streamer, titre), la chaîne hors ligne ou l'écran d'accueil
+function renderNow(s) {
+  const home = s.mode === "home", info = s.live?.[s.channel];
+  $("now").hidden = s.mode === "media" || (!home && !s.channel);
+  const thumb = !home && info?.thumb;
+  $("now-thumb").hidden = !thumb;
+  $("now-placeholder").hidden = !!thumb;
+  $("now-thumb").parentElement.classList.toggle("compact", !thumb);
+  if (thumb && $("now-thumb").getAttribute("src") !== thumb) $("now-thumb").src = thumb;
+  const badge = $("now-badge");
+  badge.hidden = home;
+  badge.className = "badge";
+  if (!home && s.playing && s.delay != null && s.delay >= 4) badge.textContent = `−${clock(s.delay)}`;
+  else if (!home && s.playing && info) { badge.textContent = "● EN DIRECT"; badge.classList.add("live"); }
+  else if (!home) badge.textContent = info ? "CHARGEMENT…" : "HORS LIGNE";
+  $("now-avatar").replaceWith(Object.assign(home ? Object.assign(document.createElement("span"), { className: "avatar home", textContent: "⌂" })
+    : avatar(s, s.channel, info ? "live" : ""), { id: "now-avatar" }));
+  $("now-name").textContent = home ? "Écran d'accueil" : s.channel;
+  $("now-meta").textContent = home ? "Choisis un streamer pour lancer un live"
+    : info ? [info.game, `${viewers(info.viewers)} spectateurs`].filter(Boolean).join(" · ")
+    : s.auto_switch ? "Hors ligne · bascule automatique vers un live" : "Hors ligne";
+  $("now-title").textContent = home ? "" : info?.title ?? "";
+}
+
 function render(s) {
   lastState = s;
   if (!$("tab-settings").hidden) renderManage();
-  $("dot").classList.toggle("on", s.playing);
-  $("status").className = "status";
-  $("status").textContent = s.playing || s.mode === "home" ? "" : `${s.channel ?? "…"} n'est pas en live (ou chargement en cours)`;
-  $("home").classList.toggle("current", s.mode === "home");
-
   const media = s.mode === "media";
+  $("dot").className = `dot${s.playing && !media ? " on" : ""}`;
+  $("tv-state").textContent = media ? "Vidéo en cours sur la TV" : s.mode === "home" ? "Écran d'accueil"
+    : s.playing ? `En direct sur la TV · ${s.channel}` : "Rien ne joue pour l'instant";
+  $("status").className = "status";
+  $("status").textContent = "";
+  $("home").classList.toggle("current", s.mode === "home");
+  renderNow(s);
+
   $("media-section").hidden = !media;
   if (media) {
     $("media-title").textContent = s.title ?? "Vidéo";
@@ -342,11 +577,10 @@ function render(s) {
       $("subs").replaceChildren(option("no", "Aucun"), ...s.subs.map((t) => option(t.id, t.name)));
       $("subs").value = s.subs.find((t) => t.selected)?.id ?? "no";
     }
-    $("status").textContent = "";
   }
 
   // Retour en arrière dans le direct (box sur le stream et en lecture)
-  $("timeshift").hidden = media || s.delay == null;
+  $("timeshift").hidden = media || s.mode === "home" || s.delay == null;
   if (s.delay != null) {
     const behind = s.delay >= 4;
     $("delay").innerHTML = "";
@@ -357,41 +591,40 @@ function render(s) {
   const list = $("streamers");
   list.replaceChildren(...s.streamers.map((name) => {
     const b = document.createElement("button");
+    b.className = "streamer";
     const info = s.live?.[name];
     const span = (cls, text) => Object.assign(document.createElement("span"), { className: cls, textContent: text });
-    b.append(span("name", name));
+    const who = span("who", "");
+    who.append(span("name", name));
     if (info) {
       const line = span("live-info", "");
       line.append(span("live-dot", `● ${viewers(info.viewers)}`), info.game ? ` · ${info.game}` : "");
-      b.append(line);
+      who.append(line);
       b.title = info.title ?? "";
     } else {
-      b.append(span("live-info offline", "hors ligne"));
+      who.append(span("live-info offline", "Hors ligne"));
     }
+    b.append(avatar(s, name, info ? "live" : "off"), who);
     b.classList.toggle("current", s.mode === "twitch" && name === s.channel);
     b.onclick = () => send("channel", { name });
     return b;
   }));
 
   $("volume").textContent = s.mute ? "muet" : `${s.volume} %`;
-  $("mute").textContent = s.mute ? "Remettre le son" : "Couper le son";
-  $("pause").textContent = s.pause ? "Reprendre" : "Pause";
-  $("chat").textContent = s.chat_visible ? "Chat affiché" : "Chat masqué";
-  $("chat").classList.toggle("current", s.chat_visible);
+  $("volume-meter").style.width = s.mute ? "0" : `${Math.min(100, s.volume / 1.3)}%`;
+  $("mute").lastElementChild.textContent = s.mute ? "Remettre le son" : "Couper le son";
+  $("mute").classList.toggle("on", s.mute);
+  $("pause").lastElementChild.textContent = s.pause ? "Reprendre" : "Pause";
+  $("pause").classList.toggle("on", s.pause);
+  setToggle("chat", s.chat_visible);
   $("corner").textContent = `Coin : ${CORNERS[s.corner] ?? s.corner}`;
-  $("auto-switch").textContent = `Bascule automatique : ${s.auto_switch ? "activée" : "désactivée"}`;
-  $("auto-switch").classList.toggle("current", s.auto_switch);
-  $("auto-switch").setAttribute("aria-pressed", String(s.auto_switch));
+  setToggle("auto-switch", s.auto_switch);
+  setToggle("night", s.night);
+  setToggle("events", s.events);
   document.querySelectorAll("[data-qr]").forEach(b => {
     b.classList.toggle("current", b.dataset.qr === s.qr);
     b.setAttribute("aria-pressed", String(b.dataset.qr === s.qr));
   });
-  for (const [id, on, label] of [["night", s.night, `Mode nuit : ${s.night ? "activé" : "désactivé"}`],
-                                 ["events", s.events, `Sondages et prédictions : ${s.events ? "affichés" : "masqués"}`]]) {
-    $(id).textContent = label;
-    $(id).classList.toggle("current", on);
-    $(id).setAttribute("aria-pressed", String(on));
-  }
   settings.chat_bg = s.chat_bg;
   settings.chat_size = s.chat_size;
   $("chat_bg-value").textContent = `${s.chat_bg} %`;
@@ -518,7 +751,8 @@ function clock(seconds) {
 }
 
 function showError(message) {
-  $("dot").classList.remove("on");
+  $("dot").className = "dot error";
+  $("tv-state").textContent = "Box injoignable";
   $("status").className = "status error";
   $("status").textContent = message;
 }
@@ -623,8 +857,9 @@ $("seek").onclick = (e) => {
 let managed = "";   // liste affichée dans les réglages, pour ne la refaire que si elle change
 function renderManage() {
   const names = lastState?.streamers ?? [];
-  if (JSON.stringify(names) === managed && $("manage-list").childElementCount) return;
-  managed = JSON.stringify(names);
+  const key = JSON.stringify([names, Object.keys(lastState?.avatars ?? {}).length]);   // refaite quand les photos arrivent
+  if (key === managed && $("manage-list").childElementCount) return;
+  managed = key;
   const btn = (text, label, onclick, disabled = false) => {
     const b = Object.assign(document.createElement("button"), { textContent: text, title: label, onclick, disabled });
     b.setAttribute("aria-label", label);
@@ -633,7 +868,9 @@ function renderManage() {
   $("manage-list").replaceChildren(...names.map((name, i) => {
     const row = Object.assign(document.createElement("div"), { className: "manage-row" });
     row.append(
-      Object.assign(document.createElement("span"), { className: "name", textContent: `${i + 1}. ${name}` }),
+      Object.assign(document.createElement("span"), { className: "rank", textContent: i + 1 }),
+      avatar(lastState, name),
+      Object.assign(document.createElement("span"), { className: "name", textContent: name }),
       btn("▲", `Monter ${name}`, () => editStreamers("move", name, -1), i === 0),
       btn("▼", `Descendre ${name}`, () => editStreamers("move", name, 1), i === names.length - 1),
       btn("✕", `Retirer ${name}`, () => { if (confirm(`Retirer ${name} de la liste ?`)) editStreamers("remove", name); }));
@@ -728,7 +965,8 @@ $("poweroff").onclick = async () => {
     const r = await fetch("/api/poweroff", { method: "POST" });
     if (!r.ok) throw new Error((await r.json()).error);
     clearTimeout(refreshTimer);
-    $("dot").classList.remove("on");
+    $("dot").className = "dot";
+    $("tv-state").textContent = "Box éteinte";
     $("status").className = "status";
     $("status").textContent = "Box éteinte. Rallume-la avec son bouton power.";
   } catch (e) {
