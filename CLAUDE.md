@@ -536,3 +536,13 @@ pas de recherche, faute de clavier : elle passe par la page), réglages des sous
 réouverture. Tailles de texte ×1,2 (`FONT`) pour le même aspect que l'appli Qt. `/api/tvimage` accepte aussi les
 images du serveur Jellyfin.
 Onglet Système du menu Lua : ligne « Mettre à jour maintenant » et tuiles d'état (`draw_health`, /api/health toutes les 5 s).
+
+### Écran de chargement entre deux vidéos ou chaînes
+
+stream-box.lua (`set_loading`) publie `user-data/streambox/loading` {title, thumb} au lancement d'une vidéo
+(`play_media url start titre_imposé image titre_affiché`) ou d'une chaîne (`start_channel`), et l'efface à la première
+image (`playback-restart`), sur erreur, à l'écran d'accueil ou au bout de 45 s. `qml/LoadingOverlay.qml` (relais
+`osd.loading`) : voile, miniature floutée, anneau qui tourne, titre ; fondu à l'entrée et à la sortie. Avec mpv seul
+(`vo` ≠ libmpv) : message « Chargement de … » à l'écran. Titre et image viennent de remote.py (historique, Jellyfin)
+ou de la requête (`POST /api/play` accepte `title`, `thumb` : le menu QML les envoie).
+

@@ -1048,7 +1048,7 @@ def jellyfin_play(item_id, from_start=False):
     now_playing.clear()
     now_playing.update(key=f"jellyfin:{item_id}", url=url, link=f"jellyfin:{item_id}", kind="jellyfin", ident=item_id,
                        title=title, thumb=i["thumb"], position=start)
-    mpv(["script-message", "streambox-play", url, str(start), title])
+    mpv(["script-message", "streambox-play", url, str(start), title, i["thumb"] or ""])
     mpv(["set_property", "user-data/streambox/storyboard", {}])
     jf_cache.pop("home", None)
     record(dict(now_playing), start, i["seconds"])
@@ -1165,15 +1165,16 @@ def fetch_storyboard(url, ident):
         pass
 
 
-def play(url, from_start=False):
+def play(url, from_start=False, title=None, thumb=None):
+    """title, thumb : connus de la page ou du menu qui lance la vidéo (écran de chargement, historique)"""
     if re.fullmatch(r"jellyfin:[0-9a-f]{32}", url or ""):   # depuis l'historique
         return jellyfin_play(url.split(":")[1], from_start)
     if not url or not re.match(r"https?://", url):
         raise ValueError("Ce n'est pas un lien http(s).")
     key, kind, ident = media_key(url)
     entry = next((e for e in read_history() if e["key"] == key), None) or {}
-    video = {"key": key, "url": url, "kind": kind, "ident": ident, "title": entry.get("title"),
-             "thumb": entry.get("thumb") or (f"https://i.ytimg.com/vi/{ident}/mqdefault.jpg" if kind == "youtube" else None)}
+    video = {"key": key, "url": url, "kind": kind, "ident": ident, "title": entry.get("title") or title,
+             "thumb": entry.get("thumb") or thumb or (f"https://i.ytimg.com/vi/{ident}/mqdefault.jpg" if kind == "youtube" else None)}
     position, updated, duration = entry.get("position", 0), entry.get("updated", 0), entry.get("duration", 0)
     try:   # Twitch : titre, vignette, durée et position enregistrée sur le compte
         if kind == "twitch-vod":
@@ -1195,7 +1196,7 @@ def play(url, from_start=False):
     start = 0 if from_start or position < RESUME_MIN or finished(position, duration) else int(position)
     now_playing.clear()
     now_playing.update(video, pushed=0.0, position=start)
-    mpv(["script-message", "streambox-play", url, str(start)])
+    mpv(["script-message", "streambox-play", url, str(start), "", video.get("thumb") or "", video.get("title") or ""])
     record(video, start, duration)
     mpv(["set_property", "user-data/streambox/storyboard", {}])
     if kind == "youtube":
@@ -1753,7 +1754,8 @@ def action(name, body):
     elif name == "corner":
         mpv(["script-message", "streambox-cycle-corner"])
     elif name == "play":
-        play(find_url(str(body.get("url", ""))), bool(body.get("from_start")))
+        play(find_url(str(body.get("url", ""))), bool(body.get("from_start")),
+             str(body.get("title") or "")[:200] or None, str(body.get("thumb") or "")[:500] or None)
     elif name == "history":
         edit_history(str(body.get("action", "")), str(body.get("key", "")))
     elif name == "twitch":

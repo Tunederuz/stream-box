@@ -79,6 +79,7 @@ Item {
         AmbientScreen {}
         ChatOverlay {}
         PollsOverlay {}
+        LoadingOverlay {}
         InfoBar {}
         Toast {}
         TracksPanel {}
