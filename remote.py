@@ -478,7 +478,8 @@ TV_IMAGE_DIR = "/tmp/stream-box-images"
 def tv_image(src, width, height, round_, radius=0):
     """Image prête pour overlay-add : round_ = disque, sinon coins arrondis de radius pixels (0 : carrés)."""
     host = urllib.parse.urlsplit(src).hostname or ""
-    if not (host.endswith(".jtvnw.net") or host in ("i.ytimg.com", "clips-media-assets2.twitch.tv")):
+    jf_host = urllib.parse.urlsplit((jf_server() or {}).get("address", "")).hostname
+    if not (host.endswith(".jtvnw.net") or host in ("i.ytimg.com", "clips-media-assets2.twitch.tv") or host == jf_host):
         raise ValueError("image refusée")
     width, height = max(8, min(1280, width)), max(8, min(1280, height))
     radius = max(0, min(radius, width // 2, height // 2))

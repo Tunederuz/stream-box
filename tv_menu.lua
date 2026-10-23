@@ -17,10 +17,11 @@ local REFRESH = 5              -- secondes entre deux relevés de l'état pendan
 local MAX_IMAGES = 48          -- overlay-add accepte les identifiants 0 à 63
 
 local TABS = { { id = "live", label = "En direct" }, { id = "follows", label = "Suivis" },
-               { id = "replays", label = "Rediffusions" },
+               { id = "replays", label = "Rediffusions" }, { id = "youtube", label = "YouTube" },
+               { id = "jellyfin", label = "Jellyfin" },
                { id = "history", label = "Historique" }, { id = "settings", label = "Réglages" },
                { id = "system", label = "Système" } }
-local KINDS = { youtube = "YouTube", ["twitch-vod"] = "Rediffusion Twitch", ["twitch-clip"] = "Clip Twitch", link = "Lien" }
+local KINDS = { youtube = "YouTube", ["twitch-vod"] = "Rediffusion Twitch", ["twitch-clip"] = "Clip Twitch", link = "Lien", jellyfin = "Jellyfin" }
 local CORNERS = { tl = "↖ haut gauche", tr = "↗ haut droite", br = "↘ bas droite", bl = "↙ bas gauche" }
 local CORNER_ORDER = { "tl", "tr", "br", "bl" }   -- même ordre que stream-box.lua
 local QR_MODES = { { "always", "Toujours" }, { "timed", "30 secondes" }, { "never", "Jamais" } }
@@ -44,6 +45,9 @@ local modal = nil                                   -- fenêtre d'actions : { ti
 local history_loading = false
 local follows, follows_loading, follows_qr = nil, false, nil   -- /api/follows ; QR code du lien d'activation
 local follows_timer = nil
+-- YouTube et Jellyfin (/api/youtube, /api/jellyfin) : rangées de cartes, rangée et choix par onglet. Pas de recherche
+-- ici (pas de clavier à l'écran avec mpv seul) : elle se fait depuis la télécommande web
+local media = { youtube = { row = 1, sel = {}, first = {} }, jellyfin = { row = 1, sel = {}, first = {} } }
 local draw, close_menu
 
 
@@ -86,9 +90,13 @@ local function rrect(x, y, w, h, r, color, alpha, extra)
         :format(math.floor(x), math.floor(y), extra or "", color, alpha or "00", p)
 end
 
+-- Tailles de texte ×1,2 : à taille égale, le texte ASS est plus petit que celui de l'appli Qt (qml/), le menu a
+-- ainsi le même aspect avec mpv seul
+local FONT = 1.2
+
 local function label(x, y, size, color, s, align, extra)
     return ("{\\an%d\\pos(%d,%d)\\fs%d\\bord0\\shad0\\1c&H%s&%s}%s")
-        :format(align or 4, math.floor(x), math.floor(y), size, color, extra or "", s)
+        :format(align or 4, math.floor(x), math.floor(y), math.floor(size * FONT + 0.5), color, extra or "", s)
 end
 
 
@@ -106,12 +114,12 @@ local marquee_start, marquee_active = 0, false
 local function text_width(s, size)
     local n = 0
     for _ in tostring(s):gmatch("[^\128-\191]") do n = n + 1 end
-    return n * size * 0.52
+    return n * size * FONT * 0.52
 end
 
 local function marquee(out, x, y, width, size, color, s, extra)
     s = tostring(s or "")
-    local clip = ("\\clip(%d,%d,%d,%d)"):format(x, y - size, x + width, y + size)
+    local clip = ("\\clip(%d,%d,%d,%d)"):format(x, y - size * FONT, x + width, y + size * FONT)
     local tw = text_width(s, size)
     if tw <= width then
         out[#out + 1] = label(x, y, size, color, ass_escape(s), 4, (extra or "") .. clip)
@@ -325,6 +333,16 @@ local function settings_rows()
             s.chat_size = math.max(20, math.min(60, (s.chat_size or 0) + 2 * d))
             act("set", { key = "chat_size", value = s.chat_size })
         end },
+        { header = "Sous-titres" },
+        { label = "Taille des sous-titres", value = ("%d %%"):format(s.sub_size or 100), step = function(d)
+            s.sub_size = math.max(50, math.min(200, (s.sub_size or 100) + 10 * d))
+            act("set", { key = "sub_size", value = s.sub_size })
+        end },
+        { label = "Fond des sous-titres", value = (s.sub_bg or 0) > 0 and ("%d %%"):format(s.sub_bg) or "Aucun",
+          step = function(d)
+            s.sub_bg = math.max(0, math.min(100, (s.sub_bg or 0) + 10 * d))
+            act("set", { key = "sub_bg", value = s.sub_bg })
+        end },
         { header = "Lecture" },
         { label = "Bascule automatique", hint = "Passer sur un streamer en live si le sien est hors ligne",
           toggle = s.auto_switch, ok = function()
@@ -430,19 +448,19 @@ end
 local function draw_rail(out)
     out[#out + 1] = rrect(0, 0, 400, H, 0, "10070B", "30")
     out[#out + 1] = rrect(56, 62, 52, 52, 14, "F7F2F4", "00")   -- logo neutre : tuile blanche, triangle anthracite
-    out[#out + 1] = "{\\an5\\pos(82,88)\\fs30\\bord0\\shad0\\1c&H1C1517&\\p1}m -7 -11 l 11 0 -7 11{\\p0}"   -- ▶ dessiné
+    out[#out + 1] = "{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H1C1517&\\p1}m 76 77 l 93 88 76 99{\\p0}"   -- ▶ dessiné
     out[#out + 1] = label(126, 88, 36, "FFFFFF", "Stream Box", 4, "\\b1")
     for i, t in ipairs(TABS) do
-        local y = 220 + (i - 1) * 92
+        local y = 206 + (i - 1) * 76   -- 9 onglets entre le logo et « En cours sur la TV »
         if i == tab and area == "rail" then
-            out[#out + 1] = rrect(40, y, 320, 72, 36, "FFFFFF", "00")
-            out[#out + 1] = label(78, y + 36, 32, "20101A", ass_escape(t.label), 4, "\\b1")
+            out[#out + 1] = rrect(40, y, 320, 64, 32, "FFFFFF", "00")
+            out[#out + 1] = label(78, y + 32, 30, "20101A", ass_escape(t.label), 4, "\\b1")
         else
             if i == tab then
-                out[#out + 1] = rrect(40, y, 320, 72, 36, "FFFFFF", "E6")
-                out[#out + 1] = rrect(60, y + 30, 12, 12, 6, VIOLET, "00")   -- onglet en cours : point dans la pastille
+                out[#out + 1] = rrect(40, y, 320, 64, 32, "FFFFFF", "E6")
+                out[#out + 1] = rrect(60, y + 26, 12, 12, 6, VIOLET, "00")   -- onglet en cours : point dans la pastille
             end
-            out[#out + 1] = label(i == tab and 88 or 78, y + 36, 32, i == tab and "FFFFFF" or "C2AFB4", ass_escape(t.label), 4,
+            out[#out + 1] = label(i == tab and 88 or 78, y + 32, 30, i == tab and "FFFFFF" or "C2AFB4", ass_escape(t.label), 4,
                                   i == tab and "\\b1" or "")
         end
     end
@@ -487,14 +505,14 @@ local function streamer_card(out, imgs, x, y, name, avatar, info, focused, curre
     if focused then
         marquee(out, tx, y + 40, x + cw - tx - 16, 34, "FFFFFF", name, "\\b1")
     else
-        out[#out + 1] = label(tx, y + 40, 34, "FFFFFF", ass_escape(shorten(name, 12)), 4, "\\b1")
+        out[#out + 1] = label(tx, y + 40, 34, "FFFFFF", ass_escape(shorten(name, 10)), 4, "\\b1")
     end
     if info then
         out[#out + 1] = label(tx, y + 82, 27, LIVE_RED, "● " .. viewers(info.viewers), 4, "\\b1")
         if focused then
             marquee(out, tx, y + 116, x + cw - tx - 16, 25, "C2AFB4", info.game or info.title)
         else
-            out[#out + 1] = label(tx, y + 116, 25, "C2AFB4", ass_escape(shorten(info.game or info.title or "", 14)), 4)
+            out[#out + 1] = label(tx, y + 116, 25, "C2AFB4", ass_escape(shorten(info.game or info.title or "", 12)), 4)
         end
     else
         out[#out + 1] = label(tx, y + 82, 27, "A0858A", "Hors ligne", 4)
@@ -559,9 +577,9 @@ local function video_card(out, imgs, x, y, item, focused, meta, progress)
     if focused then
         marquee(out, x, y + CARD_IMG_H + 46, CARD_W, 33, "FFFFFF", item.title, "\\b1")
     else
-        out[#out + 1] = label(x, y + CARD_IMG_H + 46, 33, "EADAE0", ass_escape(shorten(item.title or "", 19)), 4)
+        out[#out + 1] = label(x, y + CARD_IMG_H + 46, 33, "EADAE0", ass_escape(shorten(item.title or "", 16)), 4)
     end
-    if meta then out[#out + 1] = label(x, y + CARD_IMG_H + 88, 27, "C09FA9", ass_escape(meta), 4) end
+    if meta then out[#out + 1] = label(x, y + CARD_IMG_H + 88, 27, "C09FA9", ass_escape(shorten(meta, 26)), 4) end
 end
 
 -- Premier élément visible d'une rangée qui défile, pour garder sel à l'écran
@@ -639,6 +657,139 @@ local function draw_replays(out, imgs)
         end
         y = y + CARD_H + 34
     end
+end
+
+-- YouTube et Jellyfin
+
+local function load_media(id)
+    local m = media[id]
+    if m.loading or m.data then return end
+    m.loading = true
+    api("GET", "/api/" .. id, nil, function(d)
+        m.loading, m.data = false, d or { error = true }
+        if is_open then draw() end
+    end)
+end
+
+local function media_rows(id)
+    local m, rows = media[id], {}
+    local d = m.data or {}
+    if id == "youtube" then
+        for _, c in ipairs(d.channels or {}) do
+            rows[#rows + 1] = { key = c.id, title = c.name, items = c.videos or {} }
+        end
+    elseif d.configured then
+        if m.series then rows[#rows + 1] = { key = "series", title = m.series.name .. " · épisodes", items = m.series.episodes or {} } end
+        if #(d.resume or {}) > 0 then rows[#rows + 1] = { key = "resume", title = "Reprendre", items = d.resume } end
+        if #(d.nextup or {}) > 0 then rows[#rows + 1] = { key = "nextup", title = "Prochains épisodes", items = d.nextup } end
+        for _, l in ipairs(d.libraries or {}) do
+            rows[#rows + 1] = { key = "lib:" .. l.id, title = l.name .. " · ajouts récents", items = l.items or {} }
+        end
+    end
+    return rows
+end
+
+local function days_ago(iso)
+    local y, mo, d = tostring(iso or ""):match("(%d+)-(%d+)-(%d+)")
+    if not d then return "" end
+    local n = math.floor((os.time() - os.time({ year = y, month = mo, day = d, hour = 12 })) / 86400)
+    return n <= 0 and "aujourd'hui" or n == 1 and "hier" or n < 7 and ("il y a %d j"):format(n)
+        or n < 31 and ("il y a %d sem."):format(math.floor(n / 7)) or date_fr(iso)
+end
+
+local function hm(t)
+    t = tonumber(t) or 0
+    local h, m = math.floor(t / 3600), math.floor(t / 60) % 60
+    return h > 0 and ("%d h %02d"):format(h, m) or ("%d min"):format(m)
+end
+
+local function media_meta(id, it)
+    local parts = {}
+    local function add(v) if v and v ~= "" then parts[#parts + 1] = tostring(v) end end
+    if id == "youtube" then
+        add(days_ago(it.date))
+        if it.views then add(viewers(it.views) .. " vues") end
+    elseif it.type == "Series" then
+        add((it.unplayed or 0) > 0 and (it.unplayed .. " à voir") or "Série")
+        add(it.year)
+    elseif it.episode then
+        add(it.episode)
+    else
+        add(it.year)
+        if it.seconds then add(hm(it.seconds)) end
+    end
+    local meta = table.concat(parts, " · ")
+    return it.finished and (meta .. " · vu") or meta
+end
+
+local function draw_media(out, imgs, id)
+    local m, rows = media[id], media_rows(id)
+    local d = m.data
+    local subtitle
+    if not d then subtitle = "Chargement…"
+    elseif d.error then subtitle = (id == "youtube" and "YouTube" or "Jellyfin") .. " injoignable pour l'instant"
+    elseif id == "youtube" then
+        subtitle = #rows > 0 and (#rows .. (#rows == 1 and " chaîne" or " chaînes") .. " · recherche depuis la télécommande web")
+            or "Ajoute des chaînes depuis la télécommande web (Réglages → Chaînes YouTube)"
+    else
+        subtitle = d.configured and ((d.server or "Jellyfin") .. " · recherche depuis la télécommande web")
+            or "Jellyfin n'est pas associé à la box (« Lire sur… » depuis l'appli Jellyfin)"
+    end
+    draw_header(out, id == "youtube" and "YouTube" or "Jellyfin", subtitle)
+    m.row = math.max(1, math.min(m.row, #rows))
+    local first_row = math.max(1, m.row - 1)   -- deux rangées à l'écran
+    local y = 230
+    for r = first_row, math.min(#rows, first_row + 1) do
+        local row = rows[r]
+        local focused_row = area == "content" and r == m.row
+        out[#out + 1] = label(462, y, 25, "C09FA9", ass_escape(row.title:upper()), 4, "\\b1\\fsp2")
+        local sel = math.min(m.sel[row.key] or 1, math.max(1, #row.items))
+        m.first[row.key] = scroll(m.first[row.key], sel, 4)
+        local f = m.first[row.key]
+        for i = f, math.min(#row.items, f + 3) do
+            local it = row.items[i]
+            local title = id == "jellyfin" and it.episode and it.title or it.title
+            video_card(out, imgs, 460 + (i - f) * (CARD_W + CARD_GAP), y + 26, { title = title, thumb = it.thumb },
+                       focused_row and i == sel, media_meta(id, it),
+                       it.finished and 1 or (it.position and it.seconds and it.seconds > 0 and it.position / it.seconds) or 0)
+        end
+        if #row.items == 0 then out[#out + 1] = label(462, y + 90, 28, "A0858A", "Rien ici", 4) end
+        if #row.items > f + 3 then out[#out + 1] = label(W - 40, y + 26 + CARD_IMG_H / 2, 40, "C09FA9", "›", 6) end
+        y = y + CARD_H + 34
+    end
+end
+
+local function jellyfin_play(it, from_start)
+    api("POST", "/api/jellyfin_play", { id = it.id, from_start = from_start or false }, function() mp.add_timeout(0.3, refresh) end)
+    close_menu()
+end
+
+local function jellyfin_series(it)
+    local m = media.jellyfin
+    m.series = { id = it.series, name = it.title, episodes = nil }
+    m.row = 1
+    api("GET", "/api/jellyfin_series?id=" .. url_encode(it.series), nil, function(d)
+        if m.series and m.series.id == it.series then
+            m.series.episodes = d and d.episodes or {}
+            m.sel.series, m.first.series = (d and d.first or 0) + 1, nil
+        end
+        if is_open then draw() end
+    end)
+end
+
+local function jellyfin_choose(it)
+    if it.type == "Series" or it.type == "Season" then return jellyfin_series(it) end
+    local items = {}
+    if resumable(it.position, it.seconds, it.finished) then
+        items[#items + 1] = { label = "▶  Reprendre à " .. clock(it.position), ok = function() jellyfin_play(it) end }
+        items[#items + 1] = { label = "↺  Depuis le début", ok = function() jellyfin_play(it, true) end }
+    else
+        items[#items + 1] = { label = it.finished and "↺  Revoir" or "▶  Lire", ok = function() jellyfin_play(it, true) end }
+    end
+    if it.type == "Episode" and it.series then
+        items[#items + 1] = { label = "☰  Tous les épisodes", ok = function() jellyfin_series(it) end }
+    end
+    open_modal(it.episode and (it.title .. " · " .. it.episode) or it.title, items)
 end
 
 local FOLLOW_ROWS = 4
@@ -854,6 +1005,9 @@ function draw()
         rp_login = rp_login or state.channel or (state.streamers or {})[1]
         load_replays(rp_login)
         draw_replays(out, imgs)
+    elseif id == "youtube" or id == "jellyfin" then
+        load_media(id)
+        draw_media(out, imgs, id)
     elseif id == "history" then
         if history == nil and not history_loading then
             history_loading = true
@@ -904,7 +1058,9 @@ end
 local function open_menu()
     if is_open then return end
     is_open = true
-    tab, area, index, shortcut = 1, "content", 1, nil
+    -- Le menu rouvre sur le dernier onglet (rangée et carte gardées pour YouTube et Jellyfin), données relues
+    area, index, shortcut = TABS[tab].id == "follows" and "rail" or "content", 1, nil
+    media.youtube.data, media.jellyfin.data = nil, nil
     -- Relus à chaque ouverture : l'historique change, remote.py garde les rediffusions 5 min en cache
     history, history_loading, replays, rp_login, rp_row, rp_sel, rp_first = nil, false, {}, nil, 1, {}, {}
     follows = nil
@@ -931,12 +1087,15 @@ local function content_count()
         return follows.authorized and #follows_list() or 1
     end
     if id == "history" then return #(history or {}) end
+    if id == "youtube" or id == "jellyfin" then return #media_rows(id) end
     return #selectable(id == "settings" and settings_rows() or system_rows())
 end
 
 local function current_row()
     local id = TABS[tab].id
-    if id == "live" or id == "replays" or id == "history" or id == "follows" then return nil end
+    if id == "live" or id == "replays" or id == "history" or id == "follows" or id == "youtube" or id == "jellyfin" then
+        return nil
+    end
     local rows = id == "settings" and settings_rows() or system_rows()
     return rows[selectable(rows)[index]]
 end
@@ -1022,6 +1181,24 @@ local function on_key(key)
                 local item = row.items[sel]
                 if item then choose_video(item, item.seconds) end
             end
+        end
+    elseif id == "youtube" or id == "jellyfin" then
+        local m, rows = media[id], media_rows(id)
+        m.row = math.max(1, math.min(m.row, #rows))
+        local row = rows[m.row]
+        local sel = row and math.min(m.sel[row.key] or 1, math.max(1, #row.items)) or 1
+        if key == "up" then
+            m.row = math.max(1, m.row - 1)
+        elseif key == "down" then
+            m.row = math.min(#rows, m.row + 1)
+        elseif key == "left" then
+            if sel == 1 then area = "rail" else m.sel[row.key] = sel - 1 end
+        elseif key == "right" and row then
+            m.sel[row.key] = math.min(#row.items, sel + 1)
+        elseif key == "ok" and row and row.items[sel] then
+            local it = row.items[sel]
+            if id == "youtube" then choose_video(it, it.seconds) else jellyfin_choose(it) end
+            if not is_open then return end
         end
     elseif id == "follows" then
         if not follows.authorized then
