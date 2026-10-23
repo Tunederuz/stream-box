@@ -21,6 +21,7 @@ while true; do
   # hwdec : décodage par l'iGPU Intel (HEVC 10 bits, VP9). ytdl-format : vidéos envoyées par lien, 1440p max et
   # pas d'AV1 (l'UHD 630 ne le décode pas : tout retomberait sur le processeur). Sous-titres français et anglais,
   # manuels et automatiques, sans les traductions automatiques (« French from Arabic »… plus de 100 pistes).
+  # player_client : le client TV choisi par défaut reçoit des flux refusés (403) ; tv_simply et android_vr passent.
   # fetch_pot : jeton anti-robot (service stream-box-pot) pour chaque requête, sans quoi YouTube bloque les sous-titres
   mpv --idle=yes --force-window=yes --fs --osc=no --cursor-autohide=4000 \
     --input-ipc-server=/tmp/stream-box-mpv.sock --script="$DIR/stream-box.lua" \
@@ -29,6 +30,6 @@ while true; do
     --ytdl-raw-options-append=sub-langs=fr,fr-FR,fr-orig,en,en-US,en-GB,en-orig \
     --ytdl-raw-options-append=write-subs= --ytdl-raw-options-append=write-auto-subs= \
     --ytdl-raw-options-append=cookies="$HOME/.config/stream-box/twitch-cookies.txt" \
-    --ytdl-raw-options-append=extractor-args=youtube:fetch_pot=always
+    --ytdl-raw-options-append='extractor-args=youtube:player_client=tv_simply,android_vr;fetch_pot=always'
   sleep 2
 done

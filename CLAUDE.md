@@ -121,7 +121,9 @@ appli), fait la même chose depuis un téléphone, plus le volume et la pause.
   jeton valide n'y change rien tant que le blocage dure (quelques heures). Jetons : plugin pip
   `bgutil-ytdlp-pot-provider` + son serveur (même version, `~/.local/share/bgutil-pot-provider`, compilé avec Node
   du paquet pip `nodejs-wheel`), service utilisateur `stream-box-pot` (127.0.0.1:4416). mpv passe
-  `extractor-args=youtube:fetch_pot=always`. Vérifier : `yt-dlp -v --simulate <url>` → `PO Token Providers: bgutil:http`.
+  `extractor-args=youtube:player_client=tv_simply,android_vr;fetch_pot=always` : le client TV choisi par défaut
+  recevait des flux refusés (HTTP 403 sur googlevideo, même en IPv4 de bout en bout). Si YouTube recasse, comparer
+  les clients avec `yt-dlp --extractor-args youtube:player_client=<client> -g <url>` puis `curl -r 0-1000` sur l'URL. Vérifier : `yt-dlp -v --simulate <url>` → `PO Token Providers: bgutil:http`.
 - **Retour en arrière dans le direct** : `on_load` garde `LIVE_BACK` (400 MiB ≈ 7-8 min en 1080p60) avec
   `demuxer-seekable-cache=yes`. `live_window()` lit `demuxer-cache-state.seekable-ranges`. En différé ou en pause,
   `set_live_buffer` passe le tampon avant à 150 MiB (sinon mpv cesse de lire le flux et le retard fond) ; retour au
