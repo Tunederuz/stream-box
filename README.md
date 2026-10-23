@@ -23,6 +23,7 @@ télécommande web installable sur téléphone (PWA).
   synchronisées avec le compte Twitch connecté.
 - **Mode vidéo** : liens YouTube et autres (yt-dlp, sous-titres), rediffusions et clips Twitch, partage Android
   « Partager → Stream Box », et **Jellyfin** (« Lire sur… ») via jellyfin-mpv-shim.
+- **Grand menu sur la TV** façon Android TV (bouton Menu de la télécommande) : streamers en direct, réglages, système.
 - **Télécommande web** : aperçu de l'écran à la demande, streamers et ordre de la liste, chat, volume, barre de lecture, résolution de la TV,
   extinction. **Télécommande Bluetooth** (testé avec celle du Xiaomi TV Stick) et menu à la souris.
 - **Session dédiée sans bureau** (compositeur cage) ; écran de connexion normal si un clavier est branché au démarrage.
@@ -36,6 +37,7 @@ télécommande web installable sur téléphone (PWA).
 |---|---|
 | `start.sh` | Lancé par la session : chat, télécommande web, résolution, puis boucle sur un mpv permanent |
 | `stream-box.lua` | Script mpv : streamlink, menu, modes Twitch / vidéo, différé, barre de lecture, touches |
+| `tv_menu.lua` | Grand menu de la TV façon Android TV (bouton Menu de la télécommande) |
 | `chat_overlay.py` | Chat Twitch (IRC anonyme) affiché dans mpv par son IPC |
 | `remote.py` + `remote.html` | Télécommande web (bibliothèque standard Python) et sa page |
 | `display.py` | Résolution de la sortie vidéo (wlr-randr), jamais en dessous de 60 Hz |

@@ -204,7 +204,7 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   télécommande qui annoncerait ces touches est à ajouter à `IGNORE` dans `boot-mode.py`. cage transmet ses touches à mpv ; stream-box.lua les lie (`KEYS`, `on_key`) : OK = `0x21ffa0`, Menu ≡ =
   `0x2111a0` (codes de la télécommande Xiaomi : à adapter pour une autre), Retour = `GO_BACK`, Accueil = `HOMEPAGE`, flèches, volume (actions par défaut de mpv). Menu fermé en
   Twitch : haut/bas zappent, OK affiche/retire le bandeau d'infos (titre, « EN DIRECT » ou retard), Accueil ouvre
-  le menu (OK aussi sur l'écran d'accueil), Menu ≡ affiche/masque le chat. Dans tous les modes : WWW (le bouton
+  le grand menu (OK aussi sur l'écran d'accueil ; le petit menu ne sert plus qu'à la souris), Menu ≡ affiche/masque le chat. Dans tous les modes : WWW (le bouton
   « navigateur ») affiche l'écran d'accueil, Play (`PLAY`/`PLAYPAUSE`, lié exprès : sinon mpv met en pause, ce qui
   figeait le direct) fait changer le chat de coin. En vidéo : OK pause, ←/→ ±10 s,
   ↑ affiche/retire la barre de lecture (↓ la retire), Menu ≡ change de sous-titres, Retour ×2 revient au stream. Menu ouvert : flèches = sélection (le bouton
@@ -266,3 +266,19 @@ avec `aria-pressed`, dessinés en CSS). Version précédente de la page : tag gi
 page-v1:remote.html > remote.html` pour revenir en arrière). Pour juger d'un changement sans téléphone : copie de la
 page avec un `render(<état de /api/state>)` à la place de `refresh()`, capturée par `firefox --headless --screenshot`
 (il n'attend pas les requêtes de la page ; ne pas faire défiler : les éléments collés s'y dessinent mal).
+
+## Grand menu de la TV (tv_menu.lua)
+
+Façon Android TV, ouvert par le bouton Menu de la télécommande (touche Accueil) dans tous les modes : onglets à gauche
+(En direct, Réglages, Système), contenu à droite, vidéo assombrie derrière, refermé par Menu, Retour depuis les
+onglets, ou au bout de 90 s sans touche. Script séparé, chargé par `start.sh` (`--script` en second). Tant qu'il est
+ouvert (`user-data/streambox/tvmenu`), `stream-box.lua` lui transmet toutes les touches (`streambox-tvmenu-key`) ;
+il lit l'état et agit par l'API de `remote.py` (curl en sous-processus), comme la page web. Réglages : ◀ ▶ changent
+une valeur, OK bascule un interrupteur ; la résolution choisie aux flèches ne s'applique qu'à OK. Système : écran
+d'accueil, retour au stream, état du compte, extinction (OK deux fois), QR code de la télécommande web pour ce qui
+demande de taper du texte. Photos : images brutes posées par `overlay-add` (au-dessus du dessin ASS, coordonnées en
+pixels de l'écran), préparées par `GET /api/tvimage?src=&w=&h=&round=` (ffmpeg : recadrage, disque à bord adouci,
+BGRA à alpha prémultiplié, cache `/tmp/stream-box-images`, seulement les serveurs d'images Twitch et YouTube).
+Tester : `keypress HOMEPAGE`, `keypress DOWN`… par l'IPC, puis `/api/preview`. Pour recharger le script sans
+redémarrer la session : relancer mpv puis `load-script` une seule fois (un second `load-script` en ferait deux).
+Prochaines étapes : rediffusions et historique avec miniatures, puis finitions.
