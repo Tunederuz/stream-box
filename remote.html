@@ -600,7 +600,7 @@ async function previewTick() {
     if (r.status === 204) {
       $("preview-img").hidden = true;
       $("preview-note").hidden = false;
-      $("preview-note").textContent = "Écran d'ambiance : rien à capturer";
+      $("preview-note").textContent = "Rien à capturer pour l'instant (écran d'ambiance)";
     } else if (r.ok) {
       const url = URL.createObjectURL(await r.blob());
       $("preview-img").src = url;

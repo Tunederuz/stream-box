@@ -7,7 +7,7 @@ Les changements de streamer et de chat passent par les script-messages de stream
 Compte Twitch : le jeton du site (cookie auth-token) est rangé dans la config Twitch de streamlink, que
 streamlink lit tout seul. Twitch ne retire les pubs des abonnements qu'avec ce jeton-là.
 """
-import datetime, json, os, re, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
+import datetime, json, os, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import display   # display.py, même dossier
@@ -231,8 +231,9 @@ def ambient_loop():
         time.sleep(60)
 
 
-# Aperçu de la TV pour la page : capture de mpv réduite en JPEG, seulement quand la page le demande (bloc ouvert).
-# mpv n'a rien à capturer quand aucune vidéo ne joue (écran d'ambiance) : la page affiche alors un texte.
+# Aperçu de la TV pour la page, seulement quand la page le demande (bloc ouvert). L'écran entier (écran d'ambiance, menus
+# compris) est capturé par grim, via le protocole wlr-screencopy de cage ; la vidéo seule, ou faute de grim, par mpv,
+# qui n'a rien à capturer quand aucune vidéo ne joue (la page affiche alors un texte).
 
 PREVIEW_WIDTH = 960
 preview_lock = threading.Lock()
@@ -245,7 +246,19 @@ def preview(overlay):
         if time.time() - preview_cache["at"] < 1 and preview_cache["overlay"] == overlay:
             return preview_cache["data"]
         data = None
-        if mpv(["get_property", "video-params"])[0] is not None:
+        playing = mpv(["get_property", "video-params"])[0] is not None
+        if (overlay or not playing) and shutil.which("grim"):
+            try:
+                width = mpv(["get_property", "osd-dimensions"])[0].get("w") or PREVIEW_WIDTH
+                r = subprocess.run(["grim", "-t", "jpeg", "-q", "70", "-s", f"{min(1.0, PREVIEW_WIDTH / width):.3f}", "-"],
+                                   capture_output=True, timeout=10, env=display.wlr_env())
+                data = r.stdout if r.returncode == 0 and r.stdout else None
+            except (OSError, subprocess.SubprocessError, AttributeError):
+                data = None
+            if data:
+                preview_cache.update(at=time.time(), overlay=overlay, data=data)
+                return data
+        if playing:
             shot, small = "/tmp/stream-box-shot.jpg", "/tmp/stream-box-preview.jpg"
             for path in (shot, small):
                 if os.path.exists(path):
