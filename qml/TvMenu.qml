@@ -964,8 +964,8 @@ Item {
                     TextMetrics { id: chipMetrics; text: login; font.pixelSize: chipText.font.pixelSize; font.bold: true }
                     width: Math.ceil(chipMetrics.advanceWidth) + 100; height: 64
                     readonly property real rel: x - ListView.view.contentX
-                    opacity: rel > -20 && rel + width < ListView.view.width + 20 ? 1 : 0   // entière, sinon cachée (pas sous le rail)
-                    Behavior on opacity { NumberAnimation { duration: 150 } }
+                    opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0   // fenêtre visée
+                    Behavior on opacity { NumberAnimation { duration: 90 } }
                     scale: foc ? 1.05 : 1
                     Behavior on scale { NumberAnimation { duration: 160 } }
                     FocusFrame { active: parent.foc; radius: 32 }
@@ -981,33 +981,35 @@ Item {
                     readonly property var row: parent.rows[r]
                     y: 300 + index * 366; width: 1460; height: 350
                     Text { x: 2; text: row ? row.title.toUpperCase() : ""; color: "#a99fc0"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 2 }
-                    ListView {
-                        y: 40; x: -40; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
-                        orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
-                        leftMargin: 40
-                        model: row ? row.items.length : 0
-                        currentIndex: menu.rpSel[r] || 0
-                        // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
-                        // qui laissait des cartes coupées au bord du rail ou de l'écran)
-                        property int first: 0
-                        readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
-                        onCurrentIndexChanged: {
-                            if (currentIndex < first) first = currentIndex
-                            else if (currentIndex >= first + fits) first = currentIndex - fits + 1
-                            contentX = -leftMargin + first * 356
-                        }
-                        Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-                        delegate: VideoCard {
-                            readonly property var it: row.items[index] || {}
-                            readonly property real rel: x - ListView.view.contentX
-                            opacity: rel > -20 && rel + width < ListView.view.width + 20 ? 1 : 0   // entière, sinon cachée (pas sous le rail)
-                            Behavior on opacity { NumberAnimation { duration: 150 } }
-                            title: it.title || ""
-                            thumb: it.thumb || ""
-                            meta: (row.kind === "vods" ? Fmt.dateFr(it.date) + " · " + Fmt.clock(it.seconds)
-                                   : Fmt.clock(it.seconds) + " · " + Fmt.viewers(it.views) + " vues") + (it.finished ? " · vu" : "")
-                            progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
-                            focused: menu.area === "content" && menu.rpRow === r && index === (menu.rpSel[r] || 0)
+                    Item {   // découpe à gauche, au bord du contenu : une carte qui défile ne passe pas sous le rail
+                        x: -28; y: 0; width: 1512; height: 302 + 80; clip: true
+                        ListView {
+                            y: 40; x: -12; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
+                            orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
+                            leftMargin: 40
+                            model: row ? row.items.length : 0
+                            currentIndex: menu.rpSel[r] || 0
+                            // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
+                            // qui laissait des cartes coupées au bord du rail ou de l'écran)
+                            property int first: 0
+                            readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
+                            onCurrentIndexChanged: {
+                                if (currentIndex < first) first = currentIndex
+                                else if (currentIndex >= first + fits) first = currentIndex - fits + 1
+                                contentX = -leftMargin + first * 356
+                            }
+                            Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                            delegate: VideoCard {
+                                readonly property var it: row.items[index] || {}
+                                opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0   // fenêtre visée
+                                Behavior on opacity { NumberAnimation { duration: 90 } }
+                                title: it.title || ""
+                                thumb: it.thumb || ""
+                                meta: (row.kind === "vods" ? Fmt.dateFr(it.date) + " · " + Fmt.clock(it.seconds)
+                                       : Fmt.clock(it.seconds) + " · " + Fmt.viewers(it.views) + " vues") + (it.finished ? " · vu" : "")
+                                progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
+                                focused: menu.area === "content" && menu.rpRow === r && index === (menu.rpSel[r] || 0)
+                            }
                         }
                     }
                 }
@@ -1066,80 +1068,84 @@ Item {
                                        : row && row.loading ? "Chargement…" : menu.jfTab ? "Rien ici" : "YouTube injoignable pour l'instant"
                             color: "#8a85a0"; font.pixelSize: 24
                         }
-                        ListView {   // chaînes trouvées : photo ronde, nom, abonnés, « dans ta liste »
-                            visible: !!row && row.kind === "chans"
-                            y: 50; x: -40; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
-                            orientation: ListView.Horizontal; spacing: 30; interactive: false; clip: false
-                            leftMargin: 40
-                            model: visible ? row.items.length : 0
-                            currentIndex: visible ? (menu.mSel["chans"] || 0) : 0
-                            // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
-                            // qui laissait des cartes coupées au bord du rail ou de l'écran)
-                            property int first: 0
-                            readonly property int fits: Math.floor((width - leftMargin + spacing) / 270)
-                            onCurrentIndexChanged: {
-                                if (currentIndex < first) first = currentIndex
-                                else if (currentIndex >= first + fits) first = currentIndex - fits + 1
-                                contentX = -leftMargin + first * 270
-                            }
-                            Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-                            delegate: Item {
-                                readonly property var c: row.items[index] || {}
-                                readonly property bool foc: menu.area === "content" && menu.mRow === r && index === (menu.mSel["chans"] || 0)
-                                width: 240; height: 302
-                                readonly property real rel: x - ListView.view.contentX
-                                opacity: rel > -20 && rel + width < ListView.view.width + 20 ? 1 : 0
-                                Behavior on opacity { NumberAnimation { duration: 150 } }
-                                z: foc ? 2 : 1
-                                Item {
-                                    x: 30; y: 6; width: 180; height: 180
-                                    scale: parent.foc ? 1.06 : 1
-                                    Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                                    FocusFrame { active: parent.parent.foc; radius: 90; glow: menu.accent }
-                                    RoundImage {
-                                        anchors.fill: parent; circle: true; placeholder: "#2a2034"; source: c.avatar || ""
-                                        Text { anchors.centerIn: parent; z: -1; text: (c.name || "?").charAt(0).toUpperCase(); color: "#d0c8e0"; font.pixelSize: 64; font.bold: true }
+                        Item {   // découpe à gauche, au bord du contenu : une carte qui défile ne passe pas sous le rail
+                            x: -28; y: 10; width: 1512; height: 302 + 80; clip: true
+                            ListView {   // chaînes trouvées : photo ronde, nom, abonnés, « dans ta liste »
+                                visible: !!row && row.kind === "chans"
+                                y: 40; x: -12; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
+                                orientation: ListView.Horizontal; spacing: 30; interactive: false; clip: false
+                                leftMargin: 40
+                                model: visible ? row.items.length : 0
+                                currentIndex: visible ? (menu.mSel["chans"] || 0) : 0
+                                // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
+                                // qui laissait des cartes coupées au bord du rail ou de l'écran)
+                                property int first: 0
+                                readonly property int fits: Math.floor((width - leftMargin + spacing) / 270)
+                                onCurrentIndexChanged: {
+                                    if (currentIndex < first) first = currentIndex
+                                    else if (currentIndex >= first + fits) first = currentIndex - fits + 1
+                                    contentX = -leftMargin + first * 270
+                                }
+                                Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                                delegate: Item {
+                                    readonly property var c: row.items[index] || {}
+                                    readonly property bool foc: menu.area === "content" && menu.mRow === r && index === (menu.mSel["chans"] || 0)
+                                    width: 240; height: 302
+                                    opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0
+                                    Behavior on opacity { NumberAnimation { duration: 90 } }
+                                    z: foc ? 2 : 1
+                                    Item {
+                                        x: 30; y: 6; width: 180; height: 180
+                                        scale: parent.foc ? 1.06 : 1
+                                        Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                                        FocusFrame { active: parent.parent.foc; radius: 90; glow: menu.accent }
+                                        RoundImage {
+                                            anchors.fill: parent; circle: true; placeholder: "#2a2034"; source: c.avatar || ""
+                                            Text { anchors.centerIn: parent; z: -1; text: (c.name || "?").charAt(0).toUpperCase(); color: "#d0c8e0"; font.pixelSize: 64; font.bold: true }
+                                        }
                                     }
-                                }
-                                Text {
-                                    y: 206; width: parent.width; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-                                    text: c.name || ""; color: "white"; font.pixelSize: 25; font.bold: parent.foc
-                                }
-                                Text {
-                                    y: 242; width: parent.width; horizontalAlignment: Text.AlignHCenter
-                                    text: (c.followers ? Fmt.big(c.followers) + " abonnés" : "") + (c.saved ? (c.followers ? " · " : "") + "✓ suivie" : "")
-                                    color: c.saved ? "#ff6b7f" : "#b4afc2"; font.pixelSize: 20
+                                    Text {
+                                        y: 206; width: parent.width; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
+                                        text: c.name || ""; color: "white"; font.pixelSize: 25; font.bold: parent.foc
+                                    }
+                                    Text {
+                                        y: 242; width: parent.width; horizontalAlignment: Text.AlignHCenter
+                                        text: (c.followers ? Fmt.big(c.followers) + " abonnés" : "") + (c.saved ? (c.followers ? " · " : "") + "✓ suivie" : "")
+                                        color: c.saved ? "#ff6b7f" : "#b4afc2"; font.pixelSize: 20
+                                    }
                                 }
                             }
                         }
-                        ListView {
-                            visible: !!row && row.kind !== "chans"
-                            y: 50; x: -40; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
-                            orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
-                            leftMargin: 40
-                            model: visible ? row.items.length : 0
-                            currentIndex: visible ? (menu.mSel[row.key] || 0) : 0
-                            // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
-                            // qui laissait des cartes coupées au bord du rail ou de l'écran)
-                            property int first: 0
-                            readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
-                            onCurrentIndexChanged: {
-                                if (currentIndex < first) first = currentIndex
-                                else if (currentIndex >= first + fits) first = currentIndex - fits + 1
-                                contentX = -leftMargin + first * 356
-                            }
-                            Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-                            delegate: VideoCard {
-                                readonly property var it: row.items[index] || {}
-                                readonly property real rel: x - ListView.view.contentX
-                                opacity: rel > -20 && rel + width < ListView.view.width + 20 ? 1 : 0   // entière, sinon cachée (pas sous le rail)
-                                Behavior on opacity { NumberAnimation { duration: 150 } }
-                                title: it.title || ""
-                                thumb: it.thumb || ""
-                                meta: menu.cardMeta(row, it)
-                                progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
-                                accent: menu.accent
-                                focused: menu.area === "content" && menu.mRow === r && index === (menu.mSel[row.key] || 0)
+                        Item {   // découpe à gauche, au bord du contenu : une carte qui défile ne passe pas sous le rail
+                            x: -28; y: 10; width: 1512; height: 302 + 80; clip: true
+                            ListView {
+                                visible: !!row && row.kind !== "chans"
+                                y: 40; x: -12; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
+                                orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
+                                leftMargin: 40
+                                model: visible ? row.items.length : 0
+                                currentIndex: visible ? (menu.mSel[row.key] || 0) : 0
+                                // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
+                                // qui laissait des cartes coupées au bord du rail ou de l'écran)
+                                property int first: 0
+                                readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
+                                onCurrentIndexChanged: {
+                                    if (currentIndex < first) first = currentIndex
+                                    else if (currentIndex >= first + fits) first = currentIndex - fits + 1
+                                    contentX = -leftMargin + first * 356
+                                }
+                                Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                                delegate: VideoCard {
+                                    readonly property var it: row.items[index] || {}
+                                    opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0   // fenêtre visée
+                                    Behavior on opacity { NumberAnimation { duration: 90 } }
+                                    title: it.title || ""
+                                    thumb: it.thumb || ""
+                                    meta: menu.cardMeta(row, it)
+                                    progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
+                                    accent: menu.accent
+                                    focused: menu.area === "content" && menu.mRow === r && index === (menu.mSel[row.key] || 0)
+                                }
                             }
                         }
                     }
