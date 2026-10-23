@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Stream Box : résolution de la sortie vidéo, via wlr-randr (cage gère wlr-output-management).
 
-Seuls les modes à 60 Hz (ou presque) sont proposés : en HDMI, ce mini PC ne sort le 4K qu'en 30 Hz, ce qui fait
-sauter une image sur deux d'un stream à 60 i/s. « auto » = le mode préféré de la TV s'il est à 60 Hz, sinon la plus
-grande définition à 60 Hz (ici 2560x1440).
+Seuls les modes à 60 Hz (ou presque) sont proposés : beaucoup de mini PC ne sortent le 4K qu'en 30 Hz en HDMI, ce qui
+fait sauter une image sur deux d'un stream à 60 i/s. « auto » = le mode préféré de la TV s'il est à 60 Hz, sinon la plus
+grande définition à 60 Hz.
 
 Usage : display.py apply   applique le réglage enregistré (lancé par start.sh avant mpv)
         display.py list    affiche les modes disponibles

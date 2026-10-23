@@ -214,9 +214,9 @@ def ambient_loop():
         if time.time() - fetched > AMBIENT_FETCH:
             conf = ambient_conf()
             try:
-                tz = zoneinfo.ZoneInfo(conf.get("timezone", "Europe/Brussels"))
-            except (zoneinfo.ZoneInfoNotFoundError, ValueError):
-                tz = None
+                tz = zoneinfo.ZoneInfo(conf["timezone"])
+            except (KeyError, zoneinfo.ZoneInfoNotFoundError, ValueError):
+                tz = datetime.datetime.now().astimezone().tzinfo   # fuseau du système
             for key, fetch in (("weather", lambda: fetch_weather(conf)),
                                ("schedule", lambda: fetch_schedule(read_streamers(), tz))):
                 try:

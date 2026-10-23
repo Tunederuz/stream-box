@@ -28,7 +28,7 @@ La box éteinte ne voit rien : c'est Home Assistant qui surveille Twitch (intég
 
 - BIOS : réveil par le réseau activé, veille profonde désactivée (sur un Dell : *Wake on LAN = LAN Only*,
   *Deep Sleep Control = Disabled*) ;
-- Linux : `sudo nmcli connection modify "<connexion filaire>" 802-3-ethernet.wake-on-lan magic`.
+- Linux : `sudo bash install.sh --wol` (ou `nmcli connection modify "<connexion filaire>" 802-3-ethernet.wake-on-lan magic`).
 
 Dans Home Assistant, le plus simple est l'intégration **Wake on LAN** ajoutée par l'interface (MAC de la box et
 adresse de diffusion du réseau) : elle crée un bouton, qui sert aussi à allumer la box à la main. L'action
