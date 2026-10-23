@@ -37,9 +37,20 @@ Item {
     property var health: null                // /api/health, relu toutes les 5 s sur l'onglet Système
     // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
     property var yt: null
-    // Onglet YouTube : tout passe au rouge (fond, lueurs, halos, clavier)
-    readonly property bool ytTheme: tabId === "youtube"
-    readonly property color accent: ytTheme ? "#ff0033" : "#9146ff"
+    // Couleurs selon l'onglet : violet pour Twitch (direct, suivis, rediffusions), rouge pour YouTube, neutre
+    // (anthracite, halo blanc) pour ce qui n'appartient à aucun service (historique, réglages, système)
+    readonly property string theme: tabId === "youtube" ? "youtube"
+        : ["live", "follows", "replays"].indexOf(tabId) >= 0 ? "twitch" : "neutral"
+    readonly property var pal: theme === "youtube"
+        ? { accent: "#ff0033", veil: "#180407", rail: "#1a0709", glow: 0.22, sheet: "#261216", key: "#3a1f24",
+            surface: "#33171c", surfaceFocus: "#4a2027", label: "#c9a3aa" }
+        : theme === "twitch"
+        ? { accent: "#9146ff", veil: "#0a0612", rail: "#100b17", glow: 0.10, sheet: "#21182c", key: "#33283f",
+            surface: "#2a2034", surfaceFocus: "#3a2c4e", label: "#a99fc0" }
+        : { accent: "#e8e8ee", veil: "#0b0b0d", rail: "#121214", glow: 0.05, sheet: "#1e1e22", key: "#2f2f35",
+            surface: "#232327", surfaceFocus: "#35353c", label: "#a3a3ad" }
+    readonly property bool ytTheme: theme === "youtube"
+    readonly property color accent: pal.accent
     property var ytResults: null             // { query, results, channels } ou null
     property var ytPreview: null             // chaîne trouvée ouverte : { id, name, avatar, followers, videos, saved }
     property bool ytSearching: false
@@ -597,15 +608,14 @@ Item {
 
     Rectangle {   // voile sur la vidéo ; opaque sans vidéo, pour cacher l'écran d'ambiance
         anchors.fill: parent
-        // Onglet YouTube : fond teinté de rouge
-        color: menu.ytTheme ? "#180407" : "#0a0612"
+        color: menu.pal.veil
         opacity: box.videoActive ? 0.89 : 1
         Behavior on color { ColorAnimation { duration: 400 } }
     }
-    Rectangle {   // lueur en haut à droite : violette, rouge sur l'onglet YouTube
+    Rectangle {   // lueur en haut à droite, de la couleur de l'onglet
         x: 1350; y: -350; width: 900; height: 700; radius: 450
         color: menu.accent
-        opacity: menu.ytTheme ? 0.22 : 0.10
+        opacity: menu.pal.glow
         Behavior on color { ColorAnimation { duration: 400 } }
         Behavior on opacity { NumberAnimation { duration: 400 } }
     }
@@ -617,7 +627,7 @@ Item {
     }
 
     // Rail des onglets
-    Rectangle { width: 400; height: parent.height; color: menu.ytTheme ? "#1a0709" : "#100b17"; opacity: 0.55
+    Rectangle { width: 400; height: parent.height; color: menu.pal.rail; opacity: 0.55
                 Behavior on color { ColorAnimation { duration: 400 } } }
     Logo { x: 56; y: 62 }
     Text { x: 126; y: 88 - height / 2; text: "Stream Box"; color: "white"; font.pixelSize: 28; font.bold: true }
@@ -634,7 +644,7 @@ Item {
         Item {
             x: 40; y: 220 + index * 92; width: 320; height: 72
             readonly property bool cur: index === menu.tab
-            Rectangle {   // onglet en cours, focus dans le contenu : point violet
+            Rectangle {   // onglet en cours, focus dans le contenu : point de la couleur de l'onglet
                 visible: cur && menu.area !== "rail"
                 x: 20; anchors.verticalCenter: parent.verticalCenter
                 width: 12; height: 12; radius: 6; color: menu.accent
@@ -1026,6 +1036,7 @@ Item {
                     meta: (menu.kinds[e.kind] || "") + (e.finished ? " · vu"
                           : e.duration > 0 ? " · " + Fmt.clock(e.position) + " / " + Fmt.clock(e.duration) : "")
                     progress: e.finished ? 1 : (Fmt.resumable(e.position, e.duration, e.finished) && e.duration > 0 ? e.position / e.duration : 0)
+                    accent: menu.accent
                     focused: menu.area === "content" && index === menu.histSel
                 }
             }
@@ -1040,7 +1051,7 @@ Item {
                 readonly property var rows: modelData === "settings" ? menu.settingsRows() : menu.systemRows()
                 readonly property var sel: menu.selectable(rows)
                 readonly property int focusedRow: menu.area === "content" ? sel[modelData === "settings" ? menu.setSel : menu.sysSel] : -1
-                y: 180; x: 0; width: modelData === "settings" ? 980 : 810; height: 880
+                y: 180; x: 0; width: modelData === "settings" ? 980 : 810; height: 800   // s'arrête au-dessus de l'aide en bas
                 spacing: 10; interactive: false; clip: false; topMargin: 30
                 model: rows.length
                 onFocusedRowChanged: if (focusedRow >= 0) positionViewAtIndex(focusedRow, ListView.Contain)
@@ -1051,6 +1062,7 @@ Item {
                     opacity: rel > -height / 2 && rel + height / 2 < rowsView.height ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 150 } }
                     row: rowsView.rows[index] || {}
+                    pal: menu.pal
                     focused: index === rowsView.focusedRow
                 }
             }
@@ -1067,9 +1079,9 @@ Item {
                     readonly property color tone: modelData[3] === "bad" ? "#ff6b6b" : modelData[3] === "warn" ? "#ffb44a" : "white"
                     Column {
                         x: 18; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 36; spacing: 2
-                        Text { text: modelData[0].toUpperCase(); color: "#a99fc0"; font.pixelSize: 15; font.bold: true; font.letterSpacing: 1.5 }
+                        Text { text: modelData[0].toUpperCase(); color: menu.pal.label; font.pixelSize: 15; font.bold: true; font.letterSpacing: 1.5 }
                         Text { width: parent.width; elide: Text.ElideRight; text: modelData[1]; color: parent.parent.tone; font.pixelSize: 23; font.bold: true }
-                        Text { width: parent.width; elide: Text.ElideRight; text: modelData[2]; color: "#b4afc2"; font.pixelSize: 16 }
+                        Text { width: parent.width; elide: Text.ElideRight; text: modelData[2]; color: "#b0b0b8"; font.pixelSize: 16 }
                     }
                 }
             }
@@ -1147,7 +1159,7 @@ Item {
             readonly property var items: menu.modal ? menu.modal.items : []
             width: 820; height: 150 + items.length * 92; radius: 28
             anchors.centerIn: parent
-            color: "#21182c"
+            color: menu.pal.sheet
             scale: menu.modal ? 1 : 0.92
             Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutBack } }
             Marquee { x: 44; y: 46; width: parent.width - 88; text: menu.modal ? menu.modal.title || "" : ""; pixelSize: 27; bold: true; running: !!menu.modal }
@@ -1156,7 +1168,7 @@ Item {
                 Rectangle {
                     readonly property bool foc: index === menu.modalSel
                     x: 30; y: 112 + index * 92; width: sheet.width - 60; height: 76; radius: 38
-                    color: foc ? "white" : "#33283f"
+                    color: foc ? "white" : menu.pal.key
                     Behavior on color { ColorAnimation { duration: 140 } }
                     Text {
                         x: 40; anchors.verticalCenter: parent.verticalCenter
