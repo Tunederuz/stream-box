@@ -114,16 +114,13 @@ replays_cache = {}   # pseudo -> (heure, résultat)
 def fetch_replays(login):
     query = ("query($l:String!){user(login:$l){"
              "videos(first:8,type:ARCHIVE,sort:TIME){edges{node{id title lengthSeconds createdAt "
-             "previewThumbnailURL(width:320,height:180)}}} "
+             "previewThumbnailURL(width:320,height:180) self{viewingHistory{position}}}}} "
              "clips(first:6,criteria:{period:LAST_WEEK}){edges{node{slug title durationSeconds viewCount "
              "thumbnailURL}}}}}")
-    req = urllib.request.Request(
-        "https://gql.twitch.tv/gql", data=json.dumps({"query": query, "variables": {"l": login}}).encode(),
-        headers={"Client-ID": TWITCH_WEB_CLIENT_ID, "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=10) as r:
-        user = json.load(r)["data"]["user"] or {}
+    user = twitch_gql(query, {"l": login})["user"] or {}
     vods = [{"title": n["title"], "date": n["createdAt"][:10], "seconds": n["lengthSeconds"],
-             "thumb": n["previewThumbnailURL"], "url": f"https://www.twitch.tv/videos/{n['id']}"}
+             "thumb": n["previewThumbnailURL"], "url": f"https://www.twitch.tv/videos/{n['id']}",
+             "position": (((n.get("self") or {}).get("viewingHistory") or {}).get("position"))}
             for n in (e["node"] for e in (user.get("videos") or {}).get("edges", []))]
     clips = [{"title": n["title"], "seconds": n["durationSeconds"], "views": n["viewCount"],
               "thumb": n["thumbnailURL"], "url": f"https://clips.twitch.tv/{n['slug']}"}
@@ -138,7 +135,15 @@ def replays(login):
     if not cached or time.time() - cached[0] > 300:
         cached = (time.time(), fetch_replays(login))
         replays_cache[login] = cached
-    return cached[1]
+    # Progression : celle de l'historique de la box si elle est plus récente que le relevé Twitch
+    known = {e["key"]: e for e in read_history()}
+    result = json.loads(json.dumps(cached[1]))
+    for item in result["vods"] + result["clips"]:
+        entry = known.get(media_key(item["url"])[0])
+        if entry and entry.get("updated", 0) > cached[0] - 300:
+            item["position"] = entry["position"]
+        item["finished"] = finished(item.get("position") or 0, item.get("seconds"))
+    return result
 
 
 # Écran d'ambiance (dessiné par stream-box.lua quand rien ne joue) : météo et prochains lives prévus, publiés dans
@@ -417,10 +422,159 @@ def find_url(*texts):
     return None
 
 
-def play(url):
+# Historique et reprise de lecture des vidéos lancées depuis la télécommande (liens, YouTube, rediffusions et clips
+# Twitch ; Jellyfin gère sa propre progression). Les rediffusions Twitch sont synchronisées avec le compte connecté :
+# position lue au lancement, écrite toutes les 30 s. Le reste n'est connu que de la box.
+
+HISTORY_FILE = os.path.expanduser("~/.local/state/stream-box/history.json")
+HISTORY_MAX = 60
+RESUME_MIN = 30         # secondes : en dessous, on repart du début
+FINISHED_LEFT = 30      # à moins de 30 s de la fin, ou au-delà de 95 %, la vidéo est vue
+TWITCH_PUSH = 30        # secondes entre deux envois de la position à Twitch
+history_lock = threading.Lock()
+now_playing = {}        # vidéo lancée par play(), suivie par history_loop
+
+
+def media_key(url):
+    """(clé stable, type, identifiant) : une même vidéo garde la même clé quelle que soit la forme du lien."""
+    m = re.search(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|live/)|youtu\.be/)([\w-]{11})", url)
+    if m:
+        return f"youtube:{m.group(1)}", "youtube", m.group(1)
+    m = re.search(r"twitch\.tv/videos/(\d+)", url)
+    if m:
+        return f"twitch-vod:{m.group(1)}", "twitch-vod", m.group(1)
+    m = re.search(r"(?:clips\.twitch\.tv/|twitch\.tv/\w+/clip/)([\w-]+)", url)
+    if m:
+        return f"twitch-clip:{m.group(1)}", "twitch-clip", m.group(1)
+    return url, "link", None
+
+
+def finished(position, duration):
+    return bool(duration) and (position >= duration - FINISHED_LEFT or position >= 0.95 * duration)
+
+
+def read_history():
+    try:
+        with open(HISTORY_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def write_history(entries):
+    tmp = HISTORY_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(entries[:HISTORY_MAX], f, ensure_ascii=False)
+    os.replace(tmp, HISTORY_FILE)
+
+
+def record(video, position, duration, title=None):
+    """Met la vidéo en tête de l'historique avec sa position."""
+    with history_lock:
+        entries = [e for e in read_history() if e["key"] != video["key"]]
+        entry = {"key": video["key"], "url": video["url"], "kind": video["kind"],
+                 "title": title or video.get("title") or video["url"], "thumb": video.get("thumb"),
+                 "position": int(position or 0), "duration": int(duration or 0), "updated": time.time()}
+        entry["finished"] = finished(entry["position"], entry["duration"])
+        write_history([entry] + entries)
+
+
+def twitch_gql(query, variables=None):
+    """Requête GQL Twitch, avec le compte connecté s'il y en a un."""
+    headers = {"Client-ID": TWITCH_WEB_CLIENT_ID, "Content-Type": "application/json"}
+    token = read_token()
+    if token:
+        headers["Authorization"] = f"OAuth {token}"
+    req = urllib.request.Request("https://gql.twitch.tv/gql",
+                                 data=json.dumps({"query": query, "variables": variables or {}}).encode(), headers=headers)
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.load(r)["data"]
+
+
+def twitch_save_position(video_id, position):
+    if not read_token():
+        return
+    me = twitch_gql("{currentUser{id}}").get("currentUser")
+    if me:
+        twitch_gql("mutation($i:UpdateUserViewedVideoInput!){updateUserViewedVideo(input:$i){video{id}}}",
+                   {"i": {"userID": me["id"], "videoID": video_id, "videoType": "VOD", "position": int(position)}})
+
+
+def play(url, from_start=False):
     if not url or not re.match(r"https?://", url):
         raise ValueError("Ce n'est pas un lien http(s).")
-    mpv(["script-message", "streambox-play", url])
+    key, kind, ident = media_key(url)
+    entry = next((e for e in read_history() if e["key"] == key), None) or {}
+    video = {"key": key, "url": url, "kind": kind, "ident": ident, "title": entry.get("title"),
+             "thumb": entry.get("thumb") or (f"https://i.ytimg.com/vi/{ident}/mqdefault.jpg" if kind == "youtube" else None)}
+    position, updated, duration = entry.get("position", 0), entry.get("updated", 0), entry.get("duration", 0)
+    try:   # Twitch : titre, vignette, durée et position enregistrée sur le compte
+        if kind == "twitch-vod":
+            v = twitch_gql("query($id:ID!){video(id:$id){title lengthSeconds previewThumbnailURL(width:320,height:180) "
+                           "self{viewingHistory{position updatedAt}}}}", {"id": ident}).get("video") or {}
+            video.update(title=v.get("title") or video["title"], thumb=v.get("previewThumbnailURL") or video["thumb"])
+            duration = v.get("lengthSeconds") or duration
+            seen = (v.get("self") or {}).get("viewingHistory") or {}
+            if seen.get("updatedAt"):
+                at = datetime.datetime.fromisoformat(seen["updatedAt"].replace("Z", "+00:00")).timestamp()
+                if at > updated:   # vu plus récemment ailleurs (site, appli) que sur la box
+                    position = seen.get("position") or 0
+        elif kind == "twitch-clip":
+            c = twitch_gql("query($s:ID!){clip(slug:$s){title durationSeconds thumbnailURL}}", {"s": ident}).get("clip") or {}
+            video.update(title=c.get("title") or video["title"], thumb=c.get("thumbnailURL") or video["thumb"])
+            duration = c.get("durationSeconds") or duration
+    except (OSError, ValueError, KeyError):
+        pass   # Twitch injoignable : on se contente de l'historique de la box
+    start = 0 if from_start or position < RESUME_MIN or finished(position, duration) else int(position)
+    now_playing.clear()
+    now_playing.update(video, pushed=0.0, position=start)
+    mpv(["script-message", "streambox-play", url, str(start)])
+    record(video, start, duration)
+
+
+def history_loop():
+    """Toutes les 10 s, note la position de la vidéo lancée par play() ; l'envoie à Twitch pour une rediffusion."""
+    while True:
+        time.sleep(10)
+        video = dict(now_playing)
+        if not video:
+            continue
+        try:
+            user, path, position, duration, title = mpv(
+                ["get_property", "user-data/streambox"], ["get_property", "path"], ["get_property", "time-pos"],
+                ["get_property", "duration"], ["get_property", "media-title"])
+        except (OSError, ValueError):
+            continue
+        playing = (user or {}).get("mode") == "media" and path == video["url"]
+        if playing and isinstance(position, (int, float)):
+            record(video, position, duration, title if title and title != video["url"] else None)
+            now_playing["position"] = position
+            if video["kind"] == "twitch-vod" and time.time() - video["pushed"] >= TWITCH_PUSH:
+                try:
+                    twitch_save_position(video["ident"], position)
+                    now_playing["pushed"] = time.time()
+                except (OSError, ValueError, KeyError):
+                    pass
+        elif not playing:   # vidéo terminée ou remplacée : dernière position envoyée à Twitch
+            if video["kind"] == "twitch-vod" and video.get("position"):
+                try:
+                    twitch_save_position(video["ident"], video["position"])
+                except (OSError, ValueError, KeyError):
+                    pass
+            if now_playing.get("key") == video["key"]:
+                now_playing.clear()
+
+
+def edit_history(action, key=""):
+    with history_lock:
+        entries = read_history()
+        if action == "remove":
+            entries = [e for e in entries if e["key"] != key]
+        elif action == "clear":
+            entries = []
+        else:
+            raise ValueError("action inconnue")
+        write_history(entries)
 
 
 # Compte Twitch
@@ -547,7 +701,9 @@ def action(name, body):
     elif name == "corner":
         mpv(["script-message", "streambox-cycle-corner"])
     elif name == "play":
-        play(find_url(str(body.get("url", ""))))
+        play(find_url(str(body.get("url", ""))), bool(body.get("from_start")))
+    elif name == "history":
+        edit_history(str(body.get("action", "")), str(body.get("key", "")))
     elif name == "twitch":
         mpv(["script-message", "streambox-twitch"])
     elif name == "sub":
@@ -633,6 +789,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_response(204)   # rien à capturer (écran d'ambiance)
                     self.send_header("Cache-Control", "no-store")
                     self.end_headers()
+            elif self.path == "/api/history":
+                self.send(200, read_history())
             elif self.path.startswith("/api/replays?"):
                 login = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("login", [""])[0]
                 try:
@@ -673,4 +831,5 @@ write_cookies(read_token())   # au démarrage : cookies alignés sur le jeton en
 threading.Thread(target=account_loop, daemon=True).start()
 threading.Thread(target=live_loop, daemon=True).start()
 threading.Thread(target=ambient_loop, daemon=True).start()
+threading.Thread(target=history_loop, daemon=True).start()
 ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

@@ -89,6 +89,13 @@
   #preview-note { text-align: center; padding: 40px 0; color: var(--muted); background: #000; border-radius: 8px; }
   .check { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; color: var(--muted); }
   .check input { width: auto; min-height: auto; margin: 0; accent-color: var(--accent); }
+  .replay .bar { height: 4px; border-radius: 2px; background: var(--bg); margin-top: 6px; overflow: hidden; }
+  .replay .bar i { display: block; height: 100%; background: var(--accent); }
+  .history-item { margin-top: 6px; }
+  .history-item .actions { display: flex; gap: 6px; margin-top: 4px; }
+  .history-item .actions button { min-height: 40px; flex: 1; font-size: 14px; }
+  .history-item .actions button.remove { flex: 0 0 44px; color: var(--muted); }
+  #history-clear { width: 100%; margin-top: 12px; min-height: 44px; font-size: 14px; color: var(--muted); }
   .replays-title { font-size: 13px; color: var(--muted); margin: 12px 0 0; text-transform: uppercase;
                    letter-spacing: .08em; }
   #send-link[open] summary { margin-bottom: 4px; }
@@ -196,6 +203,13 @@
       <summary>Rediffusions et clips</summary>
       <div class="chips" id="replays-who"></div>
       <div id="replays-list"></div>
+    </details>
+  </section>
+
+  <section>
+    <details id="history">
+      <summary>Historique</summary>
+      <div id="history-list"></div>
     </details>
   </section>
 
@@ -389,6 +403,54 @@ function length(seconds) {
   return h ? `${h} h ${String(m).padStart(2, "0")}` : seconds >= 60 ? `${m} min` : `${seconds} s`;
 }
 
+// Carte de vidéo (rediffusions, historique) : vignette, titre, ligne d'infos, barre de progression
+function videoCard(item, meta, progress, onclick) {
+  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
+  const text = el("div", {}, el("div", { className: "t", textContent: item.title }), el("div", { className: "meta", textContent: meta }));
+  if (progress > 0) {
+    const bar = el("div", { className: "bar" }, el("i", {}));
+    bar.firstChild.style.width = `${Math.min(100, progress * 100)}%`;
+    text.append(bar);
+  }
+  return el("button", { className: "replay", onclick }, el("img", { src: item.thumb || "/icon-192.png", alt: "", loading: "lazy" }), text);
+}
+
+function playVideo(item, fromStart = false) {
+  send("play", { url: item.url, from_start: fromStart });
+  $("media-status").className = "status";
+  $("media-status").textContent = `Chargement de « ${item.title} » sur la TV…`;
+}
+
+const KINDS = { youtube: "YouTube", "twitch-vod": "Rediffusion Twitch", "twitch-clip": "Clip Twitch", link: "Lien" };
+async function loadHistory() {
+  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
+  try {
+    const entries = await (await fetch("/api/history")).json();
+    if (!entries.length) {
+      $("history-list").replaceChildren(el("p", { textContent: "Rien pour l'instant : les vidéos lancées sur la TV s'afficheront ici." }));
+      return;
+    }
+    const items = entries.map((e) => {
+      const started = e.position >= 30 && !e.finished;
+      const meta = [KINDS[e.kind] ?? "", e.finished ? "vu" : e.duration ? `${clock(e.position)} / ${clock(e.duration)}` : ""]
+        .filter(Boolean).join(" · ");
+      const actions = el("div", { className: "actions" },
+        el("button", { textContent: started ? "Reprendre" : "Revoir", onclick: () => playVideo(e) }));
+      if (started) actions.append(el("button", { textContent: "Depuis le début", onclick: () => playVideo(e, true) }));
+      actions.append(el("button", { className: "remove", textContent: "✕", title: "Retirer de l'historique",
+        onclick: async () => { await send("history", { action: "remove", key: e.key }); loadHistory(); } }));
+      return el("div", { className: "history-item" },
+        videoCard(e, meta, e.duration && !e.finished ? e.position / e.duration : e.finished ? 1 : 0, () => playVideo(e)), actions);
+    });
+    const clear = el("button", { id: "history-clear", textContent: "Effacer l'historique", onclick: async () => {
+      if (confirm("Effacer tout l'historique de la box ?")) { await send("history", { action: "clear" }); loadHistory(); }
+    } });
+    $("history-list").replaceChildren(...items, clear);
+  } catch (e) {
+    $("history-list").replaceChildren(el("p", { className: "status error", textContent: e.message || "Box injoignable" }));
+  }
+}
+
 async function loadReplays(login) {
   replaysLogin = login;
   const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
@@ -399,13 +461,8 @@ async function loadReplays(login) {
     const r = await fetch(`/api/replays?login=${encodeURIComponent(login)}`);
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    const card = (item, meta) => el("button", { className: "replay", onclick: () => {
-        send("play", { url: item.url });
-        $("media-status").className = "status";
-        $("media-status").textContent = `Chargement de « ${item.title} » sur la TV…`;
-      } },
-      el("img", { src: item.thumb, alt: "", loading: "lazy" }),
-      el("div", {}, el("div", { className: "t", textContent: item.title }), el("div", { className: "meta", textContent: meta })));
+    const card = (item, meta) => videoCard(item, item.finished ? `${meta} · vu` : meta,
+      item.position && item.seconds ? item.position / item.seconds : 0, () => playVideo(item));
     const date = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
     const parts = [];
     if (d.vods.length) parts.push(el("p", { className: "replays-title", textContent: "Rediffusions" }),
@@ -621,6 +678,7 @@ async function previewTick() {
 $("preview").ontoggle = () => previewTick();
 $("preview-overlay").onchange = () => previewTick();
 document.addEventListener("visibilitychange", () => previewTick());
+$("history").ontoggle = () => { if ($("history").open) loadHistory(); };
 $("replays").ontoggle = () => {
   if ($("replays").open) loadReplays(replaysLogin ?? lastState?.channel ?? lastState?.streamers?.[0]);
 };
