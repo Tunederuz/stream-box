@@ -77,6 +77,7 @@ end
 
 local function set_status(text)
     status_text = text
+    mp.set_property_native("user-data/streambox/status", text)   -- pour l'écran d'accueil en QML (appli Qt)
     if text == "" or ambient_visible then   -- l'écran d'ambiance affiche lui-même ce message, en petit
         status:remove()
         return
@@ -839,6 +840,11 @@ local function ambient_wanted()
 end
 
 local function draw_ambient()
+    -- Appli Qt : l'écran d'accueil est dessiné en QML (qml/AmbientScreen.qml), d'après ambient_on et status
+    if mp.get_property_native("user-data/streambox/chat_ui") == "qml" then
+        ambient:remove()
+        return
+    end
     local w, h = mp.get_osd_size()
     if not w or w == 0 then return end
     local t = os.date("*t")
@@ -901,6 +907,7 @@ local function update_ambient(force)
             ambient_visible = true
             qr_until = mp.get_time() + QR_SECONDS
             status:remove()
+            mp.set_property_native("user-data/streambox/ambient_on", true)
         end
         if force or key ~= ambient_drawn then
             ambient_drawn = key
@@ -909,6 +916,7 @@ local function update_ambient(force)
     elseif ambient_visible then
         ambient_visible, ambient_drawn = false, nil
         ambient:remove()
+        mp.set_property_native("user-data/streambox/ambient_on", false)
         set_status(status_text)   -- remet le message d'état (« Chargement… ») s'il y en a un
     end
 end
