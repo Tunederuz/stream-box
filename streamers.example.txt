@@ -1,0 +1,3 @@
+# Un pseudo Twitch par ligne (ou ajoute-les depuis la télécommande web, onglet Réglages).
+# Au démarrage, la box reprend le dernier regardé, sinon le premier de la liste. Exemple :
+# twitch

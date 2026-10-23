@@ -1,0 +1,737 @@
+-- Stream Box : menu affiché quand la souris bouge (choix du streamer, coin du chat),
+-- et gestion de streamlink, qui sert le flux de la chaîne choisie en HTTP local à ce mpv.
+-- La chaîne, le coin et la visibilité du chat sont publiés dans user-data/streambox/* pour chat_overlay.py.
+-- Deux modes : « twitch » (stream de la chaîne choisie) et « media » (vidéo envoyée depuis la télécommande ou
+-- Jellyfin). Tout fichier qui n'est pas le flux streamlink fait passer en « media » ; quand il se termine et que
+-- mpv reste vide, on revient au stream.
+local mp = require "mp"
+
+local DIR = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$")
+local STREAMERS_FILE = DIR .. "/streamers.txt"
+local STATE_DIR = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")) .. "/stream-box"
+
+local CORNERS = { "tl", "tr", "br", "bl" }   -- ordre du toggle (sens horaire)
+local CORNER_LABELS = { tl = "↖ haut gauche", tr = "↗ haut droite", br = "↘ bas droite", bl = "↙ bas gauche" }
+local MENU_TIMEOUT = 4    -- secondes sans bouger la souris avant de masquer le menu
+local MENU_TIMEOUT_KEYS = 10   -- idem quand on le pilote avec la télécommande
+local RETRY = 15          -- secondes entre deux essais quand la chaîne n'est pas en live
+local BACK_TO_TWITCH = 3  -- secondes à vide après une vidéo avant de revenir au stream (laisse Jellyfin enchaîner)
+local AUTO_SWITCH = 60    -- secondes hors ligne (après un changement de chaîne) avant de passer à un streamer en live
+local FROZEN = 20         -- secondes d'image figée, sans pause, avant de relancer le direct
+local LIVE_BACK = "400MiB" -- direct gardé en mémoire pour revenir en arrière (≈ 7-8 min en 1080p60)
+local LIVE_EDGE = 4       -- secondes de retard en dessous desquelles on considère être « en direct »
+local BASE_PORT = 34500
+
+local streamers, channel, corner, chat_visible
+local server, port_n = nil, os.time() % 50
+local attempts, retry_timer = 0, nil
+local mode, back_timer = "twitch", nil
+local live, offline, channel_since = {}, false, 0   -- live : relevé de remote.py (user-data/streambox/live)
+local menu = mp.create_osd_overlay("ass-events")
+local status = mp.create_osd_overlay("ass-events")
+local menu_visible, hide_timer, items = false, nil, {}
+local sel, keyboard_nav = nil, false   -- bouton sélectionné à la télécommande (index dans items)
+local started = mp.get_time()
+
+
+local function ass_escape(s)
+    -- Même échappement que les scripts intégrés de mpv
+    return (s:gsub("\\", "\\\239\187\191"):gsub("{", "\\{"))
+end
+
+local function read_streamers()
+    local list = {}
+    local f = io.open(STREAMERS_FILE)
+    if f then
+        for line in f:lines() do
+            local name = line:gsub("#.*", ""):match("^%s*(.-)%s*$"):lower()
+            name = name:gsub("^https?://", ""):gsub("^www%.", ""):gsub("^twitch%.tv/", "")
+            if name ~= "" then list[#list + 1] = name end
+        end
+        f:close()
+    end
+    return list
+end
+
+-- Réglages (chaîne, chat) gardés d'un démarrage à l'autre, un fichier par réglage dans STATE_DIR
+local function read_state(name)
+    local f = io.open(STATE_DIR .. "/" .. name)
+    local v = f and f:read("*l")
+    if f then f:close() end
+    return v
+end
+
+local function write_state(name, value)
+    local f = io.open(STATE_DIR .. "/" .. name, "w")
+    if f then
+        f:write(value, "\n")
+        f:close()
+    end
+end
+
+local function set_status(text)
+    if text == "" then
+        status:remove()
+        return
+    end
+    status.res_x, status.res_y = 1920, 1080
+    status.data = "{\\an5\\pos(960,540)\\fs40\\bord2\\shad0\\3c&H000000&\\1c&HC0C0C0&}" .. ass_escape(text)
+    status:update()
+end
+
+
+-- Lecture : streamlink tourne en serveur HTTP local, mpv lit http://127.0.0.1:<port>/
+
+local function stream_url()
+    return ("http://127.0.0.1:%d/"):format(BASE_PORT + port_n)
+end
+
+local function load_stream()
+    retry_timer = nil
+    attempts = attempts + 1
+    -- La pause survit au changement de fichier dans mpv : une vidéo laissée en pause figerait le direct
+    mp.set_property_native("pause", false)
+    mp.commandv("loadfile", stream_url())
+end
+
+local function start_server(name)
+    port_n = port_n % 50 + 1   -- nouveau port : l'ancien peut rester occupé quelques secondes
+    local handle
+    handle = mp.command_native_async({
+        name = "subprocess", playback_only = false,
+        args = { "streamlink", "--twitch-low-latency", "--retry-streams", "30",
+                 "--player-external-http", "--player-external-http-interface", "127.0.0.1",
+                 "--player-external-http-port", tostring(BASE_PORT + port_n),
+                 "twitch.tv/" .. name, "best" },
+    }, function(_, res)
+        if server == handle and not (res and res.killed_by_us) then
+            -- streamlink s'est arrêté tout seul : on le relance
+            mp.add_timeout(5, function() if server == handle then start_server(name) end end)
+        end
+    end)
+    server = handle
+end
+
+local function set_mode(m)
+    mode = m
+    mp.set_property_native("user-data/streambox/mode", m)
+    if back_timer then
+        back_timer:kill()
+        back_timer = nil
+    end
+end
+
+local function stop_twitch()
+    if server then mp.abort_async_command(server) end
+    server = nil
+    if retry_timer then retry_timer:kill() end
+    retry_timer = nil
+    set_status("")
+end
+
+local function start_channel(name)
+    if not name then return end
+    channel = name
+    write_state("channel", name)
+    mp.set_property_native("user-data/streambox/channel", name)
+    set_mode("twitch")   -- avant le « stop » ci-dessous, pour que sa fin de fichier soit lue comme un changement de chaîne
+    offline, channel_since = false, mp.get_time()
+    stop_twitch()
+    start_server(name)
+    mp.commandv("stop")
+    attempts = 0
+    set_status("Chargement de " .. name .. "…")
+    retry_timer = mp.add_timeout(2, load_stream)
+end
+
+local function play_media(url)
+    stop_twitch()
+    set_mode("media")
+    mp.commandv("loadfile", url)
+end
+
+-- Juste avant l'ouverture de chaque fichier, y compris ceux que charge Jellyfin : petit tampon pour le direct
+-- (latence), tampon normal pour les vidéos. Et décodage par l'iGPU, que le shim Jellyfin peut avoir désactivé.
+mp.add_hook("on_load", 50, function()
+    local is_live = mp.get_property("stream-open-filename") == stream_url()
+    mp.set_property("demuxer-max-bytes", is_live and "750KiB" or "150MiB")
+    -- Direct : on garde les dernières minutes et on autorise à s'y déplacer (le flux lui-même n'est pas « seekable »)
+    mp.set_property("demuxer-max-back-bytes", is_live and LIVE_BACK or "50MiB")
+    mp.set_property("demuxer-seekable-cache", is_live and "yes" or "auto")
+    mp.set_property("hwdec", "auto-safe")
+end)
+
+mp.register_event("start-file", function()
+    if mp.get_property("path") == stream_url() then return end
+    if mode == "twitch" then
+        -- Fichier chargé par quelqu'un d'autre (Jellyfin) : on lui laisse la place
+        stop_twitch()
+        set_mode("media")
+    elseif back_timer then
+        back_timer:kill()   -- vidéo suivante : on reste en mode média
+        back_timer = nil
+    end
+end)
+
+local function url_encode(s)
+    return (s:gsub("[^%w%-_%.~]", function(c) return ("%%%02X"):format(c:byte()) end))
+end
+
+-- Sous-titres automatiques de YouTube (kind=asr) : leurs répliques se chevauchent, deux restent toujours à l'écran.
+-- On les recharge via remote.py, qui coupe chaque réplique au début de la suivante. En EDL « delay_open », comme
+-- ytdl_hook : une piste n'est téléchargée que si on la choisit (YouTube répond vite « 429 » aux rafales).
+local function fix_auto_subs()
+    for _, t in ipairs(mp.get_property_native("track-list") or {}) do
+        local edl = t.type == "sub" and t["external-filename"] or ""
+        local len, rest = edl:match("%%(%d+)%%(.*)$")   -- ytdl_hook les ajoute en EDL : %longueur%url
+        local url = len and rest:sub(1, tonumber(len)) or ""
+        if url:match("^https://www%.youtube%.com/api/timedtext") and url:match("[?&]kind=asr") then
+            mp.commandv("sub-remove", tostring(t.id))
+            local fixed = "http://127.0.0.1:8080/subs?u=" .. url_encode(url)
+            mp.commandv("sub-add", ("edl://!no_clip;!delay_open,media_type=sub;%%%d%%%s"):format(#fixed, fixed),
+                        t.selected and "select" or "auto", t.title or "", t.lang or "")
+        end
+    end
+end
+
+mp.register_event("file-loaded", function()
+    attempts = 0
+    offline = false
+    set_status("")
+    if mode == "media" then fix_auto_subs() end
+end)
+
+-- Chaîne hors ligne depuis plus d'AUTO_SWITCH secondes : on passe au premier streamer en live, dans l'ordre de
+-- streamers.txt. Le délai laisse le temps de choisir exprès une chaîne hors ligne (le temps de vérifier).
+local function auto_switch()
+    if mode ~= "twitch" or not offline or mp.get_time() - channel_since < AUTO_SWITCH then return end
+    for _, name in ipairs(read_streamers()) do
+        if name ~= channel and live[name] then
+            mp.osd_message(channel .. " n'est pas en live : on passe sur " .. name, 6)
+            start_channel(name)
+            return
+        end
+    end
+end
+
+mp.register_event("end-file", function(e)
+    if mode == "media" then
+        if e.reason == "error" then mp.osd_message("Impossible de lire cette vidéo", 5) end
+        if back_timer then back_timer:kill() end
+        back_timer = mp.add_timeout(BACK_TO_TWITCH, function()
+            back_timer = nil
+            if mode == "media" and mp.get_property_native("idle-active") then start_channel(channel) end
+        end)
+        return
+    end
+    if e.reason ~= "eof" and e.reason ~= "error" then return end   -- "stop" : changement de chaîne
+    if retry_timer then retry_timer:kill() end
+    if attempts < 5 then
+        -- streamlink démarre encore, ou vient de perdre le flux : on réessaie vite
+        retry_timer = mp.add_timeout(2, load_stream)
+    else
+        offline = true
+        set_status(channel .. " n'est pas en live, nouvel essai dans " .. RETRY .. " s")
+        retry_timer = mp.add_timeout(RETRY, load_stream)
+        auto_switch()
+    end
+end)
+
+
+-- Menu
+
+local function toggle_corner()
+    for i, c in ipairs(CORNERS) do
+        if c == corner then
+            corner = CORNERS[i % #CORNERS + 1]
+            break
+        end
+    end
+    write_state("chat_corner", corner)
+    mp.set_property_native("user-data/streambox/corner", corner)
+end
+
+local function toggle_chat()
+    chat_visible = not chat_visible
+    write_state("chat_visible", chat_visible and "yes" or "no")
+    mp.set_property_native("user-data/streambox/chat_visible", chat_visible)
+end
+
+local function rect(x, y, w, h, color, alpha)
+    w, h = math.floor(w), math.floor(h)
+    return ("{\\an7\\pos(%d,%d)\\bord0\\shad0\\1c&H%s&\\1a&H%s&\\p1}m 0 0 l %d 0 %d %d 0 %d{\\p0}")
+        :format(math.floor(x), math.floor(y), color, alpha, w, w, h, h)
+end
+
+local function text(x, y, size, color, s, suffix)   -- suffix : ASS brut ajouté après le texte échappé
+    return ("{\\an5\\pos(%d,%d)\\fs%d\\bord1.5\\shad0\\3c&H000000&\\1c&H%s&}%s%s")
+        :format(math.floor(x), math.floor(y), math.floor(size), color, ass_escape(s), suffix or "")
+end
+
+local function live_badge(name)
+    local info = live[name]
+    if not info then return nil end
+    local v = tonumber(info.viewers) or 0
+    local count = v >= 1000 and (("%.1f k"):format(v / 1000):gsub("%.", ",")) or tostring(v)
+    return "{\\1c&H4848FF&}  ● " .. count   -- rouge (BGR)
+end
+
+local function draw_menu()
+    local w, h = mp.get_osd_size()
+    if not w or w == 0 then return end
+    local mouse = mp.get_property_native("mouse-pos") or {}
+
+    -- Les streamers en grille : autant de colonnes que nécessaire, et police réduite si ça ne
+    -- rentre toujours pas dans 90 % de l'écran. La ligne du chat (case + coin) prend toute la largeur en dessous.
+    local n = math.max(#streamers, 1)   -- liste vide : on garde une case pour la mise en page
+    local fs, bw, bh, sp, title_h, cols, rows, panel_w, panel_h
+    fs = h / 24
+    repeat
+        bw, bh, sp, title_h = fs * 10, fs * 1.7, fs * 0.35, fs * 2
+        local max_rows = math.max(1, math.floor((h * 0.9 - title_h - bh - sp * 4) / (bh + sp)))
+        cols = math.ceil(n / max_rows)
+        rows = math.ceil(n / cols)
+        panel_w = cols * bw + (cols - 1) * sp
+        panel_h = title_h + rows * (bh + sp) + sp * 3 + bh
+        local fits = panel_w <= w * 0.9
+        if not fits then fs = fs * 0.9 end
+    until fits or fs < 10
+    local x0, y0 = math.floor((w - panel_w) / 2), math.floor((h - panel_h) / 2)
+
+    local out = { rect(x0 - sp * 2, y0 - sp * 2, panel_w + sp * 4, panel_h + sp * 3, "000000", "50"),
+                  text(w / 2, y0 + title_h / 2, fs, "FFFFFF", "Streamers") }
+    items = {}
+    local function button(x, y, bw_, label, current, action, checked, text_color, suffix)
+        local hover
+        if keyboard_nav then
+            hover = sel == #items + 1
+        else
+            hover = mouse.x and mouse.x >= x and mouse.x <= x + bw_ and mouse.y >= y and mouse.y <= y + bh
+        end
+        local color = current and "FF4691" or (hover and "606060" or "303030")   -- violet Twitch en BGR
+        if keyboard_nav and hover then
+            out[#out + 1] = rect(x - fs * 0.12, y - fs * 0.12, bw_ + fs * 0.24, bh + fs * 0.24, "FFFFFF", "00")   -- cadre
+        end
+        out[#out + 1] = rect(x, y, bw_, bh, color, hover and "00" or "20")
+        if checked ~= nil then
+            -- Case à cocher dessinée, centrée (les glyphes ☐/☑ ne sont pas dans toutes les polices)
+            local box = fs * 0.8
+            local bx, by = x + (bw_ - box) / 2, y + (bh - box) / 2
+            out[#out + 1] = rect(bx, by, box, box, "FFFFFF", "00")
+            out[#out + 1] = rect(bx + fs * 0.08, by + fs * 0.08, box - fs * 0.16, box - fs * 0.16, "202020", "00")
+            if checked then
+                out[#out + 1] = rect(bx + fs * 0.2, by + fs * 0.2, box - fs * 0.4, box - fs * 0.4, "FF4691", "00")
+            end
+        end
+        out[#out + 1] = text(x + bw_ / 2, y + bh / 2, fs, text_color or "FFFFFF", (current and "▶ " or "") .. label,
+                             suffix)
+        items[#items + 1] = { x0 = x, y0 = y, x1 = x + bw_, y1 = y + bh, action = action }
+    end
+    for i, name in ipairs(streamers) do
+        local col, row = math.floor((i - 1) / rows), (i - 1) % rows   -- remplissage colonne par colonne
+        button(x0 + col * (bw + sp), y0 + title_h + row * (bh + sp), bw, name, name == channel and mode == "twitch",
+               function() start_channel(name) end, nil, nil, live_badge(name))
+    end
+    local y = y0 + title_h + rows * (bh + sp) + sp * 2
+    button(x0, y, bh, "", false, toggle_chat, chat_visible)   -- case : afficher / masquer le chat
+    button(x0 + bh + sp, y, panel_w - bh - sp, "Chat : " .. CORNER_LABELS[corner], false, toggle_corner, nil,
+           chat_visible and "FFFFFF" or "808080")
+
+    menu.res_x, menu.res_y = w, h
+    menu.data = table.concat(out, "\n")
+    menu:update()
+end
+
+local function hide_menu()
+    menu_visible = false
+    sel, keyboard_nav = nil, false
+    menu:remove()
+    mp.remove_key_binding("streambox-click")
+end
+
+local function on_click()
+    local m = mp.get_property_native("mouse-pos") or {}
+    for _, it in ipairs(items) do
+        if m.x and m.x >= it.x0 and m.x <= it.x1 and m.y >= it.y0 and m.y <= it.y1 then
+            it.action()
+            draw_menu()
+            return
+        end
+    end
+    hide_menu()   -- clic en dehors des boutons
+end
+
+local function show_menu(by_key)
+    if not menu_visible then
+        menu_visible = true
+        streamers = read_streamers()   -- relu à chaque ouverture : le fichier s'édite à chaud
+        mp.add_forced_key_binding("MBTN_LEFT", "streambox-click", on_click)
+        if by_key then
+            -- Sélection de départ : la chaîne en cours
+            sel = 1
+            for i, name in ipairs(streamers) do
+                if name == channel then sel = i end
+            end
+        end
+    end
+    if by_key then keyboard_nav = true end
+    draw_menu()
+    if hide_timer then hide_timer:kill() end
+    hide_timer = mp.add_timeout(keyboard_nav and MENU_TIMEOUT_KEYS or MENU_TIMEOUT, hide_menu)
+end
+
+mp.observe_property("mouse-pos", "native", function(_, m)
+    -- Ignore la position initiale du curseur au lancement de mpv
+    if m and mp.get_time() - started > 2 then
+        keyboard_nav = false
+        show_menu()
+    end
+end)
+
+
+-- Télécommande Bluetooth (Xiaomi) : cage transmet ses touches à mpv comme celles d'un clavier
+
+-- Bouton le plus proche dans la direction (dx, dy), depuis le bouton sélectionné
+local function move_selection(dx, dy)
+    local cur = items[sel or 1]
+    if not cur then return end
+    local cx, cy = (cur.x0 + cur.x1) / 2, (cur.y0 + cur.y1) / 2
+    local best, best_score
+    for i, it in ipairs(items) do
+        local ix, iy = (it.x0 + it.x1) / 2 - cx, (it.y0 + it.y1) / 2 - cy
+        local along, across = ix * dx + iy * dy, math.abs(ix * dy - iy * dx)
+        if i ~= sel and along > 0 then
+            local score = along + 2 * across
+            if not best_score or score < best_score then best, best_score = i, score end
+        end
+    end
+    if best then sel = best end
+end
+
+local function zap(step)
+    local list = read_streamers()
+    if #list == 0 then return end
+    local idx = 1
+    for i, name in ipairs(list) do
+        if name == channel then idx = i end
+    end
+    local name = list[(idx - 1 + step) % #list + 1]
+    local info = live[name]
+    mp.osd_message(("▶ %s%s"):format(name, info and ("   ● " .. info.viewers) or "   (hors ligne)"), 3)
+    start_channel(name)
+end
+
+-- Barre de lecture des vidéos, façon YouTube : affichée quelques secondes par Haut, ←/→ ou OK, retirée par Haut ou
+-- Bas, et toujours affichée pendant la pause
+local BAR_SECONDS = 5
+local bar = mp.create_osd_overlay("ass-events")
+local bar_visible, bar_until = false, 0
+
+-- Disque de rayon r centré en (cx, cy) : quatre quarts de cercle en courbes de Bézier (k ≈ 0,5523 r)
+local function disc(cx, cy, r, color)
+    local k, d = r * 0.5523, 2 * r
+    return ("{\\an5\\pos(%d,%d)\\bord0\\shad0\\1c&H%s&\\1a&H00&\\p1}"
+        .. "m %d 0 b %d 0 %d %d %d %d b %d %d %d %d %d %d b %d %d %d %d 0 %d b 0 %d %d 0 %d 0{\\p0}")
+        :format(math.floor(cx), math.floor(cy), color,
+                r, r + k, d, r - k, d, r,  d, r + k, r + k, d, r, d,  r - k, d, 0, r + k, r,  r - k, r - k, r)
+end
+
+-- Direct : partie gardée en mémoire (début, fin = le direct) et position de lecture
+local function live_window()
+    local st = mp.get_property_native("demuxer-cache-state") or {}
+    local r = (st["seekable-ranges"] or {})[1]
+    local pos = mp.get_property_number("time-pos")
+    if not r or not pos then return nil end
+    return r.start, r["end"], pos
+end
+
+-- En différé (ou en pause), le petit tampon avant du direct bloquerait la lecture du flux : la mémoire cesserait de
+-- se remplir et le retard fondrait. On l'agrandit tant qu'on n'est pas au bord du direct.
+local function set_live_buffer(behind)
+    mp.set_property("demuxer-max-bytes", behind and "150MiB" or "750KiB")
+end
+
+local function clock(t)
+    t = math.max(0, math.floor(t or 0))
+    local h, m, sec = math.floor(t / 3600), math.floor(t / 60) % 60, t % 60
+    return h > 0 and ("%d:%02d:%02d"):format(h, m, sec) or ("%d:%02d"):format(m, sec)
+end
+
+local function draw_bar()
+    local w, h = mp.get_osd_size()
+    if not w or w == 0 then return end
+    local pos = mp.get_property_number("time-pos") or 0
+    local dur = mp.get_property_number("duration")
+    local cached = mp.get_property_number("demuxer-cache-time")
+    local title = mp.get_property("media-title") or ""
+    local left, right   -- textes sous la barre (par défaut : temps écoulé, durée)
+    if mode == "twitch" then
+        -- Direct : la barre représente ce qui est gardé en mémoire, son bout droit est le direct
+        local s, e = live_window()
+        dur, cached, left = s and (e - s) or nil, nil, ""
+        if s then
+            local delay = e - pos
+            pos = pos - s
+            right = delay < LIVE_EDGE and "{\\1c&H4848FF&}● EN DIRECT" or ("−" .. clock(delay))
+        end
+        title = channel .. (live[channel] and ("  ·  " .. live[channel].title) or "")
+    end
+    local paused = mp.get_property_native("pause")
+    local fs = math.floor(h / 30)
+    local x0, x1 = math.floor(w * 0.05), math.floor(w * 0.95)
+    local by, bh = math.floor(h * 0.9), math.max(4, math.floor(h * 0.008))
+    local out = { rect(0, math.floor(h * 0.78), w, h - math.floor(h * 0.78), "000000", "60") }
+    -- Titre, précédé d'un symbole pause dessiné (deux barres) quand la vidéo est en pause
+    local tx = x0
+    if paused then
+        out[#out + 1] = rect(x0, by - fs * 2.4, fs * 0.28, fs * 0.9, "FFFFFF", "00")
+        out[#out + 1] = rect(x0 + fs * 0.5, by - fs * 2.4, fs * 0.28, fs * 0.9, "FFFFFF", "00")
+        tx = x0 + fs * 1.3
+    end
+    out[#out + 1] = ("{\\an4\\pos(%d,%d)\\fs%d\\bord1.5\\shad0\\3c&H000000&\\1c&HFFFFFF&}%s")
+        :format(tx, by - fs * 1.95, fs, ass_escape(title))
+    -- Barre : fond, partie déjà chargée, partie lue (violet Twitch), curseur
+    out[#out + 1] = rect(x0, by, x1 - x0, bh, "FFFFFF", "A0")
+    if dur and dur > 0 then
+        local function px(t) return x0 + (x1 - x0) * math.max(0, math.min(1, t / dur)) end
+        if cached and cached > pos then out[#out + 1] = rect(px(pos), by, px(cached) - px(pos), bh, "FFFFFF", "60") end
+        out[#out + 1] = rect(x0, by, px(pos) - x0, bh, "FF4691", "00")
+        out[#out + 1] = disc(px(pos), by + bh / 2, math.floor(bh * 1.8), "FFFFFF")
+    end
+    out[#out + 1] = ("{\\an7\\pos(%d,%d)\\fs%d\\bord1.5\\shad0\\3c&H000000&\\1c&HFFFFFF&}%s")
+        :format(x0, by + bh * 3, math.floor(fs * 0.8), left or clock(pos))
+    if right or (dur and dur > 0) then
+        out[#out + 1] = ("{\\an9\\pos(%d,%d)\\fs%d\\bord1.5\\shad0\\3c&H000000&\\1c&HFFFFFF&}%s")
+            :format(x1, by + bh * 3, math.floor(fs * 0.8), right or clock(dur))
+    end
+    bar.res_x, bar.res_y = w, h
+    bar.data = table.concat(out, "\n")
+    bar:update()
+end
+
+local function hide_bar()
+    bar_visible = false
+    bar:remove()
+end
+
+local function show_bar(seconds)
+    bar_visible, bar_until = true, mp.get_time() + (seconds or BAR_SECONDS)
+    draw_bar()
+end
+
+mp.add_periodic_timer(0.5, function()
+    if not bar_visible then return end
+    if mp.get_property_native("idle-active") or (not mp.get_property_native("pause") and mp.get_time() > bar_until) then
+        hide_bar()
+    else
+        draw_bar()
+    end
+end)
+
+mp.observe_property("pause", "bool", function(_, paused)
+    if mp.get_property_native("idle-active") then return end
+    if paused and mode == "twitch" then set_live_buffer(true) end
+    if paused then
+        show_bar()
+    elseif bar_visible then
+        show_bar(2)   -- à la reprise, la barre reste encore un peu
+    end
+end)
+
+-- Notification « X vient de lancer son live » (envoyée par remote.py), en haut à droite ; OK pour y aller
+local TOAST_SECONDS = 12
+local toast = mp.create_osd_overlay("ass-events")
+local toast_channel, toast_timer = nil, nil
+
+local function hide_toast()
+    toast_channel = nil
+    if toast_timer then toast_timer:kill() end
+    toast:remove()
+end
+
+mp.register_script_message("streambox-went-live", function(name)
+    if name == channel and mode == "twitch" then return end   -- on le regarde déjà
+    local info = live[name] or {}
+    local w, h = mp.get_osd_size()
+    if not w or w == 0 then return end
+    local fs = math.floor(h / 32)
+    local title = info.title or ""
+    if #title > 60 then title = title:sub(1, 57) .. "…" end
+    local lines = {
+        "{\\1c&H4848FF&}● {\\1c&HFFFFFF&\\b1}" .. ass_escape(name) .. "{\\b0} est en live",
+        "{\\fs" .. math.floor(fs * 0.8) .. "\\1c&HC0C0C0&}" .. ass_escape(title .. (info.game and ("  ·  " .. info.game) or "")),
+        "{\\fs" .. math.floor(fs * 0.8) .. "\\1c&HFF4691&}OK pour regarder",
+    }
+    local bw, bh = math.floor(w * 0.34), math.floor(fs * 4.6)
+    local x, y = w - bw - math.floor(w * 0.02), math.floor(h * 0.04)
+    toast.res_x, toast.res_y = w, h
+    toast.data = rect(x, y, bw, bh, "000000", "30") .. "\n" ..
+        ("{\\an7\\pos(%d,%d)\\fs%d\\bord1.5\\shad0\\3c&H000000&}"):format(x + fs * 0.8, y + fs * 0.6, fs)
+        .. table.concat(lines, "\\N")
+    toast:update()
+    toast_channel = name
+    if toast_timer then toast_timer:kill() end
+    toast_timer = mp.add_timeout(TOAST_SECONDS, hide_toast)
+end)
+
+-- Se déplacer dans le direct gardé en mémoire ; « live » revient au direct
+local function live_seek(delta)
+    local s, e, pos = live_window()
+    if not s then return end
+    local target = delta == "live" and e or math.max(s, math.min(e, pos + delta))
+    set_live_buffer(e - target >= LIVE_EDGE)
+    mp.commandv("seek", tostring(target), "absolute")
+    show_bar()
+end
+mp.register_script_message("streambox-live-seek", function(arg)
+    if mode == "twitch" then live_seek(arg == "live" and "live" or tonumber(arg) or 0) end
+end)
+
+local back_pressed = 0
+local KEYS = {
+    UP = "up", DOWN = "down", LEFT = "left", RIGHT = "right",
+    ENTER = "ok", KP_ENTER = "ok", ["0x21ffa0"] = "ok",
+    HOMEPAGE = "home", GO_BACK = "back", ESC = "back", ["0x2111a0"] = "menu",
+}
+local DIRECTIONS = { up = { 0, -1 }, down = { 0, 1 }, left = { -1, 0 }, right = { 1, 0 } }
+
+local function on_key(key)
+    if toast_channel and (key == "ok" or key == "back") then
+        local name = toast_channel
+        hide_toast()
+        if key == "ok" then start_channel(name) end
+        return
+    end
+    if menu_visible then
+        if DIRECTIONS[key] then
+            if keyboard_nav then move_selection(DIRECTIONS[key][1], DIRECTIONS[key][2]) end
+            show_menu(true)
+        elseif key == "ok" then
+            if keyboard_nav and items[sel] then
+                items[sel].action()
+                if mode == "twitch" and sel <= #streamers then hide_menu() else show_menu(true) end
+            else
+                show_menu(true)
+            end
+        else
+            hide_menu()
+        end
+    elseif mode == "twitch" then
+        if key == "up" or key == "down" then
+            zap(key == "down" and 1 or -1)
+        elseif key == "ok" or key == "home" then
+            show_menu(true)
+        elseif key == "left" or key == "right" then
+            live_seek(key == "right" and 10 or -10)
+        elseif key == "back" then
+            live_seek("live")
+        elseif key == "menu" then
+            toggle_chat()
+            mp.osd_message(chat_visible and "Chat affiché" or "Chat masqué", 2)
+        end
+    else   -- vidéo (lien, Jellyfin)
+        if key == "ok" then
+            mp.commandv("cycle", "pause")
+            show_bar()
+        elseif key == "left" or key == "right" then
+            mp.commandv("seek", key == "right" and 10 or -10)
+            show_bar()
+        elseif key == "up" then
+            if bar_visible and not mp.get_property_native("pause") then hide_bar() else show_bar() end
+        elseif key == "down" then
+            if not mp.get_property_native("pause") then hide_bar() end
+        elseif key == "home" then
+            show_menu(true)
+        elseif key == "menu" then
+            mp.commandv("cycle", "sub")
+        elseif key == "back" then
+            if mp.get_time() - back_pressed < 2 then
+                start_channel(channel)
+            else
+                back_pressed = mp.get_time()
+                mp.osd_message("Retour encore une fois pour revenir au stream", 2)
+            end
+        end
+    end
+end
+
+for name, key in pairs(KEYS) do
+    mp.add_forced_key_binding(name, "streambox-key-" .. name, function() on_key(key) end,
+                              { repeatable = DIRECTIONS[key] ~= nil })
+end
+
+-- Télécommande web (remote.py) : mêmes actions que le menu
+local function from_remote(fn)
+    return function(...)
+        fn(...)
+        if menu_visible then draw_menu() end
+    end
+end
+mp.register_script_message("streambox-channel", from_remote(start_channel))
+mp.register_script_message("streambox-toggle-chat", from_remote(toggle_chat))
+mp.register_script_message("streambox-cycle-corner", from_remote(toggle_corner))
+mp.register_script_message("streambox-play", play_media)
+mp.register_script_message("streambox-twitch", from_remote(function() start_channel(channel) end))
+
+-- Réglages numériques du chat, modifiables depuis la télécommande : défaut, minimum, maximum
+local NUMBERS = { chat_bg = { 60, 0, 100 },     -- opacité du fond, en %
+                  chat_size = { 32, 20, 60 } }  -- taille du texte, en pixels 1920x1080
+
+local function set_number(key, value)
+    local spec, n = NUMBERS[key], tonumber(value)
+    if not spec or not n then return end
+    n = math.max(spec[2], math.min(spec[3], math.floor(n + 0.5)))
+    write_state(key, tostring(n))
+    mp.set_property_native("user-data/streambox/" .. key, n)
+end
+mp.register_script_message("streambox-set", set_number)
+
+mp.observe_property("user-data/streambox/live", "native", function(_, value)
+    live = value or {}
+    if menu_visible then draw_menu() end
+    auto_switch()
+end)
+
+-- Chien de garde : direct dont l'image n'avance plus depuis FROZEN secondes alors qu'il n'est pas en pause
+-- (flux bloqué, tampon coincé) → on relance la chaîne
+local last_pos, last_move = nil, 0
+mp.add_periodic_timer(5, function()
+    local pos = mp.get_property_number("playback-time")
+    if mode ~= "twitch" or offline or not pos or mp.get_property_native("pause") then
+        last_pos, last_move = nil, mp.get_time()
+    elseif pos ~= last_pos then
+        last_pos, last_move = pos, mp.get_time()
+    elseif mp.get_time() - last_move > FROZEN then
+        mp.msg.warn(("direct figé depuis %d s : on relance %s"):format(FROZEN, channel))
+        last_pos, last_move = nil, mp.get_time()
+        start_channel(channel)
+    end
+end)
+
+-- Pas de double-clic plein écran : la box doit rester en plein écran
+mp.add_forced_key_binding("MBTN_LEFT_DBL", "streambox-no-dbl", function() end)
+
+
+mp.command_native({ name = "subprocess", playback_only = false, args = { "mkdir", "-p", STATE_DIR } })
+streamers = read_streamers()
+corner = read_state("chat_corner")
+if not CORNER_LABELS[corner] then corner = "bl" end
+chat_visible = read_state("chat_visible") ~= "no"
+mp.set_property_native("user-data/streambox/corner", corner)
+mp.set_property_native("user-data/streambox/chat_visible", chat_visible)
+for key, spec in pairs(NUMBERS) do
+    set_number(key, read_state(key) or spec[1])
+end
+-- Reprend le dernier streamer regardé, s'il est encore dans la liste
+local last = read_state("channel")
+for _, name in ipairs(streamers) do
+    if name == last then
+        start_channel(last)
+        return
+    end
+end
+if streamers[1] then
+    start_channel(streamers[1])
+else
+    set_status("Aucun streamer : ajoute-en un dans la télécommande web (onglet Réglages)")
+end

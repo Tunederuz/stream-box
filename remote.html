@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stream Box">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Stream Box</title>
+<style>
+  :root {
+    --bg: #0e0e10; --panel: #1f1f23; --button: #2f2f35; --button-active: #3f3f46;
+    --text: #efeff1; --muted: #adadb8; --accent: #9146ff; --error: #eb0400;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  }
+  main { max-width: 480px; margin: 0 auto; display: grid; gap: 16px; }
+  h1 { font-size: 20px; margin: 4px 0; display: flex; align-items: center; gap: 8px; }
+  h1 .power {
+    margin-left: auto; min-height: 44px; width: 44px; padding: 0; display: grid; place-items: center;
+    background: transparent; color: var(--muted);
+  }
+  h1 .power:active { background: var(--button); color: var(--error); }
+  h1 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  h1 .dot.on { background: var(--accent); }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; }
+  section { background: var(--panel); border-radius: 14px; padding: 14px; }
+  .grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; }
+  button {
+    font: inherit; color: var(--text); background: var(--button); border: 0; border-radius: 10px;
+    min-height: 52px; padding: 8px 12px; cursor: pointer; overflow-wrap: anywhere;
+  }
+  button:active { background: var(--button-active); }
+  button.current { background: var(--accent); font-weight: 600; }
+  #streamers button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  #streamers button.current .name::before { content: "▶ "; }
+  .live-info { font-size: 12px; color: var(--muted); line-height: 1.3; }
+  button.current .live-info { color: var(--text); }
+  .live-dot { color: #ff4848; font-weight: 600; }
+  .offline { opacity: .55; }
+  .volume { text-align: center; font-size: 22px; font-variant-numeric: tabular-nums; flex: 0 0 72px; }
+  .status { color: var(--muted); font-size: 14px; min-height: 20px; }
+  .status.error { color: var(--error); }
+  p { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+  details { color: var(--muted); font-size: 14px; margin-bottom: 10px; }
+  summary { cursor: pointer; color: var(--text); }
+  ol { padding-left: 20px; margin: 8px 0 0; }
+  code { background: var(--button); border-radius: 4px; padding: 1px 4px; color: var(--text); }
+  input {
+    font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--button-active);
+    border-radius: 10px; min-height: 52px; padding: 8px 12px; width: 100%; margin-bottom: 8px;
+  }
+  .account-name { font-weight: 600; color: var(--text); }
+  #send-link, #replays { margin-bottom: 0; }
+  .tabs { display: flex; gap: 8px; }
+  .tabs button { flex: 1; min-height: 44px; }
+  .tabs button[aria-selected="true"] { background: var(--accent); font-weight: 600; }
+  .tab { display: grid; gap: 16px; }
+  .tab[hidden] { display: none; }
+  .manage-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0;
+                border-top: 1px solid var(--button); color: var(--text); }
+  .manage-row button { min-height: 40px; width: 44px; padding: 0; background: transparent; color: var(--muted); }
+  .manage-row .name { flex: 1; }
+  .manage-row button:disabled { opacity: .25; }
+  .manage-row button:active { color: var(--error); }
+  #replays[open] summary { margin-bottom: 4px; }
+  .chips { display: flex; gap: 6px; overflow-x: auto; margin: 10px 0 4px; padding-bottom: 4px; }
+  .chips button { min-height: 36px; padding: 4px 12px; border-radius: 18px; flex: 0 0 auto; font-size: 14px; }
+  .replay { display: flex; gap: 10px; align-items: center; text-align: left; width: 100%; min-height: auto;
+            padding: 6px; margin-top: 6px; }
+  .replay img { width: 120px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; flex: 0 0 auto;
+                background: var(--bg); }
+  .replay .t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+               font-size: 14px; }
+  .replay .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .replays-title { font-size: 13px; color: var(--muted); margin: 12px 0 0; text-transform: uppercase;
+                   letter-spacing: .08em; }
+  #send-link[open] summary { margin-bottom: 4px; }
+  #media-status:empty { display: none; }   /* pas de ligne vide sous « Lire un lien » */
+  /* Barre de lecture : on la touche pour sauter (pas de glisser, qui partirait en faisant défiler la page) */
+  .seek { position: relative; height: 32px; margin: 4px 0 6px; border-radius: 16px; background: var(--button);
+          overflow: hidden; cursor: pointer; touch-action: manipulation; }
+  .seek-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); }
+  .times { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px;
+           font-variant-numeric: tabular-nums; margin-bottom: 10px; }
+  .setting { display: block; margin-top: 14px; font-size: 14px; color: var(--muted); }
+  .stepper { margin-top: 6px; }
+  .stepper .value { text-align: center; font-size: 18px; font-variant-numeric: tabular-nums; flex: 0 0 88px; }
+  select {
+    font: inherit; color: var(--text); background: var(--button); border: 0; border-radius: 10px;
+    min-height: 52px; padding: 8px 12px; width: 100%; margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>
+    <span class="dot" id="dot"></span>Stream Box
+    <button class="power" id="poweroff" aria-label="Éteindre la box" title="Éteindre la box">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></svg>
+    </button>
+  </h1>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="remote">Télécommande</button>
+    <button role="tab" data-tab="settings">Réglages</button>
+  </nav>
+
+  <div class="tab" id="tab-remote">
+
+  <section id="media-section" hidden>
+    <h2>En cours</h2>
+    <div>
+      <p class="account-name" id="media-title"></p>
+      <div class="seek" id="seek" role="slider" aria-label="Position dans la vidéo" hidden>
+        <div class="seek-fill" id="seek-fill"></div>
+      </div>
+      <div class="times"><span id="time-pos"></span><span id="time-dur"></span></div>
+      <div class="row">
+        <button data-action="seek" data-delta="-10" aria-label="Reculer de 10 secondes">−10 s</button>
+        <button data-action="pause" id="media-pause">Pause</button>
+        <button data-action="seek" data-delta="30" aria-label="Avancer de 30 secondes">+30 s</button>
+      </div>
+      <div id="subs-row" hidden>
+        <label class="setting" for="subs">Sous-titres</label>
+        <select id="subs"></select>
+      </div>
+      <button data-action="twitch" style="width: 100%; margin-top: 8px">Retour au stream</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Streamers</h2>
+    <div class="grid" id="streamers"></div>
+    <div id="timeshift" hidden>
+      <div class="times" style="margin: 12px 0 6px"><span>Direct</span><span id="delay"></span></div>
+      <div class="row">
+        <button data-action="live_seek" data-delta="-30" aria-label="Reculer de 30 secondes">−30 s</button>
+        <button data-action="live_seek" data-delta="30" aria-label="Avancer de 30 secondes">+30 s</button>
+        <button data-action="live_seek" data-delta="live" id="go-live">Direct</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Lecture</h2>
+    <div class="row">
+      <button data-action="volume" data-delta="-5" aria-label="Baisser le volume">− Vol</button>
+      <div class="volume" id="volume">–</div>
+      <button data-action="volume" data-delta="5" aria-label="Monter le volume">+ Vol</button>
+    </div>
+    <div class="row" style="margin-top: 8px">
+      <button data-action="mute" id="mute">Couper le son</button>
+      <button data-action="pause" id="pause">Pause</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Chat</h2>
+    <div class="row">
+      <button data-action="chat" id="chat">Chat affiché</button>
+      <button data-action="corner" id="corner">Coin</button>
+    </div>
+  </section>
+
+  <section>
+    <details id="replays">
+      <summary>Rediffusions et clips</summary>
+      <div class="chips" id="replays-who"></div>
+      <div id="replays-list"></div>
+    </details>
+  </section>
+
+  <section>
+    <details id="send-link">
+      <summary>Lire un lien sur la TV</summary>
+      <p style="margin-top: 10px">YouTube, clip Twitch… Sur Android, le plus simple : <b>Partager → Stream Box</b>
+        depuis l'appli. Pour Jellyfin : <b>Lire sur → Stream Box</b>.</p>
+      <input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://…" aria-label="Lien de la vidéo">
+      <button id="play" style="width: 100%">Lire sur la TV</button>
+    </details>
+    <div class="status" id="media-status"></div>
+  </section>
+
+  </div>
+
+  <div class="tab" id="tab-settings" hidden>
+
+  <section>
+    <h2>Liste des streamers</h2>
+    <p>L'ordre compte : c'est celui du menu de la TV, du zapping (haut / bas) et de la bascule automatique vers
+      un streamer en live.</p>
+      <input id="new-streamer" autocomplete="off" autocapitalize="none" placeholder="Pseudo ou lien Twitch"
+           aria-label="Streamer à ajouter">
+    <button id="add-streamer" style="width: 100%">Ajouter</button>
+    <div class="status" id="manage-status"></div>
+    <div id="manage-list"></div>
+  </section>
+
+  <section>
+    <h2>Apparence du chat</h2>
+    <!-- Boutons plutôt que curseurs : un curseur change de valeur quand le doigt passe dessus en faisant défiler -->
+    <div class="setting" id="chat_bg-label" style="margin-top: 0">Fond du chat</div>
+    <div class="row stepper">
+      <button data-setting="chat_bg" data-step="-10" aria-label="Fond plus transparent">−</button>
+      <div class="value" id="chat_bg-value" aria-labelledby="chat_bg-label">–</div>
+      <button data-setting="chat_bg" data-step="10" aria-label="Fond plus sombre">+</button>
+    </div>
+    <div class="setting" id="chat_size-label">Taille du texte</div>
+    <div class="row stepper">
+      <button data-setting="chat_size" data-step="-2" aria-label="Texte plus petit">−</button>
+      <div class="value" id="chat_size-value" aria-labelledby="chat_size-label">–</div>
+      <button data-setting="chat_size" data-step="2" aria-label="Texte plus grand">+</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Affichage</h2>
+    <label class="setting" for="display" style="margin-top: 0">Résolution de la TV</label>
+    <select id="display" disabled><option>Chargement…</option></select>
+    <div class="status" id="display-status"></div>
+  </section>
+
+  <section>
+    <h2>Compte Twitch</h2>
+    <div id="account-on" hidden>
+      <p>Connecté : <span class="account-name" id="account-name"></span>. Pas de pub sur les chaînes où tu es abonné.</p>
+      <button id="logout">Se déconnecter</button>
+    </div>
+    <div id="account-off" hidden>
+      <p id="account-intro">Connecte ton compte pour profiter de tes abonnements sans pub.</p>
+      <details>
+        <summary>Où trouver le jeton ?</summary>
+        <ol>
+          <li>Sur un ordinateur, ouvre <code>twitch.tv</code> en étant connecté.</li>
+          <li>Appuie sur <code>F12</code>, onglet <b>Application</b> (Chrome, Edge) ou <b>Stockage</b> (Firefox).</li>
+          <li>Cookies → <code>https://www.twitch.tv</code> → ligne <code>auth-token</code>.</li>
+          <li>Copie sa valeur (30 lettres et chiffres) et colle-la ici.</li>
+        </ol>
+        <p style="margin-top: 8px">Ce jeton donne accès à ton compte : il reste sur la box et n'est jamais réaffiché.
+          Il cesse de marcher si tu te déconnectes de Twitch sur ce navigateur.</p>
+      </details>
+      <input id="token" type="password" autocomplete="off" placeholder="Jeton auth-token" aria-label="Jeton Twitch">
+      <button id="login">Connecter</button>
+    </div>
+    <div class="status" id="account-status"></div>
+  </section>
+
+  </div>
+
+
+  <div class="status" id="status"></div>
+</main>
+
+<script>
+const CORNERS = { tl: "↖ haut gauche", tr: "↗ haut droite", br: "↘ bas droite", bl: "↙ bas gauche" };
+const $ = (id) => document.getElementById(id);
+let refreshTimer;
+let lastState = null, replaysLogin = null;
+let progress = null;   // dernière position connue, pour faire avancer la barre entre deux rafraîchissements
+const settings = {};   // dernières valeurs connues de chat_bg et chat_size
+const LIMITS = { chat_bg: [0, 100], chat_size: [20, 60] };   // mêmes bornes que NUMBERS dans stream-box.lua
+
+function render(s) {
+  lastState = s;
+  if (!$("tab-settings").hidden) renderManage();
+  $("dot").classList.toggle("on", s.playing);
+  $("status").className = "status";
+  $("status").textContent = s.playing ? "" : `${s.channel ?? "…"} n'est pas en live (ou chargement en cours)`;
+
+  const media = s.mode === "media";
+  $("media-section").hidden = !media;
+  if (media) {
+    $("media-title").textContent = s.title ?? "Vidéo";
+    progress = { position: s.position ?? 0, duration: s.duration ?? 0, pause: s.pause, at: Date.now() };
+    drawProgress();
+    $("media-pause").textContent = s.pause ? "Reprendre" : "Pause";
+    $("subs-row").hidden = !s.subs.length;
+    if (document.activeElement !== $("subs")) {   // ne pas refaire la liste pendant qu'on la déroule
+      const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
+      $("subs").replaceChildren(option("no", "Aucun"), ...s.subs.map((t) => option(t.id, t.name)));
+      $("subs").value = s.subs.find((t) => t.selected)?.id ?? "no";
+    }
+    $("status").textContent = "";
+  }
+
+  // Retour en arrière dans le direct (box sur le stream et en lecture)
+  $("timeshift").hidden = media || s.delay == null;
+  if (s.delay != null) {
+    const behind = s.delay >= 4;
+    $("delay").innerHTML = "";
+    $("delay").append(behind ? `−${clock(s.delay)}` : Object.assign(document.createElement("span"), { className: "live-dot", textContent: "● EN DIRECT" }));
+    $("go-live").disabled = !behind;
+  }
+
+  const list = $("streamers");
+  list.replaceChildren(...s.streamers.map((name) => {
+    const b = document.createElement("button");
+    const info = s.live?.[name];
+    const span = (cls, text) => Object.assign(document.createElement("span"), { className: cls, textContent: text });
+    b.append(span("name", name));
+    if (info) {
+      const line = span("live-info", "");
+      line.append(span("live-dot", `● ${viewers(info.viewers)}`), info.game ? ` · ${info.game}` : "");
+      b.append(line);
+      b.title = info.title ?? "";
+    } else {
+      b.append(span("live-info offline", "hors ligne"));
+    }
+    b.classList.toggle("current", !media && name === s.channel);
+    b.onclick = () => send("channel", { name });
+    return b;
+  }));
+
+  $("volume").textContent = s.mute ? "muet" : `${s.volume} %`;
+  $("mute").textContent = s.mute ? "Remettre le son" : "Couper le son";
+  $("pause").textContent = s.pause ? "Reprendre" : "Pause";
+  $("chat").textContent = s.chat_visible ? "Chat affiché" : "Chat masqué";
+  $("chat").classList.toggle("current", s.chat_visible);
+  $("corner").textContent = `Coin : ${CORNERS[s.corner] ?? s.corner}`;
+  settings.chat_bg = s.chat_bg;
+  settings.chat_size = s.chat_size;
+  $("chat_bg-value").textContent = `${s.chat_bg} %`;
+  $("chat_size-value").textContent = `${s.chat_size} px`;
+}
+
+async function refreshDisplay() {
+  const select = $("display");
+  try {
+    const r = await fetch("/api/display");
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
+    const pretty = (mode) => mode.replace("x", " × ").replace("@", " · ") + " Hz";
+    select.replaceChildren(option("auto", `Auto (${pretty(d.auto)})`), ...d.modes.map((m) => option(m, pretty(m))));
+    select.value = d.setting;
+    select.disabled = false;
+    $("display-status").textContent = d.current ? `Actuellement : ${pretty(d.current)}` : "";
+  } catch (e) {
+    select.replaceChildren(Object.assign(document.createElement("option"), { textContent: "Indisponible" }));
+    $("display-status").className = "status error";
+    $("display-status").textContent = e.message || "Box injoignable";
+  }
+}
+
+function drawProgress() {
+  if (!progress) return;
+  const { duration, pause, at } = progress;
+  const position = Math.min(duration || Infinity, progress.position + (pause ? 0 : (Date.now() - at) / 1000));
+  $("seek").hidden = !duration;
+  $("seek-fill").style.width = duration ? `${(100 * position) / duration}%` : "0";
+  $("seek").setAttribute("aria-valuenow", Math.round(position));
+  $("time-pos").textContent = clock(position);
+  $("time-dur").textContent = duration ? clock(duration) : "";
+}
+setInterval(() => { if (!$("media-section").hidden) drawProgress(); }, 1000);
+
+function length(seconds) {
+  const h = Math.floor(seconds / 3600), m = Math.floor(seconds / 60) % 60;
+  return h ? `${h} h ${String(m).padStart(2, "0")}` : seconds >= 60 ? `${m} min` : `${seconds} s`;
+}
+
+async function loadReplays(login) {
+  replaysLogin = login;
+  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
+  $("replays-who").replaceChildren(...(lastState?.streamers ?? []).map((name) =>
+    el("button", { className: name === login ? "current" : "", onclick: () => loadReplays(name) }, name)));
+  $("replays-list").replaceChildren(el("p", { textContent: "Chargement…" }));
+  try {
+    const r = await fetch(`/api/replays?login=${encodeURIComponent(login)}`);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    const card = (item, meta) => el("button", { className: "replay", onclick: () => {
+        send("play", { url: item.url });
+        $("media-status").className = "status";
+        $("media-status").textContent = `Chargement de « ${item.title} » sur la TV…`;
+      } },
+      el("img", { src: item.thumb, alt: "", loading: "lazy" }),
+      el("div", {}, el("div", { className: "t", textContent: item.title }), el("div", { className: "meta", textContent: meta })));
+    const date = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    const parts = [];
+    if (d.vods.length) parts.push(el("p", { className: "replays-title", textContent: "Rediffusions" }),
+      ...d.vods.map((v) => card(v, `${date(v.date)} · ${length(v.seconds)}`)));
+    if (d.clips.length) parts.push(el("p", { className: "replays-title", textContent: "Clips de la semaine" }),
+      ...d.clips.map((c) => card(c, `${length(c.seconds)} · ${viewers(c.views)} vues`)));
+    $("replays-list").replaceChildren(...(parts.length ? parts : [el("p", { textContent: "Rien pour l'instant." })]));
+  } catch (e) {
+    $("replays-list").replaceChildren(el("p", { className: "status error", textContent: e.message || "Box injoignable" }));
+  }
+}
+
+function viewers(n) {
+  return n >= 1000 ? `${(n / 1000).toFixed(1).replace(".", ",")} k` : String(n);
+}
+
+function clock(seconds) {
+  if (seconds == null) return "";
+  const t = Math.floor(seconds), h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, sec = t % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}
+
+function showError(message) {
+  $("dot").classList.remove("on");
+  $("status").className = "status error";
+  $("status").textContent = message;
+}
+
+async function refresh() {
+  clearTimeout(refreshTimer);
+  try {
+    const r = await fetch("/api/state");
+    const s = await r.json();
+    if (!r.ok) throw new Error(s.error);
+    render(s);
+  } catch (e) {
+    showError(e.message || "Box injoignable");
+  }
+  refreshTimer = setTimeout(refresh, 3000);
+}
+
+async function send(action, body = {}) {
+  try {
+    const r = await fetch(`/api/${action}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+  } catch (e) {
+    showError(e.message || "Box injoignable");
+  }
+  setTimeout(refresh, 300);   // mpv applique les script-messages de façon asynchrone
+}
+
+document.querySelectorAll("button[data-action]").forEach((b) => {
+  const delta = b.dataset.delta === "live" ? "live" : Number(b.dataset.delta);
+  b.onclick = () => send(b.dataset.action, b.dataset.delta ? { delta } : {});
+});
+async function refreshAccount() {
+  try {
+    const a = await (await fetch("/api/account")).json();
+    $("account-on").hidden = !a.login;
+    $("account-off").hidden = !!a.login;
+    $("account-name").textContent = a.login ?? "";
+    $("account-intro").textContent = a.expired
+      ? "La connexion a expiré : colle un nouveau jeton pour retrouver tes abonnements sans pub."
+      : "Connecte ton compte pour profiter de tes abonnements sans pub.";
+  } catch (e) { /* l'état de la box affiche déjà l'erreur */ }
+}
+
+async function accountAction(action, body = {}) {
+  const status = $("account-status");
+  status.className = "status";
+  status.textContent = action === "login" ? "Vérification auprès de Twitch…" : "";
+  try {
+    const r = await fetch(`/api/${action}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    status.textContent = action === "login" ? "Connecté. Le stream redémarre." : "Déconnecté. Le stream redémarre.";
+    $("token").value = "";
+  } catch (e) {
+    status.className = "status error";
+    status.textContent = e.message || "Box injoignable";
+  }
+  refreshAccount();
+  setTimeout(refresh, 300);
+}
+
+$("login").onclick = () => accountAction("login", { token: $("token").value });
+$("token").onkeydown = (e) => { if (e.key === "Enter") $("login").click(); };
+$("logout").onclick = () => accountAction("logout");
+document.querySelectorAll("button[data-setting]").forEach((b) => {
+  b.onclick = () => {
+    const key = b.dataset.setting;
+    if (settings[key] === undefined) return;
+    const [min, max] = LIMITS[key];
+    settings[key] = Math.min(max, Math.max(min, settings[key] + Number(b.dataset.step)));   // appuis rapides : on cumule sans attendre la box
+    send("set", { key, value: settings[key] });
+  };
+});
+$("display").onchange = async () => {
+  $("display").disabled = true;
+  $("display-status").className = "status";
+  $("display-status").textContent = "Changement de résolution…";
+  await send("display", { mode: $("display").value });
+  refreshDisplay();
+};
+refreshDisplay();
+$("play").onclick = async () => {
+  $("media-status").className = "status";
+  $("media-status").textContent = "Chargement sur la TV…";
+  await send("play", { url: $("url").value.trim() });
+  $("url").value = "";
+  $("send-link").open = false;
+  setTimeout(() => { $("media-status").textContent = ""; }, 4000);
+};
+$("url").onkeydown = (e) => { if (e.key === "Enter") $("play").click(); };
+$("seek").onclick = (e) => {
+  if (!progress?.duration) return;
+  const box = $("seek").getBoundingClientRect();
+  const position = Math.max(0, Math.min(1, (e.clientX - box.left) / box.width)) * progress.duration;
+  progress = { ...progress, position, at: Date.now() };   // la barre suit tout de suite, mpv suit derrière
+  drawProgress();
+  send("seek_to", { position });
+};
+let managed = "";   // liste affichée dans les réglages, pour ne la refaire que si elle change
+function renderManage() {
+  const names = lastState?.streamers ?? [];
+  if (JSON.stringify(names) === managed && $("manage-list").childElementCount) return;
+  managed = JSON.stringify(names);
+  const btn = (text, label, onclick, disabled = false) => {
+    const b = Object.assign(document.createElement("button"), { textContent: text, title: label, onclick, disabled });
+    b.setAttribute("aria-label", label);
+    return b;
+  };
+  $("manage-list").replaceChildren(...names.map((name, i) => {
+    const row = Object.assign(document.createElement("div"), { className: "manage-row" });
+    row.append(
+      Object.assign(document.createElement("span"), { className: "name", textContent: `${i + 1}. ${name}` }),
+      btn("▲", `Monter ${name}`, () => editStreamers("move", name, -1), i === 0),
+      btn("▼", `Descendre ${name}`, () => editStreamers("move", name, 1), i === names.length - 1),
+      btn("✕", `Retirer ${name}`, () => { if (confirm(`Retirer ${name} de la liste ?`)) editStreamers("remove", name); }));
+    return row;
+  }));
+}
+
+async function editStreamers(action, login, delta = 0) {
+  const status = $("manage-status");
+  status.className = "status";
+  status.textContent = action === "add" ? "Vérification sur Twitch…" : "";
+  try {
+    const r = await fetch("/api/streamers", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, login, delta }),
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    status.textContent = action === "add" ? `${login.trim()} ajouté. Le point « en live » apparaît sous une minute.`
+      : action === "remove" ? `${login} retiré.` : "";
+    if (action === "add") $("new-streamer").value = "";
+  } catch (e) {
+    status.className = "status error";
+    status.textContent = e.message || "Box injoignable";
+  }
+  await refresh();
+  renderManage();
+}
+
+function showTab(name) {
+  for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === name));
+  $("tab-remote").hidden = name !== "remote";
+  $("tab-settings").hidden = name !== "settings";
+  try { localStorage.setItem("tab", name); } catch (e) { /* stockage indisponible : on oublie l'onglet */ }
+  if (name === "settings") { renderManage(); refreshDisplay(); }
+}
+document.querySelectorAll(".tabs button").forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
+let savedTab = "remote";
+try { savedTab = localStorage.getItem("tab") || "remote"; } catch (e) { /* idem */ }
+showTab(location.hash === "#reglages" ? "settings" : savedTab);   // #reglages : lien direct vers les réglages
+$("add-streamer").onclick = () => { if ($("new-streamer").value.trim()) editStreamers("add", $("new-streamer").value); };
+$("new-streamer").onkeydown = (e) => { if (e.key === "Enter") $("add-streamer").click(); };
+$("replays").ontoggle = () => {
+  if ($("replays").open) loadReplays(replaysLogin ?? lastState?.channel ?? lastState?.streamers?.[0]);
+};
+$("subs").onchange = () => { send("sub", { id: $("subs").value }); $("subs").blur(); };
+if (new URLSearchParams(location.search).has("partage")) {
+  $("media-status").className = "status error";
+  $("media-status").textContent = "Aucun lien vidéo dans ce partage.";
+  history.replaceState(null, "", "/");
+}
+$("poweroff").onclick = async () => {
+  if (!confirm("Éteindre la box ?")) return;
+  try {
+    const r = await fetch("/api/poweroff", { method: "POST" });
+    if (!r.ok) throw new Error((await r.json()).error);
+    clearTimeout(refreshTimer);
+    $("dot").classList.remove("on");
+    $("status").className = "status";
+    $("status").textContent = "Box éteinte. Rallume-la avec son bouton power.";
+  } catch (e) {
+    showError(e.message || "Box injoignable");
+  }
+};
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); refreshAccount(); } });
+refreshAccount();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});   // HTTPS seulement
+refresh();
+</script>
+</body>
+</html>
