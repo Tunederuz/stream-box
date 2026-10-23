@@ -109,7 +109,9 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
 - **Qui est en live** : `remote.py` interroge Twitch (GQL, client-id public du site) chaque minute pour toute la
   liste, publie le résultat dans `user-data/streambox/live` (menu de la TV : point rouge + spectateurs) et le renvoie
   dans `/api/state` (page : spectateurs, jeu, titre). Après un redémarrage de mpv, le menu le reçoit au relevé suivant.
-- **Bascule automatique** (stream-box.lua, `auto_switch`) : si la chaîne en cours est hors ligne et qu'elle a été
+- **Bascule automatique** (stream-box.lua, `auto_switch`, désactivable : onglet Réglages → Lecture, `POST /api/auto_switch
+  {enabled}`, interrupteur MQTT, état dans `user-data/streambox/auto_switch` et le fichier d'état `auto_switch`) : si
+  la chaîne en cours est hors ligne et qu'elle a été
   choisie il y a plus d'`AUTO_SWITCH` (60 s), la box passe au premier streamer en live dans l'ordre de `streamers.txt`.
 - **Chien de garde** : direct dont `playback-time` n'avance plus depuis `FROZEN` (20 s), sans pause → la chaîne est
   relancée. Testé en gelant streamlink (`kill -STOP`).
@@ -160,9 +162,9 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   (Reprendre / Depuis le début / ✕, tout effacer) et barres de progression dans les rediffusions (`GET /api/history`,
   `POST /api/history {action: remove|clear}`, `POST /api/play {url, from_start}`). Limite connue : certaines
   rediffusions Twitch (playlist `EVENT`) démarrent une minute après le début même sans reprise, mpv nu compris.
-- **Aperçu de la TV** dans la page (bloc replié, onglet Télécommande ; toujours l'écran entier) : `GET /api/preview?overlay=1|0` →
+- **Aperçu de la TV** dans la page (bloc replié, onglet Télécommande) : `GET /api/preview` →
   écran entier par **grim** (protocole wlr-screencopy de cage : écran d'ambiance, menu et bandeaux compris, réduit à
-  960 px par `-s`) ; vidéo seule (`overlay=0`), ou faute de grim, `screenshot-to-file` de mpv réduit par ffmpeg. Une
+  960 px par `-s`) ; faute de grim, `screenshot-to-file … window` de mpv réduit par ffmpeg. Une
   capture à la fois, gardée 1 s pour plusieurs téléphones. La page en redemande une 1,5 s après chaque réponse,
   seulement tant que le bloc est ouvert et visible. Sans grim et sans vidéo : réponse 204.
 - **Mises à jour** : `update.sh` (timer systemd utilisateur `stream-box-update.timer`, lundi ~5 h, rattrapé au démarrage)

@@ -236,23 +236,23 @@ def ambient_loop():
         time.sleep(60)
 
 
-# Aperçu de la TV pour la page, seulement quand la page le demande (bloc ouvert). L'écran entier (écran d'ambiance, menus
-# compris) est capturé par grim, via le protocole wlr-screencopy de cage ; la vidéo seule, ou faute de grim, par mpv,
-# qui n'a rien à capturer quand aucune vidéo ne joue (la page affiche alors un texte).
+# Aperçu de la TV pour la page, seulement quand la page le demande (bloc ouvert) : l'écran entier, écran d'ambiance et
+# menus compris, capturé par grim via le protocole wlr-screencopy de cage. Faute de grim, capture de mpv (fenêtre, avec
+# le chat et le menu), qui n'a rien à capturer quand aucune vidéo ne joue (la page affiche alors un texte).
 
 PREVIEW_WIDTH = 960
 preview_lock = threading.Lock()
-preview_cache = {"at": 0.0, "overlay": None, "data": None}
+preview_cache = {"at": 0.0, "data": None}
 
 
-def preview(overlay):
-    """JPEG de l'écran (avec le chat et le menu si overlay), ou None s'il n'y a pas d'image à capturer."""
+def preview():
+    """JPEG de l'écran, ou None s'il n'y a pas d'image à capturer."""
     with preview_lock:   # une capture à la fois ; plusieurs téléphones se partagent la dernière pendant 1 s
-        if time.time() - preview_cache["at"] < 1 and preview_cache["overlay"] == overlay:
+        if time.time() - preview_cache["at"] < 1:
             return preview_cache["data"]
         data = None
         playing = mpv(["get_property", "video-params"])[0] is not None
-        if (overlay or not playing) and shutil.which("grim"):
+        if shutil.which("grim"):
             try:
                 width = mpv(["get_property", "osd-dimensions"])[0].get("w") or PREVIEW_WIDTH
                 r = subprocess.run(["grim", "-t", "jpeg", "-q", "70", "-s", f"{min(1.0, PREVIEW_WIDTH / width):.3f}", "-"],
@@ -261,14 +261,14 @@ def preview(overlay):
             except (OSError, subprocess.SubprocessError, AttributeError):
                 data = None
             if data:
-                preview_cache.update(at=time.time(), overlay=overlay, data=data)
+                preview_cache.update(at=time.time(), data=data)
                 return data
         if playing:
             shot, small = "/tmp/stream-box-shot.jpg", "/tmp/stream-box-preview.jpg"
             for path in (shot, small):
                 if os.path.exists(path):
                     os.remove(path)
-            mpv(["screenshot-to-file", shot, "window" if overlay else "video"])
+            mpv(["screenshot-to-file", shot, "window"])
             for _ in range(30):   # mpv écrit le fichier après avoir répondu
                 if os.path.exists(shot) and os.path.getsize(shot) > 0:
                     size = os.path.getsize(shot)
@@ -285,7 +285,7 @@ def preview(overlay):
                     pass   # sans ffmpeg : capture en taille réelle
                 with open(shot, "rb") as f:
                     data = f.read()
-        preview_cache.update(at=time.time(), overlay=overlay, data=data)
+        preview_cache.update(at=time.time(), data=data)
         return data
 
 
@@ -304,6 +304,7 @@ def state():
         "streamers": read_streamers(), "channel": user.get("channel"),
         "chat_visible": user.get("chat_visible", True), "corner": user.get("corner", "bl"),
         "chat_bg": user.get("chat_bg", 60), "chat_size": user.get("chat_size", 32),
+        "auto_switch": user.get("auto_switch", True),
         "volume": round(volume or 0), "mute": bool(mute), "pause": bool(pause), "playing": bool(video),
         "live": live_now, "mode": user.get("mode", "twitch"), "delay": delay, "title": title if media else None,
         "position": position if media else None, "duration": duration if media else None,
@@ -719,6 +720,8 @@ def action(name, body):
         mpv(["script-message", "streambox-live-seek", arg])
     elif name == "seek_to":
         mpv(["seek", max(0.0, float(body.get("position", 0))), "absolute"])
+    elif name == "auto_switch":
+        mpv(["script-message", "streambox-auto-switch", "yes" if body.get("enabled") else "no"])
     elif name == "set":
         # Bornes et enregistrement gérés par stream-box.lua (set_number)
         if body.get("key") not in ("chat_bg", "chat_size"):
@@ -780,9 +783,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, f.read(), content_type)
             elif self.path == "/api/state":
                 self.send(200, state())
-            elif self.path.startswith("/api/preview"):
-                query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                image = preview(query.get("overlay", ["1"])[0] != "0")
+            elif self.path.split("?")[0] == "/api/preview":
+                image = preview()
                 if image:
                     self.send(200, image, "image/jpeg")
                 else:

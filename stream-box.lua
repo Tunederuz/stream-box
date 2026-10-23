@@ -28,6 +28,7 @@ local attempts, retry_timer = 0, nil
 local mode, back_timer = "twitch", nil
 local live, offline, channel_since = {}, false, 0   -- live : relevé de remote.py (user-data/streambox/live)
 local ambient_visible, status_text = false, ""    -- écran d'ambiance affiché ; dernier message d'état
+local auto_switch_on = true   -- bascule automatique vers un streamer en live (réglage de la télécommande)
 local menu = mp.create_osd_overlay("ass-events")
 local status = mp.create_osd_overlay("ass-events")
 local menu_visible, hide_timer, items = false, nil, {}
@@ -215,7 +216,7 @@ end)
 -- Chaîne hors ligne depuis plus d'AUTO_SWITCH secondes : on passe au premier streamer en live, dans l'ordre de
 -- streamers.txt. Le délai laisse le temps de choisir exprès une chaîne hors ligne (le temps de vérifier).
 local function auto_switch()
-    if mode ~= "twitch" or not offline or mp.get_time() - channel_since < AUTO_SWITCH then return end
+    if not auto_switch_on or mode ~= "twitch" or not offline or mp.get_time() - channel_since < AUTO_SWITCH then return end
     for _, name in ipairs(read_streamers()) do
         if name ~= channel and live[name] then
             mp.osd_message(channel .. " n'est pas en live : on passe sur " .. name, 6)
@@ -698,6 +699,14 @@ local function set_number(key, value)
 end
 mp.register_script_message("streambox-set", set_number)
 
+local function set_auto_switch(value)
+    auto_switch_on = value ~= "no" and value ~= false
+    write_state("auto_switch", auto_switch_on and "yes" or "no")
+    mp.set_property_native("user-data/streambox/auto_switch", auto_switch_on)
+    auto_switch()   -- réactivée pendant que la chaîne est hors ligne : on bascule tout de suite
+end
+mp.register_script_message("streambox-auto-switch", set_auto_switch)
+
 -- Écran d'ambiance : quand rien ne joue (chaîne hors ligne, liste vide), horloge, date, météo et prochains lives
 -- (données de remote.py dans user-data/streambox/ambient). Le contenu se déplace un peu chaque minute, pour ne pas
 -- marquer l'écran de la TV.
@@ -833,6 +842,8 @@ streamers = read_streamers()
 corner = read_state("chat_corner")
 if not CORNER_LABELS[corner] then corner = "bl" end
 chat_visible = read_state("chat_visible") ~= "no"
+auto_switch_on = read_state("auto_switch") ~= "no"
+mp.set_property_native("user-data/streambox/auto_switch", auto_switch_on)
 mp.set_property_native("user-data/streambox/corner", corner)
 mp.set_property_native("user-data/streambox/chat_visible", chat_visible)
 for key, spec in pairs(NUMBERS) do
