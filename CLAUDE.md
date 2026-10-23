@@ -358,3 +358,17 @@ la même valeur) ; dans `onTabChanged`, lire `tabs[tab].id` et pas `tabId` (liai
 avec `clip` : marges (`leftMargin`, `topMargin`) pour ne pas couper le halo du focus ; modèles en nombre d'éléments
 (les délégués lisent les tableaux) pour que la liste ne se réinitialise pas à chaque relevé de l'état. Tester sans
 télécommande : `keypress HOMEPAGE`, `keypress DOWN`… par l'IPC, captures par `grim`.
+
+Fils et libmpv (blocages et plantages vus, corrigés) :
+- le fil principal de Qt n'appelle jamais mpv directement (touches, souris, `force-window`, booléen du menu) : file
+  `to_mpv` vidée par un fil à part. Un appel synchrone pouvait attendre la sortie vidéo, qui attend le fil de rendu,
+  bloqué par le fil principal ;
+- rendu : `ctx.update()` avant chaque `render`, et `block_for_target_time=False` : sinon le fil de rendu restait bloqué
+  dans `render` au démarrage, une relance sur deux ou trois (socket IPC qui coupe les connexions, image figée) ;
+  10 relances de suite sans blocage après correction ;
+- à la sortie, pas de `player.terminate()` : libmpv s'arrête net (abort, code 134) si le contexte de rendu existe
+  encore ; `os._exit` directement (mpv a déjà quitté). Avant, chaque `quit` finissait en plantage, et trois arrêts
+  rapprochés ont fait basculer `player.sh` sur mpv seul jusqu'au redémarrage suivant ;
+- `kill -USR1 <pid de ui.py>` écrit la pile de chaque fil dans `/tmp/stream-box-ui.log` ; plantages : `coredumpctl`.
+Halo du focus : `RectangularShadow` (QtQuick.Effects), sous l'élément. Grilles et rangées sans `clip` (il coupait le
+halo) : les éléments hors de la zone visible s'effacent en fondu (`rel` = position moins `contentX`/`contentY`).
