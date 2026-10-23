@@ -449,6 +449,8 @@ la droite, ligne de temps restant), `PollsOverlay.qml` (barres animées, ★ gag
 Aperçu YouTube : à chaque lecture YouTube, remote.py lance `yt-dlp -J` une fois et publie la planche de miniatures
 (`storyboard` : fragments d'images en grille rows × columns, chacun couvrant `duration` s) ; la case affichée est
 choisie d'après la position. Piège QML encore : `left` (FINAL) ne peut pas servir de nom de propriété.
+Couleur de la barre selon la source (`InfoBar.source`, d'après `path` relayé par ui.py) : rouge pour YouTube, bleu
+pour Jellyfin (lien de serveur : `/Videos/…`, `api_key=`, `MediaSourceId=`), violet sinon et en direct.
 
 ### État de la box (page, Réglages → Système)
 
@@ -461,3 +463,17 @@ que l'onglet Réglages est affiché ; tuiles en orange ou rouge au-delà des seu
 service arrêté, décodage par le processeur).
 Même état dans l'onglet Système du menu QML de la TV (tuiles sous les lignes, `/api/health` relu toutes les 5 s tant
 que l'onglet est affiché), avec une ligne « Mettre à jour maintenant » (dernière et prochaine mise à jour).
+
+### YouTube (chaînes et recherche)
+
+Liste de chaînes dans `~/.config/stream-box/youtube.json` (id UC…, nom, @, photo), éditée par
+`POST /api/youtube_channels` {action: add|remove|move, channel, delta} ; l'ajout résout « @nom », un lien ou un id avec
+`yt-dlp --flat-playlist -J --playlist-items 0` (~1 s). `GET /api/youtube` : 15 dernières vidéos par chaîne d'après le
+flux RSS public (`feeds/videos.xml?channel_id=`, sans clé, Shorts écartés, cache 20 min), fusionnées avec
+l'historique (position, vu). `GET /api/youtube_search?q=` : `yt-dlp --flat-playlist -J ytsearch20:` (~1,6 s, cache
+10 min, vidéos seulement : la recherche renvoie aussi chaînes et playlists). Peu de requêtes : YouTube a déjà limité
+l'adresse IP de la box.
+Page : bloc YouTube de l'onglet Télécommande (recherche, une puce par chaîne) et « Chaînes YouTube » dans Réglages.
+TV (onglet YouTube du menu QML) : ligne de recherche → clavier à l'écran (grille de 10 de large, ↑↓←→ et OK, Retour
+ferme), puis une rangée de résultats et une rangée par chaîne ; OK lance (ou propose la reprise, `chooseVideo`).
+Les résultats restent d'une ouverture du menu à l'autre (pas d'un redémarrage du lecteur).

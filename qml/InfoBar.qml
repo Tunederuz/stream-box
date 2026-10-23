@@ -18,6 +18,12 @@ Item {
     readonly property real span: live ? (pb.window ? pb.window[1] - pb.window[0] : 0) : (pb.duration || 0)
     readonly property real at: live ? (pb.window ? (pb.pos || 0) - pb.window[0] : 0) : (pb.pos || 0)
     readonly property real delay: live && pb.window ? pb.window[1] - (pb.pos || 0) : 0
+    // Couleur de la barre selon la source : rouge YouTube, bleu Jellyfin (lien de son serveur : /Videos/…), sinon le
+    // violet de Twitch
+    readonly property string source: live ? "twitch" : /youtube\.com|youtu\.be|googlevideo/.test(pb.path || "") ? "youtube"
+        : /\/Videos\/|\/videos\/[0-9a-f]{32}|api_key=|MediaSourceId=/i.test(pb.path || "") ? "jellyfin" : "other"
+    readonly property var colors: source === "youtube" ? ["#ff0033", "#ff4e45"]
+        : source === "jellyfin" ? ["#00a4dc", "#3fc1f0"] : ["#8a3ffc", "#b062ff"]
 
     opacity: shown ? 1 : 0
     visible: opacity > 0
@@ -110,8 +116,8 @@ Item {
                 width: parent.width * track.played
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
-                    GradientStop { position: 0; color: "#8a3ffc" }
-                    GradientStop { position: 1; color: "#b062ff" }
+                    GradientStop { position: 0; color: root.colors[0] }
+                    GradientStop { position: 1; color: root.colors[1] }
                 }
                 Behavior on width { NumberAnimation { duration: 240 } }
             }

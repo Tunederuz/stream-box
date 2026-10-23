@@ -18,7 +18,8 @@ Item {
     readonly property string api: "http://127.0.0.1:8080"
     readonly property var tabs: [
         { id: "live", label: "En direct" }, { id: "follows", label: "Suivis" },
-        { id: "replays", label: "Rediffusions" }, { id: "history", label: "Historique" },
+        { id: "replays", label: "Rediffusions" }, { id: "youtube", label: "YouTube" },
+        { id: "history", label: "Historique" },
         { id: "settings", label: "Réglages" }, { id: "system", label: "Système" }]
     readonly property var corners: ({ tl: "↖ haut gauche", tr: "↗ haut droite", br: "↘ bas droite", bl: "↙ bas gauche" })
     readonly property var cornerOrder: ["tl", "tr", "br", "bl"]
@@ -34,6 +35,20 @@ Item {
     property var account: null
     property var followsQr: null
     property var health: null                // /api/health, relu toutes les 5 s sur l'onglet Système
+    // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
+    property var yt: null
+    property var ytResults: null             // { query, results } ou null
+    property bool ytSearching: false
+    property int ytRow: 0                    // 0 : ligne de recherche, puis résultats (s'il y en a) et chaînes
+    property var ytSel: ({})
+    // Clavier à l'écran (recherche) : texte, ligne et colonne choisies
+    property bool kbOpen: false
+    property string kbText: ""
+    property int kbRow: 0
+    property int kbCol: 0
+    readonly property var kbKeys: [
+        "abcdefghij".split(""), "klmnopqrst".split(""), "uvwxyz-'.?".split(""), "0123456789".split(""),
+        "éèàçùêô".split("").concat(["Espace"]), ["Effacer", "Tout effacer", "Rechercher"]]
     readonly property var ambient: { try { return JSON.parse(box.ambient || "{}") } catch (e) { return {} } }
 
     // Focus
@@ -99,6 +114,34 @@ Item {
             var r2 = Object.assign({}, replays); r2[login] = d && d.vods ? d : false; replays = r2
         })
     }
+    function loadYoutube() {
+        call("GET", "/api/youtube", undefined, function (d) { yt = d && d.channels ? d : { channels: [] } })
+    }
+    function ytSearch(q) {
+        q = q.trim()
+        if (!q) return
+        ytSearching = true
+        ytResults = { query: q, results: [] }
+        call("GET", "/api/youtube_search?q=" + encodeURIComponent(q), undefined, function (d) {
+            ytSearching = false
+            ytResults = { query: q, results: d && d.results ? d.results : [], error: !d }
+            ytRow = 1; var s = Object.assign({}, ytSel); s["search"] = 0; ytSel = s
+        })
+    }
+    // Rangées de l'onglet YouTube : recherche, résultats, une par chaîne
+    function ytRows() {
+        var rows = [{ kind: "search" }]
+        if (ytResults) rows.push({ kind: "results", key: "search", title: "Résultats pour « " + ytResults.query + " »", items: ytResults.results })
+        var chans = yt ? yt.channels : []
+        for (var i = 0; i < chans.length; i++)
+            rows.push({ kind: "channel", key: chans[i].id, title: chans[i].name, avatar: chans[i].avatar, items: chans[i].videos || [] })
+        return rows
+    }
+    function ago(iso) {
+        var days = Math.floor((Date.now() - new Date(iso)) / 86400000)
+        return days <= 0 ? "aujourd'hui" : days === 1 ? "hier" : days < 7 ? "il y a " + days + " j"
+            : days < 31 ? "il y a " + Math.floor(days / 7) + " sem." : new Date(iso).toLocaleDateString(Qt.locale("fr_FR"), "d MMM")
+    }
     function loadHistory() { call("GET", "/api/history", undefined, function (d) { history = d || [] }) }
     function play(url, fromStart) {
         call("POST", "/api/play", { url: url, from_start: !!fromStart }, function () { refreshSoon.restart() })
@@ -123,6 +166,7 @@ Item {
         if (isOpen) return
         tab = 0; area = "content"; shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0
         follows = null; replays = ({}); history = null; rpLogin = ""; rpRow = 0; rpSel = [0, 0, 0]
+        yt = null; ytRow = 0; ytSel = ({}); kbOpen = false   // les résultats de recherche restent d'une ouverture à l'autre
         var list = st.streamers || []
         liveSel = Math.max(0, list.indexOf(st.channel))
         startFocus = true
@@ -332,6 +376,10 @@ Item {
         case "history":
             return history === null ? "Chargement…" : history.length === 0 ? "Les vidéos lancées sur la TV s'afficheront ici"
                 : (history.length === 1 ? "1 vidéo" : history.length + " vidéos") + " · OK pour reprendre ou retirer"
+        case "youtube":
+            if (!yt) return "Chargement…"
+            return yt.channels.length ? yt.channels.length + (yt.channels.length === 1 ? " chaîne" : " chaînes") + " · dernières vidéos"
+                : "Recherche une vidéo, ou ajoute des chaînes depuis la télécommande"
         case "settings": return "◀ ▶ pour changer une valeur"
         }
         return ""
@@ -344,6 +392,7 @@ Item {
         tabEnter.restart()
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
+        if (id === "youtube" && yt === null) loadYoutube()
         if (id === "replays") {
             if (!rpLogin) rpLogin = st.channel || (st.streamers || [])[0] || ""
             loadReplays(rpLogin)
@@ -366,6 +415,7 @@ Item {
         if (k === "home") return close()
         if (k === "homescreen") { act("home"); return close() }
         if (k === "corner") return act("corner")
+        if (kbOpen) return keyKeyboard(k)
         if (modal) {
             if (k === "up" || k === "down") modalSel = Math.max(0, Math.min(modal.items.length - 1, modalSel + (k === "down" ? 1 : -1)))
             else if (k === "ok") { var it = modal.items[modalSel]; modal = null; it.ok() }
@@ -383,12 +433,14 @@ Item {
         case "live": return keyLive(k)
         case "follows": return keyFollows(k)
         case "replays": return keyReplays(k)
+        case "youtube": return keyYoutube(k)
         case "history": return keyHistory(k)
         case "settings": return keyRows(k, settingsRows())
         case "system": return keyRows(k, systemRows())
         }
     }
     function enterContent() {
+        if (tabId === "youtube") { area = "content"; ytRow = 0; return }
         if (tabId === "follows" && (!follows || !follows.configured)) return
         if (tabId === "history" && !(history && history.length)) return
         area = "content"
@@ -442,6 +494,39 @@ Item {
                 var name = row.items[sel]
                 if (name && name !== rpLogin) { rpLogin = name; rpSel = [sel, 0, 0]; loadReplays(name) }
             } else if (row.items[sel]) chooseVideo(row.items[sel])
+        }
+    }
+    function keyYoutube(k) {
+        var rows = ytRows()
+        ytRow = Math.min(ytRow, rows.length - 1)
+        var row = rows[ytRow]
+        if (row.kind === "search") {
+            if (k === "ok") { kbOpen = true; kbRow = 0; kbCol = 0 }
+            else if (k === "down" && rows.length > 1) ytRow = 1
+            else if (k === "left") area = "rail"
+            return
+        }
+        var sel = ytSel[row.key] || 0, s = Object.assign({}, ytSel)
+        if (k === "up") ytRow--
+        else if (k === "down") ytRow = Math.min(rows.length - 1, ytRow + 1)
+        else if (k === "left") { if (sel === 0) area = "rail"; else { s[row.key] = sel - 1; ytSel = s } }
+        else if (k === "right") { s[row.key] = Math.min(row.items.length - 1, sel + 1); ytSel = s }
+        else if (k === "ok" && row.items[sel]) chooseVideo(row.items[sel])
+    }
+    function keyKeyboard(k) {
+        var rows = kbKeys
+        if (k === "up") { kbRow = Math.max(0, kbRow - 1); kbCol = Math.min(kbCol, rows[kbRow].length - 1) }
+        else if (k === "down") { kbRow = Math.min(rows.length - 1, kbRow + 1); kbCol = Math.min(kbCol, rows[kbRow].length - 1) }
+        else if (k === "left") kbCol = Math.max(0, kbCol - 1)
+        else if (k === "right") kbCol = Math.min(rows[kbRow].length - 1, kbCol + 1)
+        else if (k === "back") kbOpen = false
+        else if (k === "ok") {
+            var key = rows[kbRow][kbCol]
+            if (key === "Espace") kbText += " "
+            else if (key === "Effacer") kbText = kbText.slice(0, -1)
+            else if (key === "Tout effacer") kbText = ""
+            else if (key === "Rechercher") { if (kbText.trim()) { kbOpen = false; ytSearch(kbText) } }
+            else if (kbText.length < 80) kbText += key
         }
     }
     function keyHistory(k) {
@@ -759,6 +844,84 @@ Item {
             }
         }
 
+        // --- YouTube
+        Item {
+            id: ytPage
+            anchors.fill: parent
+            visible: menu.tabId === "youtube"
+            readonly property var rows: menu.ytRows()
+            // Rangées de hauteur fixe ; défilement vertical pour garder la rangée choisie à l'écran
+            readonly property real rowH: 360   // deux rangées entières au-dessus de l'aide en bas
+            readonly property real scrollY: Math.max(0, (menu.ytRow - 1) * rowH)
+            Item {   // ligne de recherche
+                y: 200; width: 760; height: 66
+                readonly property bool foc: menu.area === "content" && menu.ytRow === 0 && !menu.kbOpen
+                scale: foc ? 1.03 : 1
+                Behavior on scale { NumberAnimation { duration: 160 } }
+                FocusFrame { active: parent.foc; radius: 35 }
+                Rectangle { anchors.fill: parent; radius: 35; color: parent.foc ? "#3a2c4e" : "#2a2034" }
+                Text {
+                    x: 34; anchors.verticalCenter: parent.verticalCenter
+                    text: menu.ytSearching ? "Recherche de « " + menu.ytResults.query + " »…"
+                          : menu.ytResults ? "Nouvelle recherche  (« " + menu.ytResults.query + " »)" : "Rechercher sur YouTube"
+                    color: "white"; font.pixelSize: 27
+                }
+            }
+            Text {
+                visible: !!menu.yt && menu.yt.channels.length === 0 && !menu.ytResults
+                y: 320; text: "Ajoute des chaînes YouTube depuis la télécommande web (Réglages → Chaînes YouTube)."
+                color: "#b4afc2"; font.pixelSize: 27
+            }
+            Item {   // rangées, sous la ligne de recherche
+                y: 286; width: parent.width; height: menu.height - 286
+                Repeater {
+                    model: Math.max(0, ytPage.rows.length - 1)
+                    Item {
+                        readonly property int r: index + 1
+                        readonly property var row: ytPage.rows[r]
+                        y: index * ytPage.rowH - ytPage.scrollY
+                        Behavior on y { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+                        opacity: y > -ytPage.rowH / 2 && y < 2 * ytPage.rowH - 10 ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 180 } }
+                        width: 1460; height: ytPage.rowH
+                        Row {
+                            spacing: 14
+                            RoundImage { visible: !!(row && row.avatar); width: 40; height: 40; circle: true; source: row && row.avatar ? row.avatar : "" }
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: row ? row.title : ""; color: "#d0c8e0"; font.pixelSize: 24; font.bold: true }
+                        }
+                        Text {
+                            visible: !!row && row.items.length === 0
+                            y: 70; text: row && row.kind === "results" ? (menu.ytSearching ? "Recherche…" : "Aucun résultat") : "YouTube injoignable pour l'instant"
+                            color: "#8a85a0"; font.pixelSize: 24
+                        }
+                        ListView {
+                            y: 50; x: -40; width: 1500; height: 302
+                            orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
+                            leftMargin: 40
+                            model: row ? row.items.length : 0
+                            currentIndex: row ? (menu.ytSel[row.key] || 0) : 0
+                            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                            Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                            delegate: VideoCard {
+                                readonly property var it: row.items[index] || {}
+                                readonly property real rel: x - ListView.view.contentX
+                                opacity: rel > -width / 2 && rel + width / 2 < ListView.view.width ? 1 : 0
+                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                                title: it.title || ""
+                                thumb: it.thumb || ""
+                                meta: (row.kind === "results"
+                                       ? [it.channel, it.seconds ? Fmt.clock(it.seconds) : "", it.views ? Fmt.big(it.views) + " vues" : ""]
+                                       : [menu.ago(it.date), it.views ? Fmt.big(it.views) + " vues" : ""])
+                                      .filter(function (t) { return !!t }).join(" · ") + (it.finished ? " · vu" : "")
+                                progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
+                                focused: menu.area === "content" && menu.ytRow === r && index === (menu.ytSel[row.key] || 0)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // --- Historique
         GridView {
             visible: menu.tabId === "history"
@@ -837,6 +1000,57 @@ Item {
             Text { text: "Télécommande sur le téléphone"; color: "white"; font.pixelSize: 23; font.bold: true }
             Text { text: "Lien, streamer, compte Twitch…"; color: "#b4afc2"; font.pixelSize: 20 }
             Text { text: menu.ambient.qr ? String(menu.ambient.qr.url).replace(/^https?:\/\//, "").replace(/\/$/, "") : ""; color: "#b4afc2"; font.pixelSize: 20 }
+        }
+    }
+
+    // Clavier à l'écran (recherche YouTube)
+    Item {
+        anchors.fill: parent
+        opacity: menu.kbOpen ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: 160 } }
+        Rectangle { anchors.fill: parent; color: "#05030a"; opacity: 0.6 }
+        Rectangle {
+            width: 1180; height: 690; radius: 30
+            anchors.centerIn: parent
+            color: "#21182c"
+            scale: menu.kbOpen ? 1 : 0.95
+            Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+            Text { x: 48; y: 36; text: "Rechercher sur YouTube"; color: "#a99fc0"; font.pixelSize: 22; font.bold: true }
+            Rectangle {   // texte tapé
+                x: 44; y: 78; width: parent.width - 88; height: 76; radius: 18
+                color: "#120d19"; border.color: "#3a2c4e"; border.width: 2
+                Text {
+                    x: 26; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 52; elide: Text.ElideLeft
+                    text: menu.kbText + "▏"; color: menu.kbText ? "white" : "#8a85a0"; font.pixelSize: 34
+                }
+            }
+            Column {
+                x: 56; y: 182; spacing: 12
+                Repeater {
+                    model: menu.kbKeys.length
+                    Row {
+                        readonly property int r: index
+                        spacing: 12
+                        Repeater {
+                            model: menu.kbKeys[r].length
+                            Rectangle {
+                                readonly property string label: menu.kbKeys[r][index]
+                                readonly property bool foc: menu.kbRow === r && menu.kbCol === index
+                                readonly property bool wide: label.length > 1
+                                width: wide ? (r === 5 ? 348 : 312) : 96; height: 72; radius: 16   // 10 touches de large : 1068
+                                color: foc ? "white" : label === "Rechercher" ? "#9146ff" : "#33283f"
+                                scale: foc ? 1.06 : 1
+                                Behavior on scale { NumberAnimation { duration: 120 } }
+                                Text {
+                                    anchors.centerIn: parent; text: label
+                                    color: parent.foc ? "#1a1020" : "white"; font.pixelSize: wide ? 26 : 32; font.bold: parent.foc
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

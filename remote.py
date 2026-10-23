@@ -747,6 +747,146 @@ def media_key(url):
     return url, "link", None
 
 
+# YouTube : chaînes suivies (liste de la box, ~/.config/stream-box/youtube.json) et leurs dernières vidéos par le flux
+# RSS public (sans clé d'API, 15 vidéos), recherche par yt-dlp (« ytsearch »). Caches : 20 min par flux, 10 min par
+# recherche, pour solliciter YouTube le moins possible (il bloque vite une adresse IP trop curieuse).
+
+YT_FILE = os.path.join(COOKIES_DIR, "youtube.json")
+YT_FEED_CACHE = 1200
+YT_SEARCH_CACHE = 600
+yt_feeds, yt_searches = {}, {}   # id de chaîne → (heure, vidéos) ; requête → (heure, résultats)
+yt_lock = threading.Lock()
+YTDLP = os.path.expanduser("~/.local/bin/yt-dlp")
+
+
+def yt_channels():
+    try:
+        with open(YT_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def yt_resolve(raw):
+    """@nom, lien de chaîne ou identifiant UC… → {id, name, handle, avatar} (yt-dlp, une requête)"""
+    raw = raw.strip()
+    if re.fullmatch(r"UC[\w-]{22}", raw):
+        url = f"https://www.youtube.com/channel/{raw}"
+    elif re.fullmatch(r"@?[\w.-]{3,40}", raw):
+        url = f"https://www.youtube.com/@{raw.lstrip('@')}"
+    elif re.match(r"https?://(www\.|m\.)?youtube\.com/", raw):
+        url = raw.split("?")[0]
+    else:
+        raise ValueError("Donne un @nom de chaîne YouTube ou le lien de la chaîne.")
+    r = subprocess.run([YTDLP, "--flat-playlist", "-J", "--playlist-items", "0", "--no-warnings", url],
+                       capture_output=True, text=True, timeout=60)
+    try:
+        d = json.loads(r.stdout)
+    except ValueError:
+        raise ValueError("Chaîne YouTube introuvable.") from None
+    if not d.get("channel_id"):
+        raise ValueError("Chaîne YouTube introuvable.")
+    avatar = next((t["url"] for t in d.get("thumbnails") or [] if "avatar" in str(t.get("id"))), None)
+    return {"id": d["channel_id"], "name": d.get("channel") or d.get("uploader") or raw,
+            "handle": d.get("uploader_id") or "", "avatar": avatar}
+
+
+def edit_yt_channels(action, raw="", delta=0):
+    with yt_lock:
+        chans = yt_channels()
+        if action == "add":
+            c = yt_resolve(raw)
+            if any(x["id"] == c["id"] for x in chans):
+                raise ValueError(f"{c['name']} est déjà dans la liste.")
+            chans.append(c)
+        elif action == "remove":
+            chans = [c for c in chans if c["id"] != raw]
+        elif action == "move":
+            i = next((n for n, c in enumerate(chans) if c["id"] == raw), None)
+            j = (i if i is not None else 0) + delta
+            if i is None or not 0 <= j < len(chans):
+                raise ValueError("déplacement impossible")
+            chans[i], chans[j] = chans[j], chans[i]
+        else:
+            raise ValueError("action inconnue")
+        os.makedirs(COOKIES_DIR, mode=0o700, exist_ok=True)
+        with open(YT_FILE, "w", encoding="utf-8") as f:
+            json.dump(chans, f, ensure_ascii=False)
+
+
+def yt_feed(channel_id):
+    cached = yt_feeds.get(channel_id)
+    if cached and time.time() - cached[0] < YT_FEED_CACHE:
+        return cached[1]
+    import xml.etree.ElementTree as ET
+    ns = {"a": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015",
+          "m": "http://search.yahoo.com/mrss/"}
+    with urllib.request.urlopen(f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}", timeout=10) as r:
+        root = ET.fromstring(r.read())
+    videos = []
+    for e in root.findall("a:entry", ns):
+        vid = e.findtext("yt:videoId", namespaces=ns)
+        link = (e.find("a:link", ns).get("href") if e.find("a:link", ns) is not None else "") or ""
+        if not vid or "/shorts/" in link:   # les Shorts (vidéos verticales d'une minute) n'ont rien à faire sur la TV
+            continue
+        stats = e.find("m:group/m:community/m:statistics", ns)
+        videos.append({"id": vid, "title": e.findtext("a:title", namespaces=ns) or "",
+                       "date": (e.findtext("a:published", namespaces=ns) or "")[:10],
+                       "thumb": f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg",
+                       "views": int(stats.get("views")) if stats is not None and stats.get("views") else None,
+                       "url": f"https://www.youtube.com/watch?v={vid}"})
+    yt_feeds[channel_id] = (time.time(), videos)
+    return videos
+
+
+def with_progress(videos):
+    """Position et « vu » d'après l'historique de la box"""
+    known = {e["key"]: e for e in read_history()}
+    out = []
+    for v in videos:
+        e = known.get(f"youtube:{v['id']}") or {}
+        out.append({**v, "position": e.get("position"), "seconds": v.get("seconds") or e.get("duration"),
+                    "finished": bool(e.get("finished"))})
+    return out
+
+
+def youtube_home():
+    out = []
+    for c in yt_channels():
+        try:
+            videos = with_progress(yt_feed(c["id"]))
+        except (OSError, ValueError):
+            videos = None   # flux injoignable : la chaîne reste affichée, sans vidéos
+        out.append({**c, "videos": videos})
+    return {"channels": out}
+
+
+def yt_search(query):
+    query = " ".join(query.split())[:100]
+    if not query:
+        return []
+    cached = yt_searches.get(query.lower())
+    if cached and time.time() - cached[0] < YT_SEARCH_CACHE:
+        return with_progress(cached[1])
+    r = subprocess.run([YTDLP, "--flat-playlist", "-J", "--no-warnings", f"ytsearch20:{query}"],
+                       capture_output=True, text=True, timeout=60)
+    try:
+        entries = json.loads(r.stdout).get("entries") or []
+    except ValueError:
+        raise ValueError("Recherche YouTube impossible pour l'instant.") from None
+    results = []
+    for e in entries:
+        # Vidéos seulement : la recherche renvoie aussi des chaînes et des playlists (identifiants plus longs)
+        if not re.fullmatch(r"[\w-]{11}", e.get("id") or "") or e.get("live_status") == "is_upcoming":
+            continue
+        results.append({"id": e["id"], "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or "",
+                        "seconds": e.get("duration"), "views": e.get("view_count"),
+                        "thumb": f"https://i.ytimg.com/vi/{e['id']}/mqdefault.jpg",
+                        "url": f"https://www.youtube.com/watch?v={e['id']}"})
+    yt_searches[query.lower()] = (time.time(), results)
+    return with_progress(results)
+
+
 def finished(position, duration):
     return bool(duration) and (position >= duration - FINISHED_LEFT or position >= 0.95 * duration)
 
@@ -1407,6 +1547,8 @@ def action(name, body):
         predict(str(body.get("event", "")), str(body.get("outcome", "")), int(body.get("points", 0)))
     elif name == "player":
         set_player(str(body.get("mode", "")))
+    elif name == "youtube_channels":
+        edit_yt_channels(str(body.get("action", "")), str(body.get("channel", "")), int(body.get("delta", 0)))
     elif name == "update":
         start_update()
     elif name == "qr":
@@ -1508,6 +1650,14 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, tv_image(q.get("src", [""])[0], int(q.get("w", ["0"])[0]), int(q.get("h", ["0"])[0]),
                                             q.get("round", ["0"])[0] == "1", int(q.get("radius", ["0"])[0])))
                 except (ValueError, subprocess.SubprocessError) as e:
+                    self.send(400, {"error": str(e)})
+            elif self.path == "/api/youtube":
+                self.send(200, youtube_home())
+            elif self.path.startswith("/api/youtube_search?"):
+                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("q", [""])[0]
+                try:
+                    self.send(200, {"query": q, "results": yt_search(q)})
+                except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif self.path == "/api/health":
                 self.send(200, health())

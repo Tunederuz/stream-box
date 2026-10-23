@@ -450,7 +450,7 @@ class Osd(QObject):
                 cache = get("demuxer-cache-state") or {}
                 ranges = cache.get("seekable-ranges") or []
                 state = {"pos": get("time-pos"), "duration": get("duration"), "pause": get("pause"),
-                         "cached": get("demuxer-cache-time"), "title": get("media-title"),
+                         "cached": get("demuxer-cache-time"), "title": get("media-title"), "path": get("path") or "",
                          "window": [ranges[0]["start"], ranges[0]["end"]] if ranges else None}
             except Exception:   # rien en lecture, mpv qui redémarre…
                 continue
