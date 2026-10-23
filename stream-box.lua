@@ -457,7 +457,7 @@ end
 
 mp.observe_property("mouse-pos", "native", function(_, m)
     -- Ignore la position initiale du curseur au lancement de mpv
-    if m and mp.get_time() - started > 2 then
+    if m and mp.get_time() - started > 2 and not mp.get_property_native("user-data/streambox/tvmenu") then
         keyboard_nav = false
         show_menu()
     end
@@ -664,6 +664,16 @@ mp.register_script_message("streambox-live-seek", function(arg)
 end)
 
 local back_pressed = 0
+-- Grand menu façon Android TV (tv_menu.lua) : ouvert par le bouton Menu (touche Accueil) ; tant qu'il est ouvert,
+-- toutes les touches lui sont transmises
+local tvmenu_open = false
+mp.observe_property("user-data/streambox/tvmenu", "native", function(_, v) tvmenu_open = v == true end)
+local function open_tvmenu()
+    if menu_visible then hide_menu() end
+    hide_bar()
+    mp.commandv("script-message", "streambox-tvmenu-open")
+end
+
 local KEYS = {
     UP = "up", DOWN = "down", LEFT = "left", RIGHT = "right",
     ENTER = "ok", KP_ENTER = "ok", ["0x21ffa0"] = "ok",
@@ -674,6 +684,10 @@ local KEYS = {
 local DIRECTIONS = { up = { 0, -1 }, down = { 0, 1 }, left = { -1, 0 }, right = { 1, 0 } }
 
 local function on_key(key)
+    if tvmenu_open then
+        mp.commandv("script-message", "streambox-tvmenu-key", key)
+        return
+    end
     if key == "homescreen" then   -- écran d'accueil, depuis n'importe quel mode
         if menu_visible then hide_menu() end
         if mode ~= "home" then show_home() end
@@ -701,6 +715,8 @@ local function on_key(key)
             else
                 show_menu(true)
             end
+        elseif key == "home" then
+            open_tvmenu()
         else
             hide_menu()
         end
@@ -711,7 +727,7 @@ local function on_key(key)
             -- Bandeau d'infos : streamer, titre du live, « EN DIRECT » ou retard ; le menu s'ouvre par Accueil
             if bar_visible then hide_bar() else show_bar() end
         elseif key == "ok" or key == "home" then
-            show_menu(true)
+            open_tvmenu()
         elseif key == "left" or key == "right" then
             live_seek(key == "right" and 10 or -10)
         elseif key == "back" then
@@ -732,7 +748,7 @@ local function on_key(key)
         elseif key == "down" then
             if not mp.get_property_native("pause") then hide_bar() end
         elseif key == "home" then
-            show_menu(true)
+            open_tvmenu()
         elseif key == "menu" then
             mp.commandv("cycle", "sub")
         elseif key == "back" then

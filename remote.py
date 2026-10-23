@@ -7,7 +7,7 @@ Les changements de streamer et de chat passent par les script-messages de stream
 Compte Twitch : le jeton du site (cookie auth-token) est rangé dans la config Twitch de streamlink, que
 streamlink lit tout seul. Twitch ne retire les pubs des abonnements qu'avec ce jeton-là.
 """
-import datetime, json, os, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
+import datetime, hashlib, json, os, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import display   # display.py, même dossier
@@ -387,6 +387,35 @@ def ambient_loop():
         except OSError:
             pass
         time.sleep(PUBLISH_EVERY)
+
+
+# Images du menu de la TV (tv_menu.lua) : par-dessus la vidéo, mpv n'affiche que des images brutes (overlay-add, BGRA à
+# alpha prémultiplié). On les télécharge, recadre et convertit avec ffmpeg, en cache dans /tmp. Seulement depuis les
+# serveurs d'images de Twitch et de YouTube : l'adresse vient de la requête.
+
+TV_IMAGE_DIR = "/tmp/stream-box-images"
+
+
+def tv_image(src, width, height, round_):
+    host = urllib.parse.urlsplit(src).hostname or ""
+    if not (host.endswith(".jtvnw.net") or host == "i.ytimg.com"):
+        raise ValueError("image refusée")
+    width, height = max(8, min(1280, width)), max(8, min(1280, height))
+    key = hashlib.sha1(f"{src}|{width}|{height}|{round_}".encode()).hexdigest()[:24]
+    path = os.path.join(TV_IMAGE_DIR, f"{key}.bgra")
+    if not os.path.exists(path):
+        os.makedirs(TV_IMAGE_DIR, exist_ok=True)
+        with urllib.request.urlopen(src, timeout=10) as r:
+            data = r.read(8_000_000)
+        vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},format=rgba"
+        if round_:   # disque aux bords adoucis ; alpha prémultiplié : les couleurs suivent l'opacité
+            vf += (",geq=a='clip(255*(W/2+0.5-hypot(X+0.5-W/2,Y+0.5-H/2)),0,255)'"
+                   ":r='r(X,Y)*alpha(X,Y)/255':g='g(X,Y)*alpha(X,Y)/255':b='b(X,Y)*alpha(X,Y)/255'")
+        tmp = f"{path}.{threading.get_ident()}.tmp"
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", "pipe:0", "-vf", vf, "-frames:v", "1",
+                        "-f", "rawvideo", "-pix_fmt", "bgra", tmp], input=data, capture_output=True, timeout=30, check=True)
+        os.replace(tmp, path)
+    return {"path": path, "w": width, "h": height}
 
 
 # Aperçu de la TV pour la page, seulement quand la page le demande (bloc ouvert) : l'écran entier, écran d'ambiance et
@@ -970,6 +999,13 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, display.info())
                 except OSError as e:
                     self.send(503, {"error": str(e)})
+            elif self.path.startswith("/api/tvimage?"):
+                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                try:
+                    self.send(200, tv_image(q.get("src", [""])[0], int(q.get("w", ["0"])[0]), int(q.get("h", ["0"])[0]),
+                                            q.get("round", ["0"])[0] == "1"))
+                except (ValueError, subprocess.SubprocessError) as e:
+                    self.send(400, {"error": str(e)})
             elif self.path == "/api/account":
                 with account_lock:
                     self.send(200, dict(account))

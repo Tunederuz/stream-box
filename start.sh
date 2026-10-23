@@ -30,7 +30,7 @@ while true; do
   # player_client : le client TV choisi par défaut reçoit des flux refusés (403) ; tv_simply et android_vr passent.
   # fetch_pot : jeton anti-robot (service stream-box-pot) pour chaque requête, sans quoi YouTube bloque les sous-titres
   mpv --idle=yes --force-window=yes --fs --osc=no --cursor-autohide=4000 \
-    --input-ipc-server=/tmp/stream-box-mpv.sock --script="$DIR/stream-box.lua" \
+    --input-ipc-server=/tmp/stream-box-mpv.sock --script="$DIR/stream-box.lua" --script="$DIR/tv_menu.lua" \
     --cache=yes --hwdec=auto-safe \
     --ytdl-format="$YTDL_FORMAT" \
     --ytdl-raw-options-append=sub-langs=fr,fr-FR,fr-orig,en,en-US,en-GB,en-orig \
