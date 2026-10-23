@@ -254,10 +254,12 @@ quand Twitch change quelque chose. Mise à jour : `~/.local/share/streamlink-ven
 
 ## Page web (remote.html)
 
-Thème sombre à dégradés violets, sans dépendance externe : en-tête avec l'état de la TV, carte « Sur la TV »
+Thème sombre en verre dépoli (glassmorphism : cartes et onglets translucides `backdrop-filter`, sur des taches de
+couleur qui dérivent en `body::before/::after` ; le fond est sur `html`, sinon celui de `body` les cache), sans
+dépendance externe, onglets collés en haut : en-tête avec l'état de la TV, carte « Sur la TV »
 (miniature du live, streamer, titre, retour en arrière ; compacte pour l'écran d'accueil et une chaîne hors ligne),
 streamers en cartes avec photo (anneau rouge en live), boutons à icônes SVG en ligne, interrupteurs (`button.toggle`
 avec `aria-pressed`, dessinés en CSS). Version précédente de la page : tag git `page-v1` (`git show
 page-v1:remote.html > remote.html` pour revenir en arrière). Pour juger d'un changement sans téléphone : copie de la
 page avec un `render(<état de /api/state>)` à la place de `refresh()`, capturée par `firefox --headless --screenshot`
-(il n'attend pas les requêtes de la page).
+(il n'attend pas les requêtes de la page ; ne pas faire défiler : les éléments collés s'y dessinent mal).
