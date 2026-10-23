@@ -510,7 +510,7 @@ Item {
                 id: liveGrid
                 y: 270; x: -40; width: 1500; height: 3 * 176 + 60
                 cellWidth: 356; cellHeight: 176
-                interactive: false; clip: true
+                interactive: false; clip: false
                 topMargin: 27; leftMargin: 27
                 model: (menu.st.streamers || []).length
                 currentIndex: menu.liveSel
@@ -518,6 +518,9 @@ Item {
                 Behavior on contentY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                 delegate: Item {
                     width: 356; height: 176
+                    readonly property real rel: y - GridView.view.contentY
+                    opacity: rel > -88 && rel < GridView.view.height - 88 ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
                     readonly property string login: (menu.st.streamers || [])[index] || ""
                     readonly property var info: (menu.st.live || {})[login]
                     StreamerCard {
@@ -591,13 +594,16 @@ Item {
                 visible: !!followsPage.f.authorized
                 y: 176; x: -40; width: 1500; height: 4 * 176 + 60
                 cellWidth: 356; cellHeight: 176
-                interactive: false; clip: true; topMargin: 27; leftMargin: 27
+                interactive: false; clip: false; topMargin: 27; leftMargin: 27
                 model: menu.followList().length
                 currentIndex: menu.followSel
                 onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
                 Behavior on contentY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                 delegate: Item {
                     width: 356; height: 176
+                    readonly property real rel: y - GridView.view.contentY
+                    opacity: rel > -88 && rel < GridView.view.height - 88 ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
                     readonly property var c: menu.followList()[index] || {}
                     StreamerCard {
                         x: 13; y: 13
@@ -620,7 +626,7 @@ Item {
             readonly property var rows: menu.replayRows()
             ListView {   // puces des streamers
                 y: 166; x: -40; width: 1500; height: 116
-                orientation: ListView.Horizontal; spacing: 16; interactive: false; clip: true
+                orientation: ListView.Horizontal; spacing: 16; interactive: false; clip: false
                 leftMargin: 40; topMargin: 26
                 model: (menu.st.streamers || []).length
                 currentIndex: menu.rpSel[0]
@@ -630,7 +636,12 @@ Item {
                     readonly property string login: (menu.st.streamers || [])[index] || ""
                     readonly property bool foc: menu.area === "content" && menu.rpRow === 0 && index === menu.rpSel[0]
                     readonly property bool cur: login === menu.rpLogin
-                    width: chipText.implicitWidth + 96; height: 64
+                    // largeur mesurée en gras (le streamer affiché l'est) : la puce ne change pas de taille en le devenant
+                    TextMetrics { id: chipMetrics; text: login; font.pixelSize: chipText.font.pixelSize; font.bold: true }
+                    width: Math.ceil(chipMetrics.advanceWidth) + 100; height: 64
+                    readonly property real rel: x - ListView.view.contentX
+                    opacity: rel > -width / 2 && rel + width / 2 < ListView.view.width ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
                     scale: foc ? 1.05 : 1
                     Behavior on scale { NumberAnimation { duration: 160 } }
                     FocusFrame { active: parent.foc; radius: 32 }
@@ -648,7 +659,7 @@ Item {
                     Text { x: 2; text: row ? row.title.toUpperCase() : ""; color: "#c09fa9"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 2 }
                     ListView {
                         y: 4; x: -40; width: 1500; height: 370
-                        orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: true
+                        orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
                         leftMargin: 40; topMargin: 38
                         model: row ? row.items.length : 0
                         currentIndex: menu.rpSel[r] || 0
@@ -656,6 +667,9 @@ Item {
                         Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                         delegate: VideoCard {
                             readonly property var it: row.items[index] || {}
+                            readonly property real rel: x - ListView.view.contentX
+                            opacity: rel > -width / 2 && rel + width / 2 < ListView.view.width ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
                             title: it.title || ""
                             thumb: it.thumb || ""
                             meta: (row.kind === "vods" ? Fmt.dateFr(it.date) + " · " + Fmt.clock(it.seconds)
@@ -673,13 +687,16 @@ Item {
             visible: menu.tabId === "history"
             y: 176; x: -40; width: 1500; height: 2 * 340 + 60
             cellWidth: 356; cellHeight: 340
-            interactive: false; clip: true; topMargin: 27; leftMargin: 27
+            interactive: false; clip: false; topMargin: 27; leftMargin: 27
             model: (menu.history || []).length
             currentIndex: menu.histSel
             onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
             Behavior on contentY { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
             delegate: Item {
                 width: 356; height: 340
+                readonly property real rel: y - GridView.view.contentY
+                opacity: rel > -170 && rel < GridView.view.height - 170 ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 150 } }
                 readonly property var e: (menu.history || [])[index] || {}
                 VideoCard {
                     x: 13; y: 13
@@ -703,12 +720,15 @@ Item {
                 readonly property var sel: menu.selectable(rows)
                 readonly property int focusedRow: menu.area === "content" ? sel[modelData === "settings" ? menu.setSel : menu.sysSel] : -1
                 y: 180; x: -40; width: modelData === "settings" ? 1060 : 890; height: 880
-                spacing: 10; interactive: false; clip: true; topMargin: 30; leftMargin: 40
+                spacing: 10; interactive: false; clip: false; topMargin: 30; leftMargin: 40
                 model: rows.length
                 onFocusedRowChanged: if (focusedRow >= 0) positionViewAtIndex(focusedRow, ListView.Contain)
                 Behavior on contentY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                 delegate: SettingRow {
                     width: rowsView.width - 80
+                    readonly property real rel: y - rowsView.contentY
+                    opacity: rel > -height / 2 && rel + height / 2 < rowsView.height ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
                     row: rowsView.rows[index] || {}
                     focused: index === rowsView.focusedRow
                 }

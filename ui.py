@@ -13,7 +13,7 @@ mpv. Il lit et agit par l'API de remote.py, comme la page web.
 
 Lancé avec le Python du venv ui-venv (PySide6, python-mpv) : ui.py --input-ipc-server=… --script=… <autres options>
 """
-import ctypes, json, locale, os, sys
+import ctypes, faulthandler, json, locale, os, queue, signal, sys, threading
 
 from PySide6.QtCore import Property, QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QCursor, QGuiApplication
@@ -143,7 +143,7 @@ class Box(QObject):
     @Slot(bool)
     def setMenuOpen(self, value):
         self.menu_open = value
-        set_flag("user-data/streambox/tvmenu", value)   # le chat se masque, la souris n'ouvre pas le petit menu
+        to_mpv(set_flag, "user-data/streambox/tvmenu", value)   # le chat se masque, la souris n'ouvre pas le petit menu
 
 
 box = Box()
@@ -151,6 +151,24 @@ box = Box()
 
 bridge = Bridge()
 player = None   # créé dans main(), avant la fenêtre
+
+# Appels à mpv depuis le fil de Qt : jamais en direct. Un appel synchrone peut attendre la sortie vidéo de mpv, qui
+# attend le fil de rendu de Qt, lui-même bloqué par le fil principal : tout se fige (vu en relançant le lecteur, menu
+# ouvert : socket IPC coupé, image figée). Un fil à part les exécute dans l'ordre.
+mpv_calls = queue.Queue()
+
+
+def mpv_worker():
+    while True:
+        fn, args = mpv_calls.get()
+        try:
+            fn(*args)
+        except Exception as e:   # mpv arrêté, propriété refusée… : on continue
+            print(f"appel à mpv refusé : {e}", flush=True)
+
+
+def to_mpv(fn, *args):
+    mpv_calls.put((fn, args))
 # Tampons d'image donnés à Qt : PySide les libérerait sinon pendant que Qt s'en sert encore (plantage dans texture()).
 # Qt les détruit lui-même quand la taille change ; on garde juste la référence Python.
 framebuffers = []
@@ -195,8 +213,12 @@ class MpvRenderer(QQuickFramebufferObject.Renderer):
         return fbo
 
     def render(self):
+        # update() accuse réception de la notification de mpv ; sans attente de l'heure d'affichage de l'image : bloqué
+        # là-dedans, le fil de rendu de Qt figeait tout au démarrage (une relance sur deux ou trois)
+        self.ctx.update()
         fbo = self.framebufferObject()
-        self.ctx.render(flip_y=False, opengl_fbo={"fbo": fbo.handle(), "w": fbo.width(), "h": fbo.height()})
+        self.ctx.render(flip_y=False, block_for_target_time=False,
+                        opengl_fbo={"fbo": fbo.handle(), "w": fbo.width(), "h": fbo.height()})
         self.ctx.report_swap()
 
 
@@ -228,7 +250,7 @@ class View(QQuickView):
             box.keyPressed.emit(MENU_KEYS[name])
             return
         # Répétition : un keypress par événement, comme mpv le fait pour une touche maintenue
-        player.command("keypress", name)
+        to_mpv(player.command, "keypress", name)
 
     def mouse_pos(self, event):
         ratio = self.devicePixelRatio()
@@ -240,20 +262,22 @@ class View(QQuickView):
             return
         self.setCursor(QCursor(Qt.ArrowCursor))
         self.hide_cursor.start()
-        player.command("mouse", *self.mouse_pos(event))
+        to_mpv(player.command, "mouse", *self.mouse_pos(event))
 
     def mousePressEvent(self, event):
         if box.menu_open:
             return
         x, y = self.mouse_pos(event)
         double = event.type() == event.Type.MouseButtonDblClick
-        player.command("mouse", x, y, 0, "double" if double else "single")
+        to_mpv(player.command, "mouse", x, y, 0, "double" if double else "single")
 
     mouseDoubleClickEvent = mousePressEvent
 
 
 def main():
     global player
+    # kill -USR1 <pid> : pile de chaque fil dans le journal (diagnostic d'un blocage)
+    faulthandler.register(signal.SIGUSR1, all_threads=True)
     opts, appends, files = parse_args(sys.argv[1:])
     force_window = opts.pop("__force_window", None)
     QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
@@ -289,15 +313,18 @@ def main():
 
     bridge.shutdown.connect(app.quit, Qt.QueuedConnection)
     if force_window:
-        bridge.ready.connect(lambda: player.command("set", "force-window", force_window), Qt.QueuedConnection)
+        bridge.ready.connect(lambda: to_mpv(player.command, "set", "force-window", force_window), Qt.QueuedConnection)
     if qml_menu:
-        bridge.ready.connect(lambda: set_flag("user-data/streambox/tvmenu", False), Qt.QueuedConnection)
+        bridge.ready.connect(lambda: to_mpv(set_flag, "user-data/streambox/tvmenu", False), Qt.QueuedConnection)
     view.showFullScreen()
+    threading.Thread(target=mpv_worker, daemon=True).start()
     for f in files:
-        player.command("loadfile", f, "append-play")
+        to_mpv(player.command, "loadfile", f, "append-play")
     code = app.exec()
-    player.terminate()
-    os._exit(code)   # sans le ménage de Python : Qt a déjà détruit les tampons d'image qu'il référence
+    # mpv a déjà quitté (événement shutdown). Pas de player.terminate() : libmpv s'arrête net (abort, code 134) si son
+    # contexte de rendu, tenu par le fil de rendu de Qt, existe encore. Ni de ménage de Python : Qt a déjà détruit les
+    # tampons d'image qu'il référence.
+    os._exit(code)
 
 
 if __name__ == "__main__":

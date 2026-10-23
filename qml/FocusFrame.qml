@@ -1,4 +1,5 @@
-// Cadre de focus : halo violet flou et bord blanc autour de l'élément parent, en fondu
+// Cadre de focus, sous l'élément choisi : halo violet en dégradé doux tout autour (ombre rectangulaire floue, calculée
+// par la puce graphique) et bord blanc, en fondu
 import QtQuick
 import QtQuick.Effects
 
@@ -7,30 +8,21 @@ Item {
     property bool active: false
     property real radius: 22
     anchors.fill: parent
-    anchors.margins: -6
     opacity: active ? 1 : 0
     visible: opacity > 0
-    Behavior on opacity { NumberAnimation { duration: 160 } }
+    Behavior on opacity { NumberAnimation { duration: 180 } }
 
-    Rectangle {
-        id: glowShape
+    RectangularShadow {
         anchors.fill: parent
-        radius: root.radius + 6
+        radius: root.radius
+        blur: 42
+        spread: 4
         color: "#9146ff"
-        visible: false
-    }
-    MultiEffect {
-        source: glowShape
-        anchors.fill: glowShape
-        anchors.margins: -24
-        autoPaddingEnabled: true
-        blurEnabled: true
-        blur: 1.0
-        blurMax: 32
-        opacity: 0.55
+        opacity: 0.9
     }
     Rectangle {
         anchors.fill: parent
+        anchors.margins: -6
         radius: root.radius + 6
         color: "transparent"
         border.color: "white"
