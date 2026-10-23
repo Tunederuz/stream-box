@@ -354,9 +354,9 @@ local function draw_rail(out)
         else
             if i == tab then
                 out[#out + 1] = rrect(40, y, 320, 72, 36, "FFFFFF", "E6")
-                out[#out + 1] = rrect(48, y + 22, 6, 28, 3, VIOLET, "00")
+                out[#out + 1] = rrect(60, y + 30, 12, 12, 6, VIOLET, "00")   -- onglet en cours : point dans la pastille
             end
-            out[#out + 1] = label(78, y + 36, 32, i == tab and "FFFFFF" or "C2AFB4", ass_escape(t.label), 4,
+            out[#out + 1] = label(i == tab and 88 or 78, y + 36, 32, i == tab and "FFFFFF" or "C2AFB4", ass_escape(t.label), 4,
                                   i == tab and "\\b1" or "")
         end
     end
