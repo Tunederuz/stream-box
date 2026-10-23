@@ -136,7 +136,9 @@ appli), fait la même chose depuis un téléphone, plus le volume et la pause.
   login}`) ; l'ajout vérifie que la chaîne existe sur Twitch, les commentaires de `streamers.txt` sont conservés.
 - **Home Assistant (MQTT)** : `mqtt_bridge.py`, service utilisateur `stream-box-mqtt` (Python du venv media, paho-mqtt).
   Lit `/api/state` toutes les 2 s et publie `stream-box/state` (+ `stream-box/live`, `stream-box/status` online/offline
-  en dernière volonté) ; les commandes `stream-box/cmd/*` deviennent des appels à l'API de `remote.py`. 14 entités par
+  en dernière volonté) ; les commandes `stream-box/cmd/*` deviennent des appels à l'API de `remote.py`. Le pont démarre
+  bien avant mpv : il n'annonce `online` qu'une fois l'API prête et le Lua chargé (chaîne publiée), et garde 2 min les
+  commandes reçues avant (sinon le choix du streamer envoyé par HA au réveil était perdu). 14 entités par
   découverte (`homeassistant/…/stream_box/…`), réannoncées quand HA redémarre ou que la liste change. Config locale
   `~/.config/stream-box/mqtt.json` + `mqtt-password` (600). Entités et automatisation d'exemple : `docs/home-assistant.md`.
 - **Mises à jour** : `update.sh` (timer systemd utilisateur `stream-box-update.timer`, lundi ~5 h, rattrapé au démarrage)

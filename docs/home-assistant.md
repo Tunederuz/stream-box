@@ -17,7 +17,9 @@ La box s'annonce toute seule dans Home Assistant par la **découverte MQTT** (`m
 | `binary_sensor.stream_box_lecture` | Quelque chose joue |
 | `event.stream_box_lancement_de_live` | Un streamer de la liste lance son live (seulement quand la box est allumée) |
 
-Quand la box est éteinte, toutes ses entités passent à `unavailable` (message de dernière volonté MQTT).
+Quand la box est éteinte, toutes ses entités passent à `unavailable` (message de dernière volonté MQTT). Au démarrage,
+elles ne redeviennent disponibles qu'une fois la box prête à recevoir des commandes : on peut donc attendre ce retour
+avant de choisir le streamer (une commande envoyée trop tôt est de toute façon gardée deux minutes).
 
 ## Allumer la box et la TV quand un streamer lance son live
 

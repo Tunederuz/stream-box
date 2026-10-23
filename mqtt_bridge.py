@@ -15,6 +15,8 @@ CONF_DIR = os.path.expanduser("~/.config/stream-box")
 BASE = "stream-box"                 # préfixe des topics de la box
 DISCOVERY = "homeassistant"         # préfixe de découverte de Home Assistant
 POLL = 2                            # secondes entre deux lectures de l'état
+OFFLINE_AFTER = 30                  # secondes sans réponse de l'API avant d'annoncer la box hors ligne
+PENDING_FOR = 120                   # une commande reçue avant que la box soit prête est gardée ce temps-là
 DEVICE = {"identifiers": ["stream_box"], "name": "Stream Box", "model": "Stream Box", "manufacturer": "Stream Box"}
 
 
@@ -75,6 +77,9 @@ class Bridge:
         self.client.on_message = self.on_message
         self.client.connect_async(conf["host"], int(conf.get("port", 1883)))
         self.state, self.published, self.streamers, self.live = {}, None, None, None
+        # « En ligne » seulement quand l'API répond : au démarrage, le pont est prêt bien avant mpv et remote.py, et
+        # Home Assistant enverrait ses commandes dans le vide
+        self.available, self.last_ok, self.pending = False, time.time(), []
 
     def announce(self):
         for component, object_id, config in entities(self.streamers):
@@ -84,7 +89,7 @@ class Bridge:
 
     def on_connect(self, client, userdata, flags, reason, properties=None):
         client.subscribe([(f"{BASE}/cmd/#", 0), (f"{DISCOVERY}/status", 0)])
-        client.publish(f"{BASE}/status", "online", retain=True)
+        client.publish(f"{BASE}/status", "online" if self.available else "offline", retain=True)
         self.published = None   # republier l'état après une reconnexion
         if self.streamers is not None:
             self.announce()
@@ -97,6 +102,12 @@ class Bridge:
                 self.published = None
             return
         command = msg.topic.rsplit("/", 1)[1]
+        if not self.available:
+            self.pending.append((time.time(), command, payload))   # appliquée dès que la box est prête
+            return
+        self.run_command(command, payload)
+
+    def run_command(self, command, payload):
         s = self.state
         try:
             if command == "channel" and payload in (self.streamers or []):
@@ -123,8 +134,11 @@ class Bridge:
         try:
             s = api("/api/state")
         except (OSError, ValueError):
+            if self.available and time.time() - self.last_ok > OFFLINE_AFTER:
+                self.available = False
+                self.client.publish(f"{BASE}/status", "offline", retain=True)
             return
-        self.state = s
+        self.state, self.last_ok = s, time.time()
         if s.get("streamers") != self.streamers:   # liste modifiée : nouvelles options du sélecteur
             self.streamers = s.get("streamers")
             self.announce()
@@ -145,6 +159,15 @@ class Bridge:
         if public != self.published:
             self.client.publish(f"{BASE}/state", json.dumps(public), retain=True)
             self.published = public
+        # Prête quand le script Lua de mpv tourne (il publie la chaîne en cours) : avant, ses messages seraient perdus
+        ready = s.get("channel") is not None or not s.get("streamers")
+        if ready and not self.available:   # box prête : on l'annonce, puis on applique ce qui attendait
+            self.available = True
+            self.client.publish(f"{BASE}/status", "online", retain=True)
+            pending, self.pending = self.pending, []
+            for received, command, payload in pending:
+                if time.time() - received < PENDING_FOR:
+                    self.run_command(command, payload)
 
     def run(self):
         self.client.loop_start()
