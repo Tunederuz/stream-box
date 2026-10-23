@@ -15,6 +15,8 @@ Item {
     property var st: ({})                     // /api/state : photos, streamers en live
     property date now: new Date()
     property bool qrShown: true
+    // QR code affiché (réglage : toujours, 30 secondes à chaque arrivée, jamais)
+    readonly property bool qrWanted: !!(ambient.qr && ambient.qr.rows) && (box.qrMode === "always" || (box.qrMode === "timed" && qrShown))
     readonly property var liveOthers: {
         var out = [], live = st.live || {}
         for (var i = 0; i < (st.streamers || []).length; i++) {
@@ -179,8 +181,8 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 18
                 Repeater {
-                    model: root.schedule.slice(0, 4)
-                    Rectangle {   // 4 cartes de 330 : elles s'arrêtent avant le QR code, en bas à droite
+                    model: root.schedule.slice(0, root.qrWanted ? 3 : 4)
+                    Rectangle {   // cartes de 330 : 3 quand le QR code est affiché en bas à droite, pour ne pas le toucher
                         width: 330; height: 108; radius: 24
                         color: "#14ffffff"; border.color: "#22ffffff"; border.width: 1
                         RoundImage {
@@ -212,14 +214,13 @@ Item {
 
         // QR code de la télécommande, selon le réglage (toujours, 30 secondes à chaque arrivée, jamais)
         Column {
-            readonly property bool wanted: box.qrMode === "always" || (box.qrMode === "timed" && root.qrShown)
             visible: opacity > 0 && !!(root.ambient.qr && root.ambient.qr.rows)
-            opacity: wanted ? 1 : 0
+            opacity: root.qrWanted ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 500 } }
-            x: 1920 - 60 - width; y: 1080 - 50 - height
+            x: 1920 - 56 - width; y: 1080 - 44 - height
             spacing: 10
             Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Télécommande"; color: "#b4afc2"; font.pixelSize: 21 }
-            QrCode { anchors.horizontalCenter: parent.horizontalCenter; size: 150; rows: root.ambient.qr ? root.ambient.qr.rows : [] }
+            QrCode { anchors.horizontalCenter: parent.horizontalCenter; size: 230; rows: root.ambient.qr ? root.ambient.qr.rows : [] }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.ambient.qr ? String(root.ambient.qr.url).replace(/^https?:\/\//, "").replace(/\/$/, "") : ""
