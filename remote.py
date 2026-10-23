@@ -231,6 +231,46 @@ def ambient_loop():
         time.sleep(60)
 
 
+# Aperçu de la TV pour la page : capture de mpv réduite en JPEG, seulement quand la page le demande (bloc ouvert).
+# mpv n'a rien à capturer quand aucune vidéo ne joue (écran d'ambiance) : la page affiche alors un texte.
+
+PREVIEW_WIDTH = 960
+preview_lock = threading.Lock()
+preview_cache = {"at": 0.0, "overlay": None, "data": None}
+
+
+def preview(overlay):
+    """JPEG de l'écran (avec le chat et le menu si overlay), ou None s'il n'y a pas d'image à capturer."""
+    with preview_lock:   # une capture à la fois ; plusieurs téléphones se partagent la dernière pendant 1 s
+        if time.time() - preview_cache["at"] < 1 and preview_cache["overlay"] == overlay:
+            return preview_cache["data"]
+        data = None
+        if mpv(["get_property", "video-params"])[0] is not None:
+            shot, small = "/tmp/stream-box-shot.jpg", "/tmp/stream-box-preview.jpg"
+            for path in (shot, small):
+                if os.path.exists(path):
+                    os.remove(path)
+            mpv(["screenshot-to-file", shot, "window" if overlay else "video"])
+            for _ in range(30):   # mpv écrit le fichier après avoir répondu
+                if os.path.exists(shot) and os.path.getsize(shot) > 0:
+                    size = os.path.getsize(shot)
+                    time.sleep(0.05)
+                    if os.path.getsize(shot) == size:
+                        break
+                time.sleep(0.05)
+            if os.path.exists(shot):
+                try:
+                    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", shot, "-vf", f"scale={PREVIEW_WIDTH}:-2",
+                                    "-q:v", "5", small], timeout=10, check=True)
+                    shot = small
+                except (OSError, subprocess.SubprocessError):
+                    pass   # sans ffmpeg : capture en taille réelle
+                with open(shot, "rb") as f:
+                    data = f.read()
+        preview_cache.update(at=time.time(), overlay=overlay, data=data)
+        return data
+
+
 def state():
     user, volume, mute, pause, video, title, position, duration, tracks, cache = mpv(
         ["get_property", "user-data/streambox"], ["get_property", "volume"], ["get_property", "mute"],
@@ -571,6 +611,15 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, f.read(), content_type)
             elif self.path == "/api/state":
                 self.send(200, state())
+            elif self.path.startswith("/api/preview"):
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                image = preview(query.get("overlay", ["1"])[0] != "0")
+                if image:
+                    self.send(200, image, "image/jpeg")
+                else:
+                    self.send_response(204)   # rien à capturer (écran d'ambiance)
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
             elif self.path.startswith("/api/replays?"):
                 login = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("login", [""])[0]
                 try:

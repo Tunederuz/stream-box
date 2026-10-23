@@ -83,6 +83,12 @@
   .replay .t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
                font-size: 14px; }
   .replay .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  #preview-box { margin-top: 10px; }
+  #preview-img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border-radius: 8px; background: #000;
+                 display: block; }
+  #preview-note { text-align: center; padding: 40px 0; color: var(--muted); background: #000; border-radius: 8px; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; color: var(--muted); }
+  .check input { width: auto; min-height: auto; margin: 0; accent-color: var(--accent); }
   .replays-title { font-size: 13px; color: var(--muted); margin: 12px 0 0; text-transform: uppercase;
                    letter-spacing: .08em; }
   #send-link[open] summary { margin-bottom: 4px; }
@@ -172,6 +178,17 @@
       <button data-action="chat" id="chat">Chat affiché</button>
       <button data-action="corner" id="corner">Coin</button>
     </div>
+  </section>
+
+  <section>
+    <details id="preview">
+      <summary>Aperçu de la TV</summary>
+      <div id="preview-box">
+        <img id="preview-img" alt="Aperçu de l'écran de la TV" hidden>
+        <div id="preview-note">Chargement…</div>
+        <label class="check"><input type="checkbox" id="preview-overlay" checked> Avec le chat et le menu</label>
+      </div>
+    </details>
   </section>
 
   <section>
@@ -267,6 +284,7 @@
 const CORNERS = { tl: "↖ haut gauche", tr: "↗ haut droite", br: "↘ bas droite", bl: "↙ bas gauche" };
 const $ = (id) => document.getElementById(id);
 let refreshTimer;
+let previewTimer = null, previewUrl = null;   // aperçu de la TV (voir previewTick)
 let lastState = null, replaysLogin = null;
 let progress = null;   // dernière position connue, pour faire avancer la barre entre deux rafraîchissements
 const settings = {};   // dernières valeurs connues de chat_bg et chat_size
@@ -561,6 +579,7 @@ function showTab(name) {
   $("tab-settings").hidden = name !== "settings";
   try { localStorage.setItem("tab", name); } catch (e) { /* stockage indisponible : on oublie l'onglet */ }
   if (name === "settings") { renderManage(); refreshDisplay(); }
+  if (typeof previewTick === "function") previewTick();
 }
 document.querySelectorAll(".tabs button").forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
 let savedTab = "remote";
@@ -568,6 +587,40 @@ try { savedTab = localStorage.getItem("tab") || "remote"; } catch (e) { /* idem 
 showTab(location.hash === "#reglages" ? "settings" : savedTab);   // #reglages : lien direct vers les réglages
 $("add-streamer").onclick = () => { if ($("new-streamer").value.trim()) editStreamers("add", $("new-streamer").value); };
 $("new-streamer").onkeydown = (e) => { if (e.key === "Enter") $("add-streamer").click(); };
+// Aperçu : une capture à la fois, la suivante 1,5 s après la réponse ; rien ne tourne quand le bloc est fermé,
+// l'onglet changé ou la page cachée
+function previewActive() {
+  return $("preview").open && !$("tab-remote").hidden && !document.hidden;
+}
+async function previewTick() {
+  clearTimeout(previewTimer);
+  if (!previewActive()) return;
+  try {
+    const r = await fetch(`/api/preview?overlay=${$("preview-overlay").checked ? 1 : 0}`, { cache: "no-store" });
+    if (r.status === 204) {
+      $("preview-img").hidden = true;
+      $("preview-note").hidden = false;
+      $("preview-note").textContent = "Écran d'ambiance : rien à capturer";
+    } else if (r.ok) {
+      const url = URL.createObjectURL(await r.blob());
+      $("preview-img").src = url;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = url;
+      $("preview-img").hidden = false;
+      $("preview-note").hidden = true;
+    } else {
+      throw new Error(`HTTP ${r.status}`);
+    }
+  } catch (e) {
+    $("preview-img").hidden = true;
+    $("preview-note").hidden = false;
+    $("preview-note").textContent = "Aperçu indisponible";
+  }
+  if (previewActive()) previewTimer = setTimeout(previewTick, 1500);
+}
+$("preview").ontoggle = () => previewTick();
+$("preview-overlay").onchange = () => previewTick();
+document.addEventListener("visibilitychange", () => previewTick());
 $("replays").ontoggle = () => {
   if ($("replays").open) loadReplays(replaysLogin ?? lastState?.channel ?? lastState?.streamers?.[0]);
 };
