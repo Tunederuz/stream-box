@@ -257,7 +257,7 @@ def fetch_weather(conf):
     with urllib.request.urlopen(f"https://api.open-meteo.com/v1/forecast?{query}", timeout=10) as r:
         d = json.load(r)
     code = d["current"]["weather_code"]
-    return {"city": conf.get("city"), "temp": round(d["current"]["temperature_2m"]),
+    return {"city": conf.get("city"), "temp": round(d["current"]["temperature_2m"]), "code": code,
             "text": next((t for codes, t in WEATHER if code in codes), ""),
             "min": round(d["daily"]["temperature_2m_min"][0]), "max": round(d["daily"]["temperature_2m_max"][0]),
             "rain": d["daily"]["precipitation_probability_max"][0]}

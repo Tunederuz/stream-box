@@ -76,6 +76,7 @@ Item {
         height: 1080
         scale: Math.min(parent.width / 1920, parent.height / 1080)
         transformOrigin: Item.TopLeft
+        AmbientScreen {}
         ChatOverlay {}
         TvMenu {
             objectName: "tvMenu"

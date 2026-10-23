@@ -124,13 +124,17 @@ class Box(QObject):
     keyPressed = Signal(str)
     ambientChanged = Signal()
     videoActiveChanged = Signal()
+    homeChanged = Signal()
     _ambient_in = Signal(str)        # depuis le fil de mpv
     _video_in = Signal(bool)
+    _home_in = Signal(str, str)      # écran d'accueil : clé (ambient_on, status, qr), valeur en JSON
 
     def __init__(self):
         super().__init__()
         self.menu_open = False
         self._ambient, self._video = "{}", False
+        self._home = {"ambient_on": False, "status": "", "qr": "always"}
+        self._home_in.connect(self._set_home, Qt.QueuedConnection)
         self._ambient_in.connect(self._set_ambient, Qt.QueuedConnection)
         self._video_in.connect(self._set_video, Qt.QueuedConnection)
 
@@ -138,6 +142,15 @@ class Box(QObject):
         if value != self._ambient:
             self._ambient = value
             self.ambientChanged.emit()
+
+    def _set_home(self, key, value):
+        self._home[key] = json.loads(value)
+        self.homeChanged.emit()
+
+    # Écran d'accueil (qml/AmbientScreen.qml) : affiché quand stream-box.lua le décide, avec son message d'état
+    ambientOn = Property(bool, lambda self: bool(self._home["ambient_on"]), notify=homeChanged)
+    statusText = Property(str, lambda self: self._home["status"] or "", notify=homeChanged)
+    qrMode = Property(str, lambda self: self._home["qr"] or "always", notify=homeChanged)
 
     def _set_video(self, value):
         if value != self._video:
@@ -507,6 +520,9 @@ def main():
         player.observe_property("user-data/streambox/ambient",
                                 lambda _n, v: box._ambient_in.emit(json.dumps(v or {})))
         player.observe_property("video-params", lambda _n, v: box._video_in.emit(v is not None))
+        for key in ("ambient_on", "status", "qr"):
+            player.observe_property(f"user-data/streambox/{key}",
+                                    lambda _n, v, key=key: v is not None and box._home_in.emit(key, json.dumps(v)))
     for key, value in appends:
         player.command("change-list", key, "append", value)
 

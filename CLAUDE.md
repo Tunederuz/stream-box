@@ -410,3 +410,14 @@ erreur de chargement de ui.qml fait retomber l'appli sur le menu Lua et le chat 
 Fermeture : à l'événement `shutdown` de mpv, `os._exit` tout de suite depuis le fil d'événements de python-mpv (qui
 sinon détruit sa connexion et attend le contexte de rendu tenu par Qt : appli figée, pas de relance ; 6/6 relances
 propres après correction).
+
+### Écran d'accueil en QML (appli Qt)
+
+`qml/AmbientScreen.qml` : affiché quand stream-box.lua le décide (`user-data/streambox/ambient_on`, publié par
+`update_ambient` ; `draw_ambient` ne dessine plus rien quand `chat_ui` vaut `qml`), avec le message d'état
+(`user-data/streambox/status`, publié par `set_status`) et le mode du QR code (`qr`), relayés par `box` (`ambientOn`,
+`statusText`, `qrMode`). Fond : taches de couleur en `RectangularShadow` très flous (pas de calque, flou par la puce
+graphique) qui dérivent sur une minute ou plus ; contenu qui dérive de ±36 px sur 7 à 11 min. Horloge, date (locale
+fr_FR), météo avec `WeatherIcon.qml` (icône dessinée et animée d'après le code WMO, `code` ajouté par remote.py ; lune
+de 20 h à 7 h), « En live maintenant » (streamers de la liste en live hors celui regardé, `/api/state`), prochains
+lives en cartes de verre avec photos, QR code (toujours, 30 s à chaque arrivée, jamais).
