@@ -40,6 +40,12 @@ def entities(streamers):
         ("switch", "auto_switch", {"name": "Bascule automatique", "icon": "mdi:swap-horizontal",
                                    "state_topic": state, "command_topic": cmd("auto_switch"),
                                    "value_template": "{{ 'ON' if value_json.auto_switch else 'OFF' }}"}),
+        ("switch", "night", {"name": "Mode nuit", "icon": "mdi:weather-night", "state_topic": state,
+                             "command_topic": cmd("night"),
+                             "value_template": "{{ 'ON' if value_json.night else 'OFF' }}"}),
+        ("switch", "events", {"name": "Sondages et prédictions", "icon": "mdi:poll", "state_topic": state,
+                              "command_topic": cmd("events"),
+                              "value_template": "{{ 'ON' if value_json.events else 'OFF' }}"}),
         ("switch", "pause", {"name": "Pause", "icon": "mdi:pause", "state_topic": state, "command_topic": cmd("pause"),
                              "value_template": "{{ 'ON' if value_json.pause else 'OFF' }}"}),
         ("number", "volume", {"name": "Volume", "icon": "mdi:volume-high", "min": 0, "max": 130, "step": 5,
@@ -120,6 +126,8 @@ class Bridge:
                 api("/api/chat", {})
             elif command == "auto_switch":
                 api("/api/auto_switch", {"enabled": payload == "ON"})
+            elif command in ("night", "events"):
+                api("/api/flag", {"key": command, "enabled": payload == "ON"})
             elif command == "pause" and (payload == "ON") != bool(s.get("pause")):
                 api("/api/pause", {})
             elif command == "volume":
@@ -163,7 +171,7 @@ class Bridge:
         self.live = live
         delay = s.get("delay")
         public = {k: s.get(k) for k in ("channel", "mode", "title", "chat_visible", "pause", "volume", "playing",
-                                        "auto_switch")}
+                                        "auto_switch", "night", "events")}
         public.update(live=sorted(live), delay=None if delay is None else int(delay))
         if public != self.published:
             self.client.publish(f"{BASE}/state", json.dumps(public), retain=True)

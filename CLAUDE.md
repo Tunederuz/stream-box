@@ -140,11 +140,11 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   Lit `/api/state` toutes les 2 s et publie `stream-box/state` (+ `stream-box/live`, `stream-box/status` online/offline
   en dernière volonté) ; les commandes `stream-box/cmd/*` deviennent des appels à l'API de `remote.py`. Le pont démarre
   bien avant mpv : il n'annonce `online` qu'une fois l'API prête et le Lua chargé (chaîne publiée), et garde 2 min les
-  commandes reçues avant (sinon le choix du streamer envoyé par HA au réveil était perdu). 14 entités par
+  commandes reçues avant (sinon le choix du streamer envoyé par HA au réveil était perdu). 18 entités par
   découverte (`homeassistant/…/stream_box/…`), réannoncées quand HA redémarre ou que la liste change. Config locale
   `~/.config/stream-box/mqtt.json` + `mqtt-password` (600). Entités et automatisation d'exemple : `docs/home-assistant.md`.
 - **Écran d'accueil à la demande** : mode `home` (`show_home`, script-message `streambox-home`, `POST /api/home`,
-  bouton dans la page, dernière ligne du menu de la TV, bouton MQTT) : stream arrêté, écran d'ambiance affiché, pas
+  bouton dans la page au-dessus des streamers, première ligne du menu de la TV, bouton MQTT) : stream arrêté, écran d'ambiance affiché, pas
   de bascule automatique ni de chien de garde ; on en sort en choisissant un streamer ou une vidéo, ou par Jellyfin.
 - **Écran d'ambiance** (stream-box.lua, `draw_ambient`) quand rien ne joue (chaîne hors ligne, liste vide, mode `home`) : horloge,
   date en français, météo, prochains lives prévus, et le message d’état en petit en bas, sur un fond « aurore » (`AURORA` :
@@ -156,6 +156,25 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   ignorés ; pendant une pause Twitch (`schedule.interruption`, les vacances du streamer) : « en pause jusqu'au … » ; au-delà
   d'une semaine, la date est ajoutée au jour ; calcul testable dans `next_streams`). Les captures de mpv sont vides quand
   rien ne joue : vérifier l'écran sur la TV.
+- **QR code de la télécommande** (invités) : `remote.py` (`remote_qr`) le calcule avec segno (venv media, appelé en
+  sous-processus : `remote.py` tourne avec le Python du système) pour l'adresse de `~/.config/stream-box/remote-url`
+  (option `--remote-url` d'install.sh ; sinon `http://<IP de la box>:8080`, que le pare-feu peut bloquer), et le publie
+  dans `user-data/streambox/ambient` (`qr` : adresse + lignes de « 0 »/« 1 »). `qr_code()` du Lua le dessine en un
+  seul tracé ASS, en gris clair (moins marquant que du blanc) : en bas à droite de l'écran d'ambiance (il dérive avec
+  le reste) et à droite du menu quand l'écran d'ambiance n'est pas affiché.
+- **Sondages et prédictions** (`remote.py`, `events_loop` / `fetch_events`) : plus de PubSub pour un spectateur, donc
+  relevé GQL toutes les 10 s, seulement pendant un direct de la liste avec l'encart activé : `user.viewablePoll`
+  (sondage en cours ou terminé ; pas d'heure de fin, on montre le résultat 60 s après l'avoir vu terminé),
+  `channel.activePredictionEvents`, `lockedPredictionEvents`, et `resolvedPredictionEvents(first:1)` (résultat montré
+  60 s après `endedAt`). Publié dans `user-data/streambox/polls` (ne pas confondre avec `user-data/streambox/events`, le
+  réglage). Encart en haut au centre (`draw_events`, redessiné chaque seconde pour le temps restant), loin des coins du
+  chat. Réglage oui/non `events` (Réglages → Lecture, interrupteur MQTT). Les prédictions se lisent sans compte ; aucun
+  sondage n'était ouvert sur ~280 lives au moment des tests, l'affichage a été vérifié avec des données simulées
+  (`set_property user-data/streambox/polls …` par l'IPC).
+- **Mode nuit** : filtre audio `@night:lavfi=[acompressor=…,alimiter=…]` ajouté/retiré par le Lua (réglage `night`,
+  bouton dans Télécommande → Lecture, interrupteur MQTT). `af` est une option globale de mpv : il reste d'un fichier à
+  l'autre, Jellyfin compris. Réglages oui/non : script-message `streambox-flag <clé> yes|no`, `POST /api/flag {key,
+  enabled}`, état dans `user-data/streambox/<clé>` et le fichier d'état du même nom.
 - **Historique et reprise** (`remote.py`, `play` / `history_loop`) des vidéos lancées depuis la télécommande (liens,
   YouTube, rediffusions et clips Twitch ; Jellyfin gère sa progression). Clé stable par vidéo (`media_key` : id
   YouTube, id de VOD, slug de clip), historique dans `~media/.local/state/stream-box/history.json` (60 entrées).

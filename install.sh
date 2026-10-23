@@ -8,6 +8,8 @@
 # et met en place la session sans bureau (connexion automatique quand aucun clavier n'est branché au démarrage).
 #   --restore ARCHIVE      remet les réglages et connexions sauvegardés par backup.sh
 #   --city VILLE           météo de l'écran d'ambiance (coordonnées trouvées par Open-Meteo)
+#   --remote-url URL       adresse de la télécommande web montrée en QR code sur la TV (celle du reverse proxy
+#                          HTTPS, par exemple ; sinon http://<IP de la box>:8080)
 #   --streamers a,b,c      liste de départ des streamers (sinon : liste vide, à remplir depuis la télécommande web)
 #   --allow-from IP        ouvre le port 8080 (télécommande web) à cette adresse si le pare-feu ufw est actif,
 #                          typiquement celle du reverse proxy HTTPS
@@ -22,14 +24,15 @@ BOX_USER=media
 BOX_HOME=/home/$BOX_USER
 BOX_DIR=$BOX_HOME/stream-box
 SRC=$(cd "$(dirname "$0")" && pwd)
-MEDIA_VENV_PACKAGES="yt-dlp[default] deno nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt"
+MEDIA_VENV_PACKAGES="yt-dlp[default] deno nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt segno"
 POT_REPO=https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git
 
-CITY="" STREAMERS="" SKIP_SYSTEM=0 RESTORE="" ALLOW_FROM="" STATIC_IP="" GATEWAY="" DNS="" WOL=0
+CITY="" REMOTE_URL="" STREAMERS="" SKIP_SYSTEM=0 RESTORE="" ALLOW_FROM="" STATIC_IP="" GATEWAY="" DNS="" WOL=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --restore) RESTORE=$(realpath "${2:?--restore attend une archive}"); shift 2 ;;
     --city) CITY=${2:?--city attend un nom de ville}; shift 2 ;;
+    --remote-url) REMOTE_URL=${2:?--remote-url attend une adresse}; shift 2 ;;
     --streamers) STREAMERS=${2:?--streamers attend une liste}; shift 2 ;;
     --allow-from) ALLOW_FROM=${2:?--allow-from attend une adresse}; shift 2 ;;
     --static-ip) STATIC_IP=${2:?--static-ip attend IP/PRÉFIXE}; shift 2 ;;
@@ -50,6 +53,7 @@ as_box() { (cd "$BOX_HOME" && runuser -u "$BOX_USER" -- env HOME="$BOX_HOME" bas
 [ "$(id -u)" -eq 0 ] || die "à lancer avec sudo"
 command -v pacman > /dev/null || die "pensé pour une distribution Arch (pacman introuvable)"
 [ -z "$RESTORE" ] || [ -f "$RESTORE" ] || die "archive introuvable : $RESTORE"
+[ -z "$REMOTE_URL" ] || [[ "$REMOTE_URL" =~ ^https?:// ]] || die "--remote-url attend une adresse http(s)://…"
 [ -z "$STATIC_IP" ] || [[ "$STATIC_IP" == */* ]] || die "--static-ip attend une adresse avec son préfixe, par exemple 192.168.1.50/24"
 [ -z "$STATIC_IP" ] || [ -n "$GATEWAY" ] || die "--static-ip demande aussi --gateway"
 
@@ -181,6 +185,10 @@ with open(path, "w", encoding="utf-8") as f:
     json.dump(conf, f, ensure_ascii=False)
 print(f"météo : {found['name']} ({found.get('country', '')}), {found['latitude']:.2f}, {found['longitude']:.2f}, {found['timezone']}")
 PY
+fi
+
+if [ -n "$REMOTE_URL" ]; then
+  REMOTE_URL="$REMOTE_URL" as_box 'printf "%s\n" "$REMOTE_URL" > ~/.config/stream-box/remote-url'
 fi
 
 step "Services utilisateur (mises à jour, jetons YouTube, pont MQTT)"

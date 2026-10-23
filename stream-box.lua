@@ -29,6 +29,7 @@ local mode, back_timer = "twitch", nil
 local live, offline, channel_since = {}, false, 0   -- live : relevé de remote.py (user-data/streambox/live)
 local ambient_visible, status_text = false, ""    -- écran d'ambiance affiché ; dernier message d'état
 local auto_switch_on = true   -- bascule automatique vers un streamer en live (réglage de la télécommande)
+local qr_data = nil           -- QR code de la télécommande web, publié par remote.py avec l'écran d'ambiance
 local menu = mp.create_osd_overlay("ass-events")
 local status = mp.create_osd_overlay("ass-events")
 local menu_visible, hide_timer, items = false, nil, {}
@@ -288,6 +289,37 @@ local function text(x, y, size, color, s, suffix)   -- suffix : ASS brut ajouté
         :format(math.floor(x), math.floor(y), math.floor(size), color, ass_escape(s), suffix or "")
 end
 
+-- QR code de la télécommande web, pour les invités : carré clair (gris, moins marquant pour l'écran que du blanc) et
+-- modules sombres en un seul tracé, une bande par suite de modules. Renvoie le dessin et son côté, ou nil.
+local function qr_code(x, y, size)
+    local rows = qr_data and qr_data.rows or {}
+    local n = #rows
+    local m = n > 0 and math.floor(size / (n + 4)) or 0   -- marge de 2 modules tout autour
+    if m < 2 then return nil end
+    local paths = {}
+    for r, row in ipairs(rows) do
+        local c = 1
+        while c <= n do
+            if row:sub(c, c) == "1" then
+                local s = c
+                while c <= n and row:sub(c, c) == "1" do c = c + 1 end
+                local x0, x1, y0, y1 = (s + 1) * m, (c + 1) * m, (r + 1) * m, (r + 2) * m
+                paths[#paths + 1] = ("m %d %d l %d %d %d %d %d %d"):format(x0, y0, x1, y0, x1, y1, x0, y1)
+            else
+                c = c + 1
+            end
+        end
+    end
+    local side = (n + 4) * m
+    return rect(x, y, side, side, "C8C8C8", "00") .. "\n" ..
+        ("{\\an7\\pos(%d,%d)\\bord0\\shad0\\1c&H101010&\\1a&H00&\\p1}%s{\\p0}")
+            :format(math.floor(x), math.floor(y), table.concat(paths, " ")), side
+end
+
+local function qr_host()
+    return ((qr_data and qr_data.url or ""):gsub("^https?://", ""):gsub("/$", ""))
+end
+
 local function live_badge(name)
     local info = live[name]
     if not info then return nil end
@@ -347,16 +379,33 @@ local function draw_menu()
                              suffix)
         items[#items + 1] = { x0 = x, y0 = y, x1 = x + bw_, y1 = y + bh, action = action }
     end
+    -- Écran d'accueil en haut, au-dessus de la grille. Les streamers restent les premiers boutons de items (on_key
+    -- s'y fie) : la navigation à la télécommande ne dépend que des positions.
+    local grid_y = y0 + title_h + bh + sp * 2
     for i, name in ipairs(streamers) do
         local col, row = math.floor((i - 1) / rows), (i - 1) % rows   -- remplissage colonne par colonne
-        button(x0 + col * (bw + sp), y0 + title_h + row * (bh + sp), bw, name, name == channel and mode == "twitch",
+        button(x0 + col * (bw + sp), grid_y + row * (bh + sp), bw, name, name == channel and mode == "twitch",
                function() start_channel(name) end, nil, nil, live_badge(name))
     end
-    local y = y0 + title_h + rows * (bh + sp) + sp * 2
+    button(x0, y0 + title_h, panel_w, "⌂ Écran d'accueil", mode == "home", show_home)
+    local y = grid_y + rows * (bh + sp) + sp
     button(x0, y, bh, "", false, toggle_chat, chat_visible)   -- case : afficher / masquer le chat
     button(x0 + bh + sp, y, panel_w - bh - sp, "Chat : " .. CORNER_LABELS[corner], false, toggle_corner, nil,
            chat_visible and "FFFFFF" or "808080")
-    button(x0, y + bh + sp, panel_w, "⌂ Écran d'accueil", mode == "home", show_home)
+
+    -- QR code de la télécommande à droite du menu, s'il y a la place (pas sur l'écran d'ambiance, qui a le sien)
+    local size = math.floor(math.min(panel_h, h * 0.3))
+    local qx = x0 + panel_w + sp * 6
+    if not ambient_visible and qx + size + sp * 2 <= w * 0.98 then
+        local qy = y0 + (panel_h - size - fs * 1.6) / 2
+        local drawing, side = qr_code(qx, qy, size)
+        if drawing then
+            out[#out + 1] = rect(qx - sp * 2, qy - sp * 2, side + sp * 4, side + fs * 1.6 + sp * 4, "000000", "50")
+            out[#out + 1] = drawing
+            out[#out + 1] = text(qx + side / 2, qy + side + fs * 0.5, fs * 0.6, "FFFFFF", "Télécommande")
+            out[#out + 1] = text(qx + side / 2, qy + side + fs * 1.2, fs * 0.5, "B0B0B0", qr_host())
+        end
+    end
 
     menu.res_x, menu.res_y = w, h
     menu.data = table.concat(out, "\n")
@@ -795,6 +844,16 @@ local function draw_ambient()
     if status_text ~= "" then
         out[#out + 1] = line(h * 0.93, math.floor(fs * 0.7), "707070", ass_escape(status_text))
     end
+    -- QR code de la télécommande en bas à droite, qui dérive un peu lui aussi
+    local size = math.floor(h * 0.17)
+    local qx = w - size - w * 0.04 + math.sin(minute * 0.9) * w * 0.012
+    local qy = h - size - h * 0.11 + math.cos(minute * 0.6) * h * 0.015
+    local drawing, side = qr_code(qx, qy, size)
+    if drawing then
+        out[#out + 1] = drawing
+        out[#out + 1] = text(qx + side / 2, qy - fs * 0.7, fs * 0.8, "A0A0A0", "Télécommande")
+        out[#out + 1] = text(qx + side / 2, qy + side + fs * 0.7, fs * 0.65, "909090", qr_host())
+    end
     ambient.res_x, ambient.res_y = w, h
     ambient.data = table.concat(out, "\n")
     ambient:update()
@@ -820,7 +879,11 @@ end
 mp.add_periodic_timer(2, function() update_ambient(false) end)
 mp.observe_property("user-data/streambox/ambient", "native", function(_, value)
     ambient_data = value or {}
+    local qr = ambient_data.qr
+    local changed = (qr and qr.url) ~= (qr_data and qr_data.url)
+    qr_data = qr
     if ambient_visible then update_ambient(true) end
+    if changed and menu_visible then draw_menu() end
 end)
 
 mp.observe_property("user-data/streambox/live", "native", function(_, value)
@@ -844,6 +907,146 @@ mp.add_periodic_timer(5, function()
         start_channel(channel)
     end
 end)
+
+-- Sondages et prédictions de la chaîne regardée (relevés par remote.py dans user-data/streambox/polls) : encart en
+-- haut au centre, loin des coins où se met le chat, avec le temps restant et la part de chaque choix
+local events = mp.create_osd_overlay("ass-events")
+local events_data, events_on = {}, true
+local OUTCOME_COLORS = { BLUE = "FF7A38", PINK = "9B00F5" }   -- couleurs des prédictions sur Twitch, en BGR
+
+local function shorten(s, n)   -- coupe à n octets sans casser un caractère UTF-8
+    if #s <= n then return s end
+    local cut = n
+    while cut > 0 and (s:byte(cut + 1) or 0) >= 0x80 and (s:byte(cut + 1) or 0) < 0xC0 do cut = cut - 1 end
+    return s:sub(1, cut) .. "…"
+end
+
+local function amount(v)   -- 16617298 → « 16,6 M »
+    v = tonumber(v) or 0
+    local s = v >= 1e6 and ("%.1f M"):format(v / 1e6) or v >= 1e3 and ("%.1f k"):format(v / 1e3) or tostring(v)
+    return (s:gsub("%.", ","))
+end
+
+local function draw_events()
+    local poll, pred = events_data.poll, events_data.prediction
+    local w, h = mp.get_osd_size()
+    if not events_on or mode ~= "twitch" or not (poll or pred) or not w or w == 0 then
+        events:remove()
+        return
+    end
+    local fs = math.floor(h / 40)
+    local bw = math.floor(w * 0.3)
+    local x, y = math.floor((w - bw) / 2), math.floor(h * 0.03)
+    local pad, row_h = fs * 0.7, fs * 1.5
+    local out = {}
+    -- rows : { libellé, part de 0 à 1, détail à droite, couleur BGR, gagnant }
+    local function block(kind, title, right, rows)
+        local bh = pad * 2 + fs * 2.5 + #rows * row_h
+        out[#out + 1] = rect(x, y, bw, bh, "000000", "40")
+        out[#out + 1] = ("{\\an7\\pos(%d,%d)\\fs%d\\bord0\\shad0\\1c&HFF4691&\\b1}%s")
+            :format(x + pad, y + pad, math.floor(fs * 0.7), kind)
+        out[#out + 1] = ("{\\an9\\pos(%d,%d)\\fs%d\\bord0\\shad0\\1c&HC0C0C0&}%s")
+            :format(x + bw - pad, y + pad, math.floor(fs * 0.7), ass_escape(right))
+        out[#out + 1] = ("{\\an7\\pos(%d,%d)\\fs%d\\bord0\\shad0\\1c&HFFFFFF&\\b1}%s")
+            :format(x + pad, y + pad + fs * 0.95, fs, ass_escape(shorten(title, 70)))
+        local ry = y + pad + fs * 2.5
+        for _, r in ipairs(rows) do
+            local inner = bw - pad * 2
+            out[#out + 1] = rect(x + pad, ry, inner, row_h - fs * 0.25, "FFFFFF", "E0")
+            if r[2] > 0 then
+                out[#out + 1] = rect(x + pad, ry, inner * math.min(1, r[2]), row_h - fs * 0.25, r[4], r[5] and "20" or "70")
+            end
+            local label = (r[5] and "▶ " or "") .. shorten(r[1], 40)
+            out[#out + 1] = ("{\\an4\\pos(%d,%d)\\fs%d\\bord1\\shad0\\3c&H000000&\\1c&HFFFFFF&}%s")
+                :format(x + pad * 1.6, ry + (row_h - fs * 0.25) / 2, math.floor(fs * 0.8), ass_escape(label))
+            out[#out + 1] = ("{\\an6\\pos(%d,%d)\\fs%d\\bord1\\shad0\\3c&H000000&\\1c&HFFFFFF&}%s")
+                :format(x + bw - pad * 1.6, ry + (row_h - fs * 0.25) / 2, math.floor(fs * 0.7), ass_escape(r[3]))
+            ry = ry + row_h
+        end
+        y = y + bh + fs * 0.5
+    end
+    local now = os.time()
+    if poll then
+        local total, best = 0, 0
+        for _, c in ipairs(poll.choices or {}) do
+            total = total + c.votes
+            best = math.max(best, c.votes)
+        end
+        local rows = {}
+        for i, c in ipairs(poll.choices or {}) do
+            if i > 5 then break end
+            local share = total > 0 and c.votes / total or 0
+            rows[#rows + 1] = { c.title, share, ("%d %%  ·  %s"):format(math.floor(share * 100 + 0.5), amount(c.votes)),
+                                "FF4691", poll.ended and best > 0 and c.votes == best }
+        end
+        local left = (poll.ends_at or 0) - now
+        block("SONDAGE", poll.title, poll.ended and "Résultats" or left > 0 and clock(left) or "Dépouillement…", rows)
+    end
+    if pred then
+        local total = 0
+        for _, o in ipairs(pred.outcomes or {}) do total = total + o.points end
+        local rows = {}
+        for i, o in ipairs(pred.outcomes or {}) do
+            if i > 5 then break end
+            local share = total > 0 and o.points / total or 0
+            rows[#rows + 1] = { o.title, share, ("%d %%  ·  %s points  ·  %s"):format(
+                                    math.floor(share * 100 + 0.5), amount(o.points), amount(o.users)),
+                                OUTCOME_COLORS[o.color] or "FF4691", o.winner }
+        end
+        local left = (pred.ends_at or 0) - now
+        local right = pred.status == "RESOLVED" and "Résultat" or pred.status == "CANCELED" and "Annulée"
+            or pred.status == "ACTIVE" and left > 0 and ("Paris : " .. clock(left)) or "Paris fermés"
+        block("PRÉDICTION", pred.title, right, rows)
+    end
+    events.res_x, events.res_y = w, h
+    events.data = table.concat(out, "\n")
+    events:update()
+end
+
+mp.observe_property("user-data/streambox/polls", "native", function(_, value)
+    events_data = value or {}
+    draw_events()
+end)
+mp.add_periodic_timer(1, function()   -- temps restant
+    if events_data.poll or events_data.prediction then draw_events() end
+end)
+
+-- Réglages oui / non, depuis la télécommande web : { défaut, appliqué à chaque changement et au démarrage }
+-- Mode nuit : compresseur qui rapproche les passages forts des passages faibles (explosions, cris), puis limiteur
+local NIGHT_FILTER = "@night:lavfi=[acompressor=threshold=0.05:ratio=6:attack=10:release=300:makeup=3,"
+    .. "alimiter=limit=0.9]"
+local FLAGS = {
+    night = { false, function(on)
+        local present = false
+        for _, f in ipairs(mp.get_property_native("af") or {}) do
+            if f.label == "night" then present = true end
+        end
+        if on and not present then
+            mp.commandv("af", "add", NIGHT_FILTER)
+        elseif present and not on then
+            mp.commandv("af", "remove", "@night")
+        end
+    end },
+    events = { true, function(on)
+        events_on = on
+        draw_events()
+    end },
+}
+
+local function set_flag(key, value, quiet)
+    local spec = FLAGS[key]
+    if not spec then return end
+    local on = value == "yes"
+    write_state(key, on and "yes" or "no")
+    mp.set_property_native("user-data/streambox/" .. key, on)
+    spec[2](on)
+    if not quiet and key == "night" then mp.osd_message(on and "Mode nuit activé" or "Mode nuit désactivé", 2) end
+end
+mp.register_script_message("streambox-flag", set_flag)
+for key, spec in pairs(FLAGS) do
+    local saved = read_state(key)
+    set_flag(key, saved or (spec[1] and "yes" or "no"), true)
+end
 
 -- Pas de double-clic plein écran : la box doit rester en plein écran
 mp.add_forced_key_binding("MBTN_LEFT_DBL", "streambox-no-dbl", function() end)

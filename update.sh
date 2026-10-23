@@ -31,7 +31,7 @@ update() {
 # Vidéo YouTube de 19 s, stable depuis 2005 ; streamlink doit au moins reconnaître une URL Twitch
 update streamlink-venv streamlink \
   "$HOME/.local/bin/streamlink --can-handle-url https://www.twitch.tv/twitch"
-update media-venv "yt-dlp[default] deno nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt" \
+update media-venv "yt-dlp[default] deno nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt segno" \
   "$HOME/.local/bin/yt-dlp --simulate --no-warnings https://www.youtube.com/watch?v=jNQXAC9IVRw && $HOME/.local/bin/jellyfin-mpv-shim --version"
 
 # Serveur de jetons anti-robot YouTube : sa version doit suivre celle du plugin bgutil (recompilé si elle change)

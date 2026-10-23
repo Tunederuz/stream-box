@@ -114,6 +114,71 @@ def live_loop():
         time.sleep(PUBLISH_EVERY)
 
 
+# Sondages et prédictions de la chaîne regardée, publiés dans user-data/streambox/polls pour l'encart de stream-box.lua.
+# Twitch n'a plus d'abonnement en temps réel (PubSub) pour un simple spectateur : on relève, comme la page twitch.tv.
+
+EVENTS_EVERY = 10    # secondes entre deux relevés, seulement pendant un direct avec l'encart activé
+RESULT_FOR = 60      # secondes d'affichage du résultat d'un sondage ou d'une prédiction terminés
+EVENTS_QUERY = (
+    "query($l:String!){user(login:$l){"
+    "viewablePoll{id title status startedAt durationSeconds totalVoters choices{title votes{total}}} "
+    "channel{activePredictionEvents{...p} lockedPredictionEvents{...p} "
+    "resolvedPredictionEvents(first:1){edges{node{...p endedAt winningOutcome{id}}}}}}}"
+    "fragment p on PredictionEvent{id title status createdAt predictionWindowSeconds "
+    "outcomes{id title color totalPoints totalUsers}}")
+
+
+def epoch(value):
+    return datetime.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+
+
+def fetch_events(login, seen):
+    """{"poll", "prediction"} de la chaîne, chacun None s'il n'y a rien à montrer. seen : id → heure où l'on a vu le
+    sondage terminé (Twitch ne donne pas cette heure-là), pour n'afficher son résultat que RESULT_FOR secondes."""
+    user = twitch_gql(EVENTS_QUERY, {"l": login}).get("user") or {}
+    now, out = time.time(), {"poll": None, "prediction": None}
+    p = user.get("viewablePoll")
+    if p and p.get("status") in ("ACTIVE", "COMPLETED", "TERMINATED"):
+        ended = p["status"] != "ACTIVE"
+        if not ended or now - seen.setdefault(p["id"], now) < RESULT_FOR:
+            out["poll"] = {"title": p["title"], "ended": ended, "voters": p.get("totalVoters") or 0,
+                           "ends_at": epoch(p["startedAt"]) + (p.get("durationSeconds") or 0),
+                           "choices": [{"title": c["title"], "votes": (c.get("votes") or {}).get("total") or 0}
+                                       for c in p.get("choices") or []]}
+    channel = user.get("channel") or {}
+    events = (channel.get("activePredictionEvents") or []) + (channel.get("lockedPredictionEvents") or [])
+    resolved = [e["node"] for e in (channel.get("resolvedPredictionEvents") or {}).get("edges") or []]
+    if not events and resolved and resolved[0].get("endedAt") and now - epoch(resolved[0]["endedAt"]) < RESULT_FOR:
+        events = resolved
+    if events:
+        e = events[0]
+        winner = (e.get("winningOutcome") or {}).get("id")
+        out["prediction"] = {"title": e["title"], "status": e["status"],
+                             "ends_at": epoch(e["createdAt"]) + (e.get("predictionWindowSeconds") or 0),
+                             "outcomes": [{"title": o["title"], "color": o.get("color"), "points": o.get("totalPoints") or 0,
+                                           "users": o.get("totalUsers") or 0, "winner": o["id"] == winner}
+                                          for o in e.get("outcomes") or []]}
+    return out
+
+
+def events_loop():
+    seen, current = {}, None
+    while True:
+        data = {"poll": None, "prediction": None}
+        try:
+            user, playing = mpv(["get_property", "user-data/streambox"], ["get_property", "video-params"])
+            user = user or {}
+            login = user.get("channel")
+            if user.get("mode") == "twitch" and user.get("events", True) and playing and login in live_now:
+                if login != current:
+                    seen, current = {}, login
+                data = fetch_events(login, seen)
+            mpv(["set_property", "user-data/streambox/polls", data])
+        except (OSError, ValueError, KeyError, TypeError):
+            pass   # mpv ou Twitch injoignable : on réessaie au prochain tour
+        time.sleep(EVENTS_EVERY)
+
+
 # Rediffusions et clips de la semaine d'un streamer, pour la page (cache de 5 min par streamer)
 
 replays_cache = {}   # pseudo -> (heure, résultat)
@@ -253,9 +318,51 @@ def next_streams(users, now):
     return out + paused[:2]
 
 
+# QR code de la télécommande, pour les invités (écran d'ambiance et menu de la TV). Adresse dans
+# ~/.config/stream-box/remote-url (celle du reverse proxy HTTPS, par exemple), sinon http://<IP de la box>:8080.
+# Le QR code est calculé par segno, dans le venv media, et publié comme lignes de « 0 » et « 1 ».
+
+REMOTE_URL_FILE = os.path.join(COOKIES_DIR, "remote-url")
+MEDIA_PYTHON = os.path.expanduser("~/.local/share/media-venv/bin/python")
+
+
+def remote_url():
+    try:
+        with open(REMOTE_URL_FILE, encoding="utf-8") as f:
+            url = f.read().strip()
+        if re.match(r"https?://", url):
+            return url
+    except OSError:
+        pass
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.connect(("192.0.2.1", 9))   # rien n'est envoyé : sert seulement à connaître l'adresse de sortie
+        return f"http://{s.getsockname()[0]}:{PORT}"
+
+
+qr_cache = {}   # adresse -> lignes du QR code
+
+
+def remote_qr():
+    url = remote_url()
+    if url not in qr_cache:
+        try:
+            r = subprocess.run([MEDIA_PYTHON, "-I", "-c", "import segno, sys\n"
+                                "for row in segno.make(sys.argv[1], error='m', micro=False).matrix:\n"
+                                "    print(''.join(str(int(bool(v))) for v in row))", url],
+                               capture_output=True, text=True, timeout=20, check=True)
+            qr_cache[url] = r.stdout.split()
+        except (OSError, subprocess.SubprocessError):
+            qr_cache[url] = None   # segno absent : pas de nouvel essai avant le prochain démarrage
+    return {"url": url, "rows": qr_cache[url]} if qr_cache[url] else None
+
+
 def ambient_loop():
     data, fetched = {}, 0
     while True:
+        try:
+            data["qr"] = remote_qr()   # adresse relue à chaque tour : un changement se voit tout de suite
+        except OSError:
+            data["qr"] = None   # pas de réseau : pas d'adresse à montrer
         if time.time() - fetched > AMBIENT_FETCH:
             conf = ambient_conf()
             try:
@@ -344,7 +451,8 @@ def state():
         "streamers": read_streamers(), "channel": user.get("channel"),
         "chat_visible": user.get("chat_visible", True), "corner": user.get("corner", "bl"),
         "chat_bg": user.get("chat_bg", 60), "chat_size": user.get("chat_size", 32),
-        "auto_switch": user.get("auto_switch", True),
+        "auto_switch": user.get("auto_switch", True), "night": user.get("night", False),
+        "events": user.get("events", True),
         "volume": round(volume or 0), "mute": bool(mute), "pause": bool(pause), "playing": bool(video),
         "live": live_now, "mode": user.get("mode", "twitch"), "delay": delay, "title": title if media else None,
         "position": position if media else None, "duration": duration if media else None,
@@ -764,6 +872,11 @@ def action(name, body):
         mpv(["seek", max(0.0, float(body.get("position", 0))), "absolute"])
     elif name == "auto_switch":
         mpv(["script-message", "streambox-auto-switch", "yes" if body.get("enabled") else "no"])
+    elif name == "flag":
+        # Réglages oui / non de stream-box.lua : mode nuit (son compressé), encart des sondages et prédictions
+        if body.get("key") not in ("night", "events"):
+            raise ValueError("réglage inconnu")
+        mpv(["script-message", "streambox-flag", body["key"], "yes" if body.get("enabled") else "no"])
     elif name == "set":
         # Bornes et enregistrement gérés par stream-box.lua (set_number)
         if body.get("key") not in ("chat_bg", "chat_size"):
@@ -876,4 +989,5 @@ threading.Thread(target=account_loop, daemon=True).start()
 threading.Thread(target=live_loop, daemon=True).start()
 threading.Thread(target=ambient_loop, daemon=True).start()
 threading.Thread(target=history_loop, daemon=True).start()
+threading.Thread(target=events_loop, daemon=True).start()
 ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
