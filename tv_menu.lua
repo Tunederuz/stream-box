@@ -33,6 +33,7 @@ local state, display, account, qr = {}, nil, nil, nil
 local tab, area, index = 1, "rail", 1              -- onglet, zone qui a le focus (rail ou content), élément
 local shortcut = nil                                -- En direct : raccourci sélectionné au-dessus des streamers
 local pending_display = nil                         -- résolution choisie aux flèches, appliquée par OK
+local pending_player = nil                          -- lecteur choisi aux flèches, appliqué par OK (il redémarre)
 local poweroff_until = 0
 local idle_timer, refresh_timer
 local images, shown = {}, {}                        -- cache des images préparées ; overlays posés (id → signature)
@@ -363,6 +364,19 @@ local function settings_rows()
             s.qr = QR_MODES[i][1]
             act("qr", { mode = s.qr })
         end },
+        -- Pour revenir à l'appli Qt (menu animé) depuis mpv seul, choisi ici ou retour automatique après des plantages
+        { label = "Lecteur", value = (pending_player or s.player) == "qt" and "Appli Qt (menu animé)" or "mpv seul",
+          hint = pending_player and pending_player ~= s.player and "OK pour appliquer : le lecteur redémarre"
+              or (s.player == "qt" and s.player_running == "mpv" and "L'appli Qt s'est arrêtée : OK pour réessayer")
+              or nil,
+          step = function() pending_player = (pending_player or s.player) == "qt" and "mpv" or "qt" end,
+          ok = function()
+              local choice = pending_player or s.player
+              if choice == s.player and not (choice == "qt" and s.player_running == "mpv") then return end
+              act("player", { mode = choice })
+              pending_player = nil
+              close_menu()
+          end },
     }
 end
 
@@ -970,7 +984,7 @@ local function on_key(key)
     -- Contenu
     local id, count = TABS[tab].id, content_count()
     if key == "back" then
-        area, pending_display = "rail", nil
+        area, pending_display, pending_player = "rail", nil, nil
     elseif id == "live" and shortcut then
         local list = shortcuts()
         shortcut = math.min(shortcut, #list)

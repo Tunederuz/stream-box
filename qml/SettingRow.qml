@@ -45,7 +45,7 @@ Item {
             Text {
                 visible: !!root.row.hint
                 text: root.row.hint || ""
-                color: "#c2afb4"
+                color: "#b4afc2"
                 font.pixelSize: 20
             }
         }
@@ -72,7 +72,7 @@ Item {
             anchors.rightMargin: 34
             anchors.verticalCenter: parent.verticalCenter
             text: (root.focused && root.row.step ? "◀  " : "") + (root.row.value || "") + (root.focused && root.row.step ? "  ▶" : "")
-            color: "#f4e2e8"
+            color: "#e8e2f4"
             font.pixelSize: 25
         }
     }

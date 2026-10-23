@@ -29,8 +29,13 @@ MPV_ARGS=(
   --ytdl-raw-options-append='extractor-args=youtube:player_client=tv_simply,android_vr;fetch_pot=always'
 )
 
-quick_fails=0
+quick_fails=0 last_choice=""
 while true; do
+  choice=$(head -1 "$HOME/.config/stream-box/player" 2>/dev/null)
+  # Lecteur choisi à la main (réglage de la télécommande, qui réécrit le fichier même sans changement) : les échecs
+  # passés de l'appli Qt sont oubliés, ce qui permet de la réessayer après un retour automatique à mpv
+  stamp="$(stat -c %Y "$HOME/.config/stream-box/player" 2>/dev/null)$choice"
+  [ "$stamp" != "$last_choice" ] && quick_fails=0 && last_choice=$stamp
   pkill -u "$USER" -f 'streamlink .*--player-external-http'   # restes d'un lecteur précédent
   # Jellyfin : « Lire sur → Stream Box ». Le shim pilote ce lecteur par son socket (config dans
   # ~/.config/jellyfin-mpv-shim/) et ne se raccroche pas tout seul à un lecteur relancé : on le relance avec. Il
@@ -41,7 +46,7 @@ while true; do
     for _ in $(seq 120); do [ -S /tmp/stream-box-mpv.sock ] && break; sleep 0.5; done
     exec jellyfin-mpv-shim --no-gui < /dev/null > /tmp/jellyfin-shim.log 2>&1
   ) &
-  if [ "$(head -1 "$HOME/.config/stream-box/player" 2>/dev/null)" = qt ] && [ -x "$UI_PYTHON" ] && [ "$quick_fails" -lt 3 ]; then
+  if [ "$choice" = qt ] && [ -x "$UI_PYTHON" ] && [ "$quick_fails" -lt 3 ]; then
     started=$(date +%s)
     QT_QPA_PLATFORM=wayland "$UI_PYTHON" "$DIR/ui.py" "${MPV_ARGS[@]}" >> /tmp/stream-box-ui.log 2>&1
     code=$?

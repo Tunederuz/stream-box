@@ -40,7 +40,7 @@ Item {
             anchors.centerIn: parent
             z: -1
             text: root.name.charAt(0).toUpperCase()
-            color: "#e0c8d0"
+            color: "#d0c8e0"
             font.pixelSize: 31
             font.bold: true
         }
@@ -59,7 +59,7 @@ Item {
         }
         Text {
             text: root.live ? "● " + Fmt.viewers(root.viewers) : "Hors ligne"
-            color: root.live ? "#ff4f5e" : "#a0858a"
+            color: root.live ? "#ff4f5e" : "#8a85a0"
             font.pixelSize: 21
             font.bold: root.live
         }
@@ -67,7 +67,7 @@ Item {
             visible: root.live
             width: parent.width
             text: root.game
-            color: "#c2afb4"
+            color: "#b4afc2"
             pixelSize: 20
             running: root.focused
         }
