@@ -504,7 +504,10 @@ propre `jfRow`/`jfSel`) : recherche au clavier à l'écran, épisodes d'une sér
 resserré (pas de 76) pour 9 onglets. Rangées
 horizontales : défilement carte par carte aligné à gauche (`first`, `fits`), rangée découpée 28 px avant le contenu
 (`clip` sur une enveloppe plus haute que les cartes, pour le halo) et cartes affichées d'après la fenêtre visée, pas
-leur position animée : celle qui sort s'efface en 90 ms sans passer sous le rail. Piège QML : une fonction ne doit pas reprendre le nom d'une propriété
+leur position animée : celle qui sort s'efface en 90 ms sans passer sous le rail. Même chose à la verticale : grilles (direct, suivis,
+historique), listes (réglages, système) et rangées YouTube/Jellyfin sont dans une enveloppe `clip` (marge de 40 px
+autour pour le halo) qui s'arrête sous le titre et au-dessus de l'aide en bas ; rangées YouTube/Jellyfin affichées
+d'après la rangée visée. Piège QML : une fonction ne doit pas reprendre le nom d'une propriété
 (`setSel` existait : les touches de l'onglet échouaient en silence, sauf dans le journal).
 Page : bloc Jellyfin de l'onglet Télécommande (puces par rangée, recherche, épisodes d'une série).
 
