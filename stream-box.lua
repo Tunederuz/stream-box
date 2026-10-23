@@ -693,6 +693,86 @@ mp.register_script_message("streambox-live-seek", function(arg)
     if mode == "twitch" then live_seek(arg == "live" and "live" or tonumber(arg) or 0) end
 end)
 
+-- Sous-titres et piste audio pendant une vidéo (touche ≡, appli Qt) : liste construite ici depuis track-list, publiée
+-- dans user-data/streambox/tracks et dessinée par qml/TracksPanel.qml ; tant qu'elle est ouverte, ↑ ↓ choisissent,
+-- OK applique, Retour ou ≡ ferment. Avec mpv seul, ≡ passe simplement aux sous-titres suivants.
+local LANGS = { fr = "Français", fre = "Français", fra = "Français", en = "Anglais", eng = "Anglais", es = "Espagnol",
+                spa = "Espagnol", de = "Allemand", ger = "Allemand", deu = "Allemand", it = "Italien", ita = "Italien",
+                ja = "Japonais", jpn = "Japonais", pt = "Portugais", por = "Portugais", nl = "Néerlandais",
+                dut = "Néerlandais", ko = "Coréen", kor = "Coréen", zh = "Chinois", chi = "Chinois" }
+local tracks_open, tracks_items, tracks_sel = false, {}, 1
+
+local function track_label(t)
+    local lang = t.lang and (LANGS[t.lang:lower()] or LANGS[t.lang:lower():sub(1, 2)] or t.lang) or nil
+    local label = lang or t.title or ("Piste " .. t.id)
+    if lang and t.title and t.title ~= "" and t.title:lower() ~= lang:lower() then label = label .. " · " .. t.title end
+    if t.forced then label = label .. " (forcés)" end
+    if t["default"] and t.type == "audio" then label = label .. " (d'origine)" end
+    return label
+end
+
+local function build_tracks()
+    local subs, audio, sub_on = {}, {}, false
+    for _, t in ipairs(mp.get_property_native("track-list") or {}) do
+        if t.type == "sub" then
+            subs[#subs + 1] = { kind = "sub", id = t.id, label = track_label(t), selected = t.selected == true }
+            sub_on = sub_on or t.selected == true
+        elseif t.type == "audio" then
+            audio[#audio + 1] = { kind = "audio", id = t.id, label = track_label(t), selected = t.selected == true }
+        end
+    end
+    local items = { { header = "Sous-titres" }, { kind = "sub", id = false, label = "Désactivés", selected = not sub_on } }
+    for _, it in ipairs(subs) do items[#items + 1] = it end
+    if #audio > 1 then   -- une seule piste audio : rien à choisir
+        items[#items + 1] = { header = "Audio" }
+        for _, it in ipairs(audio) do items[#items + 1] = it end
+    end
+    tracks_items = items
+end
+
+local function publish_tracks()
+    if not tracks_open then
+        mp.set_property_native("user-data/streambox/tracks", {})
+        return
+    end
+    mp.set_property_native("user-data/streambox/tracks", { open = true, items = tracks_items, sel = tracks_sel - 1 })
+end
+
+local function open_tracks()
+    build_tracks()
+    tracks_open = true
+    tracks_sel = 2
+    for i, it in ipairs(tracks_items) do   -- focus sur le choix en cours
+        if it.kind == "sub" and it.selected then tracks_sel = i break end
+    end
+    publish_tracks()
+end
+
+local function close_tracks()
+    if not tracks_open then return end
+    tracks_open = false
+    publish_tracks()
+end
+
+local function tracks_key(key)
+    if key == "up" or key == "down" then
+        local i = tracks_sel
+        repeat i = i + (key == "down" and 1 or -1) until not tracks_items[i] or not tracks_items[i].header
+        if tracks_items[i] then tracks_sel = i end
+        publish_tracks()
+    elseif key == "ok" then
+        local it = tracks_items[tracks_sel]
+        if it then mp.set_property(it.kind == "sub" and "sid" or "aid", it.id and tostring(it.id) or "no") end
+        close_tracks()
+    else   -- Retour, ≡, Accueil…
+        close_tracks()
+    end
+end
+mp.observe_property("track-list", "native", function()
+    if tracks_open then build_tracks() publish_tracks() end
+end)
+mp.register_event("end-file", close_tracks)
+
 local back_pressed = 0
 -- Grand menu façon Android TV (tv_menu.lua) : ouvert par le bouton Menu (touche Accueil) ; tant qu'il est ouvert,
 -- toutes les touches lui sont transmises
@@ -716,6 +796,10 @@ local DIRECTIONS = { up = { 0, -1 }, down = { 0, 1 }, left = { -1, 0 }, right = 
 local function on_key(key)
     if tvmenu_open then
         mp.commandv("script-message", "streambox-tvmenu-key", key)
+        return
+    end
+    if tracks_open then
+        tracks_key(key)
         return
     end
     if key == "homescreen" then   -- écran d'accueil, depuis n'importe quel mode
@@ -780,7 +864,7 @@ local function on_key(key)
         elseif key == "home" then
             open_tvmenu()
         elseif key == "menu" then
-            mp.commandv("cycle", "sub")
+            if qt_ui() then open_tracks() show_bar() else mp.commandv("cycle", "sub") end
         elseif key == "back" then
             if mp.get_time() - back_pressed < 2 then
                 start_channel(channel)

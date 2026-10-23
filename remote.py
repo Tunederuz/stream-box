@@ -721,7 +721,8 @@ def find_url(*texts):
 
 
 # Historique et reprise de lecture des vidéos lancées depuis la télécommande (liens, YouTube, rediffusions et clips
-# Twitch ; Jellyfin gère sa propre progression). Les rediffusions Twitch sont synchronisées avec le compte connecté :
+# Twitch, Jellyfin : celui-ci garde sa propre progression, l'historique de la box ne sert qu'à le retrouver ; lien
+# « jellyfin:ID », sans jeton). Les rediffusions Twitch sont synchronisées avec le compte connecté :
 # position lue au lancement, écrite toutes les 30 s. Le reste n'est connu que de la box.
 
 HISTORY_FILE = os.path.expanduser("~/.local/state/stream-box/history.json")
@@ -735,6 +736,9 @@ now_playing = {}        # vidéo lancée par play(), suivie par history_loop
 
 def media_key(url):
     """(clé stable, type, identifiant) : une même vidéo garde la même clé quelle que soit la forme du lien."""
+    m = re.fullmatch(r"jellyfin:([0-9a-f]{32})", url) or re.search(r"/Videos/([0-9a-f]{32})/", url)
+    if m:
+        return f"jellyfin:{m.group(1)}", "jellyfin", m.group(1)
     m = re.search(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|live/)|youtu\.be/)([\w-]{11})", url)
     if m:
         return f"youtube:{m.group(1)}", "youtube", m.group(1)
@@ -1029,18 +1033,47 @@ def jellyfin_play(item_id, from_start=False):
     if not re.fullmatch(r"[0-9a-f]{32}", item_id):
         raise ValueError("élément invalide")
     srv = jf_server()
-    i = jf_item(jf_api(f"/Users/{{user}}/Items/{item_id}"))
+    raw = jf_api(f"/Users/{{user}}/Items/{item_id}")
+    i = jf_item(raw)
     if i["type"] == "Series":
         raise ValueError("Choisis un épisode.")
     title = f"{i['title']} · {i['episode']}" if i.get("episode") else i["title"]
     start = 0 if from_start or i["position"] < RESUME_MIN or i["finished"] else i["position"]
     url = f"{srv['address']}/Videos/{item_id}/stream?static=true&api_key={srv['token']}"
     now_playing.clear()
-    now_playing.update(key=f"jellyfin:{item_id}", url=url, kind="jellyfin", ident=item_id, title=title, position=start)
+    now_playing.update(key=f"jellyfin:{item_id}", url=url, link=f"jellyfin:{item_id}", kind="jellyfin", ident=item_id,
+                       title=title, thumb=i["thumb"], position=start)
     mpv(["script-message", "streambox-play", url, str(start), title])
     mpv(["set_property", "user-data/streambox/storyboard", {}])
     jf_cache.pop("home", None)
+    record(dict(now_playing), start, i["seconds"])
     jf_report("", item_id, start)
+    # Sous-titres à part (fichiers .srt… à côté de la vidéo) : absents du flux direct, ajoutés à mpv une fois la vidéo
+    # ouverte ; ceux intégrés au fichier y sont déjà
+    source = (raw.get("MediaSources") or [{}])[0]
+    external = [m for m in source.get("MediaStreams") or [] if m.get("Type") == "Subtitle" and m.get("IsExternal")]
+    if external:
+        threading.Thread(target=jf_add_subtitles, args=(url, item_id, source["Id"], external, srv), daemon=True).start()
+
+
+def jf_add_subtitles(url, item_id, source_id, streams, srv):
+    for _ in range(30):   # jusqu'à 15 s pour que la vidéo s'ouvre
+        time.sleep(0.5)
+        try:
+            path, loaded = mpv(["get_property", "path"], ["get_property", "duration"])
+        except (OSError, ValueError):
+            continue
+        if path == url and loaded:
+            break
+    else:
+        return
+    for m in streams:
+        ext = "ass" if m.get("Codec") in ("ass", "ssa") else "srt"
+        sub = f"{srv['address']}/Videos/{item_id}/{source_id}/Subtitles/{m['Index']}/Stream.{ext}?api_key={srv['token']}"
+        try:
+            mpv(["sub-add", sub, "auto", m.get("Title") or m.get("DisplayTitle") or "", m.get("Language") or ""])
+        except (OSError, ValueError):
+            pass
 
 
 def jf_report(what, item_id, position, paused=False):
@@ -1077,7 +1110,7 @@ def record(video, position, duration, title=None):
     """Met la vidéo en tête de l'historique avec sa position."""
     with history_lock:
         entries = [e for e in read_history() if e["key"] != video["key"]]
-        entry = {"key": video["key"], "url": video["url"], "kind": video["kind"],
+        entry = {"key": video["key"], "url": video.get("link") or video["url"], "kind": video["kind"],
                  "title": title or video.get("title") or video["url"], "thumb": video.get("thumb"),
                  "position": int(position or 0), "duration": int(duration or 0), "updated": time.time()}
         entry["finished"] = finished(entry["position"], entry["duration"])
@@ -1128,6 +1161,8 @@ def fetch_storyboard(url, ident):
 
 
 def play(url, from_start=False):
+    if re.fullmatch(r"jellyfin:[0-9a-f]{32}", url or ""):   # depuis l'historique
+        return jellyfin_play(url.split(":")[1], from_start)
     if not url or not re.match(r"https?://", url):
         raise ValueError("Ce n'est pas un lien http(s).")
     key, kind, ident = media_key(url)
@@ -1162,11 +1197,37 @@ def play(url, from_start=False):
         threading.Thread(target=fetch_storyboard, args=(url, ident), daemon=True).start()
 
 
+shim_items = {}   # identifiant Jellyfin → carte (titre, image), pour l'historique des lectures du shim
+
+
+def shim_video():
+    """Vidéo Jellyfin lancée par jellyfin-mpv-shim (« Lire sur… » depuis une appli Jellyfin), d'après le lien en
+    lecture ; None sinon"""
+    try:
+        user, path = mpv(["get_property", "user-data/streambox"], ["get_property", "path"])
+    except (OSError, ValueError):
+        return None
+    srv = jf_server()
+    if (user or {}).get("mode") != "media" or not srv or not str(path or "").startswith(srv["address"]):
+        return None
+    key, kind, ident = media_key(path)
+    if kind != "jellyfin":
+        return None
+    if ident not in shim_items:
+        try:
+            shim_items[ident] = jf_item(jf_api(f"/Users/{{user}}/Items/{ident}"))
+        except (OSError, ValueError, KeyError):
+            return None
+    i = shim_items[ident]
+    return {"key": key, "url": path, "link": key, "kind": kind, "ident": ident, "shim": True, "thumb": i["thumb"],
+            "title": f"{i['title']} · {i['episode']}" if i.get("episode") else i["title"]}
+
+
 def history_loop():
     """Toutes les 10 s, note la position de la vidéo lancée par play() ; l'envoie à Twitch pour une rediffusion."""
     while True:
         time.sleep(10)
-        video = dict(now_playing)
+        video = dict(now_playing) or shim_video()
         if not video:
             continue
         try:
@@ -1176,10 +1237,15 @@ def history_loop():
         except (OSError, ValueError):
             continue
         playing = (user or {}).get("mode") == "media" and path == video["url"]
+        if video.get("shim"):   # lancé par « Lire sur… » : le shim rend compte au serveur, la box note l'historique
+            if playing and isinstance(position, (int, float)):
+                record(video, position, duration)
+            continue
         if video["kind"] == "jellyfin":
             if playing and isinstance(position, (int, float)):
                 paused = mpv(["get_property", "pause"])[0]
                 jf_report("/Progress", video["ident"], position, bool(paused))
+                record(video, position, duration)
                 now_playing["position"] = position
             elif not playing:
                 jf_report("/Stopped", video["ident"], video.get("position") or 0)

@@ -421,15 +421,15 @@ chat = None   # créé dans main(), avec l'application Qt
 
 
 class Osd(QObject):
-    """Bandeau et barre de lecture, notification de live, encart des sondages (qml/InfoBar.qml, Toast.qml,
-    PollsOverlay.qml). stream-box.lua décide quand ils s'affichent (user-data/streambox/bar, toast) ; la position de
+    """Bandeau et barre de lecture, notification de live, encart des sondages, choix des sous-titres (qml/InfoBar.qml,
+    Toast.qml, PollsOverlay.qml, TracksPanel.qml). stream-box.lua décide quand ils s'affichent (user-data/streambox/bar, toast) ; la position de
     lecture est lue ici, depuis un fil à part, 4 fois par seconde tant que la barre est visible."""
     changed = Signal()
     _in = Signal(str, str)   # depuis les fils de mpv : clé, valeur JSON
 
     def __init__(self):
         super().__init__()
-        self.data = {"bar": False, "toast": {}, "polls": {}, "storyboard": {}, "playback": {}, "live": {},
+        self.data = {"bar": False, "toast": {}, "polls": {}, "storyboard": {}, "playback": {}, "live": {}, "tracks": {},
                      "mode": "", "channel": "", "events": True}
         self._in.connect(self._set, Qt.QueuedConnection)
 
@@ -461,6 +461,7 @@ class Osd(QObject):
     toast = Property(str, lambda self: json.dumps(self.data["toast"] or {}), notify=changed)
     polls = Property(str, lambda self: json.dumps(self.data["polls"] or {}), notify=changed)
     storyboard = Property(str, lambda self: json.dumps(self.data["storyboard"] or {}), notify=changed)
+    tracks = Property(str, lambda self: json.dumps(self.data["tracks"] or {}), notify=changed)   # TracksPanel.qml
     eventsOn = Property(bool, lambda self: self.data["events"] is not False, notify=changed)
 
 
@@ -556,7 +557,7 @@ def main():
         player.observe_property(f"user-data/streambox/{key}",
                                 lambda _n, v, key=key: v is not None and chat._settings_in.emit(json.dumps({key: v})))
 
-    for key in ("bar", "toast", "polls", "storyboard", "live", "mode", "channel", "events"):
+    for key in ("bar", "toast", "polls", "storyboard", "live", "mode", "channel", "events", "tracks"):
         player.observe_property(f"user-data/streambox/{key}", osd.receive(key))
     threading.Thread(target=osd.poll_loop, daemon=True).start()
 
