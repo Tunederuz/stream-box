@@ -1,0 +1,11 @@
+[Unit]
+Description=Stream Box : mise à jour hebdomadaire
+
+[Timer]
+OnCalendar=Mon *-*-* 05:00
+# Box éteinte à l'heure prévue : rattrapée au démarrage suivant
+Persistent=true
+RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target

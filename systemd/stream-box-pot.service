@@ -1,0 +1,11 @@
+[Unit]
+Description=Stream Box : jetons anti-robot YouTube pour yt-dlp (bgutil-ytdlp-pot-provider, port 4416)
+
+[Service]
+WorkingDirectory=%h/.local/share/bgutil-pot-provider/server
+ExecStart=%h/.local/share/media-venv/bin/node build/main.js
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=Stream Box : mise à jour de streamlink, yt-dlp et jellyfin-mpv-shim
+
+[Service]
+Type=oneshot
+ExecStart=%h/stream-box/update.sh
