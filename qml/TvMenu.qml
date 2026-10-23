@@ -33,6 +33,7 @@ Item {
     property var display: null
     property var account: null
     property var followsQr: null
+    property var health: null                // /api/health, relu toutes les 5 s sur l'onglet Système
     readonly property var ambient: { try { return JSON.parse(box.ambient || "{}") } catch (e) { return {} } }
 
     // Focus
@@ -105,6 +106,11 @@ Item {
     }
 
     Timer { id: refreshSoon; interval: 300; onTriggered: menu.refresh() }
+    Timer {
+        interval: 5000; repeat: true; triggeredOnStart: true
+        running: menu.isOpen && menu.tabId === "system"
+        onTriggered: menu.call("GET", "/api/health", undefined, function (d) { if (d && d.temps) menu.health = d })
+    }
     Timer { interval: 4000; repeat: true; running: menu.isOpen; onTriggered: menu.refresh() }
     Timer { id: followsPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadFollows() }
     Timer { interval: 10000; repeat: true; running: menu.isOpen; triggeredOnStart: true; onTriggered: menu.now = new Date() }
@@ -249,12 +255,53 @@ Item {
                   pendingPlayer = ""
                   close()
               } },
+            { label: "Mettre à jour maintenant",
+              hint: health && health.update ? (health.update.running ? "Mise à jour en cours…"
+                    : (health.update.last ? (health.update.last.ok ? "Dernière : " : "Échec : ") + frDate(health.update.last.date) : "Jamais")
+                      + (health.update.next ? "  ·  prochaine : " + frDate(health.update.next) : "")) : undefined,
+              ok: function () { if (!(health && health.update && health.update.running)) act("update") } },
             { label: "Éteindre la box", danger: true,
               hint: poweroffUntil > 0 ? "Appuie encore sur OK pour éteindre" : undefined,
               ok: function () {
                   if (poweroffUntil > 0) { act("poweroff"); close() }
                   else { poweroffUntil = 1; poweroffReset.restart() }
               } },
+        ]
+    }
+    // « 2026-10-23 11:48:14 » ou « Mon 2026-10-26 05:07:37 CET » → « ven. 23 oct. à 11:48 »
+    function frDate(text) {
+        var m = /(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d)/.exec(text || "")
+        if (!m) return text || ""
+        var d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])
+        return d.toLocaleDateString(Qt.locale("fr_FR"), "ddd d MMM") + " à " + m[4] + ":" + m[5]
+    }
+    function bytes(n) { return n >= 1e9 ? (n / 1e9).toFixed(1).replace(".", ",") + " Go" : Math.round(n / 1e6) + " Mo" }
+    function bits(n) {
+        return n === null || n === undefined ? "…" : n >= 1e6 ? (n / 1e6).toFixed(1).replace(".", ",") + " Mbit/s" : Math.round(n / 1e3) + " kbit/s"
+    }
+    function since(s) {
+        var h = Math.floor(s / 3600), d = Math.floor(h / 24)
+        return d ? d + " j " + (h % 24) + " h" : h ? h + " h " + (Math.floor(s / 60) % 60 < 10 ? "0" : "") + Math.floor(s / 60) % 60 : Math.floor(s / 60) + " min"
+    }
+    // Tuiles de l'état de la box : [titre, valeur, détail, niveau (""|"warn"|"bad")]
+    function healthTiles() {
+        var h = health
+        if (!h) return []
+        var t = h.temps.cpu, p = h.player, ok = function (v) { return v === "active" ? "✓" : "✕" }
+        var net = h.network
+        return [
+            ["Température", t !== undefined ? t + " °C" : "–", h.temps.disk !== undefined ? "disque " + h.temps.disk + " °C" : "",
+             t >= 85 ? "bad" : t >= 70 ? "warn" : ""],
+            ["Processeur", h.cpu !== null ? Math.round(h.cpu) + " %" : "…", "charge " + h.load.toFixed(1).replace(".", ",") + " · " + h.cores + " cœurs",
+             h.cpu >= 85 ? "warn" : ""],
+            ["Mémoire", bytes(h.memory.total - h.memory.available), "sur " + bytes(h.memory.total), h.memory.available < 5e8 ? "warn" : ""],
+            ["Disque", bytes(h.disk.free) + " libres", "sur " + bytes(h.disk.total), h.disk.free < 5e9 ? "warn" : ""],
+            ["Réseau", "↓ " + bits(net.rx), "↑ " + bits(net.tx) + (net.speed > 0 ? " · lien " + (net.speed >= 1000 ? net.speed / 1000 + " Gbit/s" : net.speed + " Mbit/s") : ""), ""],
+            ["Allumée depuis", since(h.uptime), "MQTT " + ok(h.services.mqtt) + " · jetons YouTube " + ok(h.services.youtube_tokens),
+             h.services.mqtt !== "active" || h.services.youtube_tokens !== "active" ? "warn" : ""],
+            ["Lecture", (p.running === "qt" ? "Appli Qt" : "mpv seul") + (p.hwdec && p.hwdec !== "no" ? " · " + p.hwdec : p.size ? " · processeur" : ""),
+             p.size ? p.size.replace("x", " × ") + " · " + Math.round(p.fps || 0) + " im/s · " + (p.dropped || 0) + " perdues" : "rien en lecture",
+             p.size && (!p.hwdec || p.hwdec === "no") ? "warn" : ""],
         ]
     }
     function openModal(title, items) { modal = { title: title, items: items }; modalSel = 0 }
@@ -761,6 +808,25 @@ Item {
                     Behavior on opacity { NumberAnimation { duration: 150 } }
                     row: rowsView.rows[index] || {}
                     focused: index === rowsView.focusedRow
+                }
+            }
+        }
+        Flow {   // Système : état de la box, sous les lignes (« Lecture » prend deux tuiles de large)
+            visible: menu.tabId === "system"
+            x: 0; y: 650; width: 810
+            spacing: 10
+            Repeater {
+                model: menu.healthTiles()
+                Rectangle {
+                    width: index === 6 ? 262 * 2 + 10 : 262; height: 96; radius: 18
+                    color: "#1affffff"; border.color: "#22ffffff"; border.width: 1
+                    readonly property color tone: modelData[3] === "bad" ? "#ff6b6b" : modelData[3] === "warn" ? "#ffb44a" : "white"
+                    Column {
+                        x: 18; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 36; spacing: 2
+                        Text { text: modelData[0].toUpperCase(); color: "#a99fc0"; font.pixelSize: 15; font.bold: true; font.letterSpacing: 1.5 }
+                        Text { width: parent.width; elide: Text.ElideRight; text: modelData[1]; color: parent.parent.tone; font.pixelSize: 23; font.bold: true }
+                        Text { width: parent.width; elide: Text.ElideRight; text: modelData[2]; color: "#b4afc2"; font.pixelSize: 16 }
+                    }
                 }
             }
         }

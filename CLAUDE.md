@@ -459,3 +459,5 @@ réellement actif, décodage, taille, images/s, images perdues), services utilis
 `update.log`). `POST /api/update` lance `stream-box-update.service` (`--no-block`). La page relit toutes les 5 s tant
 que l'onglet Réglages est affiché ; tuiles en orange ou rouge au-delà des seuils (70 °C, 85 °C, mémoire, disque,
 service arrêté, décodage par le processeur).
+Même état dans l'onglet Système du menu QML de la TV (tuiles sous les lignes, `/api/health` relu toutes les 5 s tant
+que l'onglet est affiché), avec une ligne « Mettre à jour maintenant » (dernière et prochaine mise à jour).
