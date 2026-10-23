@@ -302,13 +302,16 @@ Item {
 
     function open() {
         if (isOpen) return
-        tab = 0; area = "content"; shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0
+        // Le menu rouvre sur le dernier onglet (et, pour YouTube et Jellyfin, la même rangée et la même carte) ; les
+        // données sont relues. Suivis attend sur le rail : la liste n'est peut-être pas encore autorisée
+        area = tabs[tab].id === "follows" ? "rail" : "content"
+        shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0
         follows = null; replays = ({}); history = null; rpLogin = ""; rpRow = 0; rpSel = [0, 0, 0]
-        yt = null; ytRow = 0; ytSel = ({}); kbOpen = false
-        jf = null; jfRow = 0; jfSel = ({})   // les résultats de recherche restent d'une ouverture à l'autre
+        yt = null; jf = null; kbOpen = false   // les résultats de recherche restent d'une ouverture à l'autre
         var list = st.streamers || []
         liveSel = Math.max(0, list.indexOf(st.channel))
         startFocus = true
+        loadTab(tabs[tab].id)
         isOpen = true
         box.setMenuOpen(true)
         refresh()
@@ -539,9 +542,10 @@ Item {
 
     // Onglet affiché : données chargées à la première visite
     onTabChanged: {
-        // tabs[tab] et pas tabId : la liaison de tabId n'est pas encore recalculée ici
-        var id = tabs[tab].id
         tabEnter.restart()
+        loadTab(tabs[tab].id)   // tabs[tab] et pas tabId : la liaison de tabId n'est pas encore recalculée ici
+    }
+    function loadTab(id) {
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
         if (id === "youtube" && yt === null) loadYoutube()

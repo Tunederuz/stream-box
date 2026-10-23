@@ -149,6 +149,7 @@ local function start_channel(name)
     write_state("channel", name)
     mp.set_property_native("user-data/streambox/channel", name)
     set_mode("twitch")   -- avant le « stop » ci-dessous, pour que sa fin de fichier soit lue comme un changement de chaîne
+    mp.set_property_bool("pause", false)   -- mpv garde la pause d'un fichier à l'autre
     offline, channel_since = false, mp.get_time()
     stop_twitch()
     start_server(name)
@@ -165,6 +166,7 @@ end
 local function play_media(url, start, title)
     stop_twitch()
     set_mode("media")
+    mp.set_property_bool("pause", false)   -- mpv garde la pause d'un fichier à l'autre
     local at = tonumber(start) or 0
     local opts = title and title ~= "" and ("force-media-title=%%%d%%%s"):format(#title, title) or nil
     if at > 0 or opts then
