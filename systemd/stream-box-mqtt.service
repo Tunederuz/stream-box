@@ -1,0 +1,12 @@
+[Unit]
+Description=Stream Box : pont MQTT vers Home Assistant
+# Pas de config MQTT (~/.config/stream-box/mqtt.json) : le service ne démarre pas
+ConditionPathExists=%h/.config/stream-box/mqtt.json
+
+[Service]
+ExecStart=%h/.local/share/media-venv/bin/python %h/stream-box/mqtt_bridge.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
