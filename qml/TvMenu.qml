@@ -390,6 +390,14 @@ Item {
             { label: "Taille du texte", value: (s.chat_size || 0) + " px", step: function (d) {
                 act("set", { key: "chat_size", value: Math.max(20, Math.min(60, (s.chat_size || 0) + 2 * d)) })
             } },
+            { header: "Sous-titres" },
+            { label: "Taille des sous-titres", value: (s.sub_size || 100) + " %", step: function (d) {
+                act("set", { key: "sub_size", value: Math.max(50, Math.min(200, (s.sub_size || 100) + 10 * d)) })
+            } },
+            { label: "Fond des sous-titres", hint: "Bandeau noir derrière le texte, plus lisible sur une image claire",
+              value: s.sub_bg ? s.sub_bg + " %" : "Aucun", step: function (d) {
+                act("set", { key: "sub_bg", value: Math.max(0, Math.min(100, (s.sub_bg || 0) + 10 * d)) })
+            } },
             { header: "Lecture" },
             { label: "Bascule automatique", hint: "Passer sur un streamer en live si le sien est hors ligne",
               toggle: !!s.auto_switch, ok: function () { act("auto_switch", { enabled: !s.auto_switch }) } },

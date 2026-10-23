@@ -522,4 +522,7 @@ a plusieurs ; langues en français, « (forcés) », « (d'origine) ») et affic
 `user-data/streambox/tracks` {open, items, sel}, relayé par ui.py (`osd.tracks`), dessiné par `qml/TracksPanel.qml`
 au-dessus de la barre, à droite. La barre rappelle « ≡ sous-titres et audio ». Avec mpv seul, ≡ passe aux
 sous-titres suivants (comme avant).
+Réglages « Taille des sous-titres » (`sub_size`, 50–200 %, → `sub-scale`) et « Fond des sous-titres » (`sub_bg`,
+0–100 % : bandeau noir `sub-border-style=background-box` + `sub-back-color` #AA000000, 0 = contour habituel) : NUMBERS
+de stream-box.lua (`apply_sub_style`), `POST /api/set`, onglet Réglages de la TV et section Sous-titres de la page.
 

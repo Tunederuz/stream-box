@@ -895,9 +895,24 @@ mp.register_script_message("streambox-play", play_media)
 mp.register_script_message("streambox-home", from_remote(show_home))
 mp.register_script_message("streambox-twitch", from_remote(function() start_channel(channel) end))
 
--- Réglages numériques du chat, modifiables depuis la télécommande : défaut, minimum, maximum
+-- Réglages numériques du chat et des sous-titres, modifiables depuis la télécommande : défaut, minimum, maximum
 local NUMBERS = { chat_bg = { 60, 0, 100 },     -- opacité du fond, en %
-                  chat_size = { 32, 20, 60 } }  -- taille du texte, en pixels 1920x1080
+                  chat_size = { 32, 20, 60 },   -- taille du texte, en pixels 1920x1080
+                  sub_size = { 100, 50, 200 },  -- taille des sous-titres, en % de celle de mpv
+                  sub_bg = { 0, 0, 100 } }      -- fond des sous-titres : opacité d'un bandeau noir, en % (0 : contour)
+
+-- Sous-titres : taille (sub-scale) et fond (bandeau noir derrière le texte, sinon contour et ombre habituels)
+local function apply_sub_style()
+    local size = mp.get_property_native("user-data/streambox/sub_size") or 100
+    local bg = mp.get_property_native("user-data/streambox/sub_bg") or 0
+    mp.set_property_number("sub-scale", size / 100)
+    if bg > 0 then
+        mp.set_property("sub-border-style", "background-box")
+        mp.set_property("sub-back-color", ("#%02X000000"):format(math.floor(bg * 2.55 + 0.5)))
+    else
+        mp.set_property("sub-border-style", "outline-and-shadow")
+    end
+end
 
 local function set_number(key, value)
     local spec, n = NUMBERS[key], tonumber(value)
@@ -905,6 +920,7 @@ local function set_number(key, value)
     n = math.max(spec[2], math.min(spec[3], math.floor(n + 0.5)))
     write_state(key, tostring(n))
     mp.set_property_native("user-data/streambox/" .. key, n)
+    if key:sub(1, 4) == "sub_" then apply_sub_style() end
 end
 mp.register_script_message("streambox-set", set_number)
 

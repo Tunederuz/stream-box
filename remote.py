@@ -597,6 +597,7 @@ def state():
         "streamers": read_streamers(), "channel": user.get("channel"), "avatars": avatars,
         "chat_visible": user.get("chat_visible", True), "corner": user.get("corner", "bl"),
         "chat_bg": user.get("chat_bg", 60), "chat_size": user.get("chat_size", 32),
+        "sub_size": user.get("sub_size", 100), "sub_bg": user.get("sub_bg", 0),
         "auto_switch": user.get("auto_switch", True), "night": user.get("night", False),
         "events": user.get("events", True), "qr": user.get("qr", "always"),
         # Lecteur choisi, et celui qui tourne vraiment (mpv seul après plusieurs plantages de l'appli Qt)
@@ -1804,7 +1805,7 @@ def action(name, body):
         mpv(["script-message", "streambox-qr", body["mode"]])
     elif name == "set":
         # Bornes et enregistrement gérés par stream-box.lua (set_number)
-        if body.get("key") not in ("chat_bg", "chat_size"):
+        if body.get("key") not in ("chat_bg", "chat_size", "sub_size", "sub_bg"):
             raise ValueError("réglage inconnu")
         mpv(["script-message", "streambox-set", body["key"], str(int(body.get("value", 0)))])
     elif name == "display":
