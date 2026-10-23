@@ -372,3 +372,5 @@ Fils et libmpv (blocages et plantages vus, corrigés) :
 - `kill -USR1 <pid de ui.py>` écrit la pile de chaque fil dans `/tmp/stream-box-ui.log` ; plantages : `coredumpctl`.
 Halo du focus : `RectangularShadow` (QtQuick.Effects), sous l'élément. Grilles et rangées sans `clip` (il coupait le
 halo) : les éléments hors de la zone visible s'effacent en fondu (`rel` = position moins `contentX`/`contentY`).
+Marges des vues seulement dans le sens du défilement (`topMargin` d'une rangée horizontale, `leftMargin` d'une grille
+verticale) : Qt remet l'autre axe à zéro au premier `positionViewAtIndex`, et la rangée sautait sur le texte voisin.
