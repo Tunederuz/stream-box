@@ -45,6 +45,12 @@ local function ass_escape(s)
     return (s:gsub("\\", "\\\239\187\191"):gsub("{", "\\{"))
 end
 
+-- Appli Qt (ui.py) : bandeau, barre de lecture, notifications, encart des sondages et écran d'accueil sont dessinés en
+-- QML ; ce script garde la logique (quand, combien de temps, touches) et publie l'état dans user-data/streambox/*
+local function qt_ui()
+    return mp.get_property_native("user-data/streambox/chat_ui") == "qml"
+end
+
 local function read_streamers()
     local list = {}
     local f = io.open(STREAMERS_FILE)
@@ -535,6 +541,10 @@ local function clock(t)
 end
 
 local function draw_bar()
+    if qt_ui() then   -- dessinée par qml/InfoBar.qml, d'après user-data/streambox/bar
+        bar:remove()
+        return
+    end
     local w, h = mp.get_osd_size()
     if not w or w == 0 then return end
     local pos = mp.get_property_number("time-pos") or 0
@@ -589,10 +599,12 @@ end
 local function hide_bar()
     bar_visible = false
     bar:remove()
+    mp.set_property_native("user-data/streambox/bar", false)
 end
 
 local function show_bar(seconds)
     bar_visible, bar_until = true, mp.get_time() + (seconds or BAR_SECONDS)
+    mp.set_property_native("user-data/streambox/bar", true)
     draw_bar()
 end
 
@@ -624,11 +636,20 @@ local function hide_toast()
     toast_channel = nil
     if toast_timer then toast_timer:kill() end
     toast:remove()
+    mp.set_property_native("user-data/streambox/toast", {})
 end
 
 mp.register_script_message("streambox-went-live", function(name)
     if name == channel and mode == "twitch" then return end   -- on le regarde déjà
     local info = live[name] or {}
+    if qt_ui() then   -- dessinée par qml/Toast.qml ; OK et Retour restent gérés ici (toast_channel)
+        mp.set_property_native("user-data/streambox/toast", { name = name, title = info.title or "",
+            game = info.game or "", viewers = info.viewers or 0, seconds = TOAST_SECONDS })
+        toast_channel = name
+        if toast_timer then toast_timer:kill() end
+        toast_timer = mp.add_timeout(TOAST_SECONDS, hide_toast)
+        return
+    end
     local w, h = mp.get_osd_size()
     if not w or w == 0 then return end
     local fs = math.floor(h / 32)
@@ -974,7 +995,8 @@ end
 local function draw_events()
     local poll, pred = events_data.poll, events_data.prediction
     local w, h = mp.get_osd_size()
-    if not events_on or mode ~= "twitch" or not (poll or pred) or not w or w == 0 then
+    -- Appli Qt : encart dessiné par qml/PollsOverlay.qml (user-data/streambox/polls et events)
+    if qt_ui() or not events_on or mode ~= "twitch" or not (poll or pred) or not w or w == 0 then
         events:remove()
         return
     end

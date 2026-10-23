@@ -18,7 +18,7 @@ mpv. Il lit et agit par l'API de remote.py, comme la page web.
 
 Lancé avec le Python du venv ui-venv (PySide6, python-mpv) : ui.py --input-ipc-server=… --script=… <autres options>
 """
-import ctypes, faulthandler, json, locale, os, queue, re, signal, subprocess, sys, threading
+import ctypes, faulthandler, json, locale, os, queue, re, signal, subprocess, sys, threading, time
 
 from PySide6.QtCore import Property, QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QCursor, QGuiApplication
@@ -420,6 +420,53 @@ class ChatBridge(QObject):
 chat = None   # créé dans main(), avec l'application Qt
 
 
+class Osd(QObject):
+    """Bandeau et barre de lecture, notification de live, encart des sondages (qml/InfoBar.qml, Toast.qml,
+    PollsOverlay.qml). stream-box.lua décide quand ils s'affichent (user-data/streambox/bar, toast) ; la position de
+    lecture est lue ici, depuis un fil à part, 4 fois par seconde tant que la barre est visible."""
+    changed = Signal()
+    _in = Signal(str, str)   # depuis les fils de mpv : clé, valeur JSON
+
+    def __init__(self):
+        super().__init__()
+        self.data = {"bar": False, "toast": {}, "polls": {}, "storyboard": {}, "playback": {}, "live": {},
+                     "mode": "", "channel": "", "events": True}
+        self._in.connect(self._set, Qt.QueuedConnection)
+
+    def _set(self, key, value):
+        self.data[key] = json.loads(value)
+        self.changed.emit()
+
+    def receive(self, key):
+        return lambda _n, v: self._in.emit(key, json.dumps(v if v is not None else self.data[key]))
+
+    def poll_loop(self):
+        while True:
+            time.sleep(0.25 if self.data["bar"] else 1)
+            if not self.data["bar"]:
+                continue
+            try:
+                get = player._get_property
+                cache = get("demuxer-cache-state") or {}
+                ranges = cache.get("seekable-ranges") or []
+                state = {"pos": get("time-pos"), "duration": get("duration"), "pause": get("pause"),
+                         "cached": get("demuxer-cache-time"), "title": get("media-title"),
+                         "window": [ranges[0]["start"], ranges[0]["end"]] if ranges else None}
+            except Exception:   # rien en lecture, mpv qui redémarre…
+                continue
+            self._in.emit("playback", json.dumps(state))
+
+    bar = Property(str, lambda self: json.dumps({k: self.data[k] for k in ("bar", "playback", "live", "mode", "channel")}),
+                   notify=changed)
+    toast = Property(str, lambda self: json.dumps(self.data["toast"] or {}), notify=changed)
+    polls = Property(str, lambda self: json.dumps(self.data["polls"] or {}), notify=changed)
+    storyboard = Property(str, lambda self: json.dumps(self.data["storyboard"] or {}), notify=changed)
+    eventsOn = Property(bool, lambda self: self.data["events"] is not False, notify=changed)
+
+
+osd = Osd()
+
+
 class View(QQuickView):
     """Fenêtre plein écran : transmet touches et souris à mpv, masque le curseur après 4 s sans mouvement."""
 
@@ -479,6 +526,7 @@ def main():
     global chat
     chat = ChatBridge()
     view.rootContext().setContextProperty("chat", chat)
+    view.rootContext().setContextProperty("osd", osd)
     view.setSource(QUrl.fromLocalFile(os.path.join(DIR, "ui.qml")))
     qml_menu = view.status() == QQuickView.Ready and view.rootObject().findChild(QObject, "tvMenu") is not None
     if not qml_menu:
@@ -507,6 +555,10 @@ def main():
     for key in ("channel", "mode", "corner", "chat_visible", "chat_bg", "chat_size"):
         player.observe_property(f"user-data/streambox/{key}",
                                 lambda _n, v, key=key: v is not None and chat._settings_in.emit(json.dumps({key: v})))
+
+    for key in ("bar", "toast", "polls", "storyboard", "live", "mode", "channel", "events"):
+        player.observe_property(f"user-data/streambox/{key}", osd.receive(key))
+    threading.Thread(target=osd.poll_loop, daemon=True).start()
 
     def dec(v):
         return v.decode() if isinstance(v, bytes) else (v or "")

@@ -82,7 +82,7 @@ avatars = {}    # pseudo -> photo de profil Twitch, pour la page (en live ou non
 
 def fetch_live(logins):
     query = ("query($l:[String!]){users(logins:$l){login profileImageURL(width:70) "
-             "stream{title viewersCount game{displayName} previewImageURL(width:640,height:360)}}}")
+             "stream{title viewersCount createdAt game{displayName} previewImageURL(width:640,height:360)}}}")
     req = urllib.request.Request(
         "https://gql.twitch.tv/gql", data=json.dumps({"query": query, "variables": {"l": logins}}).encode(),
         headers={"Client-ID": TWITCH_WEB_CLIENT_ID, "Content-Type": "application/json"})
@@ -91,6 +91,7 @@ def fetch_live(logins):
     avatars.update({u["login"]: u["profileImageURL"] for u in users if u and u.get("profileImageURL")})
     # Miniature du live : même adresse d'une minute à l'autre, l'heure du relevé force le téléphone à la recharger
     return {u["login"]: {"title": u["stream"]["title"], "viewers": u["stream"]["viewersCount"],
+                         "started": epoch(u["stream"]["createdAt"]) if u["stream"].get("createdAt") else None,
                          "game": (u["stream"].get("game") or {}).get("displayName"),
                          "thumb": f"{u['stream']['previewImageURL']}?t={int(time.time()) // LIVE_EVERY}"
                          if u["stream"].get("previewImageURL") else None}
@@ -797,6 +798,28 @@ def twitch_save_position(video_id, position):
                    {"i": {"userID": me["id"], "videoID": video_id, "videoType": "VOD", "position": int(position)}})
 
 
+# Aperçu des vidéos YouTube sur la barre de lecture (appli Qt) : planche de miniatures (« storyboard ») donnée par
+# yt-dlp, publiée dans user-data/streambox/storyboard. Chaque image de la planche est une grille rows × columns de
+# miniatures couvrant « duration » secondes.
+
+def fetch_storyboard(url, ident):
+    try:
+        r = subprocess.run([os.path.expanduser("~/.local/bin/yt-dlp"), "-J", "--no-warnings", "--skip-download",
+                            "--no-playlist", url], capture_output=True, text=True, timeout=90)
+        info = json.loads(r.stdout or "{}")
+        boards = [f for f in info.get("formats") or [] if f.get("format_note") == "storyboard" and f.get("fragments")]
+        if not boards:
+            return
+        b = max(boards, key=lambda f: f.get("width") or 0)
+        board = {"id": ident, "width": b["width"], "height": b["height"], "rows": b.get("rows") or 1,
+                 "columns": b.get("columns") or 1,
+                 "fragments": [{"url": f["url"], "duration": f.get("duration") or 0} for f in b["fragments"]]}
+        if now_playing.get("ident") == ident:   # toujours la même vidéo
+            mpv(["set_property", "user-data/streambox/storyboard", board])
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        pass
+
+
 def play(url, from_start=False):
     if not url or not re.match(r"https?://", url):
         raise ValueError("Ce n'est pas un lien http(s).")
@@ -827,6 +850,9 @@ def play(url, from_start=False):
     now_playing.update(video, pushed=0.0, position=start)
     mpv(["script-message", "streambox-play", url, str(start)])
     record(video, start, duration)
+    mpv(["set_property", "user-data/streambox/storyboard", {}])
+    if kind == "youtube":
+        threading.Thread(target=fetch_storyboard, args=(url, ident), daemon=True).start()
 
 
 def history_loop():

@@ -78,6 +78,9 @@ Item {
         transformOrigin: Item.TopLeft
         AmbientScreen {}
         ChatOverlay {}
+        PollsOverlay {}
+        InfoBar {}
+        Toast {}
         TvMenu {
             objectName: "tvMenu"
         }

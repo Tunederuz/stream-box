@@ -435,3 +435,17 @@ Page : carte « Sondage / Prédiction » sous « Sur la TV », relevée toutes l
 Tout ou libre, confirmation avant de parier. Le relevé régulier suit maintenant toute chaîne en direct, pas seulement
 celles de la liste. Non testé en vrai (pas de sondage ouvert, et un pari dépense des points) : affichage vérifié avec
 des données simulées.
+
+### Bandeau, barre de lecture, notification, encart des sondages en QML (appli Qt)
+
+stream-box.lua garde la logique (OK, ←/→, pause, délais, touches de la notification) et, quand `qt_ui()` (chat_ui =
+qml), publie au lieu de dessiner : `user-data/streambox/bar` (barre visible), `toast` ({name, title, game, viewers,
+seconds}, vide à la fin) ; `draw_bar` et `draw_events` ne dessinent rien. ui.py (`Osd`) relaie ces propriétés, `polls`,
+`storyboard`, `live`, et lit la position de lecture (time-pos, duration, pause, cache, fenêtre du différé) depuis un fil
+à part, 4 fois par seconde seulement quand la barre est visible. QML : `InfoBar.qml` (direct : photo, titre, jeu,
+spectateurs, « en live depuis » d'après `started` = `stream.createdAt` ajouté par remote.py, mémoire du différé et
+« EN DIRECT » ou retard ; vidéo : pause, titre, partie chargée, durée, et aperçu YouTube), `Toast.qml` (glisse depuis
+la droite, ligne de temps restant), `PollsOverlay.qml` (barres animées, ★ gagnant, ✓ vote ou pari fait depuis la box).
+Aperçu YouTube : à chaque lecture YouTube, remote.py lance `yt-dlp -J` une fois et publie la planche de miniatures
+(`storyboard` : fragments d'images en grille rows × columns, chacun couvrant `duration` s) ; la case affichée est
+choisie d'après la position. Piège QML encore : `left` (FINAL) ne peut pas servir de nom de propriété.
