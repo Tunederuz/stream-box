@@ -429,7 +429,7 @@ end
 
 local function draw_rail(out)
     out[#out + 1] = rrect(0, 0, 400, H, 0, "10070B", "30")
-    out[#out + 1] = rrect(56, 62, 52, 52, 14, VIOLET, "00")
+    out[#out + 1] = rrect(56, 62, 52, 52, 14, "F97F2D", "00")   -- logo bleu (BGR), comme l'icône
     out[#out + 1] = "{\\an5\\pos(82,88)\\fs30\\bord0\\shad0\\1c&HFFFFFF&\\p1}m -7 -11 l 11 0 -7 11{\\p0}"   -- ▶ dessiné
     out[#out + 1] = label(126, 88, 36, "FFFFFF", "Stream Box", 4, "\\b1")
     for i, t in ipairs(TABS) do
