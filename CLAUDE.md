@@ -149,6 +149,10 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   `latitude`, `longitude`, `timezone` ; sans ce fichier, pas de météo) et plannings Twitch (GQL `schedule.segments`,
   créneaux de la semaine en cours : un créneau passé est reporté d'une semaine). Les captures de mpv sont vides quand
   rien ne joue : vérifier l'écran sur la TV.
+- **Aperçu de la TV** dans la page (bloc replié, onglet Télécommande) : `GET /api/preview?overlay=1|0` →
+  `screenshot-to-file` (`window` avec le chat et le menu, `video` sans), réduit en JPEG 960 px par ffmpeg, une capture à
+  la fois et gardée 1 s pour plusieurs téléphones. La page en redemande une 1,5 s après chaque réponse, seulement tant
+  que le bloc est ouvert et visible. Rien à capturer sans vidéo (écran d'ambiance) : réponse 204.
 - **Mises à jour** : `update.sh` (timer systemd utilisateur `stream-box-update.timer`, lundi ~5 h, rattrapé au démarrage)
   met à jour streamlink, yt-dlp, Deno, Node, le plugin de jetons et jellyfin-mpv-shim (et recompile le serveur de jetons si sa version change), teste chaque venv et remet les versions d'avant si le test
   échoue. Journal : `~media/.local/state/stream-box/update.log`.
