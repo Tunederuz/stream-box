@@ -272,6 +272,12 @@
     <label class="setting" for="display" style="margin-top: 0">Résolution de la TV</label>
     <select id="display" disabled><option>Chargement…</option></select>
     <div class="status" id="display-status"></div>
+    <div class="setting">QR code de la télécommande (pour les invités)</div>
+    <div class="row" id="qr-modes">
+      <button data-qr="always">Toujours</button>
+      <button data-qr="timed">30 secondes</button>
+      <button data-qr="never">Jamais</button>
+    </div>
   </section>
 
   <section>
@@ -376,6 +382,10 @@ function render(s) {
   $("auto-switch").textContent = `Bascule automatique : ${s.auto_switch ? "activée" : "désactivée"}`;
   $("auto-switch").classList.toggle("current", s.auto_switch);
   $("auto-switch").setAttribute("aria-pressed", String(s.auto_switch));
+  document.querySelectorAll("[data-qr]").forEach(b => {
+    b.classList.toggle("current", b.dataset.qr === s.qr);
+    b.setAttribute("aria-pressed", String(b.dataset.qr === s.qr));
+  });
   for (const [id, on, label] of [["night", s.night, `Mode nuit : ${s.night ? "activé" : "désactivé"}`],
                                  ["events", s.events, `Sondages et prédictions : ${s.events ? "affichés" : "masqués"}`]]) {
     $(id).textContent = label;
@@ -700,6 +710,7 @@ $("preview").ontoggle = () => previewTick();
 document.addEventListener("visibilitychange", () => previewTick());
 $("history").ontoggle = () => { if ($("history").open) loadHistory(); };
 $("auto-switch").onclick = () => send("auto_switch", { enabled: !lastState?.auto_switch });
+document.querySelectorAll("[data-qr]").forEach(b => b.onclick = () => send("qr", { mode: b.dataset.qr }));
 $("night").onclick = () => send("flag", { key: "night", enabled: !lastState?.night });
 $("events").onclick = () => send("flag", { key: "events", enabled: !lastState?.events });
 $("replays").ontoggle = () => {

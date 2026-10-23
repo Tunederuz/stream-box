@@ -30,6 +30,9 @@ local live, offline, channel_since = {}, false, 0   -- live : relevé de remote.
 local ambient_visible, status_text = false, ""    -- écran d'ambiance affiché ; dernier message d'état
 local auto_switch_on = true   -- bascule automatique vers un streamer en live (réglage de la télécommande)
 local qr_data = nil           -- QR code de la télécommande web, publié par remote.py avec l'écran d'ambiance
+local QR_MODES = { always = true, timed = true, never = true }   -- toujours, QR_SECONDS secondes, jamais
+local QR_SECONDS = 30
+local qr_mode, qr_until = "always", 0   -- en mode « timed », affiché jusqu'à qr_until (mp.get_time)
 local menu = mp.create_osd_overlay("ass-events")
 local status = mp.create_osd_overlay("ass-events")
 local menu_visible, hide_timer, items = false, nil, {}
@@ -292,6 +295,7 @@ end
 -- QR code de la télécommande web, pour les invités : carré clair (gris, moins marquant pour l'écran que du blanc) et
 -- modules sombres en un seul tracé, une bande par suite de modules. Renvoie le dessin et son côté, ou nil.
 local function qr_code(x, y, size)
+    if qr_mode == "never" or (qr_mode == "timed" and mp.get_time() > qr_until) then return nil end
     local rows = qr_data and qr_data.rows or {}
     local n = #rows
     local m = n > 0 and math.floor(size / (n + 4)) or 0   -- marge de 2 modules tout autour
@@ -434,6 +438,7 @@ end
 local function show_menu(by_key)
     if not menu_visible then
         menu_visible = true
+        qr_until = mp.get_time() + QR_SECONDS
         streamers = read_streamers()   -- relu à chaque ouverture : le fichier s'édite à chaud
         mp.add_forced_key_binding("MBTN_LEFT", "streambox-click", on_click)
         if by_key then
@@ -864,6 +869,7 @@ local function update_ambient(force)
         local key = os.time() .. status_text   -- redessiné toutes les 2 s : le fond bouge en continu
         if not ambient_visible then
             ambient_visible = true
+            qr_until = mp.get_time() + QR_SECONDS
             status:remove()
         end
         if force or key ~= ambient_drawn then
@@ -1047,6 +1053,19 @@ for key, spec in pairs(FLAGS) do
     local saved = read_state(key)
     set_flag(key, saved or (spec[1] and "yes" or "no"), true)
 end
+
+-- Affichage du QR code de la télécommande : always, timed (QR_SECONDS secondes à chaque arrivée sur l'écran d'ambiance
+-- et ouverture du menu), never
+local function set_qr_mode(value)
+    if not QR_MODES[value] then return end
+    qr_mode, qr_until = value, mp.get_time() + QR_SECONDS   -- en « timed », on le montre tout de suite pour l'exemple
+    write_state("qr", value)
+    mp.set_property_native("user-data/streambox/qr", value)
+    if ambient_visible then update_ambient(true) end
+    if menu_visible then draw_menu() end
+end
+mp.register_script_message("streambox-qr", set_qr_mode)
+set_qr_mode(read_state("qr") or "always")
 
 -- Pas de double-clic plein écran : la box doit rester en plein écran
 mp.add_forced_key_binding("MBTN_LEFT_DBL", "streambox-no-dbl", function() end)

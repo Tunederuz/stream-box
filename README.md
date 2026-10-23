@@ -15,7 +15,8 @@ télécommande web installable sur téléphone (PWA).
 - **Qui est en live** dans le menu et la télécommande, **notification** quand un streamer de la liste lance son live.
 - **Écran d'ambiance** quand rien ne joue : horloge, date, météo et prochains lives prévus (plannings Twitch).
 - **Sondages et prédictions** de la chaîne regardée affichés sur la TV, avec le temps restant et les résultats.
-- **QR code de la télécommande** sur l'écran d'ambiance et dans le menu, pour les invités.
+- **QR code de la télécommande** sur l'écran d'ambiance et dans le menu, pour les invités : toujours, 30 secondes
+  ou jamais.
 - **Mode nuit** : son compressé (sons forts atténués, voix remontées) pour regarder à faible volume.
 - **Compte Twitch** facultatif : plus de pubs sur les chaînes où l'on est abonné, VOD réservées aux abonnés.
 - **Historique et reprise de lecture** : chaque vidéo reprend où on s'était arrêté ; les rediffusions Twitch sont

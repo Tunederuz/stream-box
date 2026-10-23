@@ -17,6 +17,7 @@ DISCOVERY = "homeassistant"         # préfixe de découverte de Home Assistant
 POLL = 2                            # secondes entre deux lectures de l'état
 OFFLINE_AFTER = 30                  # secondes sans réponse de l'API avant d'annoncer la box hors ligne
 PENDING_FOR = 120                   # une commande reçue avant que la box soit prête est gardée ce temps-là
+QR_MODES = {"always": "Toujours", "timed": "30 secondes", "never": "Jamais"}   # select de Home Assistant
 DEVICE = {"identifiers": ["stream_box"], "name": "Stream Box", "model": "Stream Box", "manufacturer": "Stream Box"}
 
 
@@ -46,6 +47,9 @@ def entities(streamers):
         ("switch", "events", {"name": "Sondages et prédictions", "icon": "mdi:poll", "state_topic": state,
                               "command_topic": cmd("events"),
                               "value_template": "{{ 'ON' if value_json.events else 'OFF' }}"}),
+        ("select", "qr", {"name": "QR code de la télécommande", "icon": "mdi:qrcode", "options": list(QR_MODES.values()),
+                          "state_topic": state, "command_topic": cmd("qr"),
+                          "value_template": "{{ %s.get(value_json.qr, '') }}" % json.dumps(QR_MODES)}),
         ("switch", "pause", {"name": "Pause", "icon": "mdi:pause", "state_topic": state, "command_topic": cmd("pause"),
                              "value_template": "{{ 'ON' if value_json.pause else 'OFF' }}"}),
         ("number", "volume", {"name": "Volume", "icon": "mdi:volume-high", "min": 0, "max": 130, "step": 5,
@@ -126,6 +130,8 @@ class Bridge:
                 api("/api/chat", {})
             elif command == "auto_switch":
                 api("/api/auto_switch", {"enabled": payload == "ON"})
+            elif command == "qr" and payload in QR_MODES.values():
+                api("/api/qr", {"mode": next(k for k, v in QR_MODES.items() if v == payload)})
             elif command in ("night", "events"):
                 api("/api/flag", {"key": command, "enabled": payload == "ON"})
             elif command == "pause" and (payload == "ON") != bool(s.get("pause")):
@@ -171,7 +177,7 @@ class Bridge:
         self.live = live
         delay = s.get("delay")
         public = {k: s.get(k) for k in ("channel", "mode", "title", "chat_visible", "pause", "volume", "playing",
-                                        "auto_switch", "night", "events")}
+                                        "auto_switch", "night", "events", "qr")}
         public.update(live=sorted(live), delay=None if delay is None else int(delay))
         if public != self.published:
             self.client.publish(f"{BASE}/state", json.dumps(public), retain=True)
