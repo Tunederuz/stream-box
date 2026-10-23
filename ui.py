@@ -7,11 +7,15 @@ lecteur garde tout ce qu'il faisait : mêmes options que la ligne de commande de
 start.sh), scripts Lua, socket IPC (télécommande web, Jellyfin, Home Assistant). Les touches et la souris reçues par la
 fenêtre sont transmises à mpv (keypress, mouse), là où stream-box.lua les attend.
 
+Le grand menu de la TV est en QML (qml/TvMenu.qml) : quand il se charge, tv_menu.lua n'est pas chargé ; le bouton Menu
+(script-message streambox-tvmenu-open de stream-box.lua) l'ouvre, et tant qu'il est ouvert les touches lui vont, pas à
+mpv. Il lit et agit par l'API de remote.py, comme la page web.
+
 Lancé avec le Python du venv ui-venv (PySide6, python-mpv) : ui.py --input-ipc-server=… --script=… <autres options>
 """
-import ctypes, locale, os, sys
+import ctypes, json, locale, os, sys
 
-from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import Property, QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QCursor, QGuiApplication
 from PySide6.QtOpenGL import QOpenGLFramebufferObject
 from PySide6.QtQml import qmlRegisterType
@@ -37,6 +41,15 @@ KEYS = {
 for n in range(1, 13):
     KEYS[getattr(Qt, f"Key_F{n}")] = f"F{n}"
 
+# Touches sans nom chez Qt, relevées sur la télécommande Xiaomi : keysym → nom que mpv leur donnait (stream-box.lua les lie)
+SPECIAL_KEYSYMS = {0x1008ffa0: "0x21ffa0",   # OK
+                   0x10081246: "0x2111a0"}   # Menu ≡
+
+# Touches pour le grand menu, mêmes rôles que KEYS dans stream-box.lua
+MENU_KEYS = {"UP": "up", "DOWN": "down", "LEFT": "left", "RIGHT": "right", "ENTER": "ok", "KP_ENTER": "ok",
+             "0x21ffa0": "ok", "HOMEPAGE": "home", "GO_BACK": "back", "ESC": "back", "0x2111a0": "menu",
+             "WWW": "homescreen", "PLAY": "corner", "PLAYPAUSE": "corner"}
+
 
 def key_name(event):
     """Nom mpv de la touche, ou None pour l'ignorer."""
@@ -49,6 +62,8 @@ def key_name(event):
     # Touche spéciale sans nom chez mpv : il la nommait « 0x21 » suivi des 4 derniers chiffres de son keysym XF86
     # (OK de la télécommande Xiaomi : keysym 0x1008ffa0 = XF86Select → « 0x21ffa0 », que stream-box.lua lie)
     sym = event.nativeVirtualKey()
+    if sym in SPECIAL_KEYSYMS:
+        return SPECIAL_KEYSYMS[sym]
     if sym:
         name = f"0x{0x210000 | (sym & 0xffff):x}" if sym >> 16 == 0x1008 else f"0x{sym:x}"
         print(f"touche sans nom : keysym 0x{sym:x}, scancode {event.nativeScanCode()} → {name}", flush=True)
@@ -78,7 +93,7 @@ def parse_args(argv):
         else:
             opts[key] = value if _ else "yes"
     if scripts:
-        opts["scripts"] = ":".join(scripts)
+        opts["scripts"] = scripts   # assemblés dans main(), une fois connu le menu à utiliser
     return opts, appends, files
 
 
@@ -87,6 +102,51 @@ class Bridge(QObject):
     frame = Signal()
     shutdown = Signal()
     ready = Signal()   # contexte de rendu créé
+
+
+def set_flag(name, value):
+    """Booléen dans une propriété mpv (user-data) : python-mpv écrirait la chaîne « yes », que le chat et stream-box.lua
+    ne prennent pas pour un vrai."""
+    flag = ctypes.c_int(1 if value else 0)
+    mpv._mpv_set_property(player.handle, name.encode(), mpv.MpvFormat.FLAG, ctypes.byref(flag))
+
+
+class Box(QObject):
+    """Ce que voit le QML (« box ») : ouverture du menu, touches, données de mpv utiles au menu"""
+    openRequested = Signal()
+    keyPressed = Signal(str)
+    ambientChanged = Signal()
+    videoActiveChanged = Signal()
+    _ambient_in = Signal(str)        # depuis le fil de mpv
+    _video_in = Signal(bool)
+
+    def __init__(self):
+        super().__init__()
+        self.menu_open = False
+        self._ambient, self._video = "{}", False
+        self._ambient_in.connect(self._set_ambient, Qt.QueuedConnection)
+        self._video_in.connect(self._set_video, Qt.QueuedConnection)
+
+    def _set_ambient(self, value):
+        if value != self._ambient:
+            self._ambient = value
+            self.ambientChanged.emit()
+
+    def _set_video(self, value):
+        if value != self._video:
+            self._video = value
+            self.videoActiveChanged.emit()
+
+    ambient = Property(str, lambda self: self._ambient, notify=ambientChanged)   # météo, QR code (JSON)
+    videoActive = Property(bool, lambda self: self._video, notify=videoActiveChanged)
+
+    @Slot(bool)
+    def setMenuOpen(self, value):
+        self.menu_open = value
+        set_flag("user-data/streambox/tvmenu", value)   # le chat se masque, la souris n'ouvre pas le petit menu
+
+
+box = Box()
 
 
 bridge = Bridge()
@@ -162,9 +222,13 @@ class View(QQuickView):
 
     def keyPressEvent(self, event):
         name = key_name(event)
-        if name:
-            # Répétition : un keypress par événement, comme mpv le fait pour une touche maintenue
-            player.command("keypress", name)
+        if not name:
+            return
+        if box.menu_open and name in MENU_KEYS:   # menu QML ouvert : la touche est pour lui (le volume reste à mpv)
+            box.keyPressed.emit(MENU_KEYS[name])
+            return
+        # Répétition : un keypress par événement, comme mpv le fait pour une touche maintenue
+        player.command("keypress", name)
 
     def mouse_pos(self, event):
         ratio = self.devicePixelRatio()
@@ -172,11 +236,15 @@ class View(QQuickView):
         return int(p.x() * ratio), int(p.y() * ratio)
 
     def mouseMoveEvent(self, event):
+        if box.menu_open:
+            return
         self.setCursor(QCursor(Qt.ArrowCursor))
         self.hide_cursor.start()
         player.command("mouse", *self.mouse_pos(event))
 
     def mousePressEvent(self, event):
+        if box.menu_open:
+            return
         x, y = self.mouse_pos(event)
         double = event.type() == event.Type.MouseButtonDblClick
         player.command("mouse", x, y, 0, "double" if double else "single")
@@ -191,7 +259,27 @@ def main():
     QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
     app = QGuiApplication(sys.argv[:1])
     locale.setlocale(locale.LC_NUMERIC, "C")   # exigé par libmpv, après Qt qui applique la locale du système
+    qmlRegisterType(MpvVideo, "StreamBox", 1, 0, "MpvVideo")
+    view = View()
+    view.rootContext().setContextProperty("box", box)
+    view.setSource(QUrl.fromLocalFile(os.path.join(DIR, "ui.qml")))
+    qml_menu = view.status() == QQuickView.Ready and view.rootObject().findChild(QObject, "tvMenu") is not None
+    if not qml_menu:
+        print("menu QML indisponible : menu de tv_menu.lua", [e.toString() for e in view.errors()], flush=True)
+    scripts = opts.pop("scripts", [])
+    if qml_menu:   # deux menus répondraient au bouton Menu
+        scripts = [s for s in scripts if os.path.basename(s) != "tv_menu.lua"]
+    if scripts:
+        opts["scripts"] = ":".join(scripts)
     player = mpv.MPV(vo="libmpv", **{k.replace("-", "_"): v for k, v in opts.items()})
+    if qml_menu:
+        player.register_message_handler("streambox-tvmenu-open", lambda *_: box.openRequested.emit())
+        # Touches envoyées par l'IPC (keypress → stream-box.lua → streambox-tvmenu-key) : tests, Home Assistant
+        player.register_message_handler(
+            "streambox-tvmenu-key", lambda k, *_: box.keyPressed.emit(k.decode() if isinstance(k, bytes) else k))
+        player.observe_property("user-data/streambox/ambient",
+                                lambda _n, v: box._ambient_in.emit(json.dumps(v or {})))
+        player.observe_property("video-params", lambda _n, v: box._video_in.emit(v is not None))
     for key, value in appends:
         player.command("change-list", key, "append", value)
 
@@ -202,9 +290,8 @@ def main():
     bridge.shutdown.connect(app.quit, Qt.QueuedConnection)
     if force_window:
         bridge.ready.connect(lambda: player.command("set", "force-window", force_window), Qt.QueuedConnection)
-    qmlRegisterType(MpvVideo, "StreamBox", 1, 0, "MpvVideo")
-    view = View()
-    view.setSource(QUrl.fromLocalFile(os.path.join(DIR, "ui.qml")))
+    if qml_menu:
+        bridge.ready.connect(lambda: set_flag("user-data/streambox/tvmenu", False), Qt.QueuedConnection)
     view.showFullScreen()
     for f in files:
         player.command("loadfile", f, "append-play")

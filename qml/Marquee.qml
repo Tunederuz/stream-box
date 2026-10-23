@@ -1,0 +1,66 @@
+// Texte sur une ligne : coupé par « … » au repos ; quand running et qu'il dépasse, il défile après une pause, et une
+// seconde copie arrive quand la première part.
+import QtQuick
+
+Item {
+    id: root
+    property string text: ""
+    property color color: "white"
+    property int pixelSize: 19
+    property bool bold: false
+    property bool running: false
+    readonly property real gap: 90
+    readonly property bool overflow: probe.implicitWidth > width
+    readonly property bool scrolling: running && overflow
+    clip: true
+    implicitHeight: probe.implicitHeight
+
+    Text {
+        id: probe   // mesure seulement
+        visible: false
+        text: root.text
+        font.pixelSize: root.pixelSize
+        font.bold: root.bold
+    }
+    Text {   // au repos (ou assez court) : coupé par « … »
+        visible: !root.scrolling
+        width: root.width
+        anchors.verticalCenter: parent.verticalCenter
+        text: root.text
+        color: root.color
+        font.pixelSize: root.pixelSize
+        font.bold: root.bold
+        elide: Text.ElideRight
+    }
+    Row {   // défilement : deux copies l'une derrière l'autre
+        id: row
+        visible: root.scrolling
+        x: 0
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: root.gap
+        Repeater {
+            model: 2
+            Text {
+                text: root.text
+                color: root.color
+                font.pixelSize: root.pixelSize
+                font.bold: root.bold
+            }
+        }
+    }
+    SequentialAnimation {
+        id: anim
+        running: root.scrolling
+        loops: Animation.Infinite
+        onRunningChanged: if (!running) row.x = 0
+        PropertyAction { target: row; property: "x"; value: 0 }
+        PauseAnimation { duration: 1500 }
+        NumberAnimation {
+            target: row
+            property: "x"
+            from: 0
+            to: -(probe.implicitWidth + root.gap)
+            duration: (probe.implicitWidth + root.gap) / 70 * 1000   // 70 px/s, comme l'ancien menu
+        }
+    }
+}
