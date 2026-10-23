@@ -481,4 +481,6 @@ ferme), puis les chaînes trouvées (photos rondes ; OK : « Voir ses dernières
 « Ajouter / Retirer de mes chaînes »), les vidéos trouvées et une rangée par chaîne de la liste ; OK sur une vidéo
 lance (ou propose la reprise, `chooseVideo`). Page : chaînes trouvées en tête des résultats (toucher : leurs vidéos,
 « + Ajouter »).
-Les résultats restent d'une ouverture du menu à l'autre (pas d'un redémarrage du lecteur).
+Les résultats restent d'une ouverture du menu à l'autre (pas d'un redémarrage du lecteur). Thème rouge sur cet onglet (`menu.ytTheme`, `menu.accent` :
+fond, lueurs, halos `FocusFrame.glow`, `VideoCard.accent`, clavier). Logo (`qml/Logo.qml`, icônes `icon-*.png`,
+tv_menu.lua) : tuile blanche, triangle anthracite arrondi, neutre sur fond violet comme rouge.

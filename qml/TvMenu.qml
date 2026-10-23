@@ -37,6 +37,9 @@ Item {
     property var health: null                // /api/health, relu toutes les 5 s sur l'onglet Système
     // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
     property var yt: null
+    // Onglet YouTube : tout passe au rouge (fond, lueurs, halos, clavier)
+    readonly property bool ytTheme: tabId === "youtube"
+    readonly property color accent: ytTheme ? "#ff0033" : "#9146ff"
     property var ytResults: null             // { query, results, channels } ou null
     property var ytPreview: null             // chaîne trouvée ouverte : { id, name, avatar, followers, videos, saved }
     property bool ytSearching: false
@@ -121,8 +124,8 @@ Item {
     function ytSearch(q) {
         q = q.trim()
         if (!q) return
+        ytResults = { query: q, results: [], channels: [] }   // avant ytSearching : le texte de la ligne de recherche lit query
         ytSearching = true
-        ytResults = { query: q, results: [], channels: [] }
         ytPreview = null
         call("GET", "/api/youtube_search?q=" + encodeURIComponent(q), undefined, function (d) {
             ytSearching = false
@@ -595,28 +598,28 @@ Item {
     Rectangle {   // voile sur la vidéo ; opaque sans vidéo, pour cacher l'écran d'ambiance
         anchors.fill: parent
         // Onglet YouTube : fond teinté de rouge
-        color: menu.tabId === "youtube" ? "#14060a" : "#0a0612"
+        color: menu.ytTheme ? "#180407" : "#0a0612"
         opacity: box.videoActive ? 0.89 : 1
         Behavior on color { ColorAnimation { duration: 400 } }
     }
     Rectangle {   // lueur en haut à droite : violette, rouge sur l'onglet YouTube
         x: 1350; y: -350; width: 900; height: 700; radius: 450
-        color: menu.tabId === "youtube" ? "#ff0033" : "#9146ff"
-        opacity: menu.tabId === "youtube" ? 0.16 : 0.10
+        color: menu.accent
+        opacity: menu.ytTheme ? 0.22 : 0.10
         Behavior on color { ColorAnimation { duration: 400 } }
         Behavior on opacity { NumberAnimation { duration: 400 } }
     }
     Rectangle {   // seconde lueur rouge, en bas, sur l'onglet YouTube seulement
         x: 500; y: 780; width: 1100; height: 600; radius: 300
         color: "#ff0033"
-        opacity: menu.tabId === "youtube" ? 0.07 : 0
+        opacity: menu.ytTheme ? 0.11 : 0
         Behavior on opacity { NumberAnimation { duration: 400 } }
     }
 
     // Rail des onglets
-    Rectangle { width: 400; height: parent.height; color: "#100b17"; opacity: 0.55 }
-    Rectangle { x: 56; y: 62; width: 52; height: 52; radius: 14; color: "#2d7ff9"   // logo : bleu, comme l'icône
-        Text { anchors.centerIn: parent; anchors.horizontalCenterOffset: 2; text: "▶"; color: "white"; font.pixelSize: 20 } }
+    Rectangle { width: 400; height: parent.height; color: menu.ytTheme ? "#1a0709" : "#100b17"; opacity: 0.55
+                Behavior on color { ColorAnimation { duration: 400 } } }
+    Logo { x: 56; y: 62 }
     Text { x: 126; y: 88 - height / 2; text: "Stream Box"; color: "white"; font.pixelSize: 28; font.bold: true }
     Rectangle {   // pastille de l'onglet : glisse d'un onglet à l'autre
         x: 40; width: 320; height: 72; radius: 36
@@ -634,7 +637,7 @@ Item {
             Rectangle {   // onglet en cours, focus dans le contenu : point violet
                 visible: cur && menu.area !== "rail"
                 x: 20; anchors.verticalCenter: parent.verticalCenter
-                width: 12; height: 12; radius: 6; color: "#9146ff"
+                width: 12; height: 12; radius: 6; color: menu.accent
             }
             Text {
                 x: cur && menu.area !== "rail" ? 48 : 38
@@ -898,8 +901,8 @@ Item {
                 readonly property bool foc: menu.area === "content" && menu.ytRow === 0 && !menu.kbOpen
                 scale: foc ? 1.03 : 1
                 Behavior on scale { NumberAnimation { duration: 160 } }
-                FocusFrame { active: parent.foc; radius: 35 }
-                Rectangle { anchors.fill: parent; radius: 35; color: parent.foc ? "#3a2c4e" : "#2a2034" }
+                FocusFrame { active: parent.foc; radius: 35; glow: menu.accent }
+                Rectangle { anchors.fill: parent; radius: 35; color: parent.foc ? "#4a2027" : "#33171c" }
                 Text {
                     x: 34; anchors.verticalCenter: parent.verticalCenter
                     text: menu.ytSearching ? "Recherche de « " + menu.ytResults.query + " »…"
@@ -953,7 +956,7 @@ Item {
                                     x: 30; y: 6; width: 180; height: 180
                                     scale: parent.foc ? 1.06 : 1
                                     Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                                    FocusFrame { active: parent.parent.foc; radius: 90 }
+                                    FocusFrame { active: parent.parent.foc; radius: 90; glow: menu.accent }
                                     RoundImage {
                                         anchors.fill: parent; circle: true; placeholder: "#2a2034"; source: c.avatar || ""
                                         Text { anchors.centerIn: parent; z: -1; text: (c.name || "?").charAt(0).toUpperCase(); color: "#d0c8e0"; font.pixelSize: 64; font.bold: true }
@@ -966,7 +969,7 @@ Item {
                                 Text {
                                     y: 242; width: parent.width; horizontalAlignment: Text.AlignHCenter
                                     text: (c.followers ? Fmt.big(c.followers) + " abonnés" : "") + (c.saved ? (c.followers ? " · " : "") + "✓ suivie" : "")
-                                    color: c.saved ? "#b67bff" : "#b4afc2"; font.pixelSize: 20
+                                    color: c.saved ? "#ff6b7f" : "#b4afc2"; font.pixelSize: 20
                                 }
                             }
                         }
@@ -991,6 +994,7 @@ Item {
                                        : [menu.ago(it.date), it.views ? Fmt.big(it.views) + " vues" : ""])
                                       .filter(function (t) { return !!t }).join(" · ") + (it.finished ? " · vu" : "")
                                 progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
+                                accent: menu.accent
                                 focused: menu.area === "content" && menu.ytRow === r && index === (menu.ytSel[row.key] || 0)
                             }
                         }
@@ -1090,13 +1094,13 @@ Item {
         Rectangle {
             width: 1180; height: 690; radius: 30
             anchors.centerIn: parent
-            color: "#21182c"
+            color: "#261216"
             scale: menu.kbOpen ? 1 : 0.95
             Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-            Text { x: 48; y: 36; text: "Rechercher sur YouTube"; color: "#a99fc0"; font.pixelSize: 22; font.bold: true }
+            Text { x: 48; y: 36; text: "Rechercher sur YouTube"; color: "#c9a3aa"; font.pixelSize: 22; font.bold: true }
             Rectangle {   // texte tapé
                 x: 44; y: 78; width: parent.width - 88; height: 76; radius: 18
-                color: "#120d19"; border.color: "#3a2c4e"; border.width: 2
+                color: "#14080a"; border.color: "#4a2027"; border.width: 2
                 Text {
                     x: 26; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 52; elide: Text.ElideLeft
                     text: menu.kbText + "▏"; color: menu.kbText ? "white" : "#8a85a0"; font.pixelSize: 34
@@ -1116,7 +1120,7 @@ Item {
                                 readonly property bool foc: menu.kbRow === r && menu.kbCol === index
                                 readonly property bool wide: label.length > 1
                                 width: wide ? (r === 5 ? 348 : 312) : 96; height: 72; radius: 16   // 10 touches de large : 1068
-                                color: foc ? "white" : label === "Rechercher" ? "#e0002d" : "#33283f"   // rouge YouTube
+                                color: foc ? "white" : label === "Rechercher" ? "#e0002d" : "#3a1f24"   // rouge YouTube
                                 scale: foc ? 1.06 : 1
                                 Behavior on scale { NumberAnimation { duration: 120 } }
                                 Text {
