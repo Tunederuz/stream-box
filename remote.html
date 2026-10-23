@@ -237,6 +237,13 @@
   </section>
 
   <section>
+    <h2>Lecture</h2>
+    <p>Quand le streamer regardé est hors ligne depuis une minute, passer tout seul sur le premier streamer en live de
+      la liste.</p>
+    <button id="auto-switch" style="width: 100%" aria-pressed="true">Bascule automatique : activée</button>
+  </section>
+
+  <section>
     <h2>Apparence du chat</h2>
     <!-- Boutons plutôt que curseurs : un curseur change de valeur quand le doigt passe dessus en faisant défiler -->
     <div class="setting" id="chat_bg-label" style="margin-top: 0">Fond du chat</div>
@@ -358,6 +365,9 @@ function render(s) {
   $("chat").textContent = s.chat_visible ? "Chat affiché" : "Chat masqué";
   $("chat").classList.toggle("current", s.chat_visible);
   $("corner").textContent = `Coin : ${CORNERS[s.corner] ?? s.corner}`;
+  $("auto-switch").textContent = `Bascule automatique : ${s.auto_switch ? "activée" : "désactivée"}`;
+  $("auto-switch").classList.toggle("current", s.auto_switch);
+  $("auto-switch").setAttribute("aria-pressed", String(s.auto_switch));
   settings.chat_bg = s.chat_bg;
   settings.chat_size = s.chat_size;
   $("chat_bg-value").textContent = `${s.chat_bg} %`;
@@ -675,6 +685,7 @@ async function previewTick() {
 $("preview").ontoggle = () => previewTick();
 document.addEventListener("visibilitychange", () => previewTick());
 $("history").ontoggle = () => { if ($("history").open) loadHistory(); };
+$("auto-switch").onclick = () => send("auto_switch", { enabled: !lastState?.auto_switch });
 $("replays").ontoggle = () => {
   if ($("replays").open) loadReplays(replaysLogin ?? lastState?.channel ?? lastState?.streamers?.[0]);
 };
