@@ -830,32 +830,35 @@ Item {
                     }
                 }
             }
-            GridView {
-                id: liveGrid
-                y: 270; x: -13; width: 1460; height: 3 * 176 + 60
-                cellWidth: 356; cellHeight: 176
-                interactive: false; clip: false
-                topMargin: 27
-                model: (menu.st.streamers || []).length
-                currentIndex: menu.liveSel
-                onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
-                Behavior on contentY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                delegate: Item {
-                    width: 356; height: 176
-                    readonly property real rel: y - GridView.view.contentY
-                    opacity: rel > -88 && rel < GridView.view.height - 88 ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: 150 } }
-                    readonly property string login: (menu.st.streamers || [])[index] || ""
-                    readonly property var info: (menu.st.live || {})[login]
-                    StreamerCard {
-                        x: 13; y: 13
-                        name: login
-                        avatar: (menu.st.avatars || {})[login] || ""
-                        live: !!info
-                        viewers: info ? info.viewers : 0
-                        game: info ? (info.game || info.title || "") : ""
-                        focused: menu.area === "content" && menu.shortcut < 0 && index === menu.liveSel
-                        current: menu.st.mode === "twitch" && menu.st.channel === login
+            Item {   // découpe : ce qui défile s'arrête au bord de la zone (ni sur le titre, ni sur l'aide en bas)
+                x: -53; y: 255; width: 1540; height: 3 * 176 + 60 + 30; clip: true
+                GridView {
+                    id: liveGrid
+                    y: 15; x: 40; width: 1460; height: 3 * 176 + 60
+                    cellWidth: 356; cellHeight: 176
+                    interactive: false; clip: false
+                    topMargin: 27
+                    model: (menu.st.streamers || []).length
+                    currentIndex: menu.liveSel
+                    onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
+                    Behavior on contentY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    delegate: Item {
+                        width: 356; height: 176
+                        readonly property real rel: y - GridView.view.contentY
+                        opacity: rel > -88 && rel < GridView.view.height - 88 ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                        readonly property string login: (menu.st.streamers || [])[index] || ""
+                        readonly property var info: (menu.st.live || {})[login]
+                        StreamerCard {
+                            x: 13; y: 13
+                            name: login
+                            avatar: (menu.st.avatars || {})[login] || ""
+                            live: !!info
+                            viewers: info ? info.viewers : 0
+                            game: info ? (info.game || info.title || "") : ""
+                            focused: menu.area === "content" && menu.shortcut < 0 && index === menu.liveSel
+                            current: menu.st.mode === "twitch" && menu.st.channel === login
+                        }
                     }
                 }
             }
@@ -914,30 +917,33 @@ Item {
                     color: "#ff8f8f"; font.pixelSize: 22
                 }
             }
-            GridView {
-                visible: !!followsPage.f.authorized
-                y: 176; x: -13; width: 1460; height: 4 * 176 + 60
-                cellWidth: 356; cellHeight: 176
-                interactive: false; clip: false; topMargin: 27
-                model: menu.followList().length
-                currentIndex: menu.followSel
-                onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
-                Behavior on contentY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                delegate: Item {
-                    width: 356; height: 176
-                    readonly property real rel: y - GridView.view.contentY
-                    opacity: rel > -88 && rel < GridView.view.height - 88 ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: 150 } }
-                    readonly property var c: menu.followList()[index] || {}
-                    StreamerCard {
-                        x: 13; y: 13
-                        name: c.login || ""
-                        avatar: c.avatar || ""
-                        live: c.viewers !== undefined && c.viewers !== null
-                        viewers: c.viewers || 0
-                        game: c.game || c.title || ""
-                        focused: menu.area === "content" && index === menu.followSel
-                        current: menu.st.mode === "twitch" && menu.st.channel === c.login
+            Item {   // découpe : ce qui défile s'arrête au bord de la zone (ni sur le titre, ni sur l'aide en bas)
+                x: -53; y: 161; width: 1540; height: 4 * 176 + 60 + 30; clip: true
+                GridView {
+                    visible: !!followsPage.f.authorized
+                    y: 15; x: 40; width: 1460; height: 4 * 176 + 60
+                    cellWidth: 356; cellHeight: 176
+                    interactive: false; clip: false; topMargin: 27
+                    model: menu.followList().length
+                    currentIndex: menu.followSel
+                    onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
+                    Behavior on contentY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    delegate: Item {
+                        width: 356; height: 176
+                        readonly property real rel: y - GridView.view.contentY
+                        opacity: rel > -88 && rel < GridView.view.height - 88 ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                        readonly property var c: menu.followList()[index] || {}
+                        StreamerCard {
+                            x: 13; y: 13
+                            name: c.login || ""
+                            avatar: c.avatar || ""
+                            live: c.viewers !== undefined && c.viewers !== null
+                            viewers: c.viewers || 0
+                            game: c.game || c.title || ""
+                            focused: menu.area === "content" && index === menu.followSel
+                            current: menu.st.mode === "twitch" && menu.st.channel === c.login
+                        }
                     }
                 }
             }
@@ -1045,106 +1051,109 @@ Item {
                                          : "Ajoute des chaînes YouTube depuis la télécommande web (Réglages → Chaînes YouTube)."
                 color: "#b4afc2"; font.pixelSize: 27
             }
-            Item {   // rangées, sous la ligne de recherche
-                y: 286; width: parent.width; height: menu.height - 286
-                Repeater {
-                    model: Math.max(0, ytPage.rows.length - 1)
-                    Item {
-                        readonly property int r: index + 1
-                        readonly property var row: ytPage.rows[r]
-                        y: index * ytPage.rowH - ytPage.scrollY
-                        Behavior on y { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
-                        opacity: y > -ytPage.rowH / 2 && y < 2 * ytPage.rowH - 10 ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: 180 } }
-                        width: 1460; height: ytPage.rowH
-                        Row {
-                            spacing: 14
-                            RoundImage { visible: !!(row && row.avatar); width: 40; height: 40; circle: true; source: row && row.avatar ? row.avatar : "" }
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: row ? row.title : ""; color: "#d0c8e0"; font.pixelSize: 24; font.bold: true }
-                        }
-                        Text {
-                            visible: !!row && row.items.length === 0
-                            y: 70; text: row && row.kind === "results" ? (menu.mSearching ? "Recherche…" : "Aucun résultat")
-                                       : row && row.loading ? "Chargement…" : menu.jfTab ? "Rien ici" : "YouTube injoignable pour l'instant"
-                            color: "#8a85a0"; font.pixelSize: 24
-                        }
-                        Item {   // découpe à gauche, au bord du contenu : une carte qui défile ne passe pas sous le rail
-                            x: -28; y: 10; width: 1512; height: 302 + 80; clip: true
-                            ListView {   // chaînes trouvées : photo ronde, nom, abonnés, « dans ta liste »
-                                visible: !!row && row.kind === "chans"
-                                y: 40; x: -12; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
-                                orientation: ListView.Horizontal; spacing: 30; interactive: false; clip: false
-                                leftMargin: 40
-                                model: visible ? row.items.length : 0
-                                currentIndex: visible ? (menu.mSel["chans"] || 0) : 0
-                                // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
-                                // qui laissait des cartes coupées au bord du rail ou de l'écran)
-                                property int first: 0
-                                readonly property int fits: Math.floor((width - leftMargin + spacing) / 270)
-                                onCurrentIndexChanged: {
-                                    if (currentIndex < first) first = currentIndex
-                                    else if (currentIndex >= first + fits) first = currentIndex - fits + 1
-                                    contentX = -leftMargin + first * 270
-                                }
-                                Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-                                delegate: Item {
-                                    readonly property var c: row.items[index] || {}
-                                    readonly property bool foc: menu.area === "content" && menu.mRow === r && index === (menu.mSel["chans"] || 0)
-                                    width: 240; height: 302
-                                    opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0
-                                    Behavior on opacity { NumberAnimation { duration: 90 } }
-                                    z: foc ? 2 : 1
-                                    Item {
-                                        x: 30; y: 6; width: 180; height: 180
-                                        scale: parent.foc ? 1.06 : 1
-                                        Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                                        FocusFrame { active: parent.parent.foc; radius: 90; glow: menu.accent }
-                                        RoundImage {
-                                            anchors.fill: parent; circle: true; placeholder: "#2a2034"; source: c.avatar || ""
-                                            Text { anchors.centerIn: parent; z: -1; text: (c.name || "?").charAt(0).toUpperCase(); color: "#d0c8e0"; font.pixelSize: 64; font.bold: true }
+            Item {   // découpe : ce qui défile s'arrête au bord de la zone (ni sur le titre, ni sur l'aide en bas)
+                x: -40; y: 276; width: parent.width + 80; height: 995 - 276; clip: true
+                Item {   // rangées, sous la ligne de recherche
+                    x: 40; y: 10; width: parent.width - 80; height: menu.height - 286
+                    Repeater {
+                        model: Math.max(0, ytPage.rows.length - 1)
+                        Item {
+                            readonly property int r: index + 1
+                            readonly property var row: ytPage.rows[r]
+                            y: index * ytPage.rowH - ytPage.scrollY
+                            Behavior on y { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+                            opacity: index >= Math.max(0, menu.mRow - 1) && index < Math.max(0, menu.mRow - 1) + 2 ? 1 : 0   // rangées visées
+                            Behavior on opacity { NumberAnimation { duration: 180 } }
+                            width: 1460; height: ytPage.rowH
+                            Row {
+                                spacing: 14
+                                RoundImage { visible: !!(row && row.avatar); width: 40; height: 40; circle: true; source: row && row.avatar ? row.avatar : "" }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: row ? row.title : ""; color: "#d0c8e0"; font.pixelSize: 24; font.bold: true }
+                            }
+                            Text {
+                                visible: !!row && row.items.length === 0
+                                y: 70; text: row && row.kind === "results" ? (menu.mSearching ? "Recherche…" : "Aucun résultat")
+                                           : row && row.loading ? "Chargement…" : menu.jfTab ? "Rien ici" : "YouTube injoignable pour l'instant"
+                                color: "#8a85a0"; font.pixelSize: 24
+                            }
+                            Item {   // découpe à gauche, au bord du contenu : une carte qui défile ne passe pas sous le rail
+                                x: -28; y: 10; width: 1512; height: 302 + 80; clip: true
+                                ListView {   // chaînes trouvées : photo ronde, nom, abonnés, « dans ta liste »
+                                    visible: !!row && row.kind === "chans"
+                                    y: 40; x: -12; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
+                                    orientation: ListView.Horizontal; spacing: 30; interactive: false; clip: false
+                                    leftMargin: 40
+                                    model: visible ? row.items.length : 0
+                                    currentIndex: visible ? (menu.mSel["chans"] || 0) : 0
+                                    // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
+                                    // qui laissait des cartes coupées au bord du rail ou de l'écran)
+                                    property int first: 0
+                                    readonly property int fits: Math.floor((width - leftMargin + spacing) / 270)
+                                    onCurrentIndexChanged: {
+                                        if (currentIndex < first) first = currentIndex
+                                        else if (currentIndex >= first + fits) first = currentIndex - fits + 1
+                                        contentX = -leftMargin + first * 270
+                                    }
+                                    Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                                    delegate: Item {
+                                        readonly property var c: row.items[index] || {}
+                                        readonly property bool foc: menu.area === "content" && menu.mRow === r && index === (menu.mSel["chans"] || 0)
+                                        width: 240; height: 302
+                                        opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0
+                                        Behavior on opacity { NumberAnimation { duration: 90 } }
+                                        z: foc ? 2 : 1
+                                        Item {
+                                            x: 30; y: 6; width: 180; height: 180
+                                            scale: parent.foc ? 1.06 : 1
+                                            Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                                            FocusFrame { active: parent.parent.foc; radius: 90; glow: menu.accent }
+                                            RoundImage {
+                                                anchors.fill: parent; circle: true; placeholder: "#2a2034"; source: c.avatar || ""
+                                                Text { anchors.centerIn: parent; z: -1; text: (c.name || "?").charAt(0).toUpperCase(); color: "#d0c8e0"; font.pixelSize: 64; font.bold: true }
+                                            }
                                         }
-                                    }
-                                    Text {
-                                        y: 206; width: parent.width; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-                                        text: c.name || ""; color: "white"; font.pixelSize: 25; font.bold: parent.foc
-                                    }
-                                    Text {
-                                        y: 242; width: parent.width; horizontalAlignment: Text.AlignHCenter
-                                        text: (c.followers ? Fmt.big(c.followers) + " abonnés" : "") + (c.saved ? (c.followers ? " · " : "") + "✓ suivie" : "")
-                                        color: c.saved ? "#ff6b7f" : "#b4afc2"; font.pixelSize: 20
+                                        Text {
+                                            y: 206; width: parent.width; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
+                                            text: c.name || ""; color: "white"; font.pixelSize: 25; font.bold: parent.foc
+                                        }
+                                        Text {
+                                            y: 242; width: parent.width; horizontalAlignment: Text.AlignHCenter
+                                            text: (c.followers ? Fmt.big(c.followers) + " abonnés" : "") + (c.saved ? (c.followers ? " · " : "") + "✓ suivie" : "")
+                                            color: c.saved ? "#ff6b7f" : "#b4afc2"; font.pixelSize: 20
+                                        }
                                     }
                                 }
                             }
-                        }
-                        Item {   // découpe à gauche, au bord du contenu : une carte qui défile ne passe pas sous le rail
-                            x: -28; y: 10; width: 1512; height: 302 + 80; clip: true
-                            ListView {
-                                visible: !!row && row.kind !== "chans"
-                                y: 40; x: -12; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
-                                orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
-                                leftMargin: 40
-                                model: visible ? row.items.length : 0
-                                currentIndex: visible ? (menu.mSel[row.key] || 0) : 0
-                                // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
-                                // qui laissait des cartes coupées au bord du rail ou de l'écran)
-                                property int first: 0
-                                readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
-                                onCurrentIndexChanged: {
-                                    if (currentIndex < first) first = currentIndex
-                                    else if (currentIndex >= first + fits) first = currentIndex - fits + 1
-                                    contentX = -leftMargin + first * 356
-                                }
-                                Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-                                delegate: VideoCard {
-                                    readonly property var it: row.items[index] || {}
-                                    opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0   // fenêtre visée
-                                    Behavior on opacity { NumberAnimation { duration: 90 } }
-                                    title: it.title || ""
-                                    thumb: it.thumb || ""
-                                    meta: menu.cardMeta(row, it)
-                                    progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
-                                    accent: menu.accent
-                                    focused: menu.area === "content" && menu.mRow === r && index === (menu.mSel[row.key] || 0)
+                            Item {   // découpe à gauche, au bord du contenu : une carte qui défile ne passe pas sous le rail
+                                x: -28; y: 10; width: 1512; height: 302 + 80; clip: true
+                                ListView {
+                                    visible: !!row && row.kind !== "chans"
+                                    y: 40; x: -12; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
+                                    orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
+                                    leftMargin: 40
+                                    model: visible ? row.items.length : 0
+                                    currentIndex: visible ? (menu.mSel[row.key] || 0) : 0
+                                    // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
+                                    // qui laissait des cartes coupées au bord du rail ou de l'écran)
+                                    property int first: 0
+                                    readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
+                                    onCurrentIndexChanged: {
+                                        if (currentIndex < first) first = currentIndex
+                                        else if (currentIndex >= first + fits) first = currentIndex - fits + 1
+                                        contentX = -leftMargin + first * 356
+                                    }
+                                    Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                                    delegate: VideoCard {
+                                        readonly property var it: row.items[index] || {}
+                                        opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0   // fenêtre visée
+                                        Behavior on opacity { NumberAnimation { duration: 90 } }
+                                        title: it.title || ""
+                                        thumb: it.thumb || ""
+                                        meta: menu.cardMeta(row, it)
+                                        progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
+                                        accent: menu.accent
+                                        focused: menu.area === "content" && menu.mRow === r && index === (menu.mSel[row.key] || 0)
+                                    }
                                 }
                             }
                         }
@@ -1154,30 +1163,33 @@ Item {
         }
 
         // --- Historique
-        GridView {
-            visible: menu.tabId === "history"
-            y: 176; x: -13; width: 1460; height: 2 * 340 + 60
-            cellWidth: 356; cellHeight: 340
-            interactive: false; clip: false; topMargin: 27
-            model: (menu.history || []).length
-            currentIndex: menu.histSel
-            onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
-            Behavior on contentY { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-            delegate: Item {
-                width: 356; height: 340
-                readonly property real rel: y - GridView.view.contentY
-                opacity: rel > -170 && rel < GridView.view.height - 170 ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: 150 } }
-                readonly property var e: (menu.history || [])[index] || {}
-                VideoCard {
-                    x: 13; y: 13
-                    title: e.title || ""
-                    thumb: e.thumb || ""
-                    meta: (menu.kinds[e.kind] || "") + (e.finished ? " · vu"
-                          : e.duration > 0 ? " · " + Fmt.clock(e.position) + " / " + Fmt.clock(e.duration) : "")
-                    progress: e.finished ? 1 : (Fmt.resumable(e.position, e.duration, e.finished) && e.duration > 0 ? e.position / e.duration : 0)
-                    accent: menu.accent
-                    focused: menu.area === "content" && index === menu.histSel
+        Item {   // découpe : ce qui défile s'arrête au bord de la zone (ni sur le titre, ni sur l'aide en bas)
+            x: -53; y: 161; width: 1540; height: 2 * 340 + 60 + 30; clip: true
+            GridView {
+                visible: menu.tabId === "history"
+                y: 15; x: 40; width: 1460; height: 2 * 340 + 60
+                cellWidth: 356; cellHeight: 340
+                interactive: false; clip: false; topMargin: 27
+                model: (menu.history || []).length
+                currentIndex: menu.histSel
+                onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
+                Behavior on contentY { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                delegate: Item {
+                    width: 356; height: 340
+                    readonly property real rel: y - GridView.view.contentY
+                    opacity: rel > -170 && rel < GridView.view.height - 170 ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
+                    readonly property var e: (menu.history || [])[index] || {}
+                    VideoCard {
+                        x: 13; y: 13
+                        title: e.title || ""
+                        thumb: e.thumb || ""
+                        meta: (menu.kinds[e.kind] || "") + (e.finished ? " · vu"
+                              : e.duration > 0 ? " · " + Fmt.clock(e.position) + " / " + Fmt.clock(e.duration) : "")
+                        progress: e.finished ? 1 : (Fmt.resumable(e.position, e.duration, e.finished) && e.duration > 0 ? e.position / e.duration : 0)
+                        accent: menu.accent
+                        focused: menu.area === "content" && index === menu.histSel
+                    }
                 }
             }
         }
@@ -1185,25 +1197,29 @@ Item {
         // --- Réglages et Système : listes de lignes
         Repeater {
             model: ["settings", "system"]
-            ListView {
-                id: rowsView
+            Item {   // découpe : ce qui défile s'arrête au bord de la zone (ni sur le titre, ni sur l'aide en bas)
                 visible: menu.tabId === modelData
-                readonly property var rows: modelData === "settings" ? menu.settingsRows() : menu.systemRows()
-                readonly property var sel: menu.selectable(rows)
-                readonly property int focusedRow: menu.area === "content" ? sel[modelData === "settings" ? menu.setSel : menu.sysSel] : -1
-                y: 180; x: 0; width: modelData === "settings" ? 980 : 810; height: 800   // s'arrête au-dessus de l'aide en bas
-                spacing: 10; interactive: false; clip: false; topMargin: 30
-                model: rows.length
-                onFocusedRowChanged: if (focusedRow >= 0) positionViewAtIndex(focusedRow, ListView.Contain)
-                Behavior on contentY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                delegate: SettingRow {
-                    width: rowsView.width
-                    readonly property real rel: y - rowsView.contentY
-                    opacity: rel > -height / 2 && rel + height / 2 < rowsView.height ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: 150 } }
-                    row: rowsView.rows[index] || {}
-                    pal: menu.pal
-                    focused: index === rowsView.focusedRow
+                x: -40; y: 165; width: (modelData === "settings" ? 980 : 810) + 80; height: 830; clip: true
+                ListView {
+                    id: rowsView
+                    visible: menu.tabId === modelData
+                    readonly property var rows: modelData === "settings" ? menu.settingsRows() : menu.systemRows()
+                    readonly property var sel: menu.selectable(rows)
+                    readonly property int focusedRow: menu.area === "content" ? sel[modelData === "settings" ? menu.setSel : menu.sysSel] : -1
+                    y: 15; x: 40; width: modelData === "settings" ? 980 : 810; height: 800   // s'arrête au-dessus de l'aide en bas
+                    spacing: 10; interactive: false; clip: false; topMargin: 30
+                    model: rows.length
+                    onFocusedRowChanged: if (focusedRow >= 0) positionViewAtIndex(focusedRow, ListView.Contain)
+                    Behavior on contentY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    delegate: SettingRow {
+                        width: rowsView.width
+                        readonly property real rel: y - rowsView.contentY
+                        opacity: rel > -height / 2 && rel + height / 2 < rowsView.height ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                        row: rowsView.rows[index] || {}
+                        pal: menu.pal
+                        focused: index === rowsView.focusedRow
+                    }
                 }
             }
         }
