@@ -146,10 +146,19 @@ local function start_channel(name)
     retry_timer = mp.add_timeout(2, load_stream)
 end
 
-local function play_media(url)
+-- start : position de reprise en secondes (historique de remote.py), donnée à mpv comme option du fichier pour ne pas
+-- voir un saut après le chargement
+local function play_media(url, start)
     stop_twitch()
     set_mode("media")
-    mp.commandv("loadfile", url)
+    local at = tonumber(start) or 0
+    if at > 0 then
+        mp.commandv("loadfile", url, "replace", "-1", ("start=%d"):format(at))
+        local h, m, sec = math.floor(at / 3600), math.floor(at / 60) % 60, at % 60
+        mp.osd_message(h > 0 and ("Reprise à %d:%02d:%02d"):format(h, m, sec) or ("Reprise à %d:%02d"):format(m, sec), 4)
+    else
+        mp.commandv("loadfile", url)
+    end
 end
 
 -- Juste avant l'ouverture de chaque fichier, y compris ceux que charge Jellyfin : petit tampon pour le direct

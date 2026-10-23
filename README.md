@@ -15,6 +15,8 @@ télécommande web installable sur téléphone (PWA).
 - **Qui est en live** dans le menu et la télécommande, **notification** quand un streamer de la liste lance son live.
 - **Écran d'ambiance** quand rien ne joue : horloge, date, météo et prochains lives prévus (plannings Twitch).
 - **Compte Twitch** facultatif : plus de pubs sur les chaînes où l'on est abonné, VOD réservées aux abonnés.
+- **Historique et reprise de lecture** : chaque vidéo reprend où on s'était arrêté ; les rediffusions Twitch sont
+  synchronisées avec le compte Twitch connecté.
 - **Mode vidéo** : liens YouTube et autres (yt-dlp, sous-titres), rediffusions et clips Twitch, partage Android
   « Partager → Stream Box », et **Jellyfin** (« Lire sur… ») via jellyfin-mpv-shim.
 - **Télécommande web** : aperçu de l'écran à la demande, streamers et ordre de la liste, chat, volume, barre de lecture, résolution de la TV,

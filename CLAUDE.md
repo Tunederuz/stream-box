@@ -149,6 +149,17 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   `latitude`, `longitude`, `timezone` ; sans ce fichier, pas de météo) et plannings Twitch (GQL `schedule.segments`,
   créneaux de la semaine en cours : un créneau passé est reporté d'une semaine). Les captures de mpv sont vides quand
   rien ne joue : vérifier l'écran sur la TV.
+- **Historique et reprise** (`remote.py`, `play` / `history_loop`) des vidéos lancées depuis la télécommande (liens,
+  YouTube, rediffusions et clips Twitch ; Jellyfin gère sa progression). Clé stable par vidéo (`media_key` : id
+  YouTube, id de VOD, slug de clip), historique dans `~media/.local/state/stream-box/history.json` (60 entrées).
+  Position notée toutes les 10 s ; reprise si > 30 s et pas « vue » (à moins de 30 s de la fin ou au-delà de 95 %),
+  donnée à mpv comme option `start=` du fichier (`streambox-play <url> <début>`). **Rediffusions Twitch synchronisées
+  avec le compte** : position lue au lancement (`video.self.viewingHistory`, la plus récente l'emporte sur celle de la
+  box) et écrite toutes les 30 s et à l'arrêt (mutation `updateUserViewedVideo`). YouTube : impossible de synchroniser
+  avec le compte (pas d'API ; yt-dlp ne sait que marquer « vu »), la mémoire reste sur la box. Page : bloc Historique
+  (Reprendre / Depuis le début / ✕, tout effacer) et barres de progression dans les rediffusions (`GET /api/history`,
+  `POST /api/history {action: remove|clear}`, `POST /api/play {url, from_start}`). Limite connue : certaines
+  rediffusions Twitch (playlist `EVENT`) démarrent une minute après le début même sans reprise, mpv nu compris.
 - **Aperçu de la TV** dans la page (bloc replié, onglet Télécommande) : `GET /api/preview?overlay=1|0` →
   écran entier par **grim** (protocole wlr-screencopy de cage : écran d'ambiance, menu et bandeaux compris, réduit à
   960 px par `-s`) ; vidéo seule (`overlay=0`), ou faute de grim, `screenshot-to-file` de mpv réduit par ffmpeg. Une
