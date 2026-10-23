@@ -160,14 +160,22 @@ end
 
 -- start : position de reprise en secondes (historique de remote.py), donnée à mpv comme option du fichier pour ne pas
 -- voir un saut après le chargement
-local function play_media(url, start)
+-- title : titre à afficher (Jellyfin : le lien du flux n'en donne pas), passé en option du fichier (%n% : longueur
+-- en octets, pour que virgules et signes égal du titre passent tels quels)
+local function play_media(url, start, title)
     stop_twitch()
     set_mode("media")
     local at = tonumber(start) or 0
-    if at > 0 then
-        mp.commandv("loadfile", url, "replace", "-1", ("start=%d"):format(at))
+    local opts = title and title ~= "" and ("force-media-title=%%%d%%%s"):format(#title, title) or nil
+    if at > 0 or opts then
+        local all = {}
+        if at > 0 then all[#all + 1] = ("start=%d"):format(at) end
+        if opts then all[#all + 1] = opts end
+        mp.commandv("loadfile", url, "replace", "-1", table.concat(all, ","))
         local h, m, sec = math.floor(at / 3600), math.floor(at / 60) % 60, at % 60
-        mp.osd_message(h > 0 and ("Reprise à %d:%02d:%02d"):format(h, m, sec) or ("Reprise à %d:%02d"):format(m, sec), 4)
+        if at > 0 then
+            mp.osd_message(h > 0 and ("Reprise à %d:%02d:%02d"):format(h, m, sec) or ("Reprise à %d:%02d"):format(m, sec), 4)
+        end
     else
         mp.commandv("loadfile", url)
     end

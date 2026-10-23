@@ -27,8 +27,10 @@ télécommande web installable sur téléphone (PWA).
   « Partager → Stream Box », et **Jellyfin** (« Lire sur… ») via jellyfin-mpv-shim.
 - **YouTube** : liste de chaînes avec leurs dernières vidéos et recherche de vidéos et de chaînes, sur la TV (clavier à l'écran)
   et dans la télécommande, sans clé d'API. Barre de lecture rouge pour YouTube, bleue pour Jellyfin.
+- **Jellyfin** dans le menu de la TV et la télécommande : reprendre, prochains épisodes, ajouts récents, recherche,
+  épisodes d'une série ; la progression est renvoyée au serveur (aucune configuration en plus du « Lire sur… »).
 - **Grand menu sur la TV** façon Android TV (bouton Menu de la télécommande), animé et rendu par la puce graphique :
-  streamers en direct, chaînes suivies, rediffusions, YouTube, historique, réglages, système.
+  streamers en direct, chaînes suivies, rediffusions, YouTube, Jellyfin, historique, réglages, système.
 - **Deux streams à la fois** : en incrustation dans un coin ou côte à côte, avec inversion en un appui.
 - **Télécommande web** : aperçu de l'écran à la demande, streamers et ordre de la liste, chat, volume, barre de lecture, résolution de la TV,
   extinction. **Télécommande Bluetooth** (testé avec celle du Xiaomi TV Stick) et menu à la souris.

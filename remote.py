@@ -913,6 +913,147 @@ def yt_channel_videos(channel_id):
     return {"id": channel_id, "videos": videos, "saved": any(c["id"] == channel_id for c in yt_channels())}
 
 
+# Jellyfin : bibliothèque du serveur déjà associé à jellyfin-mpv-shim (« Lire sur… »), avec ses identifiants
+# (~/.config/jellyfin-mpv-shim/users.json : adresse, UserId, AccessToken ; rien à configurer de plus). La box lit
+# « Reprendre », « Prochains épisodes », les ajouts récents par bibliothèque, cherche, et renvoie la progression au
+# serveur pendant la lecture (Sessions/Playing, /Progress, /Stopped) : « vu » et la reprise suivent partout.
+
+JF_USERS = os.path.expanduser("~/.config/jellyfin-mpv-shim/users.json")
+JF_CACHE = 30
+jf_cache = {}
+
+
+def jf_server():
+    try:
+        with open(JF_USERS, encoding="utf-8") as f:
+            d = json.load(f)
+        users = d["users"]
+        s = next((u for u in users if u.get("id") == d.get("active")), users[0])["credentials"][0]
+        return {"address": s["address"].rstrip("/"), "user": s["UserId"], "token": s["AccessToken"], "name": s.get("Name") or ""}
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
+        return None
+
+
+def jf_api(path, body=None, params=None):
+    srv = jf_server()
+    if not srv:
+        raise ValueError("Jellyfin n'est pas associé à la box.")
+    url = srv["address"] + path.replace("{user}", srv["user"])
+    if params:
+        url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"Authorization": f'MediaBrowser Token="{srv["token"]}"',
+                                          "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        data = r.read()
+    return json.loads(data) if data else None
+
+
+def jf_item(i):
+    """Élément Jellyfin → carte : titre, ligne d'infos, image paysage, durée, position, vu"""
+    srv = jf_server() or {"address": ""}
+    img = lambda item_id, kind: f"{srv['address']}/Items/{item_id}/Images/{kind}?fillWidth=480&quality=85"
+    kind, tags = i.get("Type"), i.get("ImageTags") or {}
+    if kind == "Episode" and tags.get("Primary"):
+        thumb = img(i["Id"], "Primary")
+    elif tags.get("Thumb"):
+        thumb = img(i["Id"], "Thumb")
+    elif i.get("BackdropImageTags"):
+        thumb = img(i["Id"], "Backdrop/0")
+    elif i.get("ParentThumbItemId"):
+        thumb = img(i["ParentThumbItemId"], "Thumb")
+    elif i.get("ParentBackdropItemId"):
+        thumb = img(i["ParentBackdropItemId"], "Backdrop/0")
+    else:
+        thumb = img(i["Id"], "Primary")
+    ud = i.get("UserData") or {}
+    out = {"id": i["Id"], "type": kind, "title": i.get("Name") or "", "thumb": thumb,
+           "seconds": int((i.get("RunTimeTicks") or 0) / 1e7) or None,
+           "position": int((ud.get("PlaybackPositionTicks") or 0) / 1e7), "finished": bool(ud.get("Played")),
+           "year": i.get("ProductionYear")}
+    if kind == "Episode":
+        out["title"] = i.get("SeriesName") or out["title"]
+        out["episode"] = (f"S{i.get('ParentIndexNumber') or 0}·E{i.get('IndexNumber') or 0} · " if i.get("IndexNumber") else "") + (i.get("Name") or "")
+        out["series"] = i.get("SeriesId")
+    elif kind == "Season":   # ajouts récents d'une série, regroupés par saison
+        out.update(title=i.get("SeriesName") or out["title"], episode=i.get("Name") or "", series=i.get("SeriesId"))
+    elif kind == "Series":
+        out.update(series=i["Id"], unplayed=ud.get("UnplayedItemCount"))
+    return out
+
+
+JF_FIELDS = {"Fields": "UserData,RunTimeTicks,ProductionYear", "EnableImageTypes": "Primary,Thumb,Backdrop"}
+
+
+def jellyfin_home():
+    cached = jf_cache.get("home")
+    if cached and time.time() - cached[0] < JF_CACHE:
+        return cached[1]
+    srv = jf_server()
+    if not srv:
+        return {"configured": False}
+    resume = jf_api("/Users/{user}/Items/Resume", params={"Limit": 16, "MediaTypes": "Video", **JF_FIELDS})["Items"]
+    nextup = jf_api("/Shows/NextUp", params={"UserId": srv["user"], "Limit": 16, **JF_FIELDS})["Items"]
+    libraries = []
+    for v in jf_api("/Users/{user}/Views")["Items"]:
+        if v.get("CollectionType") not in ("movies", "tvshows", "homevideos", None):
+            continue
+        latest = jf_api("/Users/{user}/Items/Latest", params={"ParentId": v["Id"], "Limit": 16, **JF_FIELDS})
+        libraries.append({"id": v["Id"], "name": v.get("Name") or "", "items": [jf_item(i) for i in latest]})
+    home = {"configured": True, "server": srv["name"], "resume": [jf_item(i) for i in resume],
+            "nextup": [jf_item(i) for i in nextup], "libraries": libraries}
+    jf_cache["home"] = (time.time(), home)
+    return home
+
+
+def jellyfin_search(query):
+    query = " ".join(query.split())[:100]
+    if not query:
+        return []
+    items = jf_api("/Users/{user}/Items", params={"searchTerm": query, "IncludeItemTypes": "Movie,Series,Episode",
+                                                  "Recursive": "true", "Limit": 30, **JF_FIELDS})["Items"]
+    return [jf_item(i) for i in items]
+
+
+def jellyfin_series(series_id):
+    """Épisodes d'une série, et l'index du premier pas encore vu (là où placer le focus)"""
+    if not re.fullmatch(r"[0-9a-f]{32}", series_id):
+        raise ValueError("série invalide")
+    srv = jf_server()
+    eps = [jf_item(i) for i in jf_api(f"/Shows/{series_id}/Episodes", params={"UserId": srv["user"], **JF_FIELDS})["Items"]]
+    first = next((n for n, e in enumerate(eps) if not e["finished"]), 0)
+    return {"id": series_id, "episodes": eps, "first": first}
+
+
+def jellyfin_play(item_id, from_start=False):
+    if not re.fullmatch(r"[0-9a-f]{32}", item_id):
+        raise ValueError("élément invalide")
+    srv = jf_server()
+    i = jf_item(jf_api(f"/Users/{{user}}/Items/{item_id}"))
+    if i["type"] == "Series":
+        raise ValueError("Choisis un épisode.")
+    title = f"{i['title']} · {i['episode']}" if i.get("episode") else i["title"]
+    start = 0 if from_start or i["position"] < RESUME_MIN or i["finished"] else i["position"]
+    url = f"{srv['address']}/Videos/{item_id}/stream?static=true&api_key={srv['token']}"
+    now_playing.clear()
+    now_playing.update(key=f"jellyfin:{item_id}", url=url, kind="jellyfin", ident=item_id, title=title, position=start)
+    mpv(["script-message", "streambox-play", url, str(start), title])
+    mpv(["set_property", "user-data/streambox/storyboard", {}])
+    jf_cache.pop("home", None)
+    jf_report("", item_id, start)
+
+
+def jf_report(what, item_id, position, paused=False):
+    """Progression vers le serveur : what = "" (début), "/Progress" ou "/Stopped" """
+    try:
+        jf_api(f"/Sessions/Playing{what}", {"ItemId": item_id, "PositionTicks": int(position * 1e7), "IsPaused": paused,
+                                            "CanSeek": True, "PlayMethod": "DirectStream"})
+    except (OSError, ValueError):
+        pass
+    if what == "/Stopped":
+        jf_cache.pop("home", None)
+
+
 def finished(position, duration):
     return bool(duration) and (position >= duration - FINISHED_LEFT or position >= 0.95 * duration)
 
@@ -1035,6 +1176,16 @@ def history_loop():
         except (OSError, ValueError):
             continue
         playing = (user or {}).get("mode") == "media" and path == video["url"]
+        if video["kind"] == "jellyfin":
+            if playing and isinstance(position, (int, float)):
+                paused = mpv(["get_property", "pause"])[0]
+                jf_report("/Progress", video["ident"], position, bool(paused))
+                now_playing["position"] = position
+            elif not playing:
+                jf_report("/Stopped", video["ident"], video.get("position") or 0)
+                if now_playing.get("key") == video["key"]:
+                    now_playing.clear()
+            continue
         if playing and isinstance(position, (int, float)):
             record(video, position, duration, title if title and title != video["url"] else None)
             now_playing["position"] = position
@@ -1573,6 +1724,8 @@ def action(name, body):
         predict(str(body.get("event", "")), str(body.get("outcome", "")), int(body.get("points", 0)))
     elif name == "player":
         set_player(str(body.get("mode", "")))
+    elif name == "jellyfin_play":
+        jellyfin_play(str(body.get("id", "")), bool(body.get("from_start")))
     elif name == "youtube_channels":
         edit_yt_channels(str(body.get("action", "")), str(body.get("channel", "")), int(body.get("delta", 0)))
     elif name == "update":
@@ -1684,6 +1837,21 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     self.send(200, {"query": q, **yt_search(q)})
                 except ValueError as e:
+                    self.send(400, {"error": str(e)})
+            elif self.path == "/api/jellyfin":
+                try:
+                    self.send(200, jellyfin_home())
+                except (OSError, ValueError, KeyError) as e:
+                    self.send(503, {"error": f"Jellyfin injoignable : {e}"})
+            elif self.path.startswith("/api/jellyfin_search?") or self.path.startswith("/api/jellyfin_series?"):
+                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                try:
+                    if self.path.startswith("/api/jellyfin_search?"):
+                        query = q.get("q", [""])[0]
+                        self.send(200, {"query": query, "results": jellyfin_search(query)})
+                    else:
+                        self.send(200, jellyfin_series(q.get("id", [""])[0]))
+                except (OSError, ValueError, KeyError) as e:
                     self.send(400, {"error": str(e)})
             elif self.path.startswith("/api/youtube_channel?"):
                 q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("id", [""])[0]

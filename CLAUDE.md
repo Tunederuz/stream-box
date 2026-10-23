@@ -486,3 +486,22 @@ Twitch (direct, suivis, rediffusions), rouge pour YouTube, neutre anthracite à 
 système ; fond, lueurs, rail, halos (`FocusFrame.glow`), `VideoCard.accent`, `SettingRow.pal` (interrupteur clair à
 bouton sombre en neutre), fenêtre d'actions, clavier. Le bleu reste libre pour Jellyfin. Logo (`qml/Logo.qml`, icônes `icon-*.png`,
 tv_menu.lua) : tuile blanche, triangle anthracite arrondi, neutre sur fond violet comme rouge.
+
+### Jellyfin (onglet du menu QML et page)
+
+remote.py réutilise le serveur associé à jellyfin-mpv-shim (`~/.config/jellyfin-mpv-shim/users.json` : adresse,
+UserId, AccessToken ; en-tête `Authorization: MediaBrowser Token="…"`, rien d'autre à configurer). `GET /api/jellyfin`
+(cache 30 s) : `Items/Resume`, `Shows/NextUp`, `Items/Latest` par bibliothèque (films, séries ; les séries arrivent
+par saison) ; `GET /api/jellyfin_search?q=`, `GET /api/jellyfin_series?id=` (épisodes et index du premier pas vu) ;
+`POST /api/jellyfin_play` {id, from_start} : flux direct `/Videos/{id}/stream?static=true&api_key=…`, reprise à la
+position du serveur, titre passé à mpv (`streambox-play url start titre` → `force-media-title`, longueur en
+préfixe %n%). Progression renvoyée au serveur : `Sessions/Playing` au lancement, `/Progress` toutes les 10 s par
+history_loop, `/Stopped` à l'arrêt (le serveur décide du « vu ») ; pas d'entrée dans l'historique de la box. Les
+images du serveur sont publiques (pas de jeton dans leurs liens).
+TV : onglet « Jellyfin » (thème bleu) sur la même page que YouTube (`mediaRows`, `mRow`/`mSel`, `keyMedia`, état
+propre `jfRow`/`jfSel`) : recherche au clavier à l'écran, épisodes d'une série ouverte, Reprendre, Prochains
+épisodes, ajouts récents ; OK sur un film ou un épisode : Reprendre / Depuis le début / Tous les épisodes. Rail
+resserré (pas de 76) pour 9 onglets. Piège QML : une fonction ne doit pas reprendre le nom d'une propriété
+(`setSel` existait : les touches de l'onglet échouaient en silence, sauf dans le journal).
+Page : bloc Jellyfin de l'onglet Télécommande (puces par rangée, recherche, épisodes d'une série).
+
