@@ -286,8 +286,9 @@ Item {
             : jfTab ? "Rechercher dans Jellyfin" : "Rechercher sur YouTube"
     }
     function loadHistory() { call("GET", "/api/history", undefined, function (d) { history = d || [] }) }
-    function play(url, fromStart) {
-        call("POST", "/api/play", { url: url, from_start: !!fromStart }, function () { refreshSoon.restart() })
+    function play(url, fromStart, item) {   // item : titre et image pour l'écran de chargement et l'historique
+        call("POST", "/api/play", { url: url, from_start: !!fromStart, title: item ? item.title : undefined,
+                                    thumb: item ? item.thumb : undefined }, function () { refreshSoon.restart() })
         close()
     }
 
@@ -515,10 +516,10 @@ Item {
     function chooseVideo(item) {
         if (Fmt.resumable(item.position, item.seconds, item.finished))
             openModal(item.title, [
-                { label: "▶  Reprendre à " + Fmt.clock(item.position), ok: function () { play(item.url) } },
-                { label: "↺  Depuis le début", ok: function () { play(item.url, true) } }])
+                { label: "▶  Reprendre à " + Fmt.clock(item.position), ok: function () { play(item.url, false, item) } },
+                { label: "↺  Depuis le début", ok: function () { play(item.url, true, item) } }])
         else
-            play(item.url, true)
+            play(item.url, true, item)
     }
     function subtitle() {
         var live = st.live || {}

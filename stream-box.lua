@@ -81,6 +81,27 @@ local function write_state(name, value)
     end
 end
 
+-- Écran de chargement entre deux vidéos ou deux chaînes (sinon l'image reste figée et ça ressemble à un blocage) :
+-- user-data/streambox/loading { title, thumb } jusqu'à la première image (playback-restart), une erreur ou 45 s au plus ;
+-- dessiné par qml/LoadingOverlay.qml, ou simple message à l'écran avec mpv seul
+local loading_timer, loading_osd = nil, false
+local function set_loading(title, thumb)
+    if loading_timer then loading_timer:kill() loading_timer = nil end
+    if title then
+        mp.set_property_native("user-data/streambox/loading", { title = title, thumb = thumb or "" })
+        -- appli Qt (vo=libmpv, connu dès le démarrage, contrairement à chat_ui) : l'écran QML suffit
+        loading_osd = mp.get_property("vo") ~= "libmpv"
+        if loading_osd then mp.osd_message("Chargement de " .. title .. "…", 45) end
+        loading_timer = mp.add_timeout(45, function() set_loading(nil) end)
+    else
+        mp.set_property_native("user-data/streambox/loading", {})
+        if loading_osd then mp.osd_message("", 0) end
+        loading_osd = false
+    end
+end
+mp.register_event("playback-restart", function() set_loading(nil) end)
+mp.register_event("end-file", function(e) if e.reason == "error" then set_loading(nil) end end)
+
 local function set_status(text)
     status_text = text
     mp.set_property_native("user-data/streambox/status", text)   -- pour l'écran d'accueil en QML (appli Qt)
@@ -149,6 +170,7 @@ local function start_channel(name)
     write_state("channel", name)
     mp.set_property_native("user-data/streambox/channel", name)
     set_mode("twitch")   -- avant le « stop » ci-dessous, pour que sa fin de fichier soit lue comme un changement de chaîne
+    set_loading(name)
     mp.set_property_bool("pause", false)   -- mpv garde la pause d'un fichier à l'autre
     offline, channel_since = false, mp.get_time()
     stop_twitch()
@@ -163,9 +185,11 @@ end
 -- voir un saut après le chargement
 -- title : titre à afficher (Jellyfin : le lien du flux n'en donne pas), passé en option du fichier (%n% : longueur
 -- en octets, pour que virgules et signes égal du titre passent tels quels)
-local function play_media(url, start, title)
+-- thumb, label : image et titre de l'écran de chargement (label : titre connu, sans l'imposer à mpv)
+local function play_media(url, start, title, thumb, label)
     stop_twitch()
     set_mode("media")
+    set_loading((label and label ~= "" and label) or (title and title ~= "" and title) or "la vidéo", thumb)
     mp.set_property_bool("pause", false)   -- mpv garde la pause d'un fichier à l'autre
     local at = tonumber(start) or 0
     local opts = title and title ~= "" and ("force-media-title=%%%d%%%s"):format(#title, title) or nil
@@ -1036,6 +1060,7 @@ local function update_ambient(force)
         local key = os.time() .. status_text   -- redessiné toutes les 2 s : le fond bouge en continu
         if not ambient_visible then
             ambient_visible = true
+            set_loading(nil)   -- chaîne hors ligne, écran d'accueil : plus rien à attendre
             qr_until = mp.get_time() + QR_SECONDS
             status:remove()
             mp.set_property_native("user-data/streambox/ambient_on", true)
