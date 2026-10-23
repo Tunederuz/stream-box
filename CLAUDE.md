@@ -391,8 +391,22 @@ pour les deux (1080p60 + 720p60, décodage vaapi).
 
 ### Choix du lecteur
 
-Réglages → Affichage → Lecteur (page web, menu QML et menu Lua) : `POST /api/player {mode: qt|mpv}` écrit
+Système → Lecteur (menus QML et Lua de la TV ; section Système des réglages de la page web) : `POST /api/player {mode: qt|mpv}` écrit
 `~/.config/stream-box/player` et quitte le lecteur ; la boucle de player.sh relance le bon. `/api/state` donne `player`
 (choisi) et `player_running` (`qt` si `current-vo` vaut `libmpv`) : la page signale un retour automatique à mpv.
 player.sh oublie les échecs de l'appli Qt quand le fichier est réécrit (date de modification), ce qui permet de la
 réessayer sans redémarrer.
+
+### Chat avec émotes (appli Qt)
+
+`chat_qt.py` (importé par ui.py) lit le chat comme chat_overlay.py (IRC anonyme) et découpe chaque message en mots et
+émotes : Twitch par le tag `emotes` (positions en caractères), 7TV / BTTV / FFZ par nom (listes globales chargées une
+fois, listes de la chaîne dès le ROOMSTATE qui donne son identifiant ; priorité 7TV > BTTV > FFZ). `qml/ChatOverlay.qml`
+les dessine (Flow de Text et d'AnimatedImage : GIF et WebP animés, plugin `libqwebp` de Qt), dans le coin et avec le fond
+et la taille réglés, masqué en vidéo, sur l'écran d'accueil et menu ouvert. Quand l'appli tourne, elle écrit
+`user-data/streambox/chat_ui = qml` et chat_overlay.py (texte dans mpv) se tait ; il repart de zéro à chaque nouveau
+lecteur (mpv seul : chat texte). Piège QML : `left`, `top` sont des propriétés réservées des éléments (FINAL) ; une
+erreur de chargement de ui.qml fait retomber l'appli sur le menu Lua et le chat texte, sans planter.
+Fermeture : à l'événement `shutdown` de mpv, `os._exit` tout de suite depuis le fil d'événements de python-mpv (qui
+sinon détruit sa connexion et attend le contexte de rendu tenu par Qt : appli figée, pas de relance ; 6/6 relances
+propres après correction).

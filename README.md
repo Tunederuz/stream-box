@@ -10,7 +10,8 @@ télécommande web installable sur téléphone (PWA).
 - **Stream Twitch en plein écran** (streamlink + mpv, faible latence, pubs sautées), reprise du dernier streamer
   regardé au démarrage, bascule automatique vers un streamer en live si le sien est hors ligne, relance d'un direct
   figé.
-- **Chat Twitch en overlay** (lecture anonyme), dans le coin de son choix, avec fond et taille réglables.
+- **Chat Twitch en overlay** (lecture anonyme), dans le coin de son choix, avec fond et taille réglables, et les
+  émotes Twitch, 7TV, BTTV et FFZ (animées) avec l'appli Qt.
 - **Retour en arrière dans le direct** (quelques minutes gardées en mémoire), pause en différé.
 - **Qui est en live** dans le menu et la télécommande, **notification** quand un streamer de la liste lance son live.
 - **Écran d'ambiance** quand rien ne joue : horloge, date, météo et prochains lives prévus (plannings Twitch).
@@ -43,6 +44,7 @@ télécommande web installable sur téléphone (PWA).
 | `ui.py`, `ui.qml`, `player.sh` | Appli Qt Quick qui embarque mpv (libmpv), et boucle du lecteur (Qt ou mpv seul) |
 | `qml/` | Grand menu de la TV en QML (animé, rendu par la puce graphique) |
 | `chat_overlay.py` | Chat Twitch (IRC anonyme) affiché dans mpv par son IPC |
+| `chat_qt.py` | Chat avec émotes pour l'appli Qt (affiché par `qml/ChatOverlay.qml`) |
 | `remote.py` + `remote.html` | Télécommande web (bibliothèque standard Python) et sa page |
 | `display.py` | Résolution de la sortie vidéo (wlr-randr), jamais en dessous de 60 Hz |
 | `mqtt_bridge.py` | Pont MQTT vers Home Assistant (découverte automatique) |

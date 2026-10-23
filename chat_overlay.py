@@ -25,8 +25,9 @@ messages = deque(maxlen=MAX_MESSAGES)
 lock = threading.Lock()
 # Mis à jour par mpv (user-data/streambox/*). chat_bg : opacité du fond en % ; chat_size : taille du texte
 # tvmenu : grand menu de la TV ouvert (tv_menu.lua), le chat passerait par-dessus
+# chat_ui : « qml » quand l'appli Qt (ui.py) dessine elle-même le chat, avec les émotes
 state = {"channel": None, "corner": "bl", "chat_visible": True, "chat_bg": 60, "chat_size": 32, "mode": "twitch",
-         "tvmenu": False}
+         "tvmenu": False, "chat_ui": None}
 
 
 def parse_tags(raw):
@@ -89,7 +90,7 @@ def render():
             f"{{\\c{m['color']}\\b1}}{ass_escape(m['name'])}{{\\b0\\c&HFFFFFF&}}  {ass_escape(m['text'])}"
             for m in messages
         ]
-    if not state["chat_visible"] or state["mode"] != "twitch" or state["tvmenu"]:   # masqué, vidéo, menu
+    if not state["chat_visible"] or state["mode"] != "twitch" or state["tvmenu"] or state["chat_ui"] == "qml":
         return ""
     # Bloc ancré dans le coin choisi, contour sombre pour rester lisible sur la vidéo
     style = "{" + CORNERS.get(state["corner"], CORNERS["bl"]) + f"\\fs{state['chat_size']}\\bord2.5\\shad0\\3c&H000000&\\3a&H30&}}"
@@ -164,10 +165,12 @@ def mpv_loop():
         try:
             with socket.socket(socket.AF_UNIX) as s:
                 s.connect(MPV_SOCKET)
+                # Nouveau lecteur : ces réglages ne sont publiés que par l'appli Qt et le grand menu, repartir de zéro
+                state.update(chat_ui=None, tvmenu=False)
                 for i, prop in enumerate(("user-data/streambox/channel", "user-data/streambox/corner",
                                           "user-data/streambox/chat_visible", "user-data/streambox/chat_bg",
                                           "user-data/streambox/chat_size", "user-data/streambox/mode",
-                                          "user-data/streambox/tvmenu"), 1):
+                                          "user-data/streambox/tvmenu", "user-data/streambox/chat_ui"), 1):
                     s.sendall((json.dumps({"command": ["observe_property", i, prop]}) + "\n").encode())
                 buf, sent = b"", None
 
