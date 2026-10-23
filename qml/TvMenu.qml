@@ -123,7 +123,11 @@ Item {
         call("GET", "/api/state", undefined, function (d) {
             if (!d || !d.streamers) return
             st = d
-            if (startFocus) liveSel = Math.max(0, d.streamers.indexOf(d.channel))
+            if (startFocus) {   // à l'ouverture, avant toute touche : onglet du média en cours
+                liveSel = Math.max(0, d.streamers.indexOf(d.channel))
+                var t = mediaTab(d)
+                for (var i = 0; i < tabs.length; i++) if (tabs[i].id === t && tab !== i) { tab = i; area = "content" }
+            }
         })
     }
     function act(name, body) { call("POST", "/api/" + name, body || {}, function () { refreshSoon.restart() }) }
@@ -301,11 +305,19 @@ Item {
 
     // Ouverture, fermeture
 
+    // Onglet relatif au média en cours : direct → En direct, vidéo YouTube → YouTube, Jellyfin → Jellyfin, rediffusion
+    // ou clip Twitch → Rediffusions, autre lien → Historique
+    function mediaTab(d) {
+        if (d.mode !== "media") return "live"
+        return { youtube: "youtube", jellyfin: "jellyfin", "twitch-vod": "replays", "twitch-clip": "replays" }[d.media_kind] || "history"
+    }
     function open() {
         if (isOpen) return
-        // Le menu rouvre sur le dernier onglet (et, pour YouTube et Jellyfin, la même rangée et la même carte) ; les
-        // données sont relues. Suivis attend sur le rail : la liste n'est peut-être pas encore autorisée
-        area = tabs[tab].id === "follows" ? "rail" : "content"
+        // Onglet du média en cours (mediaTab, recalé quand l'état arrive) ; YouTube et Jellyfin gardent leur rangée et
+        // leur carte ; les données sont relues
+        var t = mediaTab(st)
+        for (var i = 0; i < tabs.length; i++) if (tabs[i].id === t) tab = i
+        area = "content"
         shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0
         follows = null; replays = ({}); history = null; rpLogin = ""; rpRow = 0; rpSel = [0, 0, 0]
         yt = null; jf = null; kbOpen = false   // les résultats de recherche restent d'une ouverture à l'autre

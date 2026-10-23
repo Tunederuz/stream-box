@@ -47,6 +47,7 @@ local follows, follows_loading, follows_qr = nil, false, nil   -- /api/follows ;
 local follows_timer = nil
 -- YouTube et Jellyfin (/api/youtube, /api/jellyfin) : rangées de cartes, rangée et choix par onglet. Pas de recherche
 -- ici (pas de clavier à l'écran avec mpv seul) : elle se fait depuis la télécommande web
+local health, health_timer = nil, nil              -- /api/health, relu toutes les 5 s sur l'onglet Système
 local media = { youtube = { row = 1, sel = {}, first = {} }, jellyfin = { row = 1, sel = {}, first = {} } }
 local draw, close_menu
 
@@ -150,9 +151,25 @@ local function api(method, path, body, callback)
         end)
 end
 
+local start_focus = false   -- menu tout juste ouvert, pas encore de touche : onglet recalé sur le média en cours
+
+-- Onglet relatif au média en cours : direct → En direct, vidéo YouTube → YouTube, Jellyfin → Jellyfin, rediffusion ou
+-- clip Twitch → Rediffusions, autre lien → Historique
+local MEDIA_TABS = { youtube = "youtube", jellyfin = "jellyfin", ["twitch-vod"] = "replays", ["twitch-clip"] = "replays" }
+local function media_tab(d)
+    if d.mode ~= "media" then return "live" end
+    return MEDIA_TABS[d.media_kind or ""] or "history"
+end
+
 local function refresh()
     api("GET", "/api/state", nil, function(d)
-        if d and d.streamers then state = d end
+        if d and d.streamers then
+            state = d
+            if start_focus then
+                for i, t in ipairs(TABS) do if t.id == media_tab(d) then tab = i end end
+                area = "content"
+            end
+        end
         if is_open then draw() end
     end)
 end
@@ -385,9 +402,18 @@ local function settings_rows()
     }
 end
 
+-- « 2026-10-23 11:48:14 » ou « Mon 2026-10-26 05:07:37 CET » → « 23 oct. à 11:48 »
+local function fr_date(text)
+    local y, m, d, hh, mm = tostring(text or ""):match("(%d+)-(%d+)-(%d+) (%d+):(%d+)")
+    if not y then return tostring(text or "") end
+    local months = { "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc." }
+    return ("%d %s à %s:%s"):format(tonumber(d), months[tonumber(m)], hh, mm)
+end
+
 local function system_rows()
     local s = state
     local login = account and account.login
+    local u = health and health.update
     return {
         { label = "Compte Twitch", value = login and ("Connecté : " .. login) or "Non connecté",
           hint = login and "Pas de pub sur les chaînes où tu es abonné" or "Se connecte depuis la télécommande du téléphone" },
@@ -404,6 +430,11 @@ local function system_rows()
               pending_player = nil
               close_menu()
           end },
+        { label = "Mettre à jour maintenant",
+          hint = u and (u.running and "Mise à jour en cours…"
+              or ((u.last and ((u.last.ok and "Dernière : " or "Échec : ") .. fr_date(u.last.date)) or "Jamais")
+                  .. (u.next and ("  ·  prochaine : " .. fr_date(u.next)) or ""))) or nil,
+          ok = function() if not (u and u.running) then act("update") end end },
         { label = "Éteindre la box",
           hint = mp.get_time() < poweroff_until and "Appuie encore sur OK pour éteindre" or nil,
           danger = true, ok = function()
@@ -792,6 +823,52 @@ local function jellyfin_choose(it)
     open_modal(it.episode and (it.title .. " · " .. it.episode) or it.title, items)
 end
 
+-- État de la box (onglet Système) : tuiles sous les lignes, comme l'appli Qt
+local function health_tiles()
+    local h = health
+    if not h then return {} end
+    local function bytes(n) n = tonumber(n) or 0
+        return n >= 1e9 and (("%.1f Go"):format(n / 1e9):gsub("%.", ",")) or ("%d Mo"):format(math.floor(n / 1e6)) end
+    local function bits(n) if n == nil then return "…" end
+        return n >= 1e6 and (("%.1f Mbit/s"):format(n / 1e6):gsub("%.", ",")) or ("%d kbit/s"):format(math.floor(n / 1e3)) end
+    local function since(t) t = tonumber(t) or 0
+        local hr, d = math.floor(t / 3600), math.floor(t / 86400)
+        return d > 0 and ("%d j %d h"):format(d, hr % 24) or hr > 0 and ("%d h %02d"):format(hr, math.floor(t / 60) % 60)
+            or ("%d min"):format(math.floor(t / 60)) end
+    local function ok(v) return v == "active" and "✓" or "✕" end
+    local t, p, net, mem = h.temps and h.temps.cpu, h.player or {}, h.network or {}, h.memory or {}
+    local disk, svc = h.disk or {}, h.services or {}
+    local link = (net.speed or 0) > 0 and (" · lien " .. (net.speed >= 1000 and (net.speed / 1000 .. " Gbit/s") or (net.speed .. " Mbit/s"))) or ""
+    local hw = p.hwdec and p.hwdec ~= "no" and (" · " .. p.hwdec) or (p.size and " · processeur" or "")
+    return {
+        { "TEMPÉRATURE", t and (t .. " °C") or "–", h.temps and h.temps.disk and ("disque " .. h.temps.disk .. " °C") or "",
+          t and (t >= 85 and "bad" or t >= 70 and "warn") or "" },
+        { "PROCESSEUR", h.cpu and (math.floor(h.cpu + 0.5) .. " %") or "…",
+          (("charge %.1f"):format(h.load or 0):gsub("%.", ",")) .. " · " .. (h.cores or "?") .. " cœurs", (h.cpu or 0) >= 85 and "warn" or "" },
+        { "MÉMOIRE", bytes((mem.total or 0) - (mem.available or 0)), "sur " .. bytes(mem.total), (mem.available or 1e10) < 5e8 and "warn" or "" },
+        { "DISQUE", bytes(disk.free) .. " libres", "sur " .. bytes(disk.total), (disk.free or 1e12) < 5e9 and "warn" or "" },
+        { "RÉSEAU", "↓ " .. bits(net.rx), "↑ " .. bits(net.tx) .. link, "" },
+        { "ALLUMÉE DEPUIS", since(h.uptime), "MQTT " .. ok(svc.mqtt) .. " · jetons YouTube " .. ok(svc.youtube_tokens),
+          (svc.mqtt ~= "active" or svc.youtube_tokens ~= "active") and "warn" or "" },
+        { "LECTURE", (p.running == "qt" and "Appli Qt" or "mpv seul") .. hw,
+          p.size and (p.size:gsub("x", " × ") .. " · " .. math.floor((p.fps or 0) + 0.5) .. " im/s · " .. (p.dropped or 0) .. " perdues")
+              or "rien en lecture", p.size and (not p.hwdec or p.hwdec == "no") and "warn" or "" },
+    }
+end
+
+local function draw_health(out)
+    for i, tile in ipairs(health_tiles()) do
+        local col, row = (i - 1) % 3, math.floor((i - 1) / 3)
+        local x, y = 460 + col * 272, 650 + row * 106
+        local w = i == 7 and 262 * 2 + 10 or 262
+        local tone = tile[4] == "bad" and "6B6BFF" or tile[4] == "warn" and "4AB4FF" or "FFFFFF"   -- BGR
+        out[#out + 1] = rrect(x, y, w, 96, 18, "FFFFFF", "E6")
+        out[#out + 1] = label(x + 18, y + 22, 18, "C09FA9", ass_escape(tile[1]), 4, "\\b1\\fsp1")
+        out[#out + 1] = label(x + 18, y + 51, 28, tone, ass_escape(shorten(tile[2], i == 7 and 34 or 16)), 4, "\\b1")
+        out[#out + 1] = label(x + 18, y + 78, 19, "C2AFB4", ass_escape(shorten(tile[3], i == 7 and 46 or 26)), 4)
+    end
+end
+
 local FOLLOW_ROWS = 4
 
 local function draw_qr_rows(out, rows, x, y, size)
@@ -1018,6 +1095,14 @@ function draw()
         draw_rows(out, settings_rows(), "Réglages", "◀ ▶ pour changer une valeur")
     else
         draw_rows(out, system_rows(), "Système", nil, 820)
+        draw_health(out)
+        if not health_timer then   -- relu toutes les 5 s tant que l'onglet est affiché
+            local function poll() api("GET", "/api/health", nil, function(d) if d then health = d end if is_open then draw() end end) end
+            poll()
+            health_timer = mp.add_periodic_timer(5, function()
+                if is_open and TABS[tab].id == "system" then poll() else health_timer:kill() health_timer = nil end
+            end)
+        end
         -- QR code de la télécommande web : pour tout ce qui demande de taper du texte
         local side = draw_qr(out, 1340, 230, 300)
         if side then
@@ -1058,8 +1143,9 @@ end
 local function open_menu()
     if is_open then return end
     is_open = true
-    -- Le menu rouvre sur le dernier onglet (rangée et carte gardées pour YouTube et Jellyfin), données relues
-    area, index, shortcut = TABS[tab].id == "follows" and "rail" or "content", 1, nil
+    -- Onglet du média en cours (recalé quand l'état arrive), rangée et carte gardées pour YouTube et Jellyfin
+    for i, t in ipairs(TABS) do if t.id == media_tab(state) then tab = i end end
+    area, index, shortcut, start_focus = "content", 1, nil, true
     media.youtube.data, media.jellyfin.data = nil, nil
     -- Relus à chaque ouverture : l'historique change, remote.py garde les rediffusions 5 min en cache
     history, history_loading, replays, rp_login, rp_row, rp_sel, rp_first = nil, false, {}, nil, 1, {}, {}
@@ -1102,6 +1188,7 @@ end
 
 local function on_key(key)
     arm_idle()
+    start_focus = false
     marquee_start = mp.get_time()
     if key == "home" then return close_menu() end
     if key == "homescreen" then
