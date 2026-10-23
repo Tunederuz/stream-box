@@ -272,10 +272,12 @@ page avec un `render(<état de /api/state>)` à la place de `refresh()`, captur�
 Façon Android TV, ouvert par le bouton Menu de la télécommande (touche Accueil) dans tous les modes : onglets à gauche
 (En direct, Réglages, Système), contenu à droite, vidéo assombrie derrière, refermé par Menu, Retour depuis les
 onglets, ou au bout de 90 s sans touche. Script séparé, chargé par `start.sh` (`--script` en second). Tant qu'il est
-ouvert (`user-data/streambox/tvmenu`), `stream-box.lua` lui transmet toutes les touches (`streambox-tvmenu-key`) ;
+ouvert (`user-data/streambox/tvmenu`, que `chat_overlay.py` suit aussi pour masquer le chat, sinon dessiné
+par-dessus), `stream-box.lua` lui transmet toutes les touches (`streambox-tvmenu-key`) ;
 il lit l'état et agit par l'API de `remote.py` (curl en sous-processus), comme la page web. Réglages : ◀ ▶ changent
-une valeur, OK bascule un interrupteur ; la résolution choisie aux flèches ne s'applique qu'à OK. Système : écran
-d'accueil, retour au stream, état du compte, extinction (OK deux fois), QR code de la télécommande web pour ce qui
+une valeur, OK bascule un interrupteur ; la résolution choisie aux flèches ne s'applique qu'à OK. En direct : raccourcis
+au-dessus des streamers (écran d'accueil, « Reprendre <streamer> » hors du stream ; ▲ depuis la première rangée).
+Système : état du compte, extinction (OK deux fois), QR code de la télécommande web pour ce qui
 demande de taper du texte. Photos : images brutes posées par `overlay-add` (au-dessus du dessin ASS, coordonnées en
 pixels de l'écran), préparées par `GET /api/tvimage?src=&w=&h=&round=` (ffmpeg : recadrage, disque à bord adouci,
 BGRA à alpha prémultiplié, cache `/tmp/stream-box-images`, seulement les serveurs d'images Twitch et YouTube).

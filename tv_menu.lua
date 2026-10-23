@@ -26,6 +26,7 @@ osd.res_x, osd.res_y, osd.z = W, H, 60             -- au-dessus du chat, des son
 local is_open = false
 local state, display, account, qr = {}, nil, nil, nil
 local tab, area, index = 1, "rail", 1              -- onglet, zone qui a le focus (rail ou content), élément
+local shortcut = nil                                -- En direct : raccourci sélectionné au-dessus des streamers
 local pending_display = nil                         -- résolution choisie aux flèches, appliquée par OK
 local poweroff_until = 0
 local idle_timer, refresh_timer
@@ -223,14 +224,6 @@ local function system_rows()
     local s = state
     local login = account and account.login
     return {
-        { label = "Écran d'accueil", hint = "Horloge, météo et prochains lives", ok = function()
-            act("home")
-            close_menu()
-        end },
-        { label = "Retour au stream", hint = s.channel and ("Relancer " .. s.channel) or nil, ok = function()
-            act("twitch")
-            close_menu()
-        end },
         { label = "Compte Twitch", value = login and ("Connecté : " .. login) or "Non connecté",
           hint = login and "Pas de pub sur les chaînes où tu es abonné" or "Se connecte depuis la télécommande du téléphone" },
         { label = "Éteindre la box",
@@ -255,6 +248,21 @@ local function selectable(rows)
 end
 
 local LIVE_COLS = 4
+
+-- Raccourcis en haut de l'onglet En direct : écran d'accueil, et retour au stream quand on n'y est pas
+local function shortcuts()
+    local list = { { label = "⌂  Écran d'accueil", current = state.mode == "home", ok = function()
+        act("home")
+        close_menu()
+    end } }
+    if state.mode ~= "twitch" and state.channel then
+        list[#list + 1] = { label = "▶  Reprendre " .. state.channel, ok = function()
+            act("twitch")
+            close_menu()
+        end }
+    end
+    return list
+end
 
 
 -- Dessin
@@ -298,15 +306,25 @@ local function draw_live(out, imgs)
         out[#out + 1] = label(460, 260, 30, "B4AFC2", "La liste est vide : ajoute des streamers depuis la télécommande web.")
         return
     end
-    local cw, ch, gap, x0, y0 = 330, 150, 26, 460, 220
-    local rows_visible = 4
-    local focus_row = area == "content" and math.floor((index - 1) / LIVE_COLS) or 0
+    local cw, ch, gap, x0, y0 = 330, 150, 26, 460, 310
+    local rows_visible = 3
+    local sx = x0
+    for i, sc in ipairs(shortcuts()) do
+        local focused = area == "content" and shortcut == i
+        local sw = 64 + #sc.label * 13
+        if focused then out[#out + 1] = rrect(sx - 5, 205, sw + 10, 74, 37, "FFFFFF", "00") end
+        out[#out + 1] = rrect(sx, 210, sw, 64, 32, sc.current and VIOLET or (focused and "3A2C4E" or "2A2034"),
+                              (focused or sc.current) and "00" or "30")
+        out[#out + 1] = label(sx + sw / 2, 242, 28, "FFFFFF", ass_escape(sc.label), 5, sc.current and "\\b1" or "")
+        sx = sx + sw + 20
+    end
+    local focus_row = area == "content" and not shortcut and math.floor((index - 1) / LIVE_COLS) or 0
     local first_row = math.max(0, focus_row - rows_visible + 1)
     for i, name in ipairs(list) do
         local row, col = math.floor((i - 1) / LIVE_COLS) - first_row, (i - 1) % LIVE_COLS
         if row >= 0 and row < rows_visible then
             local x, y = x0 + col * (cw + gap), y0 + row * (ch + gap)
-            local focused = area == "content" and i == index
+            local focused = area == "content" and not shortcut and i == index
             local info = live[name]
             local current = state.mode == "twitch" and state.channel == name
             if focused then out[#out + 1] = rrect(x - 6, y - 6, cw + 12, ch + 12, 26, "FFFFFF", "00") end
@@ -334,7 +352,7 @@ local function draw_live(out, imgs)
         end
     end
     -- Titre du live sélectionné, en entier, sous la grille
-    local name = area == "content" and list[index]
+    local name = area == "content" and not shortcut and list[index]
     local info = name and live[name]
     if info and info.title then
         out[#out + 1] = label(460, y0 + rows_visible * (ch + gap) + 20, 26, "D0C8E0",
@@ -412,7 +430,8 @@ end
 
 function draw()
     if not is_open then return end
-    local out = { rrect(0, 0, W, H, 0, "0A0612", "1C") }   -- voile sur la vidéo
+    -- Voile sur la vidéo ; opaque sans vidéo, pour cacher l'écran d'ambiance (horloge, QR code)
+    local out = { rrect(0, 0, W, H, 0, "0A0612", mp.get_property_native("video-params") and "1C" or "00") }
     out[#out + 1] = "{\\an7\\pos(0,0)\\bord0\\shad0\\1c&HFF4691&\\1a&HD8&\\blur120\\p1}m 1400 -200 l 2200 -200 2200 500 1400 500{\\p0}"
     local imgs = {}
     draw_rail(out)
@@ -459,7 +478,7 @@ end
 local function open_menu()
     if is_open then return end
     is_open = true
-    tab, area, index = 1, "content", 1
+    tab, area, index, shortcut = 1, "content", 1, nil
     -- Focus de départ : le streamer regardé
     for i, name in ipairs(state.streamers or {}) do
         if name == state.channel then index = i end
@@ -502,9 +521,9 @@ local function on_key(key)
     if area == "rail" then
         if key == "up" or key == "down" then
             tab = math.max(1, math.min(#TABS, tab + (key == "down" and 1 or -1)))
-            index = 1
+            index, shortcut = 1, nil
         elseif (key == "right" or key == "ok") and content_count() > 0 then
-            area, index = "content", 1
+            area, index, shortcut = "content", 1, nil
         elseif key == "back" then
             return close_menu()
         end
@@ -514,6 +533,19 @@ local function on_key(key)
     local id, count = TABS[tab].id, content_count()
     if key == "back" then
         area, pending_display = "rail", nil
+    elseif id == "live" and shortcut then
+        local list = shortcuts()
+        shortcut = math.min(shortcut, #list)
+        if key == "left" then
+            if shortcut == 1 then area, shortcut = "rail", nil else shortcut = shortcut - 1 end
+        elseif key == "right" then
+            shortcut = math.min(#list, shortcut + 1)
+        elseif key == "down" and count > 0 then
+            shortcut = nil
+        elseif key == "ok" then
+            list[shortcut].ok()
+            if not is_open then return end
+        end
     elseif id == "live" then
         local col = (index - 1) % LIVE_COLS
         if key == "left" then
@@ -521,7 +553,7 @@ local function on_key(key)
         elseif key == "right" then
             if col < LIVE_COLS - 1 and index < count then index = index + 1 end
         elseif key == "up" then
-            if index > LIVE_COLS then index = index - LIVE_COLS end
+            if index > LIVE_COLS then index = index - LIVE_COLS else shortcut = 1 end
         elseif key == "down" then
             if index + LIVE_COLS <= count then
                 index = index + LIVE_COLS
