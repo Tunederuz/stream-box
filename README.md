@@ -19,6 +19,8 @@ télécommande web installable sur téléphone (PWA).
 - **Télécommande web** : streamers et ordre de la liste, chat, volume, barre de lecture, résolution de la TV,
   extinction. **Télécommande Bluetooth** (testé avec celle du Xiaomi TV Stick) et menu à la souris.
 - **Session dédiée sans bureau** (compositeur cage) ; écran de connexion normal si un clavier est branché au démarrage.
+- **Home Assistant** par la découverte MQTT : contrôle depuis HA, et allumage automatique (Wake-on-LAN) quand un
+  streamer lance son live. Voir `docs/home-assistant.md`.
 - **Mises à jour hebdomadaires** de streamlink, yt-dlp et du reste, avec retour arrière si un test échoue.
 
 ## Comment c'est construit
@@ -30,7 +32,8 @@ télécommande web installable sur téléphone (PWA).
 | `chat_overlay.py` | Chat Twitch (IRC anonyme) affiché dans mpv par son IPC |
 | `remote.py` + `remote.html` | Télécommande web (bibliothèque standard Python) et sa page |
 | `display.py` | Résolution de la sortie vidéo (wlr-randr), jamais en dessous de 60 Hz |
-| `update.sh`, `systemd/` | Mises à jour, service de jetons anti-robot YouTube |
+| `mqtt_bridge.py` | Pont MQTT vers Home Assistant (découverte automatique) |
+| `update.sh`, `systemd/` | Mises à jour, jetons anti-robot YouTube, pont MQTT |
 | `setup-*.sh`, `boot-mode.py` | Installation : session dédiée, mode selon le clavier, extinction depuis la page |
 | `CLAUDE.md` | Documentation technique détaillée (décisions, pièges, comment tester) |
 
@@ -41,8 +44,9 @@ Pensé pour une distribution Arch (testé sur CachyOS) avec Plasma Login comme g
 1. Copier le dépôt dans `/home/media/stream-box` et `streamers.example.txt` en `streamers.txt` (un pseudo par ligne).
 2. Depuis le compte d'admin : `sudo bash setup-session.sh` (crée l'utilisateur `media`, installe cage, streamlink et
    la session dédiée), puis `sudo bash setup-boot-mode.sh` et `sudo bash setup-poweroff.sh`.
-3. Pour le mode vidéo : un venv `~/.local/share/media-venv` avec `yt-dlp[default] deno nodejs-wheel
-   bgutil-ytdlp-pot-provider jellyfin-mpv-shim`, et les unités de `systemd/` dans `~/.config/systemd/user/`.
+3. Pour le mode vidéo et Home Assistant : un venv `~/.local/share/media-venv` avec `yt-dlp[default] deno
+   nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt`, et les unités de `systemd/` dans
+   `~/.config/systemd/user/` (mises à jour, jetons anti-robot YouTube, pont MQTT).
 4. Pour la télécommande web en HTTPS (nécessaire à l'installation de la PWA sur Android) : un reverse proxy vers le
    port 8080.
 
