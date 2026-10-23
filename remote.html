@@ -275,6 +275,16 @@
   .stakes[hidden] { display: none; }
   .stakes button { flex: 1; min-height: 40px; font-size: 14px; }
   .stakes input { flex: 1.4; min-height: 40px; }
+  /* État de la box */
+  .health { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+  .tile { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }
+  .tile.wide { grid-column: span 2; }
+  .tile .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .tile .v { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  .tile .s { font-size: 13px; color: var(--muted); }
+  .tile.warn .v { color: #ffb44a; }
+  .tile.bad .v { color: var(--error); }
+  #update-log { font: 12px/1.5 ui-monospace, monospace; color: var(--muted); white-space: pre-wrap; margin: 8px 0 0; }
   .segmented { display: flex; gap: 4px; padding: 4px; background: rgba(0, 0, 0, .25); border: 1px solid var(--line);
                border-radius: 16px; }
   .segmented button { flex: 1; min-height: 42px; border: 0; background: transparent; color: var(--muted); font-size: 14px;
@@ -545,6 +555,13 @@
       <button data-player="mpv">mpv seul</button>
     </div>
     <div class="status" id="player-status"></div>
+    <div class="setting">État de la box</div>
+    <div class="health" id="health"></div>
+    <button id="update-now" style="width: 100%; margin-top: 10px">Mettre à jour maintenant</button>
+    <details style="margin-top: 10px">
+      <summary>Journal de la dernière mise à jour</summary>
+      <pre id="update-log"></pre>
+    </details>
   </section>
 
   <section>
@@ -1029,7 +1046,7 @@ function showTab(name) {
   $("tab-remote").hidden = name !== "remote";
   $("tab-settings").hidden = name !== "settings";
   try { localStorage.setItem("tab", name); } catch (e) { /* stockage indisponible : on oublie l'onglet */ }
-  if (name === "settings") { renderManage(); refreshDisplay(); }
+  if (name === "settings") { renderManage(); refreshDisplay(); if (typeof refreshHealth === "function") refreshHealth(); }
   if (typeof previewTick === "function") previewTick();
 }
 document.querySelectorAll(".tabs button").forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
@@ -1252,6 +1269,60 @@ $("follows-login").onclick = () => followsAction("follows_login");
 $("follows-logout").onclick = () => { if (confirm("Retirer l'autorisation des chaînes suivies ?")) followsAction("follows_logout"); };
 $("app-change").onclick = () => { followsChanging = true; refreshFollows(); };
 refreshFollows();
+
+// État de la box (Réglages → Système), relu toutes les 5 s tant que l'onglet est affiché
+let healthTimer = null;
+const bytes = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1).replace(".", ",")} Go` : `${Math.round(n / 1e6)} Mo`;
+const bits = (n) => n == null ? "…" : n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} Mbit/s` : `${Math.round(n / 1e3)} kbit/s`;
+const since = (s) => { const h = Math.floor(s / 3600), d = Math.floor(h / 24);
+  return d ? `${d} j ${h % 24} h` : h ? `${h} h ${String(Math.floor(s / 60) % 60).padStart(2, "0")}` : `${Math.floor(s / 60)} min`; };
+// « 2026-10-23 11:48:14 » ou « Mon 2026-10-26 05:07:37 CET » → « ven. 23 oct. à 11:48 »
+const frDate = (text) => {
+  const m = /(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d)/.exec(text || "");
+  if (!m) return text || "";
+  const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  return `${d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} à ${m[4]}:${m[5]}`;
+};
+async function refreshHealth() {
+  clearTimeout(healthTimer);
+  if (document.hidden || $("tab-settings").hidden) { healthTimer = setTimeout(refreshHealth, 5000); return; }
+  try {
+    const h = await (await fetch("/api/health")).json();
+    const tile = (k, v, sub = "", level = "", wide = false) => {
+      const t = Object.assign(document.createElement("div"), { className: `tile ${level} ${wide ? "wide" : ""}` });
+      t.append(Object.assign(document.createElement("div"), { className: "k", textContent: k }),
+               Object.assign(document.createElement("div"), { className: "v", textContent: v }),
+               Object.assign(document.createElement("div"), { className: "s", textContent: sub }));
+      return t;
+    };
+    const t = h.temps.cpu, used = h.memory.total - h.memory.available;
+    const p = h.player, u = h.update, ok = (v) => v === "active" ? "✓" : "✕";
+    $("health").replaceChildren(
+      tile("Température", t != null ? `${t} °C` : "–", h.temps.disk != null ? `disque ${h.temps.disk} °C` : "", t >= 85 ? "bad" : t >= 70 ? "warn" : ""),
+      tile("Processeur", h.cpu != null ? `${Math.round(h.cpu)} %` : "…", `charge ${h.load.toFixed(1).replace(".", ",")} · ${h.cores} cœurs`, h.cpu >= 85 ? "warn" : ""),
+      tile("Mémoire", bytes(used), `sur ${bytes(h.memory.total)}`, h.memory.available < 5e8 ? "warn" : ""),
+      tile("Disque", `${bytes(h.disk.free)} libres`, `sur ${bytes(h.disk.total)}`, h.disk.free < 5e9 ? "warn" : ""),
+      tile("Réseau", `↓ ${bits(h.network.rx)}`, `↑ ${bits(h.network.tx)} · ${h.network.iface || "?"}${h.network.speed > 0 ? ` à ${h.network.speed >= 1000 ? h.network.speed / 1000 + " Gbit/s" : h.network.speed + " Mbit/s"}` : ""}`),
+      tile("Allumée depuis", since(h.uptime), `services : MQTT ${ok(h.services.mqtt)} · jetons YouTube ${ok(h.services.youtube_tokens)}`,
+           h.services.mqtt !== "active" || h.services.youtube_tokens !== "active" ? "warn" : ""),
+      tile("Lecture", `${p.running === "qt" ? "Appli Qt" : "mpv seul"}${p.hwdec && p.hwdec !== "no" ? " · décodage " + p.hwdec : p.size ? " · décodage processeur" : ""}`,
+           p.size ? `${p.size.replace("x", " × ")} · ${Math.round(p.fps || 0)} im/s · ${p.dropped ?? 0} images perdues` : "rien en lecture",
+           p.size && (!p.hwdec || p.hwdec === "no") ? "warn" : "", true),
+      tile("Mises à jour", u.running ? "En cours…" : u.last ? `${u.last.ok ? "✓" : "✕"} ${frDate(u.last.date)}` : "jamais",
+           u.next ? `prochaine : ${frDate(u.next)}` : "", u.last && !u.last.ok ? "bad" : "", true),
+    );
+    $("update-now").disabled = u.running;
+    $("update-now").textContent = u.running ? "Mise à jour en cours…" : "Mettre à jour maintenant";
+    $("update-log").textContent = u.last ? u.last.lines.join("\n") : "Aucune mise à jour enregistrée.";
+  } catch (e) { /* la page affiche déjà l'état de la box */ }
+  healthTimer = setTimeout(refreshHealth, 5000);
+}
+$("update-now").onclick = async () => {
+  $("update-now").disabled = true;
+  await send("update");
+  setTimeout(refreshHealth, 1500);
+};
+refreshHealth();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});   // HTTPS seulement
 refresh();
 </script>

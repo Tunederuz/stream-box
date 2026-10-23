@@ -33,7 +33,8 @@ télécommande web installable sur téléphone (PWA).
 - **Session dédiée sans bureau** (compositeur cage) ; écran de connexion normal si un clavier est branché au démarrage.
 - **Home Assistant** par la découverte MQTT : contrôle depuis HA, et allumage automatique (Wake-on-LAN) quand un
   streamer lance son live. Voir `docs/home-assistant.md`.
-- **Mises à jour hebdomadaires** de streamlink, yt-dlp et du reste, avec retour arrière si un test échoue.
+- **Mises à jour hebdomadaires** de streamlink, yt-dlp et du reste, avec retour arrière si un test échoue. État de la box
+  (températures, réseau, lecture, services) et mise à jour à la demande dans la télécommande web.
 
 ## Comment c'est construit
 
