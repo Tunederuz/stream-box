@@ -7,6 +7,7 @@ Item {
     id: root
     property bool active: false
     property real radius: 22
+    property color glow: "#9146ff"   // violet ; rouge sur l'onglet YouTube
     anchors.fill: parent
     opacity: active ? 1 : 0
     visible: opacity > 0
@@ -17,7 +18,7 @@ Item {
         radius: root.radius
         blur: 42
         spread: 4
-        color: "#9146ff"
+        color: root.glow
         opacity: 0.9
     }
     Rectangle {
