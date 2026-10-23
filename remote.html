@@ -14,9 +14,14 @@
 <title>Stream Box</title>
 <style>
   :root {
-    --bg: #0b0a10; --surface: rgba(255, 255, 255, .045); --surface-2: rgba(255, 255, 255, .07);
-    --surface-3: rgba(255, 255, 255, .11); --line: rgba(255, 255, 255, .08);
-    --text: #f3f1f8; --muted: #a9a5b8; --faint: #6f6b7e;
+    --bg: #0a0812; --surface: rgba(255, 255, 255, .07); --surface-2: rgba(255, 255, 255, .08);
+    --surface-3: rgba(255, 255, 255, .16); --line: rgba(255, 255, 255, .12);
+    --text: #f6f4fb; --muted: #c2bdd3; --faint: #8a85a0;
+    /* Verre : fond translucide flouté, reflet en haut, bord clair, ombre portée */
+    --glass: linear-gradient(160deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, .04) 60%);
+    --glass-edge: rgba(255, 255, 255, .16);
+    --glass-blur: blur(22px) saturate(170%);
+    --glass-shadow: 0 10px 34px rgba(5, 0, 20, .35), inset 0 1px 0 rgba(255, 255, 255, .18);
     --accent: #9146ff; --accent-2: #b67bff; --live: #ff4f5e; --error: #ff6b6b;
     --grad: linear-gradient(135deg, #8a3ffc 0%, #b062ff 100%);
     --radius: 20px; --radius-sm: 14px;
@@ -27,12 +32,29 @@
     margin: 0; color: var(--text); min-height: 100vh;
     font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     padding: max(14px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom));
-    background:
-      radial-gradient(120% 60% at 0% -10%, rgba(145, 70, 255, .30), transparent 60%),
-      radial-gradient(90% 50% at 110% 0%, rgba(255, 79, 94, .12), transparent 60%),
-      var(--bg);
-    background-attachment: fixed;
   }
+  /* Taches de couleur qui dérivent lentement derrière le verre : sans elles, il n'y a rien à flouter. Le fond de la
+     page est sur html : celui de body passerait par-dessus les pseudo-éléments en z-index négatif. */
+  body::before, body::after {
+    content: ""; position: fixed; inset: -20%; z-index: -1; pointer-events: none;
+  }
+  body::before {
+    background:
+      radial-gradient(45% 32% at 15% 10%, rgba(138, 63, 252, .85), transparent 72%),
+      radial-gradient(42% 30% at 92% 35%, rgba(43, 107, 255, .60), transparent 72%),
+      radial-gradient(44% 30% at 15% 68%, rgba(255, 63, 142, .55), transparent 72%);
+    animation: drift-a 28s ease-in-out infinite alternate;
+  }
+  body::after {
+    background:
+      radial-gradient(42% 30% at 80% 88%, rgba(176, 98, 255, .65), transparent 72%),
+      radial-gradient(36% 24% at 62% 4%, rgba(255, 79, 94, .40), transparent 72%),
+      radial-gradient(36% 26% at 50% 48%, rgba(80, 60, 255, .35), transparent 72%);
+    animation: drift-b 36s ease-in-out infinite alternate;
+  }
+  @keyframes drift-a { to { transform: translate(6%, 8%) rotate(8deg); } }
+  @keyframes drift-b { to { transform: translate(-7%, -6%) rotate(-10deg); } }
+  @media (prefers-reduced-motion: reduce) { body::before, body::after { animation: none; } }
   main { max-width: 520px; margin: 0 auto; display: grid; gap: 14px; }
   svg { flex: 0 0 auto; }
 
@@ -52,17 +74,20 @@
   .power:active { color: var(--error); }
 
   /* Onglets : contrôle segmenté */
-  .tabs { display: flex; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--line);
-          border-radius: 16px; }
-  .tabs button { flex: 1; min-height: 42px; background: transparent; border: 0; color: var(--muted); font-weight: 600; }
+  /* Onglets collés en haut pendant le défilement, en verre comme les cartes */
+  .tabs { display: flex; gap: 4px; padding: 4px; border-radius: 18px; position: sticky; z-index: 5;
+          top: max(8px, env(safe-area-inset-top)); }
+  .tabs button { flex: 1; min-height: 42px; background: transparent; border: 0; color: var(--muted); font-weight: 600;
+                 box-shadow: none; }
   .tabs button[aria-selected="true"] { background: var(--grad); color: #fff; box-shadow: 0 4px 14px rgba(145, 70, 255, .35); }
   .tab { display: grid; gap: 14px; }
   .tab[hidden] { display: none; }
 
-  section {
-    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px;
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  section, .tabs, #status {
+    background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
   }
+  section { border-radius: var(--radius); padding: 16px; }
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 0 0 12px;
        font-weight: 700; display: flex; align-items: center; gap: 8px; }
   h2 svg { color: var(--accent-2); }
@@ -73,6 +98,7 @@
 
   button {
     font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--line);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
     border-radius: var(--radius-sm); min-height: 52px; padding: 8px 12px; cursor: pointer; overflow-wrap: anywhere;
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
     transition: transform .12s ease, background-color .15s ease;
@@ -81,7 +107,7 @@
   button:disabled { opacity: .4; }
   button.current { background: var(--grad); border-color: transparent; font-weight: 600;
                    box-shadow: 0 6px 18px rgba(145, 70, 255, .30); }
-  button.ghost { background: transparent; }
+  button.ghost { background: transparent; border-color: transparent; box-shadow: none; }
   .icon-alt { display: none; }
   .on > .icon-main { display: none; }
   .on > .icon-alt { display: inline; }
@@ -109,13 +135,14 @@
   .hero-media::after { content: ""; position: absolute; inset: 0;
                        background: linear-gradient(180deg, transparent 45%, rgba(11, 10, 16, .92)); }
   .hero-media .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255, 255, 255, .35); }
+  .hero-media .placeholder[hidden] { display: none; }
   .badge { position: absolute; top: 12px; left: 12px; z-index: 1; font-size: 12px; font-weight: 700;
            letter-spacing: .06em; padding: 4px 9px; border-radius: 8px; background: rgba(0, 0, 0, .55); color: #fff;
            backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
   .badge.live { background: var(--live); }
   .hero-info { position: relative; z-index: 1; margin-top: -54px; padding: 0 16px; display: flex; align-items: flex-end;
                gap: 12px; }
-  .hero-info .avatar { width: 56px; height: 56px; border: 3px solid var(--bg); }
+  .hero-info .avatar { width: 56px; height: 56px; border: 2px solid rgba(255, 255, 255, .35); }
   .hero-name { font-size: 20px; font-weight: 700; line-height: 1.2; }
   .hero-meta { font-size: 13px; color: var(--muted); }
   .hero-title { color: var(--text); font-size: 14px; margin: 10px 16px 0; display: -webkit-box; -webkit-line-clamp: 2;
@@ -159,8 +186,7 @@
   /* Message général (erreurs, extinction) : bulle en bas de l'écran */
   #status { position: fixed; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); z-index: 10;
             max-width: 488px; margin: 0 auto; padding: 12px 16px; border-radius: 14px; text-align: center;
-            background: rgba(30, 26, 40, .92); border: 1px solid var(--line); color: var(--text);
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0, 0, 0, .4); }
+            background: rgba(30, 22, 48, .72); color: var(--text); }
   #status.error { color: #ffd0d0; border-color: rgba(255, 107, 107, .4); }
   #status:empty { display: none; }
 
@@ -194,7 +220,8 @@
   .manage-row .avatar { width: 34px; height: 34px; font-size: 14px; }
   .manage-row .name { flex: 1; font-weight: 500; }
   .manage-row .rank { color: var(--faint); font-variant-numeric: tabular-nums; width: 18px; text-align: right; }
-  .manage-row button { min-height: 40px; width: 40px; padding: 0; background: transparent; border: 0; color: var(--muted); }
+  .manage-row button { min-height: 40px; width: 40px; padding: 0; background: transparent; border: 0; color: var(--muted);
+                       box-shadow: none; }
   .manage-row button:active { color: var(--error); }
   #manage-list { margin-top: 10px; }
 
@@ -237,7 +264,8 @@
   .stepper { justify-content: space-between; }
   .segmented { display: flex; gap: 4px; padding: 4px; background: rgba(0, 0, 0, .25); border: 1px solid var(--line);
                border-radius: 16px; }
-  .segmented button { flex: 1; min-height: 42px; border: 0; background: transparent; color: var(--muted); font-size: 14px; }
+  .segmented button { flex: 1; min-height: 42px; border: 0; background: transparent; color: var(--muted); font-size: 14px;
+                      box-shadow: none; }
   .segmented button.current { color: #fff; background: var(--grad); box-shadow: 0 4px 14px rgba(145, 70, 255, .35); }
 </style>
 </head>
