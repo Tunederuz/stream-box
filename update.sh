@@ -31,6 +31,9 @@ update() {
 # Vidéo YouTube de 19 s, stable depuis 2005 ; streamlink doit au moins reconnaître une URL Twitch
 update streamlink-venv streamlink \
   "$HOME/.local/bin/streamlink --can-handle-url https://www.twitch.tv/twitch"
+# Appli Qt qui embarque mpv (ui.py) : Qt et python-mpv doivent se charger, et libmpv être trouvée
+[ -x "$HOME/.local/share/ui-venv/bin/pip" ] && update ui-venv "PySide6-Essentials python-mpv" \
+  "$HOME/.local/share/ui-venv/bin/python -c 'import mpv; from PySide6 import QtQuick'"
 update media-venv "yt-dlp[default] deno nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt segno" \
   "$HOME/.local/bin/yt-dlp --simulate --no-warnings https://www.youtube.com/watch?v=jNQXAC9IVRw && $HOME/.local/bin/jellyfin-mpv-shim --version"
 
