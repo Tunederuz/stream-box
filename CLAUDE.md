@@ -337,3 +337,24 @@ chat, Jellyfin, Home Assistant marchent comme avant. Points délicats, vérifié
   streamlink sur un autre port.
 Changer de lecteur sans redémarrer la box : écrire le fichier puis `quit` par l'IPC (la boucle relance). Un nouveau
 `start.sh`/`player.sh` ne s'applique qu'au démarrage suivant de la session (bash garde le script lu en mémoire).
+
+### Grand menu en QML (qml/TvMenu.qml)
+
+Avec l'appli Qt, le grand menu est en QML (rendu par la puce graphique, animations : fondu à l'ouverture, pastille
+d'onglet qui glisse, contenu qui arrive en glissant, cartes qui grossissent avec un halo flou, défilement doux des
+grilles et rangées, interrupteurs animés, fenêtre d'actions qui rebondit). `ui.py` ne charge alors pas `tv_menu.lua`
+(deux menus répondraient), qui reste le menu de secours en mode mpv seul ou si le QML ne se charge pas. Ouverture :
+`streambox-tvmenu-open` de stream-box.lua intercepté par python-mpv (`register_message_handler`). Touches : tant que le
+menu est ouvert, `View.keyPressEvent` les donne au QML (`box.keyPressed`, rôles de `MENU_KEYS` : up, ok, back, home…)
+au lieu de mpv (le volume reste à mpv) ; une touche envoyée par l'IPC (`keypress` → stream-box.lua →
+`streambox-tvmenu-key`) arrive au même endroit, ce qui sert aux tests. `box.setMenuOpen` écrit un vrai booléen dans
+`user-data/streambox/tvmenu` (`MPV_FORMAT_FLAG` : python-mpv écrirait la chaîne « yes ») pour le chat et la souris.
+Données et actions : `XMLHttpRequest` vers l'API de remote.py ; photos et miniatures chargées directement depuis
+Twitch / YouTube par Qt et arrondies par `MultiEffect` (plus besoin de `/api/tvimage`) ; météo et QR code par
+`box.ambient` (propriété observée), voile opaque sans vidéo (`box.videoActive`). Composants : `RoundImage`,
+`Marquee` (texte coupé au repos, deux copies qui défilent au focus), `FocusFrame`, `StreamerCard`, `VideoCard`,
+`SettingRow`, `QrCode`, `fmt.js`. Pièges : tailles de police ×0,78 par rapport au menu ASS (Qt dessine plus grand pour
+la même valeur) ; dans `onTabChanged`, lire `tabs[tab].id` et pas `tabId` (liaison pas encore recalculée) ; listes
+avec `clip` : marges (`leftMargin`, `topMargin`) pour ne pas couper le halo du focus ; modèles en nombre d'éléments
+(les délégués lisent les tableaux) pour que la liste ne se réinitialise pas à chaque relevé de l'état. Tester sans
+télécommande : `keypress HOMEPAGE`, `keypress DOWN`… par l'IPC, captures par `grim`.

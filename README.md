@@ -39,6 +39,7 @@ télécommande web installable sur téléphone (PWA).
 | `stream-box.lua` | Script mpv : streamlink, menu, modes Twitch / vidéo, différé, barre de lecture, touches |
 | `tv_menu.lua` | Grand menu de la TV façon Android TV (bouton Menu de la télécommande) |
 | `ui.py`, `ui.qml`, `player.sh` | Appli Qt Quick qui embarque mpv (libmpv), et boucle du lecteur (Qt ou mpv seul) |
+| `qml/` | Grand menu de la TV en QML (animé, rendu par la puce graphique) |
 | `chat_overlay.py` | Chat Twitch (IRC anonyme) affiché dans mpv par son IPC |
 | `remote.py` + `remote.html` | Télécommande web (bibliothèque standard Python) et sa page |
 | `display.py` | Résolution de la sortie vidéo (wlr-randr), jamais en dessous de 60 Hz |
