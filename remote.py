@@ -584,11 +584,11 @@ def set_player(mode):
 
 
 def state():
-    user, volume, mute, pause, video, title, position, duration, tracks, cache, vo = mpv(
+    user, volume, mute, pause, video, title, position, duration, tracks, cache, vo, path = mpv(
         ["get_property", "user-data/streambox"], ["get_property", "volume"], ["get_property", "mute"],
         ["get_property", "pause"], ["get_property", "video-params"], ["get_property", "media-title"],
         ["get_property", "time-pos"], ["get_property", "duration"], ["get_property", "track-list"],
-        ["get_property", "demuxer-cache-state"], ["get_property", "current-vo"])
+        ["get_property", "demuxer-cache-state"], ["get_property", "current-vo"], ["get_property", "path"])
     user = user or {}
     media = user.get("mode") == "media"
     # Direct : retard par rapport au bout de ce qui est gardé en mémoire (0 = en direct)
@@ -607,6 +607,8 @@ def state():
         "volume": round(volume or 0), "mute": bool(mute), "pause": bool(pause), "playing": bool(video),
         "live": live_now, "mode": user.get("mode", "twitch"), "delay": delay, "title": title if media else None,
         "position": position if media else None, "duration": duration if media else None,
+        # Type de la vidéo en cours (youtube, jellyfin, twitch-vod…) : le menu de la TV s'ouvre sur l'onglet qui va avec
+        "media_kind": media_key(path)[1] if media and path else None,
         "subs": [{"id": t["id"], "name": t.get("title") or t.get("lang") or f"Piste {t['id']}",
                   "selected": bool(t.get("selected"))}
                  for t in (tracks or []) if t.get("type") == "sub"] if media else [],

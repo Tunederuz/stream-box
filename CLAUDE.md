@@ -525,8 +525,9 @@ sous-titres suivants (comme avant).
 Réglages « Taille des sous-titres » (`sub_size`, 50–200 %, → `sub-scale`) et « Fond des sous-titres » (`sub_bg`,
 0–100 % : bandeau noir `sub-border-style=background-box` + `sub-back-color` #AA000000, 0 = contour habituel) : NUMBERS
 de stream-box.lua (`apply_sub_style`), `POST /api/set`, onglet Réglages de la TV et section Sous-titres de la page.
-Le menu QML rouvre sur le dernier onglet (`open()` ne remet plus `tab` à 0 ; données relues par `loadTab`, rangée et
-carte gardées pour YouTube et Jellyfin ; Suivis s'ouvre sur le rail). mpv gardant la pause d'un fichier à l'autre,
+Les deux menus s'ouvrent sur l'onglet du média en cours (`mediaTab` / `media_tab`, d'après `mode` et `media_kind` de
+/api/state : direct → En direct, YouTube, Jellyfin, rediffusion ou clip → Rediffusions, autre lien → Historique),
+recalé quand l'état arrive tant qu'aucune touche n'a été pressée ; YouTube et Jellyfin gardent rangée et carte. mpv gardant la pause d'un fichier à l'autre,
 `play_media` et `start_channel` la retirent.
 Fond du menu : deux lueurs floues (RectangularShadow, pas de forme nette) de la couleur de l'onglet, en haut à droite
 (`pal.glow`) et en bas (`pal.glowLow`), sur tous les thèmes ; presque invisibles en neutre.
@@ -534,4 +535,4 @@ Menu Lua (mpv seul, tv_menu.lua) : onglets YouTube et Jellyfin (rangées de cart
 pas de recherche, faute de clavier : elle passe par la page), réglages des sous-titres, onglet gardé à la
 réouverture. Tailles de texte ×1,2 (`FONT`) pour le même aspect que l'appli Qt. `/api/tvimage` accepte aussi les
 images du serveur Jellyfin.
-
+Onglet Système du menu Lua : ligne « Mettre à jour maintenant » et tuiles d'état (`draw_health`, /api/health toutes les 5 s).
