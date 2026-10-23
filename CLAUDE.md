@@ -374,3 +374,25 @@ Halo du focus : `RectangularShadow` (QtQuick.Effects), sous l'élément. Grilles
 halo) : les éléments hors de la zone visible s'effacent en fondu (`rel` = position moins `contentX`/`contentY`).
 Marges des vues seulement dans le sens du défilement (`topMargin` d'une rangée horizontale, `leftMargin` d'une grille
 verticale) : Qt remet l'autre axe à zéro au premier `positionViewAtIndex`, et la rangée sautait sur le texte voisin.
+
+### Deux streams à la fois (appli Qt)
+
+Second lecteur libmpv (`pip_player` dans ui.py, son coupé, petit tampon de direct, pas d'interface) avec son propre
+streamlink (port `PIP_PORT` 34590 ; 720p en incrustation, meilleure qualité côte à côte), dessiné par un second
+`MpvVideo { which: "pip" }`. Dispositions dans ui.qml : `pip` (30 % de l'écran, en haut, du côté opposé au chat s'il
+est en haut à droite, ombre et liseré) et `split` (deux moitiés). Les vidéos gardent leur taille de rendu et sont
+réduites par `scale` : transitions animées sans recréer les tampons d'image. Commandes : menu QML (Menu ≡ sur une carte
+En direct ou Suivis en live : En incrustation, Côte à côte ; raccourcis Inverser, Côte à côte/Incrustation, Fermer),
+page web (barre « Second stream » quand il est actif), `POST /api/pip {action: open|close|swap|layout, name, layout}` →
+script-message `streambox-pip` → classe `Pip` de ui.py. État dans `user-data/streambox/pip` et `/api/state` (`pip`).
+Inverser = la chaîne du second passe en principal (`streambox-channel`) et inversement, donc le son suit. Le second se
+ferme seul si le principal passe en écran d'accueil, en vidéo, ou sur la même chaîne. Charge mesurée : ~66 % d'un cœur
+pour les deux (1080p60 + 720p60, décodage vaapi).
+
+### Choix du lecteur
+
+Réglages → Affichage → Lecteur (page web, menu QML et menu Lua) : `POST /api/player {mode: qt|mpv}` écrit
+`~/.config/stream-box/player` et quitte le lecteur ; la boucle de player.sh relance le bon. `/api/state` donne `player`
+(choisi) et `player_running` (`qt` si `current-vo` vaut `libmpv`) : la page signale un retour automatique à mpv.
+player.sh oublie les échecs de l'appli Qt quand le fichier est réécrit (date de modification), ce qui permet de la
+réessayer sans redémarrer.

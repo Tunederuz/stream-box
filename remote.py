@@ -487,12 +487,33 @@ def preview():
         return data
 
 
+PLAYER_FILE = os.path.join(COOKIES_DIR, "player")   # « qt » : appli Qt qui embarque mpv (voir player.sh)
+
+
+def player_choice():
+    try:
+        with open(PLAYER_FILE, encoding="utf-8") as f:
+            return "qt" if f.readline().strip() == "qt" else "mpv"
+    except OSError:
+        return "mpv"
+
+
+def set_player(mode):
+    """Choix du lecteur, appliqué tout de suite : on quitte le lecteur, la boucle de player.sh relance le bon"""
+    if mode not in ("qt", "mpv"):
+        raise ValueError("lecteur inconnu")
+    os.makedirs(COOKIES_DIR, mode=0o700, exist_ok=True)
+    with open(PLAYER_FILE, "w", encoding="utf-8") as f:
+        f.write(mode + "\n")
+    mpv(["quit"])
+
+
 def state():
-    user, volume, mute, pause, video, title, position, duration, tracks, cache = mpv(
+    user, volume, mute, pause, video, title, position, duration, tracks, cache, vo = mpv(
         ["get_property", "user-data/streambox"], ["get_property", "volume"], ["get_property", "mute"],
         ["get_property", "pause"], ["get_property", "video-params"], ["get_property", "media-title"],
         ["get_property", "time-pos"], ["get_property", "duration"], ["get_property", "track-list"],
-        ["get_property", "demuxer-cache-state"])
+        ["get_property", "demuxer-cache-state"], ["get_property", "current-vo"])
     user = user or {}
     media = user.get("mode") == "media"
     # Direct : retard par rapport au bout de ce qui est gardé en mémoire (0 = en direct)
@@ -504,6 +525,9 @@ def state():
         "chat_bg": user.get("chat_bg", 60), "chat_size": user.get("chat_size", 32),
         "auto_switch": user.get("auto_switch", True), "night": user.get("night", False),
         "events": user.get("events", True), "qr": user.get("qr", "always"),
+        # Lecteur choisi, et celui qui tourne vraiment (mpv seul après plusieurs plantages de l'appli Qt)
+        "player": player_choice(), "player_running": "qt" if vo == "libmpv" else "mpv",
+        "pip": user.get("pip") or {"channel": "", "layout": ""},
         "volume": round(volume or 0), "mute": bool(mute), "pause": bool(pause), "playing": bool(video),
         "live": live_now, "mode": user.get("mode", "twitch"), "delay": delay, "title": title if media else None,
         "position": position if media else None, "duration": duration if media else None,
@@ -1140,6 +1164,17 @@ def action(name, body):
         if body.get("key") not in ("night", "events"):
             raise ValueError("réglage inconnu")
         mpv(["script-message", "streambox-flag", body["key"], "yes" if body.get("enabled") else "no"])
+    elif name == "pip":
+        # Second stream (appli Qt) : open <chaîne> [pip|split], close, swap, layout <pip|split>
+        action = str(body.get("action", ""))
+        if action not in ("open", "close", "swap", "layout"):
+            raise ValueError("action inconnue")
+        login = str(body.get("name", "")).strip().lower()
+        if action == "open" and not re.fullmatch(r"[a-z0-9_]{2,25}", login):
+            raise ValueError("chaîne invalide")
+        mpv(["script-message", "streambox-pip", action, login, str(body.get("layout", "pip"))])
+    elif name == "player":
+        set_player(str(body.get("mode", "")))
     elif name == "qr":
         # Affichage du QR code de la télécommande sur la TV
         if body.get("mode") not in ("always", "timed", "never"):

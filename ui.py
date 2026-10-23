@@ -7,13 +7,18 @@ lecteur garde tout ce qu'il faisait : mêmes options que la ligne de commande de
 start.sh), scripts Lua, socket IPC (télécommande web, Jellyfin, Home Assistant). Les touches et la souris reçues par la
 fenêtre sont transmises à mpv (keypress, mouse), là où stream-box.lua les attend.
 
+Deux streams à la fois : un second lecteur libmpv (pip_player) avec son propre streamlink, dessiné en incrustation dans
+un coin ou côte à côte avec le principal (ui.qml, transitions animées). Commandé par le menu QML (objet « pip ») et par
+l'IPC (script-message streambox-pip <open|close|swap|layout> [chaîne] [pip|split], /api/pip de remote.py) ; état publié
+dans user-data/streambox/pip. Son coupé : le son est celui du stream principal (Inverser échange les deux).
+
 Le grand menu de la TV est en QML (qml/TvMenu.qml) : quand il se charge, tv_menu.lua n'est pas chargé ; le bouton Menu
 (script-message streambox-tvmenu-open de stream-box.lua) l'ouvre, et tant qu'il est ouvert les touches lui vont, pas à
 mpv. Il lit et agit par l'API de remote.py, comme la page web.
 
 Lancé avec le Python du venv ui-venv (PySide6, python-mpv) : ui.py --input-ipc-server=… --script=… <autres options>
 """
-import ctypes, faulthandler, json, locale, os, queue, signal, sys, threading
+import ctypes, faulthandler, json, locale, os, queue, re, signal, subprocess, sys, threading
 
 from PySide6.QtCore import Property, QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QCursor, QGuiApplication
@@ -194,8 +199,9 @@ def egl_get_proc_address():
 
 
 class MpvRenderer(QQuickFramebufferObject.Renderer):
-    def __init__(self):
+    def __init__(self, item):
         super().__init__()
+        self.item = item
         self.ctx = None
         self.proc = egl_get_proc_address()   # gardé : mpv l'appelle depuis le C
 
@@ -205,9 +211,11 @@ class MpvRenderer(QQuickFramebufferObject.Renderer):
             display = wayland_display()
             if display:
                 params["wl_display"] = ctypes.c_void_p(display)
-            self.ctx = mpv.MpvRenderContext(player, "opengl", **params)
-            self.ctx.update_cb = bridge.frame.emit
-            bridge.ready.emit()
+            main = self.item.which != "pip"
+            self.ctx = mpv.MpvRenderContext(player if main else pip_player, "opengl", **params)
+            self.ctx.update_cb = self.item.frameReady.emit
+            if main:
+                bridge.ready.emit()
         fbo = QOpenGLFramebufferObject(size)
         framebuffers.append(fbo)
         return fbo
@@ -223,12 +231,134 @@ class MpvRenderer(QQuickFramebufferObject.Renderer):
 
 
 class MpvVideo(QQuickFramebufferObject):
+    """Vidéo d'un lecteur libmpv : which = « main » (par défaut) ou « pip » (second stream)"""
+    frameReady = Signal()   # depuis mpv, n'importe quel fil
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        bridge.frame.connect(self.update, Qt.QueuedConnection)
+        self._which = "main"
+        self.frameReady.connect(self.update, Qt.QueuedConnection)
+
+    def _get_which(self):
+        return self._which
+
+    def _set_which(self, value):
+        self._which = value
+
+    which = Property(str, _get_which, _set_which)
 
     def createRenderer(self):
-        return MpvRenderer()
+        return MpvRenderer(self)
+
+
+PIP_PORT = 34590   # streamlink du second stream (le principal prend 34501 à 34550, voir stream-box.lua)
+pip_player = None  # second lecteur libmpv, créé dans main()
+
+
+def set_node(name, value):
+    """Valeur structurée (dict) dans une propriété mpv du lecteur principal"""
+    player._set_property(name, value)
+
+
+class Pip(QObject):
+    """Second stream : streamlink à part, lecteur pip_player, disposition « pip » (incrustation) ou « split »"""
+    changed = Signal()
+    _request = Signal(str, str, str)   # depuis le fil de mpv (IPC) : action, chaîne, disposition
+    _main = Signal(str, str, str)      # chaîne, mode et coin du chat du lecteur principal
+    _idle = Signal()                   # le second lecteur n'a plus rien à lire
+
+    def __init__(self):
+        super().__init__()
+        self._channel, self._layout, self._corner = "", "", "bl"
+        self.main_channel, self.main_mode, self.proc = "", "", None
+        self.retry = QTimer(self, singleShot=True, interval=3000)
+        self.retry.timeout.connect(self.load)
+        self._request.connect(self.handle, Qt.QueuedConnection)
+        self._main.connect(self.on_main, Qt.QueuedConnection)
+        self._idle.connect(lambda: self._channel and not self.retry.isActive() and self.retry.start(3000),
+                           Qt.QueuedConnection)
+
+    channel = Property(str, lambda self: self._channel, notify=changed)
+    layout = Property(str, lambda self: self._layout, notify=changed)
+    chatCorner = Property(str, lambda self: self._corner, notify=changed)
+
+    def handle(self, action, name, layout):
+        if action == "open":
+            self.open(name, layout)
+        elif action == "close":
+            self.close()
+        elif action == "swap":
+            self.swap()
+        elif action == "layout":
+            self.setLayout(layout)
+
+    @Slot(str, str)
+    def open(self, name, layout):
+        name = (name or "").strip().lower()
+        if not re.fullmatch(r"[a-z0-9_]{2,25}", name) or name == self.main_channel or self.main_mode != "twitch":
+            return
+        self.stop_stream()
+        self._channel, self._layout = name, layout if layout in ("pip", "split") else "pip"
+        # En incrustation, 720p suffit et ménage le réseau ; côte à côte, la meilleure qualité
+        quality = "best" if self._layout == "split" else "720p60,720p,best"
+        self.proc = subprocess.Popen(
+            ["streamlink", "--twitch-low-latency", "--retry-streams", "30", "--player-external-http",
+             "--player-external-http-interface", "127.0.0.1", "--player-external-http-port", str(PIP_PORT),
+             f"twitch.tv/{name}", quality], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.retry.start(2500)   # le temps que streamlink ouvre son serveur
+        self.publish()
+
+    def load(self):
+        if self._channel:
+            to_mpv(pip_player.command, "loadfile", f"http://127.0.0.1:{PIP_PORT}/")
+
+    def stop_stream(self):
+        self.retry.stop()
+        if self.proc:
+            self.proc.terminate()
+            self.proc = None
+        to_mpv(pip_player.command, "stop")
+
+    @Slot()
+    def close(self):
+        if not self._channel:
+            return
+        self.stop_stream()
+        self._channel, self._layout = "", ""
+        self.publish()
+
+    @Slot()
+    def swap(self):
+        """Échange les deux streams (et donc le son)"""
+        if not self._channel or not self.main_channel:
+            return
+        new_main, new_pip, layout = self._channel, self.main_channel, self._layout
+        self.close()
+        self.main_channel = new_main
+        to_mpv(player.command, "script-message", "streambox-channel", new_main)
+        self.open(new_pip, layout)
+
+    @Slot(str)
+    def setLayout(self, layout):
+        if self._channel and layout in ("pip", "split") and layout != self._layout:
+            self._layout = layout
+            self.publish()
+
+    def on_main(self, channel, mode, corner):
+        self.main_channel, self.main_mode = channel, mode
+        if corner != self._corner:
+            self._corner = corner
+            self.changed.emit()
+        # Écran d'accueil, vidéo, ou même streamer que le second : le second stream n'a plus lieu d'être
+        if self._channel and (mode != "twitch" or channel == self._channel):
+            self.close()
+
+    def publish(self):
+        self.changed.emit()
+        to_mpv(set_node, "user-data/streambox/pip", {"channel": self._channel, "layout": self._layout})
+
+
+pip = Pip()
 
 
 class View(QQuickView):
@@ -286,6 +416,7 @@ def main():
     qmlRegisterType(MpvVideo, "StreamBox", 1, 0, "MpvVideo")
     view = View()
     view.rootContext().setContextProperty("box", box)
+    view.rootContext().setContextProperty("pip", pip)
     view.setSource(QUrl.fromLocalFile(os.path.join(DIR, "ui.qml")))
     qml_menu = view.status() == QQuickView.Ready and view.rootObject().findChild(QObject, "tvMenu") is not None
     if not qml_menu:
@@ -296,6 +427,26 @@ def main():
     if scripts:
         opts["scripts"] = ":".join(scripts)
     player = mpv.MPV(vo="libmpv", **{k.replace("-", "_"): v for k, v in opts.items()})
+    global pip_player
+    # Second stream : direct à faible latence comme le principal (petit tampon), sans son ni interface
+    pip_player = mpv.MPV(vo="libmpv", hwdec=opts.get("hwdec", "auto-safe"), mute="yes", idle="yes", ytdl="no",
+                         osd_level="0", input_default_bindings="no", cache="yes", demuxer_max_bytes="750KiB",
+                         demuxer_max_back_bytes="0")
+    pip_player.observe_property("idle-active", lambda _n, v: v and pip._idle.emit())
+    main_state = {"channel": "", "mode": "", "corner": "bl"}
+
+    def follow(key):
+        def cb(_name, value):
+            main_state[key] = value if isinstance(value, str) else ""
+            pip._main.emit(main_state["channel"], main_state["mode"], main_state["corner"] or "bl")
+        return cb
+    for key in ("channel", "mode", "corner"):
+        player.observe_property(f"user-data/streambox/{key}", follow(key))
+
+    def dec(v):
+        return v.decode() if isinstance(v, bytes) else (v or "")
+    player.register_message_handler(
+        "streambox-pip", lambda action=b"", name=b"", layout=b"", *_: pip._request.emit(dec(action), dec(name), dec(layout)))
     if qml_menu:
         player.register_message_handler("streambox-tvmenu-open", lambda *_: box.openRequested.emit())
         # Touches envoyées par l'IPC (keypress → stream-box.lua → streambox-tvmenu-key) : tests, Home Assistant

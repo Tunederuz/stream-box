@@ -347,6 +347,14 @@
     <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
       <circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Streamers</h2>
+    <div id="pip-bar" class="stack" hidden style="margin-bottom: 8px">
+      <p id="pip-label" style="margin: 0"></p>
+      <div class="row">
+        <button id="pip-swap">Inverser</button>
+        <button id="pip-layout">Côte à côte</button>
+        <button id="pip-close">Fermer</button>
+      </div>
+    </div>
     <button data-action="home" id="home">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
@@ -499,6 +507,12 @@
       <button data-qr="timed">30 secondes</button>
       <button data-qr="never">Jamais</button>
     </div>
+    <div class="setting">Lecteur</div>
+    <div class="segmented" id="player-modes">
+      <button data-player="qt">Appli Qt (menu animé)</button>
+      <button data-player="mpv">mpv seul</button>
+    </div>
+    <div class="status" id="player-status"></div>
   </section>
 
   <section>
@@ -691,6 +705,15 @@ function render(s) {
   setToggle("auto-switch", s.auto_switch);
   setToggle("night", s.night);
   setToggle("events", s.events);
+  document.querySelectorAll("[data-player]").forEach(b => b.classList.toggle("current", b.dataset.player === s.player));
+  $("player-status").textContent = s.player === "qt" && s.player_running === "mpv"
+    ? "L'appli Qt s'est arrêtée plusieurs fois : mpv seul en attendant. Choisis à nouveau « Appli Qt » pour réessayer." : "";
+  const pipOn = !!(s.pip && s.pip.channel);
+  $("pip-bar").hidden = !pipOn;
+  if (pipOn) {
+    $("pip-label").textContent = `Second stream : ${s.pip.channel}`;
+    $("pip-layout").textContent = s.pip.layout === "split" ? "Incrustation" : "Côte à côte";
+  }
   document.querySelectorAll("[data-qr]").forEach(b => {
     b.classList.toggle("current", b.dataset.qr === s.qr);
     b.setAttribute("aria-pressed", String(b.dataset.qr === s.qr));
@@ -1018,6 +1041,13 @@ document.addEventListener("visibilitychange", () => previewTick());
 $("history").ontoggle = () => { if ($("history").open) loadHistory(); };
 $("auto-switch").onclick = () => send("auto_switch", { enabled: !lastState?.auto_switch });
 document.querySelectorAll("[data-qr]").forEach(b => b.onclick = () => send("qr", { mode: b.dataset.qr }));
+document.querySelectorAll("[data-player]").forEach(b => b.onclick = () => {
+  $("player-status").textContent = "Le lecteur redémarre…";
+  send("player", { mode: b.dataset.player });
+});
+$("pip-swap").onclick = () => send("pip", { action: "swap" });
+$("pip-close").onclick = () => send("pip", { action: "close" });
+$("pip-layout").onclick = () => send("pip", { action: "layout", layout: lastState?.pip?.layout === "split" ? "pip" : "split" });
 $("night").onclick = () => send("flag", { key: "night", enabled: !lastState?.night });
 $("events").onclick = () => send("flag", { key: "events", enabled: !lastState?.events });
 $("replays").ontoggle = () => {

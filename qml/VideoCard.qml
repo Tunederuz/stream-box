@@ -53,7 +53,7 @@ Item {
         y: 214
         width: root.width
         text: root.title
-        color: root.focused ? "white" : "#eadae0"
+        color: root.focused ? "white" : "#e0daea"
         pixelSize: 26
         bold: root.focused
         running: root.focused
@@ -62,7 +62,7 @@ Item {
         y: 258
         width: root.width
         text: root.meta
-        color: "#c09fa9"
+        color: "#a99fc0"
         font.pixelSize: 21
         elide: Text.ElideRight
     }

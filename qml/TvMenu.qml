@@ -1,7 +1,8 @@
 // Stream Box : grand menu de la TV en QML (rendu par la puce graphique), à la place de tv_menu.lua quand le lecteur est
 // l'appli Qt (ui.py). Mêmes onglets et mêmes actions : tout passe par l'API de remote.py, comme la page web.
 // Les touches arrivent de ui.py (box.keyPressed) déjà traduites : up, down, left, right, ok, back, home (bouton Menu,
-// ferme), homescreen (WWW), corner (Play), menu (≡). Coordonnées en 1920x1080, mises à l'échelle par ui.qml.
+// ferme), homescreen (WWW), corner (Play), menu (≡ : options de la carte choisie, dont le second stream). Coordonnées
+// en 1920x1080, mises à l'échelle par ui.qml. Second stream : objet « pip » de ui.py.
 import QtQuick
 import "fmt.js" as Fmt
 
@@ -48,6 +49,7 @@ Item {
     property var rpSel: [0, 0, 0]
     property string rpLogin: ""
     property string pendingDisplay: ""
+    property string pendingPlayer: ""        // lecteur choisi aux flèches, appliqué par OK (le lecteur redémarre)
     property real poweroffUntil: 0
     property var modal: null                 // { title, items: [{ label, danger, ok }] }
     property int modalSel: 0
@@ -145,7 +147,25 @@ Item {
         var l = [{ label: "⌂  Écran d'accueil", current: st.mode === "home", ok: function () { act("home"); close() } }]
         if (st.mode !== "twitch" && st.channel)
             l.push({ label: "▶  Reprendre " + st.channel, ok: function () { act("twitch"); close() } })
+        if (pip.channel) {   // second stream en cours
+            l.push({ label: "Inverser avec " + pip.channel, ok: function () { pip.swap(); close() } })
+            l.push(pip.layout === "split" ? { label: "Incrustation", ok: function () { pip.setLayout("pip") } }
+                                          : { label: "Côte à côte", ok: function () { pip.setLayout("split") } })
+            l.push({ label: "Fermer " + pip.channel, ok: function () { pip.close() } })
+        }
         return l
+    }
+    // Menu ≡ sur un streamer : le regarder, ou l'ajouter en second stream à côté de celui en cours
+    function streamerOptions(name, addToList, isLive) {
+        var watch = function () { act("channel", { name: name }); close() }
+        var items = [{ label: "▶  Regarder", ok: watch }]
+        // Second stream : seulement une chaîne en live (sinon un cadre noir qui attend), à côté d'un direct
+        if (isLive && st.mode === "twitch" && st.channel && name !== st.channel) {
+            items.push({ label: "En incrustation", ok: function () { pip.open(name, "pip"); close() } })
+            items.push({ label: "Côte à côte", ok: function () { pip.open(name, "split"); close() } })
+        }
+        if (addToList) items.push({ label: "+  Ajouter à ma liste", ok: function () { act("streamers", { action: "add", login: name }) } })
+        openModal(name, items)
     }
     function followList() {
         if (!follows || !follows.authorized) return []
@@ -207,6 +227,15 @@ Item {
             { label: "QR code de la télécommande", value: qrModes[qi][1], step: function (d) {
                 act("qr", { mode: qrModes[Math.max(0, Math.min(qrModes.length - 1, qi + d))][0] })
             } },
+            { label: "Lecteur", value: (pendingPlayer || s.player) === "mpv" ? "mpv seul" : "Appli Qt (menu animé)",
+              hint: pendingPlayer && pendingPlayer !== s.player ? "OK pour appliquer : le lecteur redémarre" : undefined,
+              step: function (d) { pendingPlayer = (pendingPlayer || s.player) === "qt" ? "mpv" : "qt" },
+              ok: function () {
+                  if (!pendingPlayer || pendingPlayer === s.player) return
+                  act("player", { mode: pendingPlayer })
+                  pendingPlayer = ""
+                  close()
+              } },
         ]
     }
     Timer { id: displayReload; interval: 3000; onTriggered: menu.call("GET", "/api/display", undefined, function (d) { if (d && d.modes) menu.display = d }) }
@@ -302,7 +331,7 @@ Item {
             else if (k === "back") close()
             return
         }
-        if (k === "back") { area = "rail"; pendingDisplay = ""; return }
+        if (k === "back") { area = "rail"; pendingDisplay = ""; pendingPlayer = ""; return }
         switch (tabId) {
         case "live": return keyLive(k)
         case "follows": return keyFollows(k)
@@ -330,6 +359,7 @@ Item {
             return
         }
         if (k === "ok") { if (list[liveSel]) { act("channel", { name: list[liveSel] }); close() } return }
+        if (k === "menu") { if (list[liveSel]) streamerOptions(list[liveSel], false, !!(st.live || {})[list[liveSel]]); return }
         if (k === "up" && liveSel < 4) { shortcut = 0; return }
         var n = grid(liveSel, list.length, 4, k)
         if (n < 0) area = "rail"; else liveSel = n
@@ -342,12 +372,10 @@ Item {
             return
         }
         var list = followList()
-        if (k === "ok" && list[followSel]) {
+        if ((k === "ok" || k === "menu") && list[followSel]) {
             var name = list[followSel].login
-            var watch = function () { act("channel", { name: name }); close() }
-            if (inList(name)) return watch()
-            openModal(name, [{ label: "▶  Regarder", ok: watch },
-                             { label: "＋  Ajouter à ma liste", ok: function () { act("streamers", { action: "add", login: name }) } }])
+            if (k === "ok" && inList(name)) { act("channel", { name: name }); close(); return }
+            streamerOptions(name, !inList(name), list[followSel].viewers !== undefined && list[followSel].viewers !== null)
             return
         }
         var n = grid(followSel, list.length, 4, k)
@@ -393,7 +421,7 @@ Item {
         var sel = selectable(rows)
         var cur = tabId === "settings" ? setSel : sysSel
         var row = rows[sel[cur]]
-        var set = function (v) { if (tabId === "settings") setSel = v; else sysSel = v; pendingDisplay = "" }
+        var set = function (v) { if (tabId === "settings") setSel = v; else sysSel = v; pendingDisplay = ""; pendingPlayer = "" }
         if (k === "up") set(Math.max(0, cur - 1))
         else if (k === "down") set(Math.min(sel.length - 1, cur + 1))
         else if ((k === "left" || k === "right") && row && row.step) row.step(k === "right" ? 1 : -1)
@@ -440,7 +468,7 @@ Item {
                 x: cur && menu.area !== "rail" ? 48 : 38
                 anchors.verticalCenter: parent.verticalCenter
                 text: menu.tabs[index].label
-                color: cur && menu.area === "rail" ? "#20101a" : (cur ? "white" : "#c2afb4")
+                color: cur && menu.area === "rail" ? "#1a1020" : (cur ? "white" : "#b4afc2")
                 font.pixelSize: 25
                 font.bold: cur
                 Behavior on x { NumberAnimation { duration: 160 } }
@@ -450,29 +478,31 @@ Item {
     Column {   // ce qui joue sur la TV
         x: 56; y: menu.height - 190; width: 310; spacing: 8
         visible: (menu.st.mode === "twitch" && !!menu.st.channel) || menu.st.mode === "media"
-        Text { text: "EN COURS SUR LA TV"; color: "#c09fa9"; font.pixelSize: 16; font.bold: true; font.letterSpacing: 2 }
+        Text { text: "EN COURS SUR LA TV"; color: "#a99fc0"; font.pixelSize: 16; font.bold: true; font.letterSpacing: 2 }
         Marquee {
             width: parent.width; pixelSize: 22; running: menu.isOpen
+            // Chaîne hors de la liste (suivie, second stream inversé) : pas de relevé du live, juste son nom
+            readonly property var info: (menu.st.live || {})[menu.st.channel]
             text: menu.st.mode === "media" ? (menu.st.title || "Vidéo")
-                : (menu.st.channel || "") + "  ·  " + (((menu.st.live || {})[menu.st.channel] || {}).title || "hors ligne")
+                : (menu.st.channel || "") + (info ? "  ·  " + info.title : "")
         }
     }
     Text {
         x: 56; y: menu.height - 75
-        text: "▲▼◀▶ se déplacer   ·   OK valider   ·   Retour revenir   ·   Menu fermer"
-        color: "#a0858a"; font.pixelSize: 19
+        text: "▲▼◀▶ se déplacer   ·   OK valider   ·   ≡ options   ·   Retour revenir   ·   Menu fermer"
+        color: "#8a85a0"; font.pixelSize: 19
     }
 
     // En-tête
     Text { x: 460; y: 100 - height / 2; text: menu.tabs[menu.tab].label; color: "white"; font.pixelSize: 41; font.bold: true }
-    Text { x: 460; y: 158 - height / 2; text: menu.subtitle(); color: "#c2afb4"; font.pixelSize: 25 }
+    Text { x: 460; y: 158 - height / 2; text: menu.subtitle(); color: "#b4afc2"; font.pixelSize: 25 }
     Row {
         anchors.right: parent.right; anchors.rightMargin: 80; y: 100 - height / 2; spacing: 28
         Text {
             anchors.verticalCenter: parent.verticalCenter
             visible: !!(menu.ambient.weather && menu.ambient.weather.temp !== undefined)
             text: visible ? menu.ambient.weather.temp + "°  " + (menu.ambient.weather.text || "") : ""
-            color: "#c2afb4"; font.pixelSize: 25
+            color: "#b4afc2"; font.pixelSize: 25
         }
         Text { text: Qt.formatTime(menu.now, "hh:mm"); color: "white"; font.pixelSize: 31 }
     }
@@ -536,7 +566,7 @@ Item {
                 }
             }
             Marquee {   // titre du live choisi, en entier
-                y: 290 + 3 * 176 + 40; width: 1400; pixelSize: 24; color: "#e0c8d0"; running: true
+                y: 290 + 3 * 176 + 40; width: 1400; pixelSize: 24; color: "#d0c8e0"; running: true
                 readonly property string login: (menu.st.streamers || [])[menu.liveSel] || ""
                 readonly property var info: (menu.st.live || {})[login]
                 visible: menu.area === "content" && menu.shortcut < 0 && !!info
@@ -545,7 +575,7 @@ Item {
             Text {
                 visible: !(menu.st.streamers || []).length
                 y: 280; text: "La liste est vide : ajoute des streamers depuis la télécommande web."
-                color: "#c2afb4"; font.pixelSize: 27
+                color: "#b4afc2"; font.pixelSize: 27
             }
         }
 
@@ -561,7 +591,7 @@ Item {
                 visible: !!menu.follows && !menu.follows.error && !followsPage.f.configured
                 y: 260; spacing: 20
                 Text { text: "Pour les afficher, la box a besoin de ta propre appli Twitch."; color: "white"; font.pixelSize: 27 }
-                Text { text: "Télécommande web → Réglages → Chaînes suivies : tout y est expliqué."; color: "#c2afb4"; font.pixelSize: 22 }
+                Text { text: "Télécommande web → Réglages → Chaînes suivies : tout y est expliqué."; color: "#b4afc2"; font.pixelSize: 22 }
             }
             Item {
                 visible: !!followsPage.f.configured && !followsPage.f.authorized
@@ -571,7 +601,7 @@ Item {
                     y: 260; spacing: 26
                     Text { text: "Sur ton téléphone, ouvre twitch.tv/activate et tape :"; color: "white"; font.pixelSize: 27 }
                     Text { text: followsPage.pend ? followsPage.pend.user_code || "" : ""; color: "white"; font.pixelSize: 75; font.bold: true; font.letterSpacing: 12 }
-                    Text { text: "ou scanne le QR code. La TV se met à jour toute seule."; color: "#c2afb4"; font.pixelSize: 22 }
+                    Text { text: "ou scanne le QR code. La TV se met à jour toute seule."; color: "#b4afc2"; font.pixelSize: 22 }
                 }
                 QrCode { visible: followsPage.waiting && n > 0; x: 940; y: 240; size: 360; rows: menu.followsQr ? menu.followsQr.rows : [] }
                 Item {
@@ -656,7 +686,7 @@ Item {
                     readonly property int r: index + 1
                     readonly property var row: parent.rows[r]
                     y: 300 + index * 366; width: 1460; height: 350
-                    Text { x: 2; text: row ? row.title.toUpperCase() : ""; color: "#c09fa9"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 2 }
+                    Text { x: 2; text: row ? row.title.toUpperCase() : ""; color: "#a99fc0"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 2 }
                     ListView {
                         y: 40; x: -40; width: 1500; height: 302
                         orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
@@ -739,8 +769,8 @@ Item {
             x: 880; y: 230; spacing: 16
             QrCode { size: 300; rows: menu.ambient.qr ? menu.ambient.qr.rows : [] }
             Text { text: "Télécommande sur le téléphone"; color: "white"; font.pixelSize: 23; font.bold: true }
-            Text { text: "Lien, streamer, compte Twitch…"; color: "#c2afb4"; font.pixelSize: 20 }
-            Text { text: menu.ambient.qr ? String(menu.ambient.qr.url).replace(/^https?:\/\//, "").replace(/\/$/, "") : ""; color: "#c2afb4"; font.pixelSize: 20 }
+            Text { text: "Lien, streamer, compte Twitch…"; color: "#b4afc2"; font.pixelSize: 20 }
+            Text { text: menu.ambient.qr ? String(menu.ambient.qr.url).replace(/^https?:\/\//, "").replace(/\/$/, "") : ""; color: "#b4afc2"; font.pixelSize: 20 }
         }
     }
 
@@ -756,7 +786,7 @@ Item {
             readonly property var items: menu.modal ? menu.modal.items : []
             width: 820; height: 150 + items.length * 92; radius: 28
             anchors.centerIn: parent
-            color: "#2c1821"
+            color: "#21182c"
             scale: menu.modal ? 1 : 0.92
             Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutBack } }
             Marquee { x: 44; y: 46; width: parent.width - 88; text: menu.modal ? menu.modal.title || "" : ""; pixelSize: 27; bold: true; running: !!menu.modal }
@@ -765,12 +795,12 @@ Item {
                 Rectangle {
                     readonly property bool foc: index === menu.modalSel
                     x: 30; y: 112 + index * 92; width: sheet.width - 60; height: 76; radius: 38
-                    color: foc ? "white" : "#3f2833"
+                    color: foc ? "white" : "#33283f"
                     Behavior on color { ColorAnimation { duration: 140 } }
                     Text {
                         x: 40; anchors.verticalCenter: parent.verticalCenter
                         text: sheet.items[index] ? sheet.items[index].label : ""
-                        color: parent.foc ? "#20101a" : (sheet.items[index] && sheet.items[index].danger ? "#ff8f8f" : "white")
+                        color: parent.foc ? "#1a1020" : (sheet.items[index] && sheet.items[index].danger ? "#ff8f8f" : "white")
                         font.pixelSize: 26; font.bold: parent.foc
                     }
                 }
