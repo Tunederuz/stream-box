@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Stream Box : utilisateur media, code de la box et tout ce qu'il installe hors pacman (venvs Python, serveur de jetons
+# YouTube). Lancé par mkosi dans l'image, avec le réseau, juste après les paquets (« final ») ; mêmes étapes que
+# install.sh, faites une fois pour toutes à la construction.
+set -euo pipefail
+[ "$1" = final ] || exit 0
+
+BOX_USER=media
+BOX_HOME=/home/$BOX_USER
+MEDIA_VENV_PACKAGES="yt-dlp[default] deno nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt segno"
+POT_REPO=https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git
+as_box() { (cd "$BOX_HOME" && runuser -u "$BOX_USER" -- env HOME="$BOX_HOME" bash -c "$1"); }
+
+id "$BOX_USER" > /dev/null 2>&1 || useradd -m -s /bin/bash -G video,audio,input "$BOX_USER"
+usermod -p '*' "$BOX_USER"   # pas de mot de passe ; connexion SSH par clé possible (~media/.ssh/authorized_keys)
+
+# Code de la box : une copie git du dépôt (les mises à jour de la box reprennent ensuite par git pull)
+rm -rf "$BOX_HOME/stream-box"
+git -c safe.directory='*' clone -q /work/src/stream-box "$BOX_HOME/stream-box"
+git -C "$BOX_HOME/stream-box" remote set-url origin https://github.com/Tunederuz/stream-box.git
+cp "$BOX_HOME/stream-box/streamers.example.txt" "$BOX_HOME/stream-box/streamers.txt"
+chown -R "$BOX_USER:$BOX_USER" "$BOX_HOME"
+
+as_box '
+  set -e
+  mkdir -p ~/.local/bin ~/.local/share ~/.local/state/stream-box
+  python3 -m venv ~/.local/share/streamlink-venv
+  ~/.local/share/streamlink-venv/bin/pip install -q -U pip streamlink
+  python3 -m venv ~/.local/share/ui-venv
+  ~/.local/share/ui-venv/bin/pip install -q -U pip PySide6-Essentials python-mpv
+  python3 -m venv ~/.local/share/media-venv
+  ~/.local/share/media-venv/bin/pip install -q -U pip '"$MEDIA_VENV_PACKAGES"'
+  ln -sf ~/.local/share/streamlink-venv/bin/streamlink ~/.local/bin/streamlink
+  for tool in yt-dlp deno jellyfin-mpv-shim; do ln -sf ~/.local/share/media-venv/bin/$tool ~/.local/bin/$tool; done
+  rm -rf ~/.cache/pip
+'
+as_box '
+  set -e
+  export PATH="$HOME/.local/share/media-venv/bin:$PATH"
+  want=$(pip show bgutil-ytdlp-pot-provider | awk "/^Version/{print \$2}")
+  dir=~/.local/share/bgutil-pot-provider
+  git clone -q --depth 1 --branch "$want" '"$POT_REPO"' "$dir"
+  (cd "$dir/server" && npm ci --no-audit --no-fund --loglevel=error && npx tsc)
+  rm -rf ~/.npm
+'
