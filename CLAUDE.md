@@ -598,5 +598,9 @@ mqtt_bridge.py (bouton « Éteindre » ; select « Bouton d'arrêt »). Veille p
 remote.py (session locale active) ; règle polkit `login1.suspend*` ajoutée (install.sh, image) pour le pont, qui
 tourne hors session. Pendant la veille, Allumée passe à OFF : le pont prend un verrou logind « delay » et suit
 PrepareForSleep (gdbus monitor), publie OFF avant la veille et ON + status au réveil. Réveil : Wake-on-LAN (même paquet
-que pour l'allumage) ou bouton power.
+que pour l'allumage) ou bouton power. Au réveil, remote.py (`resume_loop`, PrepareForSleep false) attend que twitch.tv réponde puis envoie
+`streambox-resume` : stream-box.lua relance la chaîne, ou la vidéo à sa position (flux morts pendant la veille, image
+figée sinon). Testé : réveil par WoL en 6 s, stream de retour 8 s après le paquet. La veille demandée par remote.py
+n'est permise d'office que s'il tourne dans la session de la TV (lancé par start.sh) ; hors session (relancé par ssh),
+il faut la règle polkit `login1.suspend*`.
 

@@ -1043,6 +1043,18 @@ mp.register_script_message("streambox-cycle-corner", from_remote(toggle_corner))
 mp.register_script_message("streambox-play", play_media)
 mp.register_script_message("streambox-home", from_remote(show_home))
 mp.register_script_message("streambox-twitch", from_remote(function() start_channel(channel) end))
+-- Réveil après une mise en veille (remote.py, resume_loop) : flux coupés, on relance la lecture en cours
+mp.register_script_message("streambox-resume", function()
+    if mode == "twitch" and channel then
+        start_channel(channel)
+    elseif mode == "media" then
+        local path, pos = mp.get_property("path"), mp.get_property_number("time-pos")
+        if path then
+            local opts = pos and pos > 5 and ("start=%d"):format(math.floor(pos)) or ""
+            mp.commandv("loadfile", path, "replace", "-1", opts)
+        end
+    end
+end)
 
 -- Réglages numériques du chat et des sous-titres, modifiables depuis la télécommande : défaut, minimum, maximum
 local NUMBERS = { chat_bg = { 60, 0, 100 },     -- opacité du fond, en %

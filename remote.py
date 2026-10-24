@@ -604,6 +604,33 @@ def power(mode):
         raise ValueError(f"{'Mise en veille' if mode == 'suspend' else 'Extinction'} refusée : {r.stderr.strip() or r.returncode}")
 
 
+def resume_loop():
+    """Réveil après une mise en veille : les connexions (streamlink, flux vidéo) sont mortes et l'image resterait
+    figée. logind signale PrepareForSleep(false) au réveil (suivi par gdbus) ; mpv relance alors la lecture."""
+    while True:
+        try:
+            mon = subprocess.Popen(["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1",
+                                    "--object-path", "/org/freedesktop/login1"], stdout=subprocess.PIPE, text=True)
+            for line in mon.stdout:
+                if "PrepareForSleep (false" in line:
+                    # Réseau revenu (NetworkManager reprend la connexion en quelques secondes) : sinon streamlink
+                    # échoue et la box croit le streamer hors ligne, puis réessaie 15 s plus tard
+                    for _ in range(60):
+                        try:
+                            socket.create_connection(("www.twitch.tv", 443), timeout=2).close()
+                            break
+                        except OSError:
+                            time.sleep(1)
+                    try:
+                        mpv(["script-message", "streambox-resume"])
+                    except OSError:
+                        pass
+            mon.wait()
+        except OSError:
+            pass
+        time.sleep(5)
+
+
 def set_player(mode):
     """Choix du lecteur, appliqué tout de suite : on quitte le lecteur, la boucle de player.sh relance le bon"""
     if mode not in ("qt", "mpv"):
@@ -2036,4 +2063,5 @@ threading.Thread(target=ambient_loop, daemon=True).start()
 threading.Thread(target=history_loop, daemon=True).start()
 threading.Thread(target=events_loop, daemon=True).start()
 threading.Thread(target=health_loop, daemon=True).start()
+threading.Thread(target=resume_loop, daemon=True).start()
 ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
