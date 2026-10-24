@@ -639,11 +639,21 @@ Flèches répétées tant qu'on reste appuyé (400 ms puis toutes les 120 ms), p
 
 Depuis la télécommande virtuelle, la page ne garde que ce que le téléphone fait mieux que le menu de la TV. Onglet
 Télécommande : télécommande virtuelle, En cours (titre ; vidéo : titre et « Retour au stream »), votes, Son (volume,
-couper le son), aperçu de la TV, recherche YouTube (vidéos et chaînes) et Jellyfin, lien à lire. Réglages : Wi-Fi,
+couper le son), aperçu de la TV, lien à lire. Réglages : Wi-Fi,
 listes des streamers et des chaînes YouTube, adresse de la télécommande, état de la box et mises à jour, compte
 Twitch, chaînes suivies. Retirés (dans le menu de la TV) : grille des streamers et second stream, retour en arrière
 du direct, barre de lecture et sous-titres, pause, mode nuit, chat (affiché, coin, apparence), parcours YouTube
 (dernières vidéos par chaîne) et Jellyfin (rangées), rediffusions, historique, bascule auto, sondages affichés,
 sous-titres, résolution, bouton d'arrêt, QR code, lecteur. L'API garde ces actions (menu de la TV, Home Assistant).
 Banc d'essai de la page : jsdom dans Docker, fetch relayé vers l'API de la box (lecture seule), erreurs JS rapportées.
+
+### Clavier du téléphone pour la recherche du menu de la TV
+
+Clavier de recherche (YouTube, Jellyfin) ouvert ou fermé dans TvMenu.qml (`onKbOpenChanged`, aussi fermé avec le menu)
+→ `POST /api/keyboard {open, text, target}` ; remote.py le garde (`keyboard`, oublié après 10 min) et le publie dans
+`/api/state` (`keyboard`). La page affiche alors en tête « Recherche … (sur la TV) » : chaque frappe (120 ms après) →
+`POST /api/keyboard_input {text}` → `script-message streambox-tvmenu-text <texte> <0|1>` → ui.py `box.textInput` →
+`kbText` ; Entrée ou « Rechercher » (`submit`) lance la recherche et ferme le clavier. Les blocs de recherche
+YouTube et Jellyfin de la page sont retirés : la recherche se fait sur la TV. Appli Qt seulement (pas de recherche
+dans le menu de mpv seul).
 

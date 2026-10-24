@@ -327,6 +327,15 @@
 
   <div class="tab" id="tab-remote">
 
+  <!-- Clavier du téléphone pour le menu de la TV : affiché tant que le clavier de recherche est ouvert sur la TV -->
+  <section id="tv-keyboard" hidden>
+    <h2 id="tv-keyboard-title">Recherche sur la TV</h2>
+    <div class="field">
+      <input id="tv-keyboard-text" type="search" autocomplete="off" enterkeyhint="search" placeholder="Tape ici, ça s'écrit sur la TV">
+      <button id="tv-keyboard-go" class="current">Rechercher</button>
+    </div>
+  </section>
+
   <!-- Télécommande virtuelle : mêmes touches que la télécommande Bluetooth (flèches répétées si on reste appuyé) -->
   <section>
     <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -431,26 +440,6 @@
     </details>
   </section>
 
-  <section>
-    <details id="youtube">
-      <summary><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8zM9.75 15.1V8.9L15.5 12z"/></svg>YouTube</summary>
-      <div class="field">
-        <input id="yt-query" type="search" autocomplete="off" placeholder="Rechercher une vidéo" aria-label="Recherche YouTube">
-        <button id="yt-search" class="current">Chercher</button>
-      </div>
-      <div id="yt-list"></div>
-    </details>
-    <details id="jellyfin">
-      <summary><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 2C9.5 2 2 15.6 3.2 18.1 4.4 20.6 19.6 20.6 20.8 18.1 22 15.6 14.5 2 12 2zm0 6.2c1.6 0 5.8 7.6 5 9-.7 1.4-9.3 1.4-10 0-.8-1.4 3.4-9 5-9z"/></svg>Jellyfin</summary>
-      <div class="field">
-        <input id="jf-query" type="search" autocomplete="off" placeholder="Rechercher un film, une série" aria-label="Recherche Jellyfin">
-        <button id="jf-search" class="current">Chercher</button>
-      </div>
-      <div id="jf-list"></div>
-    </details>
-  </section>
 
   <section>
     <details id="send-link">
@@ -672,30 +661,11 @@ function render(s) {
   $("mute").classList.toggle("on", s.mute);
   powerAction = s.power_action;
   if (document.activeElement !== $("remote-url")) $("remote-url").value = s.remote_url || "";
+  renderKeyboard(s.keyboard);
 }
 
-function length(seconds) {
-  const h = Math.floor(seconds / 3600), m = Math.floor(seconds / 60) % 60;
-  return h ? `${h} h ${String(m).padStart(2, "0")}` : seconds >= 60 ? `${m} min` : `${seconds} s`;
-}
 
-// Carte de vidéo (rediffusions, historique) : vignette, titre, ligne d'infos, barre de progression
-function videoCard(item, meta, progress, onclick) {
-  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
-  const text = el("div", {}, el("div", { className: "t", textContent: item.title }), el("div", { className: "meta", textContent: meta }));
-  if (progress > 0) {
-    const bar = el("div", { className: "bar" }, el("i", {}));
-    bar.firstChild.style.width = `${Math.min(100, progress * 100)}%`;
-    text.append(bar);
-  }
-  return el("button", { className: "replay", onclick }, el("img", { src: item.thumb || "/icon-192.png", alt: "", loading: "lazy" }), text);
-}
 
-function playVideo(item, fromStart = false) {
-  send("play", { url: item.url, from_start: fromStart });
-  $("media-status").className = "status";
-  $("media-status").textContent = `Chargement de « ${item.title} » sur la TV…`;
-}
 
 function viewers(n) {
   if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(".", ",")} M`;
@@ -879,6 +849,28 @@ async function previewTick() {
 }
 $("preview").ontoggle = () => previewTick();
 document.addEventListener("visibilitychange", () => previewTick());
+// Clavier du téléphone pour le menu de la TV : le champ apparaît quand le clavier de recherche s'ouvre sur la TV ;
+// chaque frappe envoie le texte entier (le dernier envoi gagne), Entrée ou « Rechercher » lance la recherche
+let kbShown = false, kbTimer = null;
+function renderKeyboard(k) {
+  $("tv-keyboard").hidden = !k;
+  if (k && !kbShown) {
+    $("tv-keyboard-title").textContent = `Recherche ${k.target ? (k.target === "Jellyfin" ? "dans Jellyfin" : "sur YouTube") : ""} (sur la TV)`;
+    $("tv-keyboard-text").value = k.text || "";
+    $("tv-keyboard").scrollIntoView({ block: "start" });
+    $("tv-keyboard-text").focus();
+  }
+  kbShown = !!k;
+}
+function sendKeyboard(submit) {
+  clearTimeout(kbTimer);
+  send("keyboard_input", { text: $("tv-keyboard-text").value, submit });
+  if (submit) { $("tv-keyboard").hidden = true; kbShown = false; $("tv-keyboard-text").blur(); }
+}
+$("tv-keyboard-text").oninput = () => { clearTimeout(kbTimer); kbTimer = setTimeout(() => sendKeyboard(false), 120); };
+$("tv-keyboard-text").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); sendKeyboard(true); } };
+$("tv-keyboard-go").onclick = () => sendKeyboard(true);
+
 // Télécommande virtuelle : la touche part au relâchement, si le doigt n'a pas bougé (un défilement de la page qui
 // commence sur un bouton ne déclenche rien) ; flèches maintenues : répétition après 400 ms, toutes les 120 ms
 document.querySelectorAll("[data-key]").forEach((b) => {
@@ -1080,75 +1072,12 @@ refreshFollows();
 // YouTube : recherche (vidéos et chaînes), gestion de la liste des chaînes (Réglages). Les dernières vidéos des chaînes
 // se parcourent sur la TV
 let ytHome = null;
-const ago = (iso) => {
-  const days = Math.floor((Date.now() - new Date(iso)) / 86400000);
-  return days <= 0 ? "aujourd'hui" : days === 1 ? "hier" : days < 7 ? `il y a ${days} j` : days < 31 ? `il y a ${Math.floor(days / 7)} sem.`
-    : new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-};
-function ytCard(v, meta) {
-  return videoCard(v, v.finished ? `${meta} · vu` : meta, v.position && v.seconds ? v.position / v.seconds : 0, () => playVideo(v));
-}
 async function loadYoutube() {   // liste des chaînes, pour les Réglages
   try {
     ytHome = await (await fetch("/api/youtube")).json();
   } catch (e) { return; }
   renderYoutubeManage();
 }
-async function ytSearch() {
-  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
-  const q = $("yt-query").value.trim();
-  if (!q) return;
-  $("yt-list").replaceChildren(el("p", { textContent: "Recherche…" }));
-  try {
-    const r = await fetch(`/api/youtube_search?q=${encodeURIComponent(q)}`);
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error);
-    $("yt-list").replaceChildren(...(d.channels.length ? [el("p", { className: "replays-title", textContent: "Chaînes" }),
-                                                          ...d.channels.map(ytChannelRow)] : []),
-      el("p", { className: "replays-title", textContent: `Résultats pour « ${q} »` }),
-      ...d.results.map((v) => ytCard(v, [v.channel, v.seconds ? length(v.seconds) : "", v.views != null ? viewers(v.views) + " vues" : ""]
-        .filter(Boolean).join(" · "))));
-  } catch (e) {
-    $("yt-list").replaceChildren(el("p", { className: "status error", textContent: e.message || "Box injoignable" }));
-  }
-}
-// Chaîne trouvée par la recherche : ses dernières vidéos au toucher, et l'ajout à la liste (ou le retrait)
-function ytChannelRow(c) {
-  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
-  const pic = c.avatar ? el("img", { className: "avatar", src: c.avatar, alt: "" })
-                       : el("span", { className: "avatar", textContent: c.name.charAt(0).toUpperCase() });
-  const add = el("button", { textContent: c.saved ? "✓ Ajoutée" : "+ Ajouter", disabled: c.saved });
-  add.onclick = async (e) => {
-    e.stopPropagation();
-    add.disabled = true;
-    await editYoutube("add", c.id);
-    add.textContent = "✓ Ajoutée";
-  };
-  const row = el("div", { className: "manage-row yt-channel" }, pic,
-    el("span", { className: "name" }, c.name,
-       el("small", { textContent: c.followers ? ` · ${viewers(c.followers)} abonnés` : "" })), add);
-  row.onclick = () => ytShowFound(c);
-  return row;
-}
-async function ytShowFound(c) {
-  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
-  $("yt-list").replaceChildren(el("p", { textContent: "Chargement…" }));
-  try {
-    const r = await fetch(`/api/youtube_channel?id=${encodeURIComponent(c.id)}`);
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error);
-    const back = el("button", { textContent: "← Résultats" });
-    back.onclick = ytSearch;
-    $("yt-list").replaceChildren(el("div", { className: "chips" }, back), ytChannelRow({ ...c, saved: d.saved }),
-      el("p", { className: "replays-title", textContent: "Dernières vidéos" }),
-      ...d.videos.map((v) => ytCard(v, `${ago(v.date)}${v.views != null ? " · " + viewers(v.views) + " vues" : ""}`)));
-  } catch (e) {
-    $("yt-list").replaceChildren(el("p", { className: "status error", textContent: e.message || "Box injoignable" }));
-  }
-}
-$("yt-search").onclick = ytSearch;
-$("yt-query").onkeydown = (e) => { if (e.key === "Enter") ytSearch(); };
-$("youtube").ontoggle = () => { if ($("youtube").open) loadYoutube(); };
 function renderYoutubeManage() {
   const chans = ytHome?.channels ?? [];
   const btn = (text, label, onclick, disabled = false) => {
@@ -1185,68 +1114,6 @@ async function editYoutube(action, channel, delta = 0) {
 }
 $("add-yt").onclick = () => { if ($("new-yt").value.trim()) editYoutube("add", $("new-yt").value); };
 $("new-yt").onkeydown = (e) => { if (e.key === "Enter") $("add-yt").click(); };
-
-// Jellyfin : recherche et épisodes d'une série trouvée (les rangées Reprendre, Prochains épisodes… sont sur la TV). La
-// lecture passe par la box (/api/jellyfin_play), qui renvoie la progression au serveur
-let jfHome = null;
-const jfEl = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
-const jfDuration = (t) => { const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60; return h ? `${h} h ${String(m).padStart(2, "0")}` : `${m} min`; };
-function jfCard(it) {
-  const meta = (it.type === "Series" ? [it.unplayed ? `${it.unplayed} à voir` : "Série", it.year]
-    : it.episode ? [it.episode] : [it.year, it.seconds ? jfDuration(it.seconds) : ""]).filter(Boolean).join(" · ");
-  const open = it.type === "Series" || it.type === "Season" ? () => jfSeries(it) : () => jfPlay(it);
-  return videoCard(it, it.finished ? `${meta} · vu` : meta, it.finished ? 1 : it.position && it.seconds ? it.position / it.seconds : 0, open);
-}
-function jfPlay(it) {
-  send("jellyfin_play", { id: it.id });
-  $("media-status").className = "status";
-  $("media-status").textContent = `Chargement de « ${it.episode ? it.title + " · " + it.episode : it.title} » sur la TV…`;
-}
-async function loadJellyfin() {
-  try {
-    const r = await fetch("/api/jellyfin");
-    jfHome = await r.json();
-    if (!r.ok) throw new Error(jfHome.error);
-  } catch (e) {
-    $("jf-list").replaceChildren(jfEl("p", { className: "status error", textContent: e.message || "Box injoignable" }));
-    return;
-  }
-  $("jf-list").replaceChildren(...(jfHome.configured ? [] :
-    [jfEl("p", { textContent: "Jellyfin n'est pas associé à la box : dans l'appli Jellyfin, « Lire sur… » → la box." })]));
-}
-async function jfSearch() {
-  const q = $("jf-query").value.trim();
-  if (!q) return;
-  $("jf-list").replaceChildren(jfEl("p", { textContent: "Recherche…" }));
-  try {
-    const r = await fetch(`/api/jellyfin_search?q=${encodeURIComponent(q)}`);
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error);
-    $("jf-list").replaceChildren(jfEl("p", { className: "replays-title", textContent: `Résultats pour « ${q} »` }),
-      ...(d.results.length ? d.results.map(jfCard) : [jfEl("p", { textContent: "Aucun résultat." })]));
-  } catch (e) {
-    $("jf-list").replaceChildren(jfEl("p", { className: "status error", textContent: e.message || "Box injoignable" }));
-  }
-}
-async function jfSeries(it) {
-  $("jf-list").replaceChildren(jfEl("p", { textContent: "Chargement…" }));
-  try {
-    const r = await fetch(`/api/jellyfin_series?id=${encodeURIComponent(it.series)}`);
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error);
-    const back = jfEl("button", { textContent: "← Retour" });
-    back.onclick = jfSearch;
-    const cards = d.episodes.map(jfCard);
-    $("jf-list").replaceChildren(jfEl("div", { className: "chips" }, back),
-      jfEl("p", { className: "replays-title", textContent: it.title }), ...cards);
-    cards[d.first]?.scrollIntoView({ block: "nearest" });
-  } catch (e) {
-    $("jf-list").replaceChildren(jfEl("p", { className: "status error", textContent: e.message || "Box injoignable" }));
-  }
-}
-$("jf-search").onclick = jfSearch;
-$("jf-query").onkeydown = (e) => { if (e.key === "Enter") jfSearch(); };
-$("jellyfin").ontoggle = () => { if ($("jellyfin").open) loadJellyfin(); };
 
 // Wi-Fi : affiché si la box a une carte Wi-Fi. Sur le point d'accès de configuration (10.42.0.1), la page s'ouvre
 // sur cette section : après la connexion, le téléphone perd la box (elle quitte son point d'accès)
