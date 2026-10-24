@@ -1964,6 +1964,14 @@ def action(name, body):
         # mode : « suspend » (Mettre en veille), « full » (Éteindre la box, menu de la TV) ; sinon le réglage
         mode = str(body.get("mode") or "")
         power("suspend" if mode == "suspend" else "poweroff" if mode == "full" else power_action())
+    elif name == "key":
+        # Télécommande virtuelle de la page : mêmes touches que la télécommande Bluetooth (stream-box.lua, KEYS)
+        keys = {"up": "UP", "down": "DOWN", "left": "LEFT", "right": "RIGHT", "ok": "ENTER", "back": "GO_BACK",
+                "home": "HOMEPAGE", "menu": "0x2111a0", "homescreen": "WWW", "playpause": "PLAYPAUSE"}
+        key = keys.get(str(body.get("key", "")))
+        if not key:
+            raise ValueError("touche inconnue")
+        mpv(["keypress", key])
     elif name == "remote_url":
         set_remote_url(str(body.get("url", ""))[:300])
     elif name == "wifi":
