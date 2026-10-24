@@ -631,7 +631,7 @@ Affichage (`POST /api/remote_url`, fichier remote-url, vide = réseau local).
 ### Télécommande virtuelle (page)
 
 Section « Télécommande » en haut de l'onglet Télécommande : pavé ▲▼◀▶ + OK, Retour, Menu (menu de la TV), Options (≡),
-Lecture. `POST /api/key {key}` → `keypress` mpv avec les noms que lie stream-box.lua (UP… ENTER, GO_BACK, HOMEPAGE,
+Lecture (`cycle pause` : la touche lecture Xiaomi, elle, change le coin du chat). `POST /api/key {key}` → `keypress` mpv avec les noms que lie stream-box.lua (UP… ENTER, GO_BACK, HOMEPAGE,
 0x2111a0, PLAYPAUSE ; liste blanche dans remote.py) : même effet que la télécommande Bluetooth, menu de la TV compris.
 Flèches répétées tant qu'on reste appuyé (400 ms puis toutes les 120 ms), petite vibration à chaque appui.
 

@@ -1971,8 +1971,12 @@ def action(name, body):
         power("suspend" if mode == "suspend" else "poweroff" if mode == "full" else power_action())
     elif name == "key":
         # Télécommande virtuelle de la page : mêmes touches que la télécommande Bluetooth (stream-box.lua, KEYS)
+        # (la touche lecture de la télécommande Xiaomi change le coin du chat : ici, « Lecture » met en pause ou relance)
         keys = {"up": "UP", "down": "DOWN", "left": "LEFT", "right": "RIGHT", "ok": "ENTER", "back": "GO_BACK",
-                "home": "HOMEPAGE", "menu": "0x2111a0", "homescreen": "WWW", "playpause": "PLAYPAUSE"}
+                "home": "HOMEPAGE", "menu": "0x2111a0", "homescreen": "WWW"}
+        if body.get("key") == "playpause":
+            mpv(["cycle", "pause"])
+            return
         key = keys.get(str(body.get("key", "")))
         if not key:
             raise ValueError("touche inconnue")
