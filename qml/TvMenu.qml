@@ -37,6 +37,7 @@ Item {
     property var account: null
     property var followsQr: null
     property var health: null                // /api/health, relu toutes les 5 s sur l'onglet Système
+    property var wifi: null                  // /api/wifi, idem (ligne « Wi-Fi » : mode configuration)
     // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
     property var yt: null
     // Couleurs selon l'onglet : violet pour Twitch (direct, suivis, rediffusions), rouge pour YouTube, neutre
@@ -296,7 +297,10 @@ Item {
     Timer {
         interval: 5000; repeat: true; triggeredOnStart: true
         running: menu.isOpen && menu.tabId === "system"
-        onTriggered: menu.call("GET", "/api/health", undefined, function (d) { if (d && d.temps) menu.health = d })
+        onTriggered: {
+            menu.call("GET", "/api/health", undefined, function (d) { if (d && d.temps) menu.health = d })
+            menu.call("GET", "/api/wifi", undefined, function (d) { if (d) menu.wifi = d })
+        }
     }
     Timer { interval: 4000; repeat: true; running: menu.isOpen; onTriggered: menu.refresh() }
     Timer { id: followsPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadFollows() }
@@ -463,6 +467,13 @@ Item {
                   pendingPlayer = ""
                   close()
               } },
+            { label: "Wi-Fi", visible: !!(wifi && wifi.device),
+              value: !wifi ? "" : wifi.connecting ? "connexion…" : wifi.mode === "hotspot" ? "mode configuration"
+                   : wifi.network ? (wifi.wired ? "câble" : wifi.network) : "aucun réseau",
+              hint: wifi && wifi.mode === "hotspot" ? "Wi-Fi « " + wifi.hotspot.ssid + " », mot de passe " + wifi.hotspot.password
+                  + ", puis " + String(wifi.hotspot.url).replace(/^http:\/\//, "").replace(/\/$/, "")
+                  : "OK : mode configuration, pour choisir un autre réseau depuis le téléphone",
+              ok: function () { if (wifi && wifi.mode !== "hotspot") act("wifi", { action: "hotspot" }) } },
             { label: "Mettre à jour maintenant",
               hint: health && health.update ? (health.update.running ? "Mise à jour en cours…"
                     : (health.update.last ? (health.update.last.ok ? "Dernière : " : "Échec : ") + frDate(health.update.last.date) : "Jamais")
@@ -479,7 +490,7 @@ Item {
                   if (poweroffUntil > 0) { act("poweroff", { mode: "full" }); close() }
                   else { poweroffUntil = 1; poweroffReset.restart() }
               } },
-        ]
+        ].filter(function (r) { return r.visible !== false })   // Wi-Fi : seulement avec une carte Wi-Fi
     }
     // « 2026-10-23 11:48:14 » ou « Mon 2026-10-26 05:07:37 CET » → « ven. 23 oct. à 11:48 »
     function frDate(text) {

@@ -2,7 +2,9 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 # streamlink est installé dans un venv, lien dans ~/.local/bin (pas forcément dans le PATH de l'autostart)
 export PATH="$HOME/.local/bin:$PATH"
-until getent hosts www.twitch.tv >/dev/null; do sleep 2; done
+# Réseau : on l'attend 20 s au plus. Sans réseau, la box démarre quand même : écran d'accueil, et mode configuration
+# Wi-Fi (point d'accès de la box, voir netsetup.py) s'il y a une carte Wi-Fi
+for _ in $(seq 10); do getent hosts www.twitch.tv > /dev/null && break; sleep 2; done
 
 python3 "$DIR/chat_overlay.py" &
 python3 "$DIR/remote.py" &   # télécommande web, port 8080

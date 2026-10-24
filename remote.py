@@ -11,6 +11,7 @@ import datetime, hashlib, json, os, uuid, re, shutil, socket, subprocess, thread
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import display   # display.py, même dossier
+import netsetup  # netsetup.py : point d'accès Wi-Fi de configuration
 
 PORT = 8080
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
@@ -419,6 +420,30 @@ def remote_url():
         return f"http://{s.getsockname()[0]}:{PORT}"
 
 
+def custom_remote_url():
+    try:
+        with open(REMOTE_URL_FILE, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def set_remote_url(url):
+    """Adresse de la télécommande montrée en QR code : nom de domaine (reverse proxy HTTPS…) ; vide = réseau local"""
+    url = url.strip()
+    if not url:
+        try:
+            os.remove(REMOTE_URL_FILE)
+        except FileNotFoundError:
+            pass
+        return
+    if not re.match(r"https?://[\w.-]+(:\d+)?(/\S*)?$", url):
+        raise ValueError("Adresse attendue : https://… (ou http://…)")
+    os.makedirs(COOKIES_DIR, mode=0o700, exist_ok=True)
+    with open(REMOTE_URL_FILE, "w", encoding="utf-8") as f:
+        f.write(url + "\n")
+
+
 qr_cache = {}   # adresse -> lignes du QR code
 
 
@@ -448,6 +473,16 @@ def ambient_loop():
             data["qr"] = remote_qr()   # adresse relue à chaque tour : un changement se voit tout de suite
         except OSError:
             data["qr"] = None   # pas de réseau : pas d'adresse à montrer
+        # Mode configuration (point d'accès Wi-Fi de la box) : QR code pour rejoindre son réseau, puis pour la page
+        try:
+            w = netsetup.status()
+        except (OSError, subprocess.SubprocessError):
+            w = {}
+        h = w.get("hotspot")
+        data["setup"] = {"ssid": h["ssid"], "password": h["password"], "url": h["url"],
+                         "wifi_rows": qr_rows(f"WIFI:T:WPA;S:{h['ssid']};P:{h['password']};;"),
+                         "url_rows": qr_rows(h["url"]), "error": w.get("error")} if h else (
+                        {"connecting": w["connecting"]} if w.get("connecting") else None)
         if time.time() - fetched > AMBIENT_FETCH:
             conf = ambient_conf()
             try:
@@ -671,6 +706,7 @@ def state():
         "events": user.get("events", True), "qr": user.get("qr", "always"),
         # Lecteur choisi, et celui qui tourne vraiment (mpv seul après plusieurs plantages de l'appli Qt)
         "player": player_choice(), "player_running": "qt" if vo == "libmpv" else "mpv", "power_action": power_action(),
+        "remote_url": custom_remote_url(),
         "pip": user.get("pip") or {"channel": "", "layout": ""},
         "volume": round(volume or 0), "mute": bool(mute), "pause": bool(pause), "playing": bool(video),
         "live": live_now, "mode": user.get("mode", "twitch"), "delay": delay, "title": title if media else None,
@@ -1928,6 +1964,14 @@ def action(name, body):
         # mode : « suspend » (Mettre en veille), « full » (Éteindre la box, menu de la TV) ; sinon le réglage
         mode = str(body.get("mode") or "")
         power("suspend" if mode == "suspend" else "poweroff" if mode == "full" else power_action())
+    elif name == "remote_url":
+        set_remote_url(str(body.get("url", ""))[:300])
+    elif name == "wifi":
+        # {"action": "connect", "ssid", "password"} : rejoindre un réseau ; {"action": "hotspot"} : mode configuration
+        if body.get("action") == "hotspot":
+            netsetup.manual_hotspot()
+        else:
+            netsetup.connect(str(body.get("ssid", ""))[:64], str(body.get("password", ""))[:128])
     elif name == "power_action":
         set_power_action(str(body.get("mode", "")))
     else:
@@ -2026,6 +2070,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, yt_channel_videos(q))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
+            elif self.path == "/api/wifi":
+                self.send(200, netsetup.status())
             elif self.path == "/api/health":
                 self.send(200, health())
             elif self.path == "/api/events":
@@ -2074,5 +2120,6 @@ threading.Thread(target=history_loop, daemon=True).start()
 threading.Thread(target=events_loop, daemon=True).start()
 threading.Thread(target=health_loop, daemon=True).start()
 threading.Thread(target=resume_loop, daemon=True).start()
+threading.Thread(target=netsetup.setup_loop, daemon=True).start()
 hold_power_key()
 ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
