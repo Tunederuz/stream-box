@@ -435,11 +435,22 @@ local function system_rows()
               or ((u.last and ((u.last.ok and "Dernière : " or "Échec : ") .. fr_date(u.last.date)) or "Jamais")
                   .. (u.next and ("  ·  prochaine : " .. fr_date(u.next)) or ""))) or nil,
           ok = function() if not (u and u.running) then act("update") end end },
+        { label = "Bouton d'arrêt (téléphone, Home Assistant)",
+          value = s.power_action == "suspend" and "Mise en veille" or "Arrêt complet",
+          step = function()
+              s.power_action = s.power_action == "suspend" and "poweroff" or "suspend"
+              act("power_action", { mode = s.power_action })
+          end },
+        { label = "Mettre en veille", hint = "Réveil par la télécommande, Home Assistant ou le bouton power",
+          ok = function()
+              act("poweroff", { mode = "suspend" })
+              close_menu()
+          end },
         { label = "Éteindre la box",
           hint = mp.get_time() < poweroff_until and "Appuie encore sur OK pour éteindre" or nil,
           danger = true, ok = function()
               if mp.get_time() < poweroff_until then
-                  act("poweroff")
+                  act("poweroff", { mode = "full" })
                   close_menu()
               else
                   poweroff_until = mp.get_time() + 4

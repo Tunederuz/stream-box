@@ -592,6 +592,11 @@
     <label class="setting" for="display" style="margin-top: 0">Résolution de la TV</label>
     <select id="display" disabled><option>Chargement…</option></select>
     <div class="status" id="display-status"></div>
+    <div class="setting">Bouton d'arrêt (en haut de cette page et Home Assistant)</div>
+    <div class="segmented" id="power-modes">
+      <button data-power="suspend">Mise en veille</button>
+      <button data-power="poweroff">Arrêt complet</button>
+    </div>
     <div class="setting">QR code de la télécommande (pour les invités)</div>
     <div class="segmented" id="qr-modes">
       <button data-qr="always">Toujours</button>
@@ -816,6 +821,11 @@ function render(s) {
     $("pip-label").textContent = `Second stream : ${s.pip.channel}`;
     $("pip-layout").textContent = s.pip.layout === "split" ? "Incrustation" : "Côte à côte";
   }
+  document.querySelectorAll("[data-power]").forEach(b => {
+    b.classList.toggle("current", b.dataset.power === s.power_action);
+    b.setAttribute("aria-pressed", String(b.dataset.power === s.power_action));
+  });
+  powerAction = s.power_action;
   document.querySelectorAll("[data-qr]").forEach(b => {
     b.classList.toggle("current", b.dataset.qr === s.qr);
     b.setAttribute("aria-pressed", String(b.dataset.qr === s.qr));
@@ -1148,6 +1158,7 @@ document.addEventListener("visibilitychange", () => previewTick());
 $("history").ontoggle = () => { if ($("history").open) loadHistory(); };
 $("auto-switch").onclick = () => send("auto_switch", { enabled: !lastState?.auto_switch });
 document.querySelectorAll("[data-qr]").forEach(b => b.onclick = () => send("qr", { mode: b.dataset.qr }));
+document.querySelectorAll("[data-power]").forEach(b => b.onclick = () => send("power_action", { mode: b.dataset.power }));
 document.querySelectorAll("[data-player]").forEach(b => b.onclick = () => {
   $("player-status").textContent = "Le lecteur redémarre…";
   send("player", { mode: b.dataset.player });
@@ -1258,16 +1269,19 @@ if (new URLSearchParams(location.search).has("partage")) {
   $("media-status").textContent = "Aucun lien vidéo dans ce partage.";
   history.replaceState(null, "", "/");
 }
+let powerAction = "poweroff";   // réglage « Bouton d'arrêt » : mise en veille ou arrêt complet
 $("poweroff").onclick = async () => {
-  if (!confirm("Éteindre la box ?")) return;
+  const sleep = powerAction === "suspend";
+  if (!confirm(sleep ? "Mettre la box en veille ?" : "Éteindre la box ?")) return;
   try {
     const r = await fetch("/api/poweroff", { method: "POST" });
     if (!r.ok) throw new Error((await r.json()).error);
     clearTimeout(refreshTimer);
     $("dot").className = "dot";
-    $("tv-state").textContent = "Box éteinte";
+    $("tv-state").textContent = sleep ? "Box en veille" : "Box éteinte";
     $("status").className = "status";
-    $("status").textContent = "Box éteinte. Rallume-la avec son bouton power.";
+    $("status").textContent = sleep ? "Box en veille. Réveil par Home Assistant (réseau) ou son bouton power."
+                                    : "Box éteinte. Rallume-la avec son bouton power.";
   } catch (e) {
     showError(e.message || "Box injoignable");
   }

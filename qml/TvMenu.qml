@@ -468,10 +468,15 @@ Item {
                     : (health.update.last ? (health.update.last.ok ? "Dernière : " : "Échec : ") + frDate(health.update.last.date) : "Jamais")
                       + (health.update.next ? "  ·  prochaine : " + frDate(health.update.next) : "")) : undefined,
               ok: function () { if (!(health && health.update && health.update.running)) act("update") } },
+            { label: "Bouton d'arrêt (téléphone, Home Assistant)",
+              value: st.power_action === "suspend" ? "Mise en veille" : "Arrêt complet",
+              step: function (d) { act("power_action", { mode: st.power_action === "suspend" ? "poweroff" : "suspend" }) } },
+            { label: "Mettre en veille", hint: "Réveil par la télécommande, Home Assistant ou le bouton power",
+              ok: function () { act("poweroff", { mode: "suspend" }); close() } },
             { label: "Éteindre la box", danger: true,
               hint: poweroffUntil > 0 ? "Appuie encore sur OK pour éteindre" : undefined,
               ok: function () {
-                  if (poweroffUntil > 0) { act("poweroff"); close() }
+                  if (poweroffUntil > 0) { act("poweroff", { mode: "full" }); close() }
                   else { poweroffUntil = 1; poweroffReset.restart() }
               } },
         ]
