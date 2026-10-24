@@ -879,21 +879,31 @@ async function previewTick() {
 }
 $("preview").ontoggle = () => previewTick();
 document.addEventListener("visibilitychange", () => previewTick());
-// Télécommande virtuelle : un appui = une touche ; flèches répétées tant qu'on reste appuyé (après 400 ms, toutes les 120 ms)
+// Télécommande virtuelle : la touche part au relâchement, si le doigt n'a pas bougé (un défilement de la page qui
+// commence sur un bouton ne déclenche rien) ; flèches maintenues : répétition après 400 ms, toutes les 120 ms
 document.querySelectorAll("[data-key]").forEach((b) => {
-  let repeat = null, delay = null;
+  let repeat = null, delay = null, start = null, repeated = false;
   const press = () => {
     if (navigator.vibrate) navigator.vibrate(8);
     fetch("/api/key", { method: "POST", headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ key: b.dataset.key }) }).catch(() => {});
   };
-  const stop = () => { clearTimeout(delay); clearInterval(repeat); delay = repeat = null; };
+  const stop = () => { clearTimeout(delay); clearInterval(repeat); delay = repeat = null; start = null; };
   b.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    press();
-    if (["up", "down", "left", "right"].includes(b.dataset.key)) delay = setTimeout(() => { repeat = setInterval(press, 120); }, 400);
+    start = { x: e.clientX, y: e.clientY };
+    repeated = false;
+    if (["up", "down", "left", "right"].includes(b.dataset.key)) {
+      delay = setTimeout(() => { repeated = true; press(); repeat = setInterval(press, 120); }, 400);
+    }
   });
-  ["pointerup", "pointerleave", "pointercancel"].forEach((t) => b.addEventListener(t, stop));
+  b.addEventListener("pointermove", (e) => {
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) stop();   // c'est un défilement
+  });
+  b.addEventListener("pointerup", () => {
+    if (start && !repeated) press();
+    stop();
+  });
+  ["pointerleave", "pointercancel"].forEach((t) => b.addEventListener(t, stop));
   b.addEventListener("contextmenu", (e) => e.preventDefault());
 });
 $("remote-url-save").onclick = () => send("remote_url", { url: $("remote-url").value.trim() });
