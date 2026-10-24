@@ -518,6 +518,20 @@
 
   <div class="tab" id="tab-settings" hidden>
 
+  <!-- Wi-Fi : mode configuration (point d'accès de la box, netsetup.py) ou changement de réseau -->
+  <section id="wifi" hidden>
+    <h2>Wi-Fi</h2>
+    <p id="wifi-state">…</p>
+    <label class="setting" for="wifi-ssid" style="margin-top: 0">Réseau</label>
+    <select id="wifi-ssid"></select>
+    <label class="setting" for="wifi-password">Mot de passe</label>
+    <div class="field">
+      <input id="wifi-password" type="password" autocomplete="off" placeholder="Mot de passe du Wi-Fi">
+      <button id="wifi-connect" class="current">Connecter</button>
+    </div>
+    <div class="status" id="wifi-status"></div>
+  </section>
+
   <section>
     <h2>Liste des streamers</h2>
     <p>L'ordre compte : c'est celui du menu de la TV, du zapping (haut / bas) et de la bascule automatique vers
@@ -592,6 +606,13 @@
     <label class="setting" for="display" style="margin-top: 0">Résolution de la TV</label>
     <select id="display" disabled><option>Chargement…</option></select>
     <div class="status" id="display-status"></div>
+    <label class="setting" for="remote-url" style="margin-top: 0">Adresse de la télécommande (QR code de la TV)</label>
+    <div class="field">
+      <input id="remote-url" type="url" autocomplete="off" placeholder="Réseau local (par défaut)">
+      <button id="remote-url-save">Enregistrer</button>
+    </div>
+    <p>Vide : adresse de la box sur le réseau local. Nom de domaine (https://…, derrière un reverse proxy)
+      : nécessaire pour installer la télécommande comme une appli sur le téléphone.</p>
     <div class="setting">Bouton d'arrêt (en haut de cette page et Home Assistant)</div>
     <div class="segmented" id="power-modes">
       <button data-power="suspend">Mise en veille</button>
@@ -826,6 +847,7 @@ function render(s) {
     b.setAttribute("aria-pressed", String(b.dataset.power === s.power_action));
   });
   powerAction = s.power_action;
+  if (document.activeElement !== $("remote-url")) $("remote-url").value = s.remote_url || "";
   document.querySelectorAll("[data-qr]").forEach(b => {
     b.classList.toggle("current", b.dataset.qr === s.qr);
     b.setAttribute("aria-pressed", String(b.dataset.qr === s.qr));
@@ -1159,6 +1181,7 @@ $("history").ontoggle = () => { if ($("history").open) loadHistory(); };
 $("auto-switch").onclick = () => send("auto_switch", { enabled: !lastState?.auto_switch });
 document.querySelectorAll("[data-qr]").forEach(b => b.onclick = () => send("qr", { mode: b.dataset.qr }));
 document.querySelectorAll("[data-power]").forEach(b => b.onclick = () => send("power_action", { mode: b.dataset.power }));
+$("remote-url-save").onclick = () => send("remote_url", { url: $("remote-url").value.trim() });
 document.querySelectorAll("[data-player]").forEach(b => b.onclick = () => {
   $("player-status").textContent = "Le lecteur redémarre…";
   send("player", { mode: b.dataset.player });
@@ -1548,6 +1571,48 @@ async function jfSeries(it) {
 $("jf-search").onclick = jfSearch;
 $("jf-query").onkeydown = (e) => { if (e.key === "Enter") jfSearch(); };
 $("jellyfin").ontoggle = () => { if ($("jellyfin").open) loadJellyfin(); };
+
+// Wi-Fi : affiché si la box a une carte Wi-Fi. Sur le point d'accès de configuration (10.42.0.1), la page s'ouvre
+// sur cette section : après la connexion, le téléphone perd la box (elle quitte son point d'accès)
+const onSetupHotspot = location.hostname === "10.42.0.1";
+async function refreshWifi() {
+  let w;
+  try { w = await (await fetch("/api/wifi")).json(); } catch (e) { return; }
+  $("wifi").hidden = !w.device;
+  if (!w.device) return;
+  $("wifi-state").textContent = w.connecting ? `Connexion à « ${w.connecting} »…`
+    : w.mode === "hotspot" ? "Mode configuration : choisis le Wi-Fi de la maison."
+    : w.mode === "connected" ? (w.wired ? `Connectée par câble (${w.network}).` : `Connectée au Wi-Fi « ${w.network} ».`)
+    : "Pas de réseau.";
+  if (w.error) { $("wifi-status").className = "status error"; $("wifi-status").textContent = w.error; }
+  const current = $("wifi-ssid").value;
+  const bars = (n) => n >= 70 ? "▂▄▆█" : n >= 45 ? "▂▄▆" : n >= 20 ? "▂▄" : "▂";
+  $("wifi-ssid").replaceChildren(...w.networks.map((n) => Object.assign(document.createElement("option"),
+    { value: n.ssid, textContent: `${n.ssid}  ${bars(n.signal)}${n.secure ? "  🔒" : ""}` })));
+  if (current && w.networks.some((n) => n.ssid === current)) $("wifi-ssid").value = current;
+}
+$("wifi-connect").onclick = async () => {
+  const ssid = $("wifi-ssid").value;
+  if (!ssid) return;
+  $("wifi-status").className = "status";
+  $("wifi-status").textContent = onSetupHotspot
+    ? `La box se connecte à « ${ssid} ». Reconnecte ton téléphone à ce Wi-Fi, puis scanne le QR code affiché sur la TV.`
+    : `Connexion à « ${ssid} »…`;
+  try {
+    const r = await fetch("/api/wifi", { method: "POST", headers: { "Content-Type": "application/json" },
+                                         body: JSON.stringify({ action: "connect", ssid, password: $("wifi-password").value }) });
+    if (!r.ok) throw new Error((await r.json()).error);
+    $("wifi-password").value = "";
+  } catch (e) {
+    if (!onSetupHotspot) { $("wifi-status").className = "status error"; $("wifi-status").textContent = e.message || "Box injoignable"; }
+  }
+  setTimeout(refreshWifi, 4000);
+};
+refreshWifi();
+if (onSetupHotspot) {
+  showTab("settings");
+  $("wifi").scrollIntoView();
+}
 
 // État de la box (Réglages → Système), relu toutes les 5 s tant que l'onglet est affiché
 let healthTimer = null;

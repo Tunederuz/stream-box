@@ -30,6 +30,7 @@ local live, offline, channel_since = {}, false, 0   -- live : relevé de remote.
 local ambient_visible, status_text = false, ""    -- écran d'ambiance affiché ; dernier message d'état
 local auto_switch_on = true   -- bascule automatique vers un streamer en live (réglage de la télécommande)
 local qr_data = nil           -- QR code de la télécommande web, publié par remote.py avec l'écran d'ambiance
+local ambient_data = {}       -- user-data/streambox/ambient (météo, plannings, QR code, mode configuration)
 local QR_MODES = { always = true, timed = true, never = true }   -- toujours, QR_SECONDS secondes, jamais
 local QR_SECONDS = 30
 local qr_mode, qr_until = "always", 0   -- en mode « timed », affiché jusqu'à qr_until (mp.get_time)
@@ -338,7 +339,8 @@ end
 -- QR code de la télécommande web, pour les invités : carré clair (gris, moins marquant pour l'écran que du blanc) et
 -- modules sombres en un seul tracé, une bande par suite de modules. Renvoie le dessin et son côté, ou nil.
 local function qr_code(x, y, size)
-    if qr_mode == "never" or (qr_mode == "timed" and mp.get_time() > qr_until) then return nil end
+    local setup = (ambient_data or {}).setup
+    if not (setup and setup.ssid) and (qr_mode == "never" or (qr_mode == "timed" and mp.get_time() > qr_until)) then return nil end
     local rows = qr_data and qr_data.rows or {}
     local n = #rows
     local m = n > 0 and math.floor(size / (n + 4)) or 0   -- marge de 2 modules tout autour
@@ -1116,7 +1118,7 @@ local MONTHS = { "janvier", "février", "mars", "avril", "mai", "juin", "juillet
                  "novembre", "décembre" }
 local ambient = mp.create_osd_overlay("ass-events")
 ambient.z = -10   -- sous le menu et les notifications
-local ambient_data, ambient_drawn = {}, nil
+local ambient_drawn = nil
 
 -- Fond « aurore » : trois grandes taches très floues qui dérivent lentement sur un fond presque noir.
 -- { couleur BGR, opacité ASS (00 = opaque), vitesse, phase }
@@ -1190,6 +1192,17 @@ local function draw_ambient()
     if status_text ~= "" then
         out[#out + 1] = line(h * 0.93, math.floor(fs * 0.7), "707070", ass_escape(status_text))
     end
+    -- Mode configuration (mpv seul ; l'appli Qt a son propre écran) : QR code du Wi-Fi de la box en bas à droite
+    local setup = ambient_data.setup
+    if setup and setup.ssid then
+        out[#out + 1] = line(h * 0.72, math.floor(fs * 0.9), "FFFFFF", "{\\b1}Configuration")
+        out[#out + 1] = line(h * 0.77, math.floor(fs * 0.75), "D0D0D0",
+            ass_escape(("1. Wi-Fi « %s », mot de passe %s"):format(setup.ssid, setup.password)))
+        out[#out + 1] = line(h * 0.81, math.floor(fs * 0.75), "D0D0D0",
+            ass_escape("2. Ouvre " .. (setup.url or ""):gsub("^http://", ""):gsub("/$", "") .. " et choisis le Wi-Fi de la maison"))
+    elseif setup and setup.connecting then
+        out[#out + 1] = line(h * 0.77, math.floor(fs * 0.8), "FFFFFF", ass_escape("Connexion au Wi-Fi « " .. setup.connecting .. " »…"))
+    end
     -- QR code de la télécommande en bas à droite, qui dérive un peu lui aussi
     local size = math.floor(h * 0.17)
     local qx = w - size - w * 0.04 + math.sin(minute * 0.9) * w * 0.012
@@ -1230,6 +1243,8 @@ mp.add_periodic_timer(2, function() update_ambient(false) end)
 mp.observe_property("user-data/streambox/ambient", "native", function(_, value)
     ambient_data = value or {}
     local qr = ambient_data.qr
+    local setup = ambient_data.setup
+    if setup and setup.ssid then qr = { url = setup.url, rows = setup.wifi_rows } end   -- QR code du Wi-Fi de la box
     local changed = (qr and qr.url) ~= (qr_data and qr_data.url)
     qr_data = qr
     if ambient_visible then update_ambient(true) end

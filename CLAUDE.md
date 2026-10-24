@@ -609,3 +609,22 @@ keysym XF86PowerOff) à `power_key` → `POST /api/poweroff` sans mode, donc le 
 après le démarrage et après un réveil. Lecteur arrêté : le bouton ne fait rien (logind ne reprend la main que si
 remote.py meurt).
 
+### Mode configuration Wi-Fi (netsetup.py)
+
+Sans réseau (aucune connexion Ethernet ou Wi-Fi active) et avec une carte Wi-Fi, remote.py (`netsetup.setup_loop`,
+25 s après le démarrage) crée le point d'accès NetworkManager `stream-box-setup` (« Stream Box XXXX », mot de passe
+tiré une fois, `~/.config/stream-box/hotspot.json`, adresse de la box 10.42.0.1, dnsmasq pour le DHCP). L'écran
+d'accueil (AmbientScreen.qml ; texte avec mpv seul) montre « 1. Connecte ton téléphone » (QR code WIFI:…) et « 2. Ouvre
+la configuration » (QR code http://10.42.0.1:8080/). La page, ouverte sur 10.42.0.1, s'ouvre sur la section Wi-Fi
+(liste relevée juste avant le point d'accès, une seule radio) ; `POST /api/wifi {action: connect, ssid, password}`
+arrête le point d'accès, cherche le réseau, s'y connecte ; échec → point d'accès de nouveau, erreur dans
+`GET /api/wifi`. Récupération à tout moment : Wi-Fi enregistré perdu → 60 s de grâce (NetworkManager réessaie) puis
+point d'accès ; sans téléphone dessus, il s'efface toutes les 3 min pour réessayer le Wi-Fi enregistré ; réseau revenu
+(câble…) → il s'arrête. Menu Système de la TV : ligne « Wi-Fi » (OK : mode configuration, gardé 15 min). En Ethernet,
+rien ne change. Carte choisie : celle du point d'accès, sinon la première par nom qui ne sert pas déjà de point
+d'accès. start.sh n'attend plus le réseau que 20 s. Test : `bash image/build.sh test` (mac80211_hwsim : deux cartes
+simulées, clé SSH de test gitignorée) ; testé dans QEMU : écran, recherche, mauvais puis bon mot de passe.
+
+Adresse de la télécommande (QR code) : par défaut http://<IP locale>:8080 ; nom de domaine optionnel dans Réglages →
+Affichage (`POST /api/remote_url`, fichier remote-url, vide = réseau local).
+

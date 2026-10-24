@@ -11,7 +11,9 @@ Item {
     anchors.fill: parent
     readonly property var ambient: { try { return JSON.parse(box.ambient || "{}") } catch (e) { return {} } }
     readonly property var weather: ambient.weather || null
-    readonly property var schedule: ambient.schedule || []
+    readonly property var schedule: setup ? [] : (ambient.schedule || [])
+    // Mode configuration (netsetup.py) : point d'accès Wi-Fi de la box, ou connexion en cours à un réseau
+    readonly property var setup: ambient.setup || null
     property var st: ({})                     // /api/state : photos, streamers en live
     property date now: new Date()
     property bool qrShown: true
@@ -139,7 +141,7 @@ Item {
 
         // En live maintenant (streamers de la liste qu'on ne regarde pas)
         Column {
-            visible: root.liveOthers.length > 0
+            visible: root.liveOthers.length > 0 && !root.setup
             anchors.horizontalCenter: parent.horizontalCenter
             y: 625
             spacing: 14
@@ -212,9 +214,64 @@ Item {
             font.pixelSize: 20
         }
 
+        // Mode configuration : 1. rejoindre le Wi-Fi de la box (QR code Wi-Fi, ou nom et mot de passe), 2. ouvrir la page
+        Item {
+            visible: !!root.setup
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 560; width: 1300; height: 420
+            Text {
+                visible: !!(root.setup && root.setup.connecting)
+                anchors.centerIn: parent
+                text: root.setup && root.setup.connecting ? "Connexion au Wi-Fi « " + root.setup.connecting + " »…" : ""
+                color: "white"; font.pixelSize: 36
+            }
+            Column {
+                visible: !!(root.setup && root.setup.ssid)
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 22
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "CONFIGURATION"; color: "#c9b8ff"; font.pixelSize: 22; font.bold: true; font.letterSpacing: 4
+                }
+                Text {
+                    visible: !!(root.setup && root.setup.error)
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: root.setup ? root.setup.error || "" : ""; color: "#ff8f8f"; font.pixelSize: 22
+                }
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 90
+                    Repeater {
+                        model: root.setup && root.setup.ssid ? [
+                            { n: "1", title: "Connecte ton téléphone", rows: root.setup.wifi_rows,
+                              lines: ["Wi-Fi « " + root.setup.ssid + " »", "Mot de passe : " + root.setup.password] },
+                            { n: "2", title: "Ouvre la configuration", rows: root.setup.url_rows,
+                              lines: [String(root.setup.url).replace(/^http:\/\//, "").replace(/\/$/, ""), "Choisis le Wi-Fi de la maison"] }] : []
+                        Row {
+                            spacing: 26
+                            QrCode { size: 220; rows: modelData.rows || [] }
+                            Column {
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 10
+                                Rectangle {
+                                    width: 52; height: 52; radius: 26; color: "#9146ff"
+                                    Text { anchors.centerIn: parent; text: modelData.n; color: "white"; font.pixelSize: 28; font.bold: true }
+                                }
+                                Text { text: modelData.title; color: "white"; font.pixelSize: 30; font.bold: true }
+                                Repeater {
+                                    model: modelData.lines
+                                    Text { text: modelData; color: "#d0c8e0"; font.pixelSize: 24 }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // QR code de la télécommande, selon le réglage (toujours, 30 secondes à chaque arrivée, jamais)
         Column {
-            visible: opacity > 0 && !!(root.ambient.qr && root.ambient.qr.rows)
+            visible: opacity > 0 && !!(root.ambient.qr && root.ambient.qr.rows) && !root.setup
             opacity: root.qrWanted ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 500 } }
             x: 1920 - 56 - width; y: 1080 - 44 - height
