@@ -6,7 +6,7 @@ reçues de Home Assistant en appels à cette même API : les vérifications de r
 Config : ~/.config/stream-box/mqtt.json ({"host", "port", "user"}) et le mot de passe seul dans mqtt-password (600).
 Lancé par le service utilisateur stream-box-mqtt, avec le Python du venv media (paho-mqtt).
 """
-import json, os, signal, sys, time, urllib.request
+import json, os, signal, subprocess, sys, time, urllib.request
 
 import paho.mqtt.client as mqtt
 
@@ -104,10 +104,11 @@ class Bridge:
     def announce(self):
         for component, object_id, config in entities(self.streamers):
             config = {**config, "unique_id": f"stream_box_{object_id}", "device": DEVICE}
-            if object_id != "power":   # disponibles quand la box est allumée et prête
-                config.update(availability=[{"topic": f"{BASE}/status"},
-                                            {"topic": POWER, "payload_available": "ON", "payload_not_available": "OFF"}],
-                              availability_mode="all")
+            powered = {"topic": POWER, "payload_available": "ON", "payload_not_available": "OFF"}
+            if object_id == "poweroff":   # dès que la box est allumée, même en plein démarrage
+                config.update(availability=[powered])
+            elif object_id != "power":   # disponibles quand la box est allumée et prête
+                config.update(availability=[{"topic": f"{BASE}/status"}, powered], availability_mode="all")
             self.client.publish(f"{DISCOVERY}/{component}/stream_box/{object_id}/config", json.dumps(config), retain=True)
 
     def on_connect(self, client, userdata, flags, reason, properties=None):
@@ -126,6 +127,8 @@ class Bridge:
                 self.published = None
             return
         command = msg.topic.rsplit("/", 1)[1]
+        if command == "poweroff":   # sans attendre que la box soit prête (ni mpv ni remote.py n'en ont besoin)
+            return self.poweroff()
         if not self.available:
             self.pending.append((time.time(), command, payload))   # appliquée dès que la box est prête
             return
@@ -154,9 +157,6 @@ class Bridge:
                 api("/api/home", {})
             elif command == "go_live":
                 api("/api/live_seek", {"delta": "live"})
-            elif command == "poweroff":
-                self.off()
-                api("/api/poweroff", {})
             elif command == "play" and payload:
                 api("/api/play", {"url": payload})
                 self.client.publish(f"{BASE}/play_url", "", retain=True)
@@ -202,6 +202,14 @@ class Bridge:
             for received, command, payload in pending:
                 if time.time() - received < PENDING_FOR:
                     self.run_command(command, payload)
+
+    def poweroff(self):
+        # Autorisé sans mot de passe pour media par /etc/polkit-1/rules.d/50-stream-box.rules (comme pour remote.py)
+        self.off()
+        r = subprocess.run(["systemctl", "poweroff"], capture_output=True, text=True, timeout=10)
+        if r.returncode != 0:
+            print(f"extinction refusée : {r.stderr.strip() or r.returncode}", flush=True)
+            self.client.publish(POWER, "ON", retain=True)
 
     def off(self):
         """Box qui s'éteint : annoncée tout de suite, sans attendre que le broker constate la coupure"""

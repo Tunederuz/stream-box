@@ -53,12 +53,13 @@ automation:
         entity_id: media_player.<tv>
         to: "off"
         for: "00:05:00"                   # pas pour une TV éteinte une minute
-    conditions:
-      - condition: state
-        entity_id: binary_sensor.stream_box_allumee
-        state: "on"
     actions:
-      - action: button.press
+      # Box encore en train de démarrer (allumée avec la TV juste avant) : on attend qu'elle soit allumée.
+      # wait_template et pas wait_for_trigger : celui-ci attend un changement et ne voit rien si elle l'est déjà.
+      - wait_template: "{{ is_state('binary_sensor.stream_box_allumee', 'on') }}"
+        timeout: "00:05:00"
+        continue_on_timeout: false
+      - action: button.press             # disponible dès que la box est allumée, même avant qu'elle soit prête
         target:
           entity_id: button.stream_box_eteindre
 ```
