@@ -17,11 +17,51 @@ La box s'annonce toute seule dans Home Assistant par la **découverte MQTT** (`m
 | `text.stream_box_lire_un_lien` | Écrire une URL la lance sur la TV |
 | `sensor.stream_box_mode`, `sensor.stream_box_en_cours`, `sensor.stream_box_streamers_en_live`, `sensor.stream_box_retard_sur_le_direct` | État (les streamers en live en attributs) |
 | `binary_sensor.stream_box_lecture` | Quelque chose joue |
+| `binary_sensor.stream_box_allumee` | Box allumée : `on` / `off`, jamais `unavailable` (à utiliser dans les automatisations) |
 | `event.stream_box_lancement_de_live` | Un streamer de la liste lance son live (seulement quand la box est allumée) |
 
-Quand la box est éteinte, toutes ses entités passent à `unavailable` (message de dernière volonté MQTT). Au démarrage,
+**Allumée** passe à `on` dès que le système a démarré (le pont MQTT est connecté) et à `off` tout de suite à l'extinction
+(arrêt du service) ou, en cas de coupure, quand le broker constate la déconnexion (message de dernière volonté). Les
+autres entités passent alors à `unavailable`. Au démarrage,
 elles ne redeviennent disponibles qu'une fois la box prête à recevoir des commandes : on peut donc attendre ce retour
 avant de choisir le streamer (une commande envoyée trop tôt est de toute façon gardée deux minutes).
+
+## Allumer la box avec la TV
+
+Il faut le Wake-on-LAN (voir plus bas) et une TV que Home Assistant voit s'allumer (`media_player.<tv>`, ou un
+capteur de consommation) :
+
+```yaml
+automation:
+  - alias: "Stream Box : allumer avec la TV"
+    triggers:
+      - trigger: state
+        entity_id: media_player.<tv>
+        from: "off"
+    conditions:
+      - condition: state
+        entity_id: binary_sensor.stream_box_allumee
+        state: "off"
+    actions:
+      - action: button.press              # bouton créé par l'intégration Wake on LAN
+        target:
+          entity_id: button.wake_on_lan_<mac>
+
+  - alias: "Stream Box : éteindre avec la TV"   # facultatif
+    triggers:
+      - trigger: state
+        entity_id: media_player.<tv>
+        to: "off"
+        for: "00:05:00"                   # pas pour une TV éteinte une minute
+    conditions:
+      - condition: state
+        entity_id: binary_sensor.stream_box_allumee
+        state: "on"
+    actions:
+      - action: button.press
+        target:
+          entity_id: button.stream_box_eteindre
+```
 
 ## Allumer la box et la TV quand un streamer lance son live
 
@@ -46,8 +86,8 @@ automation:
         to: streaming
     conditions:
       - condition: state            # box éteinte : on ne coupe pas ce qui est en train d'être regardé
-        entity_id: select.stream_box_streamer
-        state: unavailable
+        entity_id: binary_sensor.stream_box_allumee
+        state: "off"
     actions:
       - action: button.press              # bouton créé par l'intégration Wake on LAN
         target:
