@@ -925,10 +925,24 @@ local KEYS = {
     HOMEPAGE = "home", GO_BACK = "back", ESC = "back", ["0x2111a0"] = "menu",
     WWW = "homescreen",
     PLAY = "corner", PLAYPAUSE = "corner",   -- sans ce lien, mpv les traduit en pause, ce qui figeait le direct
+    POWER = "power", ["0x21ff2a"] = "power",  -- bouton power (télécommande, boîtier) : mpv seul, appli Qt
 }
 local DIRECTIONS = { up = { 0, -1 }, down = { 0, 1 }, left = { -1, 0 }, right = { 1, 0 } }
 
+-- Bouton power (télécommande Bluetooth, bouton du boîtier) : même action que le bouton d'arrêt de la page et de Home
+-- Assistant (réglage « Bouton d'arrêt » : veille ou arrêt complet). logind n'agit plus de lui-même : remote.py tient un
+-- verrou « handle-power-key ». Ignoré juste après le démarrage ou un réveil (la touche qui réveille arrive aussi).
+local power_quiet_until = mp.get_time() + 15
+local function power_key()
+    if mp.get_time() < power_quiet_until then return end
+    power_quiet_until = mp.get_time() + 15
+    mp.command_native_async({ name = "subprocess", playback_only = false, capture_stdout = true,
+        args = { "curl", "-s", "-m", "10", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}",
+                 "http://127.0.0.1:8080/api/poweroff" } }, function() end)
+end
+
 local function on_key(key)
+    if key == "power" then return power_key() end
     if tvmenu_open then
         mp.commandv("script-message", "streambox-tvmenu-key", key)
         return
@@ -1045,6 +1059,7 @@ mp.register_script_message("streambox-home", from_remote(show_home))
 mp.register_script_message("streambox-twitch", from_remote(function() start_channel(channel) end))
 -- Réveil après une mise en veille (remote.py, resume_loop) : flux coupés, on relance la lecture en cours
 mp.register_script_message("streambox-resume", function()
+    power_quiet_until = mp.get_time() + 15
     if mode == "twitch" and channel then
         start_channel(channel)
     elseif mode == "media" then

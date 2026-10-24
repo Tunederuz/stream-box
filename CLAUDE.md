@@ -603,4 +603,9 @@ que pour l'allumage) ou bouton power. Au réveil, remote.py (`resume_loop`, Prep
 figée sinon). Testé : réveil par WoL en 6 s, stream de retour 8 s après le paquet. La veille demandée par remote.py
 n'est permise d'office que s'il tourne dans la session de la TV (lancé par start.sh) ; hors session (relancé par ssh),
 il faut la règle polkit `login1.suspend*`.
+Bouton power (télécommande Bluetooth, bouton du boîtier) : remote.py tient un verrou logind `handle-power-key`
+(`hold_power_key`, permis dans la session de la TV) ; stream-box.lua lie `POWER` (mpv seul) et `0x21ff2a` (appli Qt,
+keysym XF86PowerOff) à `power_key` → `POST /api/poweroff` sans mode, donc le réglage « Bouton d'arrêt ». Ignoré 15 s
+après le démarrage et après un réveil. Lecteur arrêté : le bouton ne fait rien (logind ne reprend la main que si
+remote.py meurt).
 
