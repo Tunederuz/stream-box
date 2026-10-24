@@ -676,6 +676,9 @@ def resume_loop():
         time.sleep(5)
 
 
+keyboard = {}   # clavier de recherche du menu de la TV : {open, text, target, at}
+
+
 def set_player(mode):
     """Choix du lecteur, appliqué tout de suite : on quitte le lecteur, la boucle de player.sh relance le bon"""
     if mode not in ("qt", "mpv"):
@@ -707,6 +710,8 @@ def state():
         # Lecteur choisi, et celui qui tourne vraiment (mpv seul après plusieurs plantages de l'appli Qt)
         "player": player_choice(), "player_running": "qt" if vo == "libmpv" else "mpv", "power_action": power_action(),
         "remote_url": custom_remote_url(),
+        # Clavier de recherche du menu de la TV ouvert (oublié au bout de 10 min, menu fermé entre-temps)
+        "keyboard": keyboard if keyboard.get("open") and time.time() - keyboard.get("at", 0) < 600 else None,
         "pip": user.get("pip") or {"channel": "", "layout": ""},
         "volume": round(volume or 0), "mute": bool(mute), "pause": bool(pause), "playing": bool(video),
         "live": live_now, "mode": user.get("mode", "twitch"), "delay": delay, "title": title if media else None,
@@ -1972,6 +1977,19 @@ def action(name, body):
         if not key:
             raise ValueError("touche inconnue")
         mpv(["keypress", key])
+    elif name == "keyboard":
+        # Menu de la TV : clavier de recherche ouvert ou fermé (la page propose alors un champ de texte)
+        keyboard.update(open=bool(body.get("open")), text=str(body.get("text", ""))[:80],
+                        target=str(body.get("target", ""))[:20], at=time.time())
+    elif name == "keyboard_input":
+        # Page : texte du champ, envoyé au clavier du menu ; submit lance la recherche
+        if not keyboard.get("open"):
+            raise ValueError("Le clavier de la TV n'est plus ouvert.")
+        text = str(body.get("text", ""))[:80]
+        keyboard["text"] = text
+        mpv(["script-message", "streambox-tvmenu-text", text, "1" if body.get("submit") else "0"])
+        if body.get("submit"):
+            keyboard["open"] = False
     elif name == "remote_url":
         set_remote_url(str(body.get("url", ""))[:300])
     elif name == "wifi":

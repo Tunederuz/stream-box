@@ -122,6 +122,7 @@ class Box(QObject):
     """Ce que voit le QML (« box ») : ouverture du menu, touches, données de mpv utiles au menu"""
     openRequested = Signal()
     keyPressed = Signal(str)
+    textInput = Signal(str, bool)    # texte tapé sur le téléphone pour le clavier du menu (texte, lancer la recherche)
     ambientChanged = Signal()
     videoActiveChanged = Signal()
     homeChanged = Signal()
@@ -580,6 +581,10 @@ def main():
         # Touches envoyées par l'IPC (keypress → stream-box.lua → streambox-tvmenu-key) : tests, Home Assistant
         player.register_message_handler(
             "streambox-tvmenu-key", lambda k, *_: box.keyPressed.emit(k.decode() if isinstance(k, bytes) else k))
+        # Clavier du menu tenu par la page (remote.py, /api/keyboard_input) : texte en entier, et « 1 » pour lancer
+        dec = lambda v: v.decode() if isinstance(v, bytes) else v
+        player.register_message_handler(
+            "streambox-tvmenu-text", lambda t, submit="0", *_: box.textInput.emit(dec(t), dec(submit) == "1"))
         player.observe_property("user-data/streambox/ambient",
                                 lambda _n, v: box._ambient_in.emit(json.dumps(v or {})))
         player.observe_property("video-params", lambda _n, v: box._video_in.emit(v is not None))

@@ -78,6 +78,8 @@ Item {
     // Clavier à l'écran (recherche) : texte, ligne et colonne choisies
     property bool kbOpen: false
     property string kbText: ""
+    // Clavier ouvert ou fermé : signalé à la box, la page du téléphone propose alors de taper le texte
+    onKbOpenChanged: call("POST", "/api/keyboard", { open: kbOpen, text: kbText, target: jfTab ? "Jellyfin" : "YouTube" })
     property int kbRow: 0
     property int kbCol: 0
     readonly property var kbKeys: [
@@ -341,6 +343,7 @@ Item {
         if (!isOpen) return
         isOpen = false
         modal = null
+        kbOpen = false
         box.setMenuOpen(false)
         idleClose.stop()
     }
@@ -348,6 +351,12 @@ Item {
         target: box
         function onOpenRequested() { menu.open() }
         function onKeyPressed(k) { menu.key(k) }
+        // Texte tapé sur le téléphone pendant que le clavier de recherche est ouvert
+        function onTextInput(text, submit) {
+            if (!menu.kbOpen) return
+            menu.kbText = text.slice(0, 80)
+            if (submit && menu.kbText.trim()) { menu.kbOpen = false; if (menu.jfTab) menu.jfSearch(menu.kbText); else menu.ytSearch(menu.kbText) }
+        }
     }
     Component.onCompleted: refresh()
 
