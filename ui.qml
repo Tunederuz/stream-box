@@ -80,7 +80,9 @@ Item {
         ChatOverlay {}
         PollsOverlay {}
         LoadingOverlay {}
+        PauseScreen {}
         InfoBar {}
+        NextUp {}
         Toast {}
         TracksPanel {}
         TvMenu {

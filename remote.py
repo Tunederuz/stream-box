@@ -1050,6 +1050,23 @@ def jellyfin_play(item_id, from_start=False):
                        title=title, thumb=i["thumb"], position=start)
     mpv(["script-message", "streambox-play", url, str(start), title, i["thumb"] or ""])
     mpv(["set_property", "user-data/streambox/storyboard", {}])
+    # Barre de lecture et écran de pause : série, épisode, année, résumé ; épisode suivant pour la carte de fin
+    mpv(["set_property", "user-data/streambox/meta",
+         {"source": "jellyfin", "series": raw.get("SeriesName") or "", "episode": i.get("episode") or "",
+          "year": raw.get("ProductionYear") or "", "rating": raw.get("CommunityRating") or 0,
+          "overview": (raw.get("Overview") or "")[:600]}])
+    nxt = {}
+    if i["type"] == "Episode" and raw.get("SeriesId"):
+        try:
+            eps = jf_api(f"/Shows/{raw['SeriesId']}/Episodes",
+                         params={"UserId": srv["user"], "AdjacentTo": item_id, **JF_FIELDS})["Items"]
+            ids = [e["Id"] for e in eps]
+            if item_id in ids and ids.index(item_id) + 1 < len(eps):
+                n = jf_item(eps[ids.index(item_id) + 1])
+                nxt = {"id": n["id"], "of": item_id, "title": n["title"], "episode": n.get("episode") or "", "thumb": n["thumb"]}
+        except (OSError, ValueError, KeyError):
+            pass
+    mpv(["set_property", "user-data/streambox/next_up", nxt])
     jf_cache.pop("home", None)
     record(dict(now_playing), start, i["seconds"])
     jf_report("", item_id, start)
@@ -1152,6 +1169,12 @@ def fetch_storyboard(url, ident):
         r = subprocess.run([os.path.expanduser("~/.local/bin/yt-dlp"), "-J", "--no-warnings", "--skip-download",
                             "--no-playlist", url], capture_output=True, text=True, timeout=90)
         info = json.loads(r.stdout or "{}")
+        if now_playing.get("ident") == ident:   # infos de la barre de lecture et de l'écran de pause
+            d = info.get("upload_date") or ""
+            mpv(["set_property", "user-data/streambox/meta",
+                 {"source": "youtube", "channel": info.get("channel") or info.get("uploader") or "",
+                  "date": f"{d[6:8]}/{d[4:6]}/{d[:4]}" if len(d) == 8 else "",
+                  "views": info.get("view_count") or 0, "overview": (info.get("description") or "")[:600]}])
         boards = [f for f in info.get("formats") or [] if f.get("format_note") == "storyboard" and f.get("fragments")]
         if not boards:
             return
@@ -1199,6 +1222,8 @@ def play(url, from_start=False, title=None, thumb=None):
     mpv(["script-message", "streambox-play", url, str(start), "", video.get("thumb") or "", video.get("title") or ""])
     record(video, start, duration)
     mpv(["set_property", "user-data/streambox/storyboard", {}])
+    mpv(["set_property", "user-data/streambox/meta", {}])
+    mpv(["set_property", "user-data/streambox/next_up", {}])
     if kind == "youtube":
         threading.Thread(target=fetch_storyboard, args=(url, ident), daemon=True).start()
 

@@ -549,3 +549,22 @@ ombre portée sous les textes ; fondu à l'entrée et à la sortie. Avec mpv seu
 ou de la requête (`POST /api/play` accepte `title`, `thumb` : le menu QML les envoie).
 Bandeau et barre de lecture (InfoBar.qml) : dégradé plus sombre plus haut et ombre portée sous l'en-tête, pour lire le
 titre sur une image claire.
+
+### Barre de lecture d'une vidéo (appli Qt)
+
+- Avance rapide qui accélère (stream-box.lua `media_seek`) : appuis rapprochés (< 0,8 s) ou touche maintenue (au plus
+  8 sauts/s) → 10 s ×3, puis 30 s, puis 1 min ; total publié dans `user-data/streambox/seekfx` {text, n}, bulle
+  « +2 min 30 » au-dessus du curseur (InfoBar.qml). Marche aussi avec mpv seul (sans la bulle).
+- Rangée de boutons : ↓ y descend (focus sur Pause/Lecture), ← → et OK, ↑ ou Retour remontent ; −10 s, Pause/Lecture,
+  +10 s, Sous-titres, Chapitre suivant (s'il y a des chapitres), Épisode suivant (Jellyfin). `ctrl_focus`,
+  `user-data/streambox/controls` {items, focus} ; disparaît avec la barre.
+- Infos : `user-data/streambox/meta` publié par remote.py (YouTube : chaîne, date, vues, description, depuis le
+  `yt-dlp -J` de l'aperçu ; Jellyfin : série, épisode, année, note, résumé) ; chapitres (`chapter-list`, `chapter`)
+  relevés par ui.py avec la position : repères sur la barre, chapitre en cours dans la ligne d'infos. Temps restant
+  et heure de fin (« −21:26 · fin à 02:30 »).
+- Écran de pause (`qml/PauseScreen.qml`) : image assombrie, grande icône pause, résumé au-dessus du bandeau.
+- Épisode suivant (Jellyfin) : remote.py publie `user-data/streambox/next_up` {id, of, title, episode, thumb}
+  (`Shows/{série}/Episodes?AdjacentTo=`) ; dans les 20 dernières secondes, stream-box.lua publie `next_card`
+  {seconds, …} → `qml/NextUp.qml` (OK : lancer, Retour : rester) ; à la fin du fichier, l'épisode suivant part
+  (POST /api/jellyfin_play). `of` : seulement pendant l'épisode dont c'est la suite (pas pour une lecture du shim).
+

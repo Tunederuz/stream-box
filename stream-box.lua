@@ -632,7 +632,12 @@ local function draw_bar()
     bar:update()
 end
 
+local ctrl_focus = nil   -- rangée de boutons sous la barre (vidéo, appli Qt) : bouton choisi, nil hors de la rangée
 local function hide_bar()
+    if ctrl_focus then   -- la rangée de boutons part avec la barre
+        ctrl_focus = nil
+        mp.set_property_native("user-data/streambox/controls", { items = {}, focus = -1 })
+    end
     bar_visible = false
     bar:remove()
     mp.set_property_native("user-data/streambox/bar", false)
@@ -801,6 +806,108 @@ mp.observe_property("track-list", "native", function()
 end)
 mp.register_event("end-file", close_tracks)
 
+-- Lecture d'une vidéo : avance rapide qui accélère, rangée de boutons sous la barre (appli Qt), épisode suivant
+-- (Jellyfin). États publiés pour InfoBar.qml et NextUp.qml : seekfx, controls, next_card ; remote.py publie next_up.
+
+-- Avance rapide : appuis rapprochés ou touche maintenue → sauts de 10 s, puis 30 s, puis 1 min ; total affiché
+local seek_last, seek_streak, seek_total, seek_dir, seek_n = 0, 0, 0, 0, 0
+local function fmt_seek(t)
+    t = math.abs(t)
+    if t < 60 then return ("%d s"):format(t) end
+    local m, sec = math.floor(t / 60), t % 60
+    return sec > 0 and ("%d min %02d"):format(m, sec) or ("%d min"):format(m)
+end
+local function media_seek(dir)
+    local now = mp.get_time()
+    if now - seek_last < 0.12 then return end   -- répétition d'une touche maintenue : pas plus de 8 sauts par seconde
+    if now - seek_last < 0.8 and dir == seek_dir then seek_streak = seek_streak + 1 else seek_streak, seek_total = 0, 0 end
+    seek_last, seek_dir = now, dir
+    local step = seek_streak < 3 and 10 or seek_streak < 9 and 30 or 60
+    seek_total = seek_total + step
+    seek_n = seek_n + 1
+    mp.commandv("seek", tostring(step * dir))
+    mp.set_property_native("user-data/streambox/seekfx", { text = (dir > 0 and "+" or "−") .. fmt_seek(seek_total), n = seek_n })
+end
+
+-- Épisode suivant (Jellyfin) : remote.py publie user-data/streambox/next_up { id, title, episode, thumb } ; dans les
+-- 20 dernières secondes, une carte « Épisode suivant dans N s » (OK : tout de suite, Retour : non) ; à la fin, il part
+local NEXT_BEFORE = 20
+local next_dismissed, next_shown = false, false
+-- seulement pendant l'épisode dont c'est la suite (of) : pas pour une vidéo lancée ensuite par le shim Jellyfin
+local function next_up()
+    local n = mp.get_property_native("user-data/streambox/next_up")
+    if not (n and n.id and n.of) then return nil end
+    return (mp.get_property("path") or ""):find("/Videos/" .. n.of .. "/", 1, true) and n or nil
+end
+local next_cache = nil   -- dernier next_up valable : à la fin du fichier, path n'est plus lisible
+local function play_next()
+    local n = next_up() or next_cache
+    if not n then return end
+    next_shown = false
+    mp.set_property_native("user-data/streambox/next_card", {})
+    mp.command_native_async({ name = "subprocess", playback_only = false, capture_stdout = true,
+        args = { "curl", "-s", "-m", "10", "-X", "POST", "-H", "Content-Type: application/json",
+                 "-d", ('{"id":"%s","from_start":true}'):format(n.id), "http://127.0.0.1:8080/api/jellyfin_play" } }, function() end)
+end
+local function hide_next(dismiss)
+    if dismiss then next_dismissed = true end
+    if next_shown then
+        next_shown = false
+        mp.set_property_native("user-data/streambox/next_card", {})
+        if not qt_ui() then mp.osd_message("", 0) end
+    end
+end
+mp.register_event("file-loaded", function() next_dismissed = false hide_next() end)
+mp.add_periodic_timer(1, function()
+    next_cache = mode == "media" and next_up() or nil
+    if mode ~= "media" or next_dismissed or not next_cache then return hide_next() end
+    local left = mp.get_property_native("time-remaining")
+    if not left or left > NEXT_BEFORE or (mp.get_property_native("duration") or 0) < 120 then return hide_next() end
+    next_shown = true
+    local n = next_up()
+    mp.set_property_native("user-data/streambox/next_card", { seconds = math.max(0, math.ceil(left)), title = n.title,
+                                                               episode = n.episode or "", thumb = n.thumb or "" })
+    if not qt_ui() then
+        mp.osd_message(("Épisode suivant dans %d s : %s — OK pour le lancer, Retour pour rester"):format(math.ceil(left), n.episode or n.title), 2)
+    end
+end)
+mp.register_event("end-file", function(e)
+    if e.reason == "eof" and mode == "media" and not next_dismissed and next_cache then play_next() end
+end)
+
+-- Rangée de boutons sous la barre (appli Qt) : ↓ y descend, ← → choisissent, OK, ↑ ou Retour remontent
+local function controls_list()
+    local paused = mp.get_property_native("pause")
+    local list = { { id = "back", label = "−10 s" }, { id = "play", label = paused and "Lecture" or "Pause" },
+                   { id = "fwd", label = "+10 s" }, { id = "tracks", label = "Sous-titres" } }
+    if #(mp.get_property_native("chapter-list") or {}) > 1 then list[#list + 1] = { id = "chapter", label = "Chapitre suivant" } end
+    if next_up() then list[#list + 1] = { id = "next", label = "Épisode suivant" } end
+    return list
+end
+local function publish_controls()
+    local list = controls_list()
+    if ctrl_focus then ctrl_focus = math.max(1, math.min(#list, ctrl_focus)) end
+    mp.set_property_native("user-data/streambox/controls", { items = list, focus = ctrl_focus and ctrl_focus - 1 or -1 })
+end
+mp.observe_property("pause", "bool", function() if mode == "media" then publish_controls() end end)
+mp.register_event("file-loaded", function() ctrl_focus = nil publish_controls() end)
+local function controls_key(key)
+    local list = controls_list()
+    if key == "left" then ctrl_focus = math.max(1, ctrl_focus - 1)
+    elseif key == "right" then ctrl_focus = math.min(#list, ctrl_focus + 1)
+    elseif key == "up" or key == "back" then ctrl_focus = nil
+    elseif key == "ok" then
+        local id = (list[ctrl_focus] or {}).id
+        if id == "back" or id == "fwd" then media_seek(id == "fwd" and 1 or -1)
+        elseif id == "play" then mp.commandv("cycle", "pause")
+        elseif id == "tracks" then open_tracks()
+        elseif id == "chapter" then mp.commandv("add", "chapter", "1")
+        elseif id == "next" then play_next() end
+    end
+    show_bar()
+    publish_controls()
+end
+
 local back_pressed = 0
 -- Grand menu façon Android TV (tv_menu.lua) : ouvert par le bouton Menu (touche Accueil) ; tant qu'il est ouvert,
 -- toutes les touches lui sont transmises
@@ -828,6 +935,14 @@ local function on_key(key)
     end
     if tracks_open then
         tracks_key(key)
+        return
+    end
+    if next_shown and mode == "media" and (key == "ok" or key == "back") then   -- carte « Épisode suivant »
+        if key == "ok" then play_next() else hide_next(true) end
+        return
+    end
+    if ctrl_focus and mode == "media" and key ~= "home" and key ~= "menu" then
+        controls_key(key)
         return
     end
     if key == "homescreen" then   -- écran d'accueil, depuis n'importe quel mode
@@ -883,12 +998,18 @@ local function on_key(key)
             mp.commandv("cycle", "pause")
             show_bar()
         elseif key == "left" or key == "right" then
-            mp.commandv("seek", key == "right" and 10 or -10)
+            media_seek(key == "right" and 1 or -1)
             show_bar()
         elseif key == "up" then
             if bar_visible and not mp.get_property_native("pause") then hide_bar() else show_bar() end
         elseif key == "down" then
-            if not mp.get_property_native("pause") then hide_bar() end
+            if qt_ui() then   -- barre et rangée de boutons, focus sur Pause / Lecture
+                ctrl_focus = 2
+                show_bar()
+                publish_controls()
+            elseif not mp.get_property_native("pause") then
+                hide_bar()
+            end
         elseif key == "home" then
             open_tvmenu()
         elseif key == "menu" then

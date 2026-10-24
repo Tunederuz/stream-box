@@ -429,7 +429,8 @@ class Osd(QObject):
 
     def __init__(self):
         super().__init__()
-        self.data = {"bar": False, "toast": {}, "polls": {}, "storyboard": {}, "playback": {}, "live": {}, "tracks": {}, "loading": {},
+        self.data = {"bar": False, "toast": {}, "polls": {}, "storyboard": {}, "playback": {}, "live": {}, "tracks": {}, "loading": {}, "meta": {}, "controls": {}, "seekfx": {},
+                     "next_card": {},
                      "mode": "", "channel": "", "events": True}
         self._in.connect(self._set, Qt.QueuedConnection)
 
@@ -451,7 +452,9 @@ class Osd(QObject):
                 ranges = cache.get("seekable-ranges") or []
                 state = {"pos": get("time-pos"), "duration": get("duration"), "pause": get("pause"),
                          "cached": get("demuxer-cache-time"), "title": get("media-title"), "path": get("path") or "",
-                         "window": [ranges[0]["start"], ranges[0]["end"]] if ranges else None}
+                         "window": [ranges[0]["start"], ranges[0]["end"]] if ranges else None,
+                         "chapters": [{"time": c.get("time", 0), "title": c.get("title") or ""}
+                                      for c in get("chapter-list") or []], "chapter": get("chapter")}
             except Exception:   # rien en lecture, mpv qui redémarre…
                 continue
             self._in.emit("playback", json.dumps(state))
@@ -463,6 +466,11 @@ class Osd(QObject):
     storyboard = Property(str, lambda self: json.dumps(self.data["storyboard"] or {}), notify=changed)
     tracks = Property(str, lambda self: json.dumps(self.data["tracks"] or {}), notify=changed)   # TracksPanel.qml
     loading = Property(str, lambda self: json.dumps(self.data["loading"] or {}), notify=changed)   # LoadingOverlay.qml
+    # Barre de lecture : infos de la vidéo, rangée de boutons, saut affiché ; carte « Épisode suivant » (NextUp.qml)
+    meta = Property(str, lambda self: json.dumps(self.data["meta"] or {}), notify=changed)
+    controls = Property(str, lambda self: json.dumps(self.data["controls"] or {}), notify=changed)
+    seekfx = Property(str, lambda self: json.dumps(self.data["seekfx"] or {}), notify=changed)
+    nextCard = Property(str, lambda self: json.dumps(self.data["next_card"] or {}), notify=changed)
     eventsOn = Property(bool, lambda self: self.data["events"] is not False, notify=changed)
 
 
@@ -558,7 +566,8 @@ def main():
         player.observe_property(f"user-data/streambox/{key}",
                                 lambda _n, v, key=key: v is not None and chat._settings_in.emit(json.dumps({key: v})))
 
-    for key in ("bar", "toast", "polls", "storyboard", "live", "mode", "channel", "events", "tracks", "loading"):
+    for key in ("bar", "toast", "polls", "storyboard", "live", "mode", "channel", "events", "tracks", "loading", "meta", "controls", "seekfx",
+                "next_card"):
         player.observe_property(f"user-data/streambox/{key}", osd.receive(key))
     threading.Thread(target=osd.poll_loop, daemon=True).start()
 
