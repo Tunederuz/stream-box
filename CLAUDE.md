@@ -573,5 +573,6 @@ titre sur une image claire.
 mqtt_bridge.py : `binary_sensor.stream_box_allumee` sur `stream-box/power` (ON à la connexion du pont, OFF par le
 message de dernière volonté, à l'arrêt du service — SIGTERM — et juste avant « Éteindre ») ; sans `availability`,
 donc `off` et jamais `unavailable`. Les autres entités : disponibles si `status` = online (box prête) ET power = ON
-(`availability_mode: all`). Exemples d'automatisation (allumer et éteindre avec la TV) dans docs/home-assistant.md.
+(`availability_mode: all`), sauf « Éteindre » : disponible dès power = ON et exécuté tout de suite par le pont
+(`systemctl poweroff`, polkit), même pendant le démarrage. Exemples d'automatisation (allumer et éteindre avec la TV) dans docs/home-assistant.md.
 
