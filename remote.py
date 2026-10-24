@@ -604,6 +604,16 @@ def power(mode):
         raise ValueError(f"{'Mise en veille' if mode == 'suspend' else 'Extinction'} refusée : {r.stderr.strip() or r.returncode}")
 
 
+def hold_power_key():
+    """Bouton power (télécommande Bluetooth, boîtier) : logind éteindrait la box de lui-même ; ce verrou l'en empêche,
+    et stream-box.lua applique le réglage « Bouton d'arrêt » (veille ou arrêt complet). Permis d'office dans la session
+    de la TV (remote.py est lancé par start.sh) ; refusé ailleurs, et logind garde alors son comportement."""
+    subprocess.run(["pkill", "-u", str(os.getuid()), "-f", "who=Stream Box bouton power"], capture_output=True)
+    subprocess.Popen(["systemd-inhibit", "--what=handle-power-key", "--mode=block", "--who=Stream Box bouton power",
+                      "--why=Bouton power : veille ou arrêt selon le réglage", "sleep", "infinity"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
 def resume_loop():
     """Réveil après une mise en veille : les connexions (streamlink, flux vidéo) sont mortes et l'image resterait
     figée. logind signale PrepareForSleep(false) au réveil (suivi par gdbus) ; mpv relance alors la lecture."""
@@ -2064,4 +2074,5 @@ threading.Thread(target=history_loop, daemon=True).start()
 threading.Thread(target=events_loop, daemon=True).start()
 threading.Thread(target=health_loop, daemon=True).start()
 threading.Thread(target=resume_loop, daemon=True).start()
+hold_power_key()
 ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
