@@ -875,6 +875,8 @@ YT_SEARCH_CACHE = 600
 yt_feeds, yt_searches = {}, {}   # id de chaîne → (heure, vidéos) ; requête → (heure, résultats)
 yt_lock = threading.Lock()
 YTDLP = os.path.expanduser("~/.local/bin/yt-dlp")
+# Défis JavaScript de YouTube : deno s'il est installé (install.sh), sinon le Node du système (image, sans deno)
+YTDLP_JS = [] if os.path.exists(os.path.expanduser("~/.local/bin/deno")) else ["--js-runtimes", "node"]
 
 
 def yt_channels():
@@ -1275,7 +1277,7 @@ def twitch_save_position(video_id, position):
 
 def fetch_storyboard(url, ident):
     try:
-        r = subprocess.run([os.path.expanduser("~/.local/bin/yt-dlp"), "-J", "--no-warnings", "--skip-download",
+        r = subprocess.run([YTDLP, *YTDLP_JS, "-J", "--no-warnings", "--skip-download",
                             "--no-playlist", url], capture_output=True, text=True, timeout=90)
         info = json.loads(r.stdout or "{}")
         if now_playing.get("ident") == ident:   # infos de la barre de lecture et de l'écran de pause

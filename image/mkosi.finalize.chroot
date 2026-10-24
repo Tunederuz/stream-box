@@ -4,3 +4,12 @@
 set -euo pipefail
 systemctl enable greetd.service NetworkManager.service bluetooth.service sshd.service systemd-timesyncd.service
 systemctl set-default graphical.target   # greetd (display-manager) n'est lancé que par graphical.target
+
+# Allègement, sans toucher à la compatibilité : en-têtes, documentation, traductions autres que français et anglais,
+# outils de développement Qt du venv de l'appli
+rm -rf /usr/include /usr/share/doc /usr/share/man /usr/share/info /usr/share/gtk-doc
+find /usr/share/locale -mindepth 1 -maxdepth 1 -type d ! -name 'fr*' ! -name 'en*' -exec rm -rf {} +
+for d in /home/media/.local/share/ui-venv/lib/python3*/site-packages/PySide6; do
+  rm -rf "$d"/{assistant,designer,linguist,lrelease,lupdate,qmlformat,qmllint,qmlls,qmlcachegen,qmltyperegistrar,uic,rcc} \
+         "$d"/Qt/translations "$d"/include "$d"/typesystems "$d"/glue "$d"/scripts
+done
