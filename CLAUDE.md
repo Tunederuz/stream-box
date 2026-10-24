@@ -542,7 +542,10 @@ Onglet Système du menu Lua : ligne « Mettre à jour maintenant » et tuiles d'
 stream-box.lua (`set_loading`) publie `user-data/streambox/loading` {title, thumb} au lancement d'une vidéo
 (`play_media url start titre_imposé image titre_affiché`) ou d'une chaîne (`start_channel`), et l'efface à la première
 image (`playback-restart`), sur erreur, à l'écran d'accueil ou au bout de 45 s. `qml/LoadingOverlay.qml` (relais
-`osd.loading`) : voile, miniature floutée, anneau qui tourne, titre ; fondu à l'entrée et à la sortie. Avec mpv seul
+`osd.loading`, `kind` : twitch, youtube, jellyfin, video) : miniature floutée, logo de la box qui respire, lueur de la
+couleur de la source qui court sur le contour du triangle (ShapePath en pointillés, `dashOffset` animé), ondes ;
+ombre portée sous les textes ; fondu à l'entrée et à la sortie. Avec mpv seul
 (`vo` ≠ libmpv) : message « Chargement de … » à l'écran. Titre et image viennent de remote.py (historique, Jellyfin)
 ou de la requête (`POST /api/play` accepte `title`, `thumb` : le menu QML les envoie).
-
+Bandeau et barre de lecture (InfoBar.qml) : dégradé plus sombre plus haut et ombre portée sous l'en-tête, pour lire le
+titre sur une image claire.
