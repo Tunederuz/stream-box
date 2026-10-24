@@ -635,3 +635,15 @@ Lecture. `POST /api/key {key}` → `keypress` mpv avec les noms que lie stream-b
 0x2111a0, PLAYPAUSE ; liste blanche dans remote.py) : même effet que la télécommande Bluetooth, menu de la TV compris.
 Flèches répétées tant qu'on reste appuyé (400 ms puis toutes les 120 ms), petite vibration à chaque appui.
 
+### Page allégée (télécommande virtuelle d'abord)
+
+Depuis la télécommande virtuelle, la page ne garde que ce que le téléphone fait mieux que le menu de la TV. Onglet
+Télécommande : télécommande virtuelle, En cours (titre ; vidéo : titre et « Retour au stream »), votes, Son (volume,
+couper le son), aperçu de la TV, recherche YouTube (vidéos et chaînes) et Jellyfin, lien à lire. Réglages : Wi-Fi,
+listes des streamers et des chaînes YouTube, adresse de la télécommande, état de la box et mises à jour, compte
+Twitch, chaînes suivies. Retirés (dans le menu de la TV) : grille des streamers et second stream, retour en arrière
+du direct, barre de lecture et sous-titres, pause, mode nuit, chat (affiché, coin, apparence), parcours YouTube
+(dernières vidéos par chaîne) et Jellyfin (rangées), rediffusions, historique, bascule auto, sondages affichés,
+sous-titres, résolution, bouton d'arrêt, QR code, lecteur. L'API garde ces actions (menu de la TV, Home Assistant).
+Banc d'essai de la page : jsdom dans Docker, fetch relayé vers l'API de la box (lecture seule), erreurs JS rapportées.
+

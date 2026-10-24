@@ -1,10 +1,11 @@
-# Stream Box : au démarrage, session de la box sans écran de connexion (cage -s : Ctrl+Alt+F2… vers une console).
+# Stream Box : au démarrage, session de la box sans écran de connexion (stream-box-session : cage, Ctrl+Alt+F2… vers
+# une console).
 # Si elle se termine, écran de connexion texte (agreety).
 [terminal]
 vt = 1
 
 [initial_session]
-command = "cage -s -- /home/media/stream-box/start.sh"
+command = "/usr/local/bin/stream-box-session"
 user = "media"
 
 [default_session]
