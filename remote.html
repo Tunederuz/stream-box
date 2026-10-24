@@ -327,6 +327,26 @@
 
   <div class="tab" id="tab-remote">
 
+  <!-- Télécommande virtuelle : mêmes touches que la télécommande Bluetooth (flèches répétées si on reste appuyé) -->
+  <section>
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="5"/>
+      <circle cx="12" cy="9" r="2"/></svg>Télécommande</h2>
+    <div class="dpad">
+      <button data-key="up" class="up" aria-label="Haut">▲</button>
+      <button data-key="left" class="left" aria-label="Gauche">◀</button>
+      <button data-key="ok" class="ok" aria-label="OK">OK</button>
+      <button data-key="right" class="right" aria-label="Droite">▶</button>
+      <button data-key="down" class="down" aria-label="Bas">▼</button>
+    </div>
+    <div class="keys">
+      <button data-key="back" aria-label="Retour">↩<small>Retour</small></button>
+      <button data-key="home" aria-label="Menu de la TV">☰<small>Menu</small></button>
+      <button data-key="menu" aria-label="Options">≡<small>Options</small></button>
+      <button data-key="playpause" aria-label="Lecture ou pause">⏯<small>Lecture</small></button>
+    </div>
+  </section>
+
   <section class="hero" id="now" hidden>
     <div class="hero-media">
       <img id="now-thumb" alt="" hidden>
@@ -345,14 +365,6 @@
       </div>
     </div>
     <p class="hero-title" id="now-title"></p>
-    <div class="hero-body" id="timeshift" hidden>
-      <div class="times"><span>Retour en arrière</span><span id="delay"></span></div>
-      <div class="row">
-        <button data-action="live_seek" data-delta="-30" aria-label="Reculer de 30 secondes">−30 s</button>
-        <button data-action="live_seek" data-delta="30" aria-label="Avancer de 30 secondes">+30 s</button>
-        <button data-action="live_seek" data-delta="live" id="go-live">Direct</button>
-      </div>
-    </div>
   </section>
 
   <section id="vote-section" hidden>
@@ -375,19 +387,6 @@
       <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
         <path d="M8 5v14l11-7z"/></svg>Vidéo en cours</h2>
       <p class="account-name" id="media-title" style="font-size: 17px"></p>
-      <div class="seek" id="seek" role="slider" aria-label="Position dans la vidéo" hidden>
-        <div class="seek-fill" id="seek-fill"></div>
-      </div>
-      <div class="times"><span id="time-pos"></span><span id="time-dur"></span></div>
-      <div class="row">
-        <button data-action="seek" data-delta="-10" aria-label="Reculer de 10 secondes">−10 s</button>
-        <button data-action="pause" id="media-pause">Pause</button>
-        <button data-action="seek" data-delta="30" aria-label="Avancer de 30 secondes">+30 s</button>
-      </div>
-      <div id="subs-row" hidden>
-        <label class="setting" for="subs">Sous-titres</label>
-        <select id="subs"></select>
-      </div>
       <button data-action="twitch" style="width: 100%; margin-top: 8px">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/>
@@ -395,49 +394,10 @@
     </div>
   </section>
 
-  <!-- Télécommande virtuelle : mêmes touches que la télécommande Bluetooth (flèches répétées si on reste appuyé) -->
-  <section>
-    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="5"/>
-      <circle cx="12" cy="9" r="2"/></svg>Télécommande</h2>
-    <div class="dpad">
-      <button data-key="up" class="up" aria-label="Haut">▲</button>
-      <button data-key="left" class="left" aria-label="Gauche">◀</button>
-      <button data-key="ok" class="ok" aria-label="OK">OK</button>
-      <button data-key="right" class="right" aria-label="Droite">▶</button>
-      <button data-key="down" class="down" aria-label="Bas">▼</button>
-    </div>
-    <div class="keys">
-      <button data-key="back" aria-label="Retour">↩<small>Retour</small></button>
-      <button data-key="home" aria-label="Menu de la TV">☰<small>Menu</small></button>
-      <button data-key="menu" aria-label="Options">≡<small>Options</small></button>
-      <button data-key="playpause" aria-label="Lecture ou pause">⏯<small>Lecture</small></button>
-    </div>
-  </section>
-
-  <section>
-    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-      <circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Streamers</h2>
-    <div id="pip-bar" class="stack" hidden style="margin-bottom: 8px">
-      <p id="pip-label" style="margin: 0"></p>
-      <div class="row">
-        <button id="pip-swap">Inverser</button>
-        <button id="pip-layout">Côte à côte</button>
-        <button id="pip-close">Fermer</button>
-      </div>
-    </div>
-    <button data-action="home" id="home">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
-      Écran d'accueil</button>
-    <div class="grid" id="streamers"></div>
-  </section>
-
   <section>
     <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/>
-      <path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>Son et lecture</h2>
+      <path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>Son</h2>
     <div class="row" style="justify-content: space-between">
       <button class="round" data-action="volume" data-delta="-5" aria-label="Baisser le volume">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
@@ -456,24 +416,6 @@
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/>
           <path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
         <span>Couper le son</span></button>
-      <button data-action="pause" id="pause">
-        <svg class="icon-main" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
-        <svg class="icon-alt" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M8 5v14l11-7z"/></svg>
-        <span>Pause</span></button>
-    </div>
-    <button class="toggle" id="night" style="margin-top: 8px" aria-pressed="false">
-      <span class="label">Mode nuit<small>Sons forts atténués, voix remontées</small></span></button>
-  </section>
-
-  <section>
-    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat</h2>
-    <div class="stack">
-      <button class="toggle" data-action="chat" id="chat" aria-pressed="true">
-        <span class="label">Chat sur la TV</span></button>
-      <button data-action="corner" id="corner">Coin</button>
     </div>
   </section>
 
@@ -497,7 +439,6 @@
         <input id="yt-query" type="search" autocomplete="off" placeholder="Rechercher une vidéo" aria-label="Recherche YouTube">
         <button id="yt-search" class="current">Chercher</button>
       </div>
-      <div class="chips" id="yt-who" style="margin-top: 12px"></div>
       <div id="yt-list"></div>
     </details>
     <details id="jellyfin">
@@ -507,27 +448,7 @@
         <input id="jf-query" type="search" autocomplete="off" placeholder="Rechercher un film, une série" aria-label="Recherche Jellyfin">
         <button id="jf-search" class="current">Chercher</button>
       </div>
-      <div class="chips" id="jf-who" style="margin-top: 12px"></div>
       <div id="jf-list"></div>
-    </details>
-  </section>
-
-  <section>
-    <details id="replays">
-      <summary><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/>
-          <path d="m10 9 5 3-5 3z"/></svg>Rediffusions et clips</summary>
-      <div class="chips" id="replays-who"></div>
-      <div id="replays-list"></div>
-    </details>
-  </section>
-
-  <section>
-    <details id="history">
-      <summary><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
-          <path d="M3 3v5h5M12 7v5l3 2"/></svg>Historique</summary>
-      <div id="history-list"></div>
     </details>
   </section>
 
@@ -590,83 +511,19 @@
   </section>
 
   <section>
-    <h2>Lecture</h2>
-    <div class="stack">
-      <button class="toggle" id="auto-switch" aria-pressed="true">
-        <span class="label">Bascule automatique<small>Streamer hors ligne depuis une minute : passer au premier
-          streamer en live de la liste</small></span></button>
-      <button class="toggle" id="events" aria-pressed="true">
-        <span class="label">Sondages et prédictions<small>Affichés en haut de la TV pendant un direct</small></span></button>
-    </div>
-  </section>
-
-  <section>
-    <h2>Apparence du chat</h2>
-    <!-- Boutons plutôt que curseurs : un curseur change de valeur quand le doigt passe dessus en faisant défiler -->
-    <div class="setting" id="chat_bg-label" style="margin-top: 0">Fond du chat</div>
-    <div class="row stepper">
-      <button data-setting="chat_bg" data-step="-10" aria-label="Fond plus transparent">−</button>
-      <div class="value" id="chat_bg-value" aria-labelledby="chat_bg-label">–</div>
-      <button data-setting="chat_bg" data-step="10" aria-label="Fond plus sombre">+</button>
-    </div>
-    <div class="setting" id="chat_size-label">Taille du texte</div>
-    <div class="row stepper">
-      <button data-setting="chat_size" data-step="-2" aria-label="Texte plus petit">−</button>
-      <div class="value" id="chat_size-value" aria-labelledby="chat_size-label">–</div>
-      <button data-setting="chat_size" data-step="2" aria-label="Texte plus grand">+</button>
-    </div>
-  </section>
-
-  <section>
-    <h2>Sous-titres</h2>
-    <div class="setting" id="sub_size-label" style="margin-top: 0">Taille</div>
-    <div class="row stepper">
-      <button data-setting="sub_size" data-step="-10" aria-label="Sous-titres plus petits">−</button>
-      <div class="value" id="sub_size-value" aria-labelledby="sub_size-label">–</div>
-      <button data-setting="sub_size" data-step="10" aria-label="Sous-titres plus grands">+</button>
-    </div>
-    <div class="setting" id="sub_bg-label">Fond</div>
-    <div class="row stepper">
-      <button data-setting="sub_bg" data-step="-10" aria-label="Fond plus transparent">−</button>
-      <div class="value" id="sub_bg-value" aria-labelledby="sub_bg-label">–</div>
-      <button data-setting="sub_bg" data-step="10" aria-label="Fond plus sombre">+</button>
-    </div>
-  </section>
-
-  <section>
-    <h2>Affichage</h2>
-    <label class="setting" for="display" style="margin-top: 0">Résolution de la TV</label>
-    <select id="display" disabled><option>Chargement…</option></select>
-    <div class="status" id="display-status"></div>
-    <label class="setting" for="remote-url" style="margin-top: 0">Adresse de la télécommande (QR code de la TV)</label>
+    <h2>Adresse de la télécommande</h2>
+    <label class="setting" for="remote-url" style="margin-top: 0">Adresse montrée en QR code sur la TV</label>
     <div class="field">
       <input id="remote-url" type="url" autocomplete="off" placeholder="Réseau local (par défaut)">
       <button id="remote-url-save">Enregistrer</button>
     </div>
     <p>Vide : adresse de la box sur le réseau local. Nom de domaine (https://…, derrière un reverse proxy)
       : nécessaire pour installer la télécommande comme une appli sur le téléphone.</p>
-    <div class="setting">Bouton d'arrêt (en haut de cette page et Home Assistant)</div>
-    <div class="segmented" id="power-modes">
-      <button data-power="suspend">Mise en veille</button>
-      <button data-power="poweroff">Arrêt complet</button>
-    </div>
-    <div class="setting">QR code de la télécommande (pour les invités)</div>
-    <div class="segmented" id="qr-modes">
-      <button data-qr="always">Toujours</button>
-      <button data-qr="timed">30 secondes</button>
-      <button data-qr="never">Jamais</button>
-    </div>
   </section>
 
   <section>
     <h2>Système</h2>
-    <div class="setting" style="margin-top: 0">Lecteur</div>
-    <div class="segmented" id="player-modes">
-      <button data-player="qt">Appli Qt (menu animé)</button>
-      <button data-player="mpv">mpv seul</button>
-    </div>
-    <div class="status" id="player-status"></div>
-    <div class="setting">État de la box</div>
+    <div class="setting" style="margin-top: 0">État de la box</div>
     <div class="health" id="health"></div>
     <button id="update-now" style="width: 100%; margin-top: 10px">Mettre à jour maintenant</button>
     <details style="margin-top: 10px">
@@ -750,14 +607,10 @@
 </main>
 
 <script>
-const CORNERS = { tl: "↖ haut gauche", tr: "↗ haut droite", br: "↘ bas droite", bl: "↙ bas gauche" };
 const $ = (id) => document.getElementById(id);
 let refreshTimer;
 let previewTimer = null, previewUrl = null;   // aperçu de la TV (voir previewTick)
-let lastState = null, replaysLogin = null;
-let progress = null;   // dernière position connue, pour faire avancer la barre entre deux rafraîchissements
-const settings = {};   // dernières valeurs connues de chat_bg, chat_size, sub_size et sub_bg
-const LIMITS = { chat_bg: [0, 100], chat_size: [20, 60], sub_size: [50, 200], sub_bg: [0, 100] };   // mêmes bornes que NUMBERS dans stream-box.lua
+let lastState = null;
 
 // Photo de profil du streamer, ou son initiale ; anneau rouge en live, grisée hors ligne
 function avatar(s, name, extra = "") {
@@ -806,124 +659,20 @@ function render(s) {
     : s.playing ? `En direct sur la TV · ${s.channel}` : "Rien ne joue pour l'instant";
   $("status").className = "status";
   $("status").textContent = "";
-  $("home").classList.toggle("current", s.mode === "home");
   renderNow(s);
 
   $("media-section").hidden = !media;
   if (media) {
     $("media-title").textContent = s.title ?? "Vidéo";
-    progress = { position: s.position ?? 0, duration: s.duration ?? 0, pause: s.pause, at: Date.now() };
-    drawProgress();
-    $("media-pause").textContent = s.pause ? "Reprendre" : "Pause";
-    $("subs-row").hidden = !s.subs.length;
-    if (document.activeElement !== $("subs")) {   // ne pas refaire la liste pendant qu'on la déroule
-      const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
-      $("subs").replaceChildren(option("no", "Aucun"), ...s.subs.map((t) => option(t.id, t.name)));
-      $("subs").value = s.subs.find((t) => t.selected)?.id ?? "no";
-    }
   }
-
-  // Retour en arrière dans le direct (box sur le stream et en lecture)
-  $("timeshift").hidden = media || s.mode === "home" || s.delay == null;
-  if (s.delay != null) {
-    const behind = s.delay >= 4;
-    $("delay").innerHTML = "";
-    $("delay").append(behind ? `−${clock(s.delay)}` : Object.assign(document.createElement("span"), { className: "live-dot", textContent: "● EN DIRECT" }));
-    $("go-live").disabled = !behind;
-  }
-
-  const list = $("streamers");
-  list.replaceChildren(...s.streamers.map((name) => {
-    const b = document.createElement("button");
-    b.className = "streamer";
-    const info = s.live?.[name];
-    const span = (cls, text) => Object.assign(document.createElement("span"), { className: cls, textContent: text });
-    const who = span("who", "");
-    who.append(span("name", name));
-    if (info) {
-      const line = span("live-info", "");
-      line.append(span("live-dot", `● ${viewers(info.viewers)}`), info.game ? ` · ${info.game}` : "");
-      who.append(line);
-      b.title = info.title ?? "";
-    } else {
-      who.append(span("live-info offline", "Hors ligne"));
-    }
-    b.append(avatar(s, name, info ? "live" : "off"), who);
-    b.classList.toggle("current", s.mode === "twitch" && name === s.channel);
-    b.onclick = () => send("channel", { name });
-    return b;
-  }));
 
   $("volume").textContent = s.mute ? "muet" : `${s.volume} %`;
   $("volume-meter").style.width = s.mute ? "0" : `${Math.min(100, s.volume / 1.3)}%`;
   $("mute").lastElementChild.textContent = s.mute ? "Remettre le son" : "Couper le son";
   $("mute").classList.toggle("on", s.mute);
-  $("pause").lastElementChild.textContent = s.pause ? "Reprendre" : "Pause";
-  $("pause").classList.toggle("on", s.pause);
-  setToggle("chat", s.chat_visible);
-  $("corner").textContent = `Coin : ${CORNERS[s.corner] ?? s.corner}`;
-  setToggle("auto-switch", s.auto_switch);
-  setToggle("night", s.night);
-  setToggle("events", s.events);
-  document.querySelectorAll("[data-player]").forEach(b => b.classList.toggle("current", b.dataset.player === s.player));
-  $("player-status").textContent = s.player === "qt" && s.player_running === "mpv"
-    ? "L'appli Qt s'est arrêtée plusieurs fois : mpv seul en attendant. Choisis à nouveau « Appli Qt » pour réessayer." : "";
-  const pipOn = !!(s.pip && s.pip.channel);
-  $("pip-bar").hidden = !pipOn;
-  if (pipOn) {
-    $("pip-label").textContent = `Second stream : ${s.pip.channel}`;
-    $("pip-layout").textContent = s.pip.layout === "split" ? "Incrustation" : "Côte à côte";
-  }
-  document.querySelectorAll("[data-power]").forEach(b => {
-    b.classList.toggle("current", b.dataset.power === s.power_action);
-    b.setAttribute("aria-pressed", String(b.dataset.power === s.power_action));
-  });
   powerAction = s.power_action;
   if (document.activeElement !== $("remote-url")) $("remote-url").value = s.remote_url || "";
-  document.querySelectorAll("[data-qr]").forEach(b => {
-    b.classList.toggle("current", b.dataset.qr === s.qr);
-    b.setAttribute("aria-pressed", String(b.dataset.qr === s.qr));
-  });
-  settings.chat_bg = s.chat_bg;
-  settings.chat_size = s.chat_size;
-  $("chat_bg-value").textContent = `${s.chat_bg} %`;
-  $("chat_size-value").textContent = `${s.chat_size} px`;
-  settings.sub_size = s.sub_size;
-  settings.sub_bg = s.sub_bg;
-  $("sub_size-value").textContent = `${s.sub_size} %`;
-  $("sub_bg-value").textContent = s.sub_bg ? `${s.sub_bg} %` : "Aucun";
 }
-
-async function refreshDisplay() {
-  const select = $("display");
-  try {
-    const r = await fetch("/api/display");
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error);
-    const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
-    const pretty = (mode) => mode.replace("x", " × ").replace("@", " · ") + " Hz";
-    select.replaceChildren(option("auto", `Auto (${pretty(d.auto)})`), ...d.modes.map((m) => option(m, pretty(m))));
-    select.value = d.setting;
-    select.disabled = false;
-    $("display-status").textContent = d.current ? `Actuellement : ${pretty(d.current)}` : "";
-  } catch (e) {
-    select.replaceChildren(Object.assign(document.createElement("option"), { textContent: "Indisponible" }));
-    $("display-status").className = "status error";
-    $("display-status").textContent = e.message || "Box injoignable";
-  }
-}
-
-function drawProgress() {
-  if (!progress) return;
-  const { duration, pause, at } = progress;
-  const position = Math.min(duration || Infinity, progress.position + (pause ? 0 : (Date.now() - at) / 1000));
-  $("seek").hidden = !duration;
-  $("seek-fill").style.width = duration ? `${(100 * position) / duration}%` : "0";
-  $("seek").setAttribute("aria-valuenow", Math.round(position));
-  $("time-pos").textContent = clock(position);
-  $("time-dur").textContent = duration ? clock(duration) : "";
-}
-setInterval(() => { if (!$("media-section").hidden) drawProgress(); }, 1000);
 
 function length(seconds) {
   const h = Math.floor(seconds / 3600), m = Math.floor(seconds / 60) % 60;
@@ -946,60 +695,6 @@ function playVideo(item, fromStart = false) {
   send("play", { url: item.url, from_start: fromStart });
   $("media-status").className = "status";
   $("media-status").textContent = `Chargement de « ${item.title} » sur la TV…`;
-}
-
-const KINDS = { youtube: "YouTube", "twitch-vod": "Rediffusion Twitch", "twitch-clip": "Clip Twitch", link: "Lien", jellyfin: "Jellyfin" };
-async function loadHistory() {
-  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
-  try {
-    const entries = await (await fetch("/api/history")).json();
-    if (!entries.length) {
-      $("history-list").replaceChildren(el("p", { textContent: "Rien pour l'instant : les vidéos lancées sur la TV s'afficheront ici." }));
-      return;
-    }
-    const items = entries.map((e) => {
-      const started = e.position >= 30 && !e.finished;
-      const meta = [KINDS[e.kind] ?? "", e.finished ? "vu" : e.duration ? `${clock(e.position)} / ${clock(e.duration)}` : ""]
-        .filter(Boolean).join(" · ");
-      const actions = el("div", { className: "actions" },
-        el("button", { textContent: started ? "Reprendre" : "Revoir", onclick: () => playVideo(e) }));
-      if (started) actions.append(el("button", { textContent: "Depuis le début", onclick: () => playVideo(e, true) }));
-      actions.append(el("button", { className: "remove", textContent: "✕", title: "Retirer de l'historique",
-        onclick: async () => { await send("history", { action: "remove", key: e.key }); loadHistory(); } }));
-      return el("div", { className: "history-item" },
-        videoCard(e, meta, e.duration && !e.finished ? e.position / e.duration : e.finished ? 1 : 0, () => playVideo(e)), actions);
-    });
-    const clear = el("button", { id: "history-clear", textContent: "Effacer l'historique", onclick: async () => {
-      if (confirm("Effacer tout l'historique de la box ?")) { await send("history", { action: "clear" }); loadHistory(); }
-    } });
-    $("history-list").replaceChildren(...items, clear);
-  } catch (e) {
-    $("history-list").replaceChildren(el("p", { className: "status error", textContent: e.message || "Box injoignable" }));
-  }
-}
-
-async function loadReplays(login) {
-  replaysLogin = login;
-  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
-  $("replays-who").replaceChildren(...(lastState?.streamers ?? []).map((name) =>
-    el("button", { className: name === login ? "current" : "", onclick: () => loadReplays(name) }, name)));
-  $("replays-list").replaceChildren(el("p", { textContent: "Chargement…" }));
-  try {
-    const r = await fetch(`/api/replays?login=${encodeURIComponent(login)}`);
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error);
-    const card = (item, meta) => videoCard(item, item.finished ? `${meta} · vu` : meta,
-      item.position && item.seconds ? item.position / item.seconds : 0, () => playVideo(item));
-    const date = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-    const parts = [];
-    if (d.vods.length) parts.push(el("p", { className: "replays-title", textContent: "Rediffusions" }),
-      ...d.vods.map((v) => card(v, `${date(v.date)} · ${length(v.seconds)}`)));
-    if (d.clips.length) parts.push(el("p", { className: "replays-title", textContent: "Clips de la semaine" }),
-      ...d.clips.map((c) => card(c, `${length(c.seconds)} · ${viewers(c.views)} vues`)));
-    $("replays-list").replaceChildren(...(parts.length ? parts : [el("p", { textContent: "Rien pour l'instant." })]));
-  } catch (e) {
-    $("replays-list").replaceChildren(el("p", { className: "status error", textContent: e.message || "Box injoignable" }));
-  }
 }
 
 function viewers(n) {
@@ -1084,23 +779,6 @@ async function accountAction(action, body = {}) {
 $("login").onclick = () => accountAction("login", { token: $("token").value });
 $("token").onkeydown = (e) => { if (e.key === "Enter") $("login").click(); };
 $("logout").onclick = () => accountAction("logout");
-document.querySelectorAll("button[data-setting]").forEach((b) => {
-  b.onclick = () => {
-    const key = b.dataset.setting;
-    if (settings[key] === undefined) return;
-    const [min, max] = LIMITS[key];
-    settings[key] = Math.min(max, Math.max(min, settings[key] + Number(b.dataset.step)));   // appuis rapides : on cumule sans attendre la box
-    send("set", { key, value: settings[key] });
-  };
-});
-$("display").onchange = async () => {
-  $("display").disabled = true;
-  $("display-status").className = "status";
-  $("display-status").textContent = "Changement de résolution…";
-  await send("display", { mode: $("display").value });
-  refreshDisplay();
-};
-refreshDisplay();
 $("play").onclick = async () => {
   $("media-status").className = "status";
   $("media-status").textContent = "Chargement sur la TV…";
@@ -1110,14 +788,6 @@ $("play").onclick = async () => {
   setTimeout(() => { $("media-status").textContent = ""; }, 4000);
 };
 $("url").onkeydown = (e) => { if (e.key === "Enter") $("play").click(); };
-$("seek").onclick = (e) => {
-  if (!progress?.duration) return;
-  const box = $("seek").getBoundingClientRect();
-  const position = Math.max(0, Math.min(1, (e.clientX - box.left) / box.width)) * progress.duration;
-  progress = { ...progress, position, at: Date.now() };   // la barre suit tout de suite, mpv suit derrière
-  drawProgress();
-  send("seek_to", { position });
-};
 let managed = "";   // liste affichée dans les réglages, pour ne la refaire que si elle change
 function renderManage() {
   const names = lastState?.streamers ?? [];
@@ -1167,7 +837,7 @@ function showTab(name) {
   $("tab-remote").hidden = name !== "remote";
   $("tab-settings").hidden = name !== "settings";
   try { localStorage.setItem("tab", name); } catch (e) { /* stockage indisponible : on oublie l'onglet */ }
-  if (name === "settings") { renderManage(); refreshDisplay(); if (typeof refreshHealth === "function") refreshHealth(); if (typeof loadYoutube === "function") loadYoutube(); }
+  if (name === "settings") { renderManage(); if (typeof refreshHealth === "function") refreshHealth(); if (typeof loadYoutube === "function") loadYoutube(); }
   if (typeof previewTick === "function") previewTick();
 }
 document.querySelectorAll(".tabs button").forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
@@ -1209,10 +879,6 @@ async function previewTick() {
 }
 $("preview").ontoggle = () => previewTick();
 document.addEventListener("visibilitychange", () => previewTick());
-$("history").ontoggle = () => { if ($("history").open) loadHistory(); };
-$("auto-switch").onclick = () => send("auto_switch", { enabled: !lastState?.auto_switch });
-document.querySelectorAll("[data-qr]").forEach(b => b.onclick = () => send("qr", { mode: b.dataset.qr }));
-document.querySelectorAll("[data-power]").forEach(b => b.onclick = () => send("power_action", { mode: b.dataset.power }));
 // Télécommande virtuelle : un appui = une touche ; flèches répétées tant qu'on reste appuyé (après 400 ms, toutes les 120 ms)
 document.querySelectorAll("[data-key]").forEach((b) => {
   let repeat = null, delay = null;
@@ -1231,10 +897,6 @@ document.querySelectorAll("[data-key]").forEach((b) => {
   b.addEventListener("contextmenu", (e) => e.preventDefault());
 });
 $("remote-url-save").onclick = () => send("remote_url", { url: $("remote-url").value.trim() });
-document.querySelectorAll("[data-player]").forEach(b => b.onclick = () => {
-  $("player-status").textContent = "Le lecteur redémarre…";
-  send("player", { mode: b.dataset.player });
-});
 // Sondage et prédiction : relevés toutes les 3 s tant que la page montre un direct
 let events = null, eventsTimer = null;
 async function refreshEvents() {
@@ -1327,15 +989,7 @@ async function castVote(body, action = "vote") {
   refreshEvents();
 }
 refreshEvents();
-$("pip-swap").onclick = () => send("pip", { action: "swap" });
-$("pip-close").onclick = () => send("pip", { action: "close" });
-$("pip-layout").onclick = () => send("pip", { action: "layout", layout: lastState?.pip?.layout === "split" ? "pip" : "split" });
-$("night").onclick = () => send("flag", { key: "night", enabled: !lastState?.night });
-$("events").onclick = () => send("flag", { key: "events", enabled: !lastState?.events });
-$("replays").ontoggle = () => {
-  if ($("replays").open) loadReplays(replaysLogin ?? lastState?.channel ?? lastState?.streamers?.[0]);
-};
-$("subs").onchange = () => { send("sub", { id: $("subs").value }); $("subs").blur(); };
+
 if (new URLSearchParams(location.search).has("partage")) {
   $("media-status").className = "status error";
   $("media-status").textContent = "Aucun lien vidéo dans ce partage.";
@@ -1413,8 +1067,9 @@ $("follows-logout").onclick = () => { if (confirm("Retirer l'autorisation des ch
 $("app-change").onclick = () => { followsChanging = true; refreshFollows(); };
 refreshFollows();
 
-// YouTube : dernières vidéos des chaînes de la liste, recherche, gestion de la liste
-let ytHome = null, ytChannel = null, ytMode = "channel";   // ytMode : "search" pendant une recherche affichée
+// YouTube : recherche (vidéos et chaînes), gestion de la liste des chaînes (Réglages). Les dernières vidéos des chaînes
+// se parcourent sur la TV
+let ytHome = null;
 const ago = (iso) => {
   const days = Math.floor((Date.now() - new Date(iso)) / 86400000);
   return days <= 0 ? "aujourd'hui" : days === 1 ? "hier" : days < 7 ? `il y a ${days} j` : days < 31 ? `il y a ${Math.floor(days / 7)} sem.`
@@ -1423,36 +1078,16 @@ const ago = (iso) => {
 function ytCard(v, meta) {
   return videoCard(v, v.finished ? `${meta} · vu` : meta, v.position && v.seconds ? v.position / v.seconds : 0, () => playVideo(v));
 }
-async function loadYoutube() {
-  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
+async function loadYoutube() {   // liste des chaînes, pour les Réglages
   try {
     ytHome = await (await fetch("/api/youtube")).json();
   } catch (e) { return; }
   renderYoutubeManage();
-  const chans = ytHome.channels;
-  if (!chans.length) {
-    $("yt-who").replaceChildren();
-    $("yt-list").replaceChildren(el("p", { textContent: "Ajoute des chaînes dans Réglages → Chaînes YouTube, ou cherche une vidéo." }));
-    return;
-  }
-  if (!chans.some((c) => c.id === ytChannel)) ytChannel = chans[0].id;
-  showYoutubeChannel(ytMode === "search");   // une chaîne ajoutée depuis la recherche ne remplace pas les résultats
-}
-function showYoutubeChannel(chipsOnly = false) {
-  const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
-  $("yt-who").replaceChildren(...ytHome.channels.map((c) => el("button", { className: c.id === ytChannel && !chipsOnly ? "current" : "",
-    onclick: () => { ytChannel = c.id; ytMode = "channel"; showYoutubeChannel(); } }, c.name)));
-  if (chipsOnly) return;
-  const c = ytHome.channels.find((x) => x.id === ytChannel);
-  $("yt-list").replaceChildren(...(c.videos === null ? [el("p", { textContent: "YouTube injoignable pour l'instant." })]
-    : c.videos.map((v) => ytCard(v, `${ago(v.date)}${v.views != null ? " · " + viewers(v.views) + " vues" : ""}`))));
 }
 async function ytSearch() {
   const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
   const q = $("yt-query").value.trim();
   if (!q) return;
-  ytMode = "search";
-  $("yt-who").querySelectorAll("button").forEach((b) => b.classList.remove("current"));
   $("yt-list").replaceChildren(el("p", { textContent: "Recherche…" }));
   try {
     const r = await fetch(`/api/youtube_search?q=${encodeURIComponent(q)}`);
@@ -1541,9 +1176,9 @@ async function editYoutube(action, channel, delta = 0) {
 $("add-yt").onclick = () => { if ($("new-yt").value.trim()) editYoutube("add", $("new-yt").value); };
 $("new-yt").onkeydown = (e) => { if (e.key === "Enter") $("add-yt").click(); };
 
-// Jellyfin : reprendre, prochains épisodes, ajouts récents par bibliothèque, recherche, épisodes d'une série. La
+// Jellyfin : recherche et épisodes d'une série trouvée (les rangées Reprendre, Prochains épisodes… sont sur la TV). La
 // lecture passe par la box (/api/jellyfin_play), qui renvoie la progression au serveur
-let jfHome = null, jfShelf = "resume";
+let jfHome = null;
 const jfEl = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
 const jfDuration = (t) => { const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60; return h ? `${h} h ${String(m).padStart(2, "0")}` : `${m} min`; };
 function jfCard(it) {
@@ -1557,19 +1192,6 @@ function jfPlay(it) {
   $("media-status").className = "status";
   $("media-status").textContent = `Chargement de « ${it.episode ? it.title + " · " + it.episode : it.title} » sur la TV…`;
 }
-function jfShelves() {
-  if (!jfHome?.configured) return [];
-  return [["resume", "Reprendre", jfHome.resume], ["nextup", "Prochains épisodes", jfHome.nextup],
-          ...jfHome.libraries.map((l) => [`lib:${l.id}`, l.name, l.items])].filter((x) => x[2].length);
-}
-function jfShow() {
-  const shelves = jfShelves();
-  if (!shelves.some((x) => x[0] === jfShelf) && shelves.length) jfShelf = shelves[0][0];
-  $("jf-who").replaceChildren(...shelves.map(([key, name]) => jfEl("button", { className: key === jfShelf ? "current" : "",
-    onclick: () => { jfShelf = key; jfShow(); } }, name)));
-  const shelf = shelves.find((x) => x[0] === jfShelf);
-  $("jf-list").replaceChildren(...(shelf ? shelf[2].map(jfCard) : [jfEl("p", { textContent: "Rien à afficher pour l'instant." })]));
-}
 async function loadJellyfin() {
   try {
     const r = await fetch("/api/jellyfin");
@@ -1579,17 +1201,12 @@ async function loadJellyfin() {
     $("jf-list").replaceChildren(jfEl("p", { className: "status error", textContent: e.message || "Box injoignable" }));
     return;
   }
-  if (!jfHome.configured) {
-    $("jf-who").replaceChildren();
-    $("jf-list").replaceChildren(jfEl("p", { textContent: "Jellyfin n'est pas associé à la box : dans l'appli Jellyfin, « Lire sur… » → la box." }));
-    return;
-  }
-  jfShow();
+  $("jf-list").replaceChildren(...(jfHome.configured ? [] :
+    [jfEl("p", { textContent: "Jellyfin n'est pas associé à la box : dans l'appli Jellyfin, « Lire sur… » → la box." })]));
 }
 async function jfSearch() {
   const q = $("jf-query").value.trim();
   if (!q) return;
-  $("jf-who").querySelectorAll("button").forEach((b) => b.classList.remove("current"));
   $("jf-list").replaceChildren(jfEl("p", { textContent: "Recherche…" }));
   try {
     const r = await fetch(`/api/jellyfin_search?q=${encodeURIComponent(q)}`);
@@ -1608,7 +1225,7 @@ async function jfSeries(it) {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
     const back = jfEl("button", { textContent: "← Retour" });
-    back.onclick = jfShow;
+    back.onclick = jfSearch;
     const cards = d.episodes.map(jfCard);
     $("jf-list").replaceChildren(jfEl("div", { className: "chips" }, back),
       jfEl("p", { className: "replays-title", textContent: it.title }), ...cards);

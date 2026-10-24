@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Stream Box : session de la box, lancée par greetd. Sortie de cage et de tout ce qu'il lance dans le journal
+# (journalctl -t stream-box-session). Si cage s'arrête en moins de 20 s (pas d'accélération graphique utilisable avec
+# cette carte : pilote manquant…), nouvel essai avec le rendu logiciel de wlroots, plus lent mais affiché.
+session() { systemd-cat --identifier=stream-box-session -- cage -s -- /home/media/stream-box/start.sh; }
+start=$(date +%s)
+session
+if [ $(( $(date +%s) - start )) -lt 20 ]; then
+  echo "cage arrêté au démarrage : nouvel essai en rendu logiciel" | systemd-cat --identifier=stream-box-session -p warning
+  export WLR_RENDERER=pixman
+  session
+fi
