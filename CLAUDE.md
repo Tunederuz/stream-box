@@ -578,7 +578,8 @@ donc `off` et jamais `unavailable`. Les autres entités : disponibles si `status
 
 ### Image disque installable (image/, mkosi)
 
-`bash image/build.sh` construit `image/mkosi.output/stream-box.raw` (~5,7 Go, à écrire sur un disque ou une clé USB)
+`bash image/build.sh` construit `image/mkosi.output/stream-box.raw` (~3 Go, à écrire sur un disque ou une clé USB ;
+`bash image/build.sh xz` : stream-box.raw.xz, ~1,8 Go, la version à télécharger)
 dans un conteneur Docker Arch avec mkosi 27 (rien d'installé sur la machine) ; `bash image/build.sh vm` la démarre
 dans QEMU. Base Arch (pas CachyOS), UEFI, systemd-boot + UKI. greetd lance la session cage de media au démarrage
 (pas de choix clavier/écran de connexion comme boot-mode.py). `mkosi.prepare.chroot` (avec réseau) : utilisateur
@@ -656,4 +657,11 @@ Clavier de recherche (YouTube, Jellyfin) ouvert ou fermé dans TvMenu.qml (`onKb
 `kbText` ; Entrée ou « Rechercher » (`submit`) lance la recherche et ferme le clavier. Les blocs de recherche
 YouTube et Jellyfin de la page sont retirés : la recherche se fait sur la TV. Appli Qt seulement (pas de recherche
 dans le menu de mpv seul).
+Allègement de l'image (5,7 → 3,0 Go) : partition système en btrfs compressé zstd, `Minimize=best` (pas de place vide
+écrite, agrandie au premier démarrage) ; pas de deno ni de nodejs-wheel dans le venv media (yt-dlp passe par le Node du
+système : `--js-runtimes node` dans player.sh, remote.py `YTDLP_JS`, update.sh, seulement si deno est absent, la box
+installée par install.sh garde deno) ; serveur de jetons sans ses dépendances de développement (`npm prune
+--omit=dev`) ; `mkosi.finalize.chroot` retire /usr/include, doc, man, traductions autres que fr et en, outils de
+développement Qt du venv. Firmwares, LLVM, polices Noto et Qt gardés (compatibilité). Testé dans QEMU sur une clé de
+16 Go : partition agrandie à 16 Go, vidéo YouTube lue.
 

@@ -34,8 +34,13 @@ update streamlink-venv streamlink \
 # Appli Qt qui embarque mpv (ui.py) : Qt et python-mpv doivent se charger, et libmpv être trouvée
 [ -x "$HOME/.local/share/ui-venv/bin/pip" ] && update ui-venv "PySide6-Essentials python-mpv" \
   "$HOME/.local/share/ui-venv/bin/python -c 'import mpv; from PySide6 import QtQuick'"
-update media-venv "yt-dlp[default] deno nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt segno" \
-  "$HOME/.local/bin/yt-dlp --simulate --no-warnings https://www.youtube.com/watch?v=jNQXAC9IVRw && $HOME/.local/bin/jellyfin-mpv-shim --version"
+# deno et nodejs-wheel seulement s'ils sont déjà là (installation par install.sh) ; l'image s'en passe : Node du système
+JS=""
+[ -x "$HOME/.local/share/media-venv/bin/deno" ] && JS="deno nodejs-wheel"
+JSARG=""
+[ -z "$JS" ] && JSARG="--js-runtimes node"
+update media-venv "yt-dlp[default] $JS bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt segno" \
+  "$HOME/.local/bin/yt-dlp $JSARG --simulate --no-warnings https://www.youtube.com/watch?v=jNQXAC9IVRw && $HOME/.local/bin/jellyfin-mpv-shim --version"
 
 # Serveur de jetons anti-robot YouTube : sa version doit suivre celle du plugin bgutil (recompilé si elle change)
 POT_DIR="$HOME/.local/share/bgutil-pot-provider"
@@ -45,7 +50,8 @@ if [ -n "$want" ] && [ "$want" != "$have" ]; then
   echo "serveur de jetons : $have → $want"
   export PATH="$HOME/.local/share/media-venv/bin:$PATH"
   if git clone -q --depth 1 --branch "$want" https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git "$POT_DIR.new" \
-     && (cd "$POT_DIR.new/server" && npm ci --no-audit --no-fund --loglevel=error && npx tsc); then
+     && (cd "$POT_DIR.new/server" && npm ci --no-audit --no-fund --loglevel=error && npx tsc \
+         && npm prune --omit=dev --no-audit --no-fund --loglevel=error); then
     rm -rf "$POT_DIR" && mv "$POT_DIR.new" "$POT_DIR"
     systemctl --user restart stream-box-pot.service && echo "serveur de jetons : relancé"
   else

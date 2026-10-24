@@ -28,6 +28,8 @@ MPV_ARGS=(
   --ytdl-raw-options-append=cookies="$HOME/.config/stream-box/twitch-cookies.txt"
   --ytdl-raw-options-append='extractor-args=youtube:player_client=tv_simply,android_vr;fetch_pot=always'
 )
+# Défis JavaScript de YouTube : deno s'il est installé (install.sh), sinon le Node du système (image)
+[ -x "$HOME/.local/bin/deno" ] || MPV_ARGS+=(--ytdl-raw-options-append=js-runtimes=node)
 
 quick_fails=0 last_choice=""
 while true; do
