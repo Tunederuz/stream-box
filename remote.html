@@ -238,6 +238,18 @@
   .replay .bar { height: 4px; border-radius: 2px; background: var(--surface-3); margin-top: 6px; overflow: hidden; }
   .replay .bar i { display: block; height: 100%; background: var(--grad); }
   .yt-channel { cursor: pointer; }
+  /* Télécommande virtuelle */
+  .dpad { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 8px;
+          width: min(100%, 300px); aspect-ratio: 1; margin: 4px auto 14px; touch-action: manipulation; }
+  .dpad button { font-size: 22px; border-radius: 18px; min-height: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+  .dpad .up { grid-area: 1 / 2; } .dpad .left { grid-area: 2 / 1; } .dpad .right { grid-area: 2 / 3; }
+  .dpad .down { grid-area: 3 / 2; }
+  .dpad .ok { grid-area: 2 / 2; border-radius: 50%; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  .dpad button:active, .keys button:active { transform: scale(.94); background: var(--surface-3); }
+  .dpad .ok:active { background: var(--accent-2); }
+  .keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; touch-action: manipulation; }
+  .keys button { flex-direction: column; gap: 2px; font-size: 20px; padding: 8px 4px; user-select: none; -webkit-user-select: none; }
+  .keys small { font-size: 11px; color: var(--muted); }
   .yt-channel small { color: var(--muted); font-weight: normal; }
   .replays-title { font-size: 12px; color: var(--muted); margin: 14px 0 0; text-transform: uppercase;
                    letter-spacing: .1em; font-weight: 700; }
@@ -380,6 +392,26 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/>
           <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Retour au stream</button>
+    </div>
+  </section>
+
+  <!-- Télécommande virtuelle : mêmes touches que la télécommande Bluetooth (flèches répétées si on reste appuyé) -->
+  <section>
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="5"/>
+      <circle cx="12" cy="9" r="2"/></svg>Télécommande</h2>
+    <div class="dpad">
+      <button data-key="up" class="up" aria-label="Haut">▲</button>
+      <button data-key="left" class="left" aria-label="Gauche">◀</button>
+      <button data-key="ok" class="ok" aria-label="OK">OK</button>
+      <button data-key="right" class="right" aria-label="Droite">▶</button>
+      <button data-key="down" class="down" aria-label="Bas">▼</button>
+    </div>
+    <div class="keys">
+      <button data-key="back" aria-label="Retour">↩<small>Retour</small></button>
+      <button data-key="home" aria-label="Menu de la TV">☰<small>Menu</small></button>
+      <button data-key="menu" aria-label="Options">≡<small>Options</small></button>
+      <button data-key="playpause" aria-label="Lecture ou pause">⏯<small>Lecture</small></button>
     </div>
   </section>
 
@@ -1181,6 +1213,23 @@ $("history").ontoggle = () => { if ($("history").open) loadHistory(); };
 $("auto-switch").onclick = () => send("auto_switch", { enabled: !lastState?.auto_switch });
 document.querySelectorAll("[data-qr]").forEach(b => b.onclick = () => send("qr", { mode: b.dataset.qr }));
 document.querySelectorAll("[data-power]").forEach(b => b.onclick = () => send("power_action", { mode: b.dataset.power }));
+// Télécommande virtuelle : un appui = une touche ; flèches répétées tant qu'on reste appuyé (après 400 ms, toutes les 120 ms)
+document.querySelectorAll("[data-key]").forEach((b) => {
+  let repeat = null, delay = null;
+  const press = () => {
+    if (navigator.vibrate) navigator.vibrate(8);
+    fetch("/api/key", { method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ key: b.dataset.key }) }).catch(() => {});
+  };
+  const stop = () => { clearTimeout(delay); clearInterval(repeat); delay = repeat = null; };
+  b.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    press();
+    if (["up", "down", "left", "right"].includes(b.dataset.key)) delay = setTimeout(() => { repeat = setInterval(press, 120); }, 400);
+  });
+  ["pointerup", "pointerleave", "pointercancel"].forEach((t) => b.addEventListener(t, stop));
+  b.addEventListener("contextmenu", (e) => e.preventDefault());
+});
 $("remote-url-save").onclick = () => send("remote_url", { url: $("remote-url").value.trim() });
 document.querySelectorAll("[data-player]").forEach(b => b.onclick = () => {
   $("player-status").textContent = "Le lecteur redémarre…";
