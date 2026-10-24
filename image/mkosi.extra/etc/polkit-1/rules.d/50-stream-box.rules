@@ -1,0 +1,9 @@
+// Stream Box : le bouton d'extinction de la télécommande et de Home Assistant (utilisateur media)
+polkit.addRule(function (action, subject) {
+    if (subject.user == "media" &&
+        (action.id == "org.freedesktop.login1.power-off" ||
+         action.id == "org.freedesktop.login1.power-off-multiple-sessions" ||
+         action.id == "org.freedesktop.login1.power-off-ignore-inhibit")) {
+        return polkit.Result.YES;
+    }
+});

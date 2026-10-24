@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Stream Box : services et réglages de l'image (après les paquets et mkosi.prepare.chroot)
+set -euo pipefail
+BOX_USER=media
+BOX_HOME=/home/$BOX_USER
+as_box() { (cd "$BOX_HOME" && runuser -u "$BOX_USER" -- env HOME="$BOX_HOME" bash -c "$1"); }
+
+# SSH : clés seulement (services activés par mkosi.finalize.chroot, après le « preset-all » de mkosi qui les annulerait)
+install -d /etc/ssh/sshd_config.d
+printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\n' > /etc/ssh/sshd_config.d/50-stream-box.conf
+
+# Services utilisateur de media : mises à jour, jetons YouTube, pont MQTT (sans config MQTT, celui-ci ne démarre pas)
+as_box '
+  set -e
+  units=~/.config/systemd/user
+  mkdir -p "$units/default.target.wants" "$units/timers.target.wants"
+  cp ~/stream-box/systemd/*.service ~/stream-box/systemd/*.timer "$units/"
+  ln -sf "$units/stream-box-pot.service" "$units/default.target.wants/"
+  ln -sf "$units/stream-box-mqtt.service" "$units/default.target.wants/"
+  ln -sf "$units/stream-box-update.timer" "$units/timers.target.wants/"
+  install -d -m 700 ~/.config/stream-box ~/.config/jellyfin-mpv-shim
+  echo qt > ~/.config/stream-box/player
+'
+# jellyfin-mpv-shim pilote le mpv de la box (même config que install.sh)
+as_box 'cat > ~/.config/jellyfin-mpv-shim/conf.json' << 'JSON'
+{
+  "player_name": "Stream Box",
+  "enable_gui": false,
+  "headless": true,
+  "fullscreen": true,
+  "hwdec": "auto-safe",
+  "mpv_ext": true,
+  "mpv_ext_start": false,
+  "mpv_ext_ipc": "/tmp/stream-box-mpv.sock",
+  "mpv_ext_no_ovr": true,
+  "mpv_idle_quit": false
+}
+JSON
+chmod +x "$BOX_HOME"/stream-box/*.sh "$BOX_HOME"/stream-box/*.py

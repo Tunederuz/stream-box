@@ -576,3 +576,16 @@ donc `off` et jamais `unavailable`. Les autres entités : disponibles si `status
 (`availability_mode: all`), sauf « Éteindre » : disponible dès power = ON et exécuté tout de suite par le pont
 (`systemctl poweroff`, polkit), même pendant le démarrage. Exemples d'automatisation (allumer et éteindre avec la TV) dans docs/home-assistant.md.
 
+### Image disque installable (image/, mkosi)
+
+`bash image/build.sh` construit `image/mkosi.output/stream-box.raw` (~5,7 Go, à écrire sur un disque ou une clé USB)
+dans un conteneur Docker Arch avec mkosi 27 (rien d'installé sur la machine) ; `bash image/build.sh vm` la démarre
+dans QEMU. Base Arch (pas CachyOS), UEFI, systemd-boot + UKI. greetd lance la session cage de media au démarrage
+(pas de choix clavier/écran de connexion comme boot-mode.py). `mkosi.prepare.chroot` (avec réseau) : utilisateur
+media, clone du dépôt (origin = GitHub), venvs, serveur de jetons YouTube ; `mkosi.postinst.chroot` : config SSH,
+services utilisateur, jellyfin-mpv-shim, lecteur Qt ; `mkosi.finalize.chroot` : activation des services système et
+graphical.target (après le `systemctl preset-all` de mkosi, qui annulerait des `enable` faits plus tôt).
+`/usr/lib/repart.d/10-root.conf` agrandit la partition système à tout le disque au premier démarrage. Aucun réglage
+personnel dans l'image : tout passe par la télécommande web. Testé dans QEMU (écran d'accueil de l'appli Qt, API).
+Piège : `pkill -f motif` dans une commande dont le texte contient ce motif se tue lui-même (`[q]emu…`).
+
