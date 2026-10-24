@@ -1263,14 +1263,14 @@ Item {
                 }
             }
         }
-        Flow {   // Système : état de la box, sous les lignes (« Lecture » prend deux tuiles de large)
+        Flow {   // Système : état de la box, à droite des lignes, sous le QR code (« Lecture » prend deux tuiles de large)
             visible: menu.tabId === "system"
-            x: 0; y: 650; width: 810
+            x: 860; y: 430; width: 520   // s'arrête à 80 px du bord de l'écran
             spacing: 10
             Repeater {
                 model: menu.healthTiles()
                 Rectangle {
-                    width: index === 6 ? 262 * 2 + 10 : 262; height: 96; radius: 18
+                    width: index === 6 ? 520 : 255; height: 92; radius: 18
                     color: "#1affffff"; border.color: "#22ffffff"; border.width: 1
                     readonly property color tone: modelData[3] === "bad" ? "#ff6b6b" : modelData[3] === "warn" ? "#ffb44a" : "white"
                     Column {
@@ -1282,13 +1282,16 @@ Item {
                 }
             }
         }
-        Column {   // Système : QR code de la télécommande web, pour tout ce qui demande de taper du texte
+        Row {   // Système : QR code de la télécommande web, pour tout ce qui demande de taper du texte
             visible: menu.tabId === "system" && !!(menu.ambient.qr && menu.ambient.qr.rows)
-            x: 880; y: 230; spacing: 16
-            QrCode { size: 300; rows: menu.ambient.qr ? menu.ambient.qr.rows : [] }
-            Text { text: "Télécommande sur le téléphone"; color: "white"; font.pixelSize: 23; font.bold: true }
-            Text { text: "Lien, streamer, compte Twitch…"; color: "#b4afc2"; font.pixelSize: 20 }
-            Text { text: menu.ambient.qr ? String(menu.ambient.qr.url).replace(/^https?:\/\//, "").replace(/\/$/, "") : ""; color: "#b4afc2"; font.pixelSize: 20 }
+            x: 860; y: 210; spacing: 24
+            QrCode { size: 190; rows: menu.ambient.qr ? menu.ambient.qr.rows : [] }
+            Column {
+                anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                Text { text: "Télécommande sur le téléphone"; color: "white"; font.pixelSize: 23; font.bold: true }
+                Text { text: "Lien, streamer, compte Twitch…"; color: "#b4afc2"; font.pixelSize: 20 }
+                Text { text: menu.ambient.qr ? String(menu.ambient.qr.url).replace(/^https?:\/\//, "").replace(/\/$/, "") : ""; color: "#b4afc2"; font.pixelSize: 20 }
+            }
         }
     }
 
