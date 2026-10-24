@@ -6,13 +6,16 @@ reçues de Home Assistant en appels à cette même API : les vérifications de r
 Config : ~/.config/stream-box/mqtt.json ({"host", "port", "user"}) et le mot de passe seul dans mqtt-password (600).
 Lancé par le service utilisateur stream-box-mqtt, avec le Python du venv media (paho-mqtt).
 """
-import json, os, time, urllib.request
+import json, os, signal, sys, time, urllib.request
 
 import paho.mqtt.client as mqtt
 
 API = "http://127.0.0.1:8080"
 CONF_DIR = os.path.expanduser("~/.config/stream-box")
 BASE = "stream-box"                 # préfixe des topics de la box
+# Allumée : ON dès que le pont est connecté (système démarré), OFF par le message de dernière volonté MQTT (coupure)
+# ou à l'arrêt du service (extinction propre). « status » dit en plus si la box est prête à recevoir des commandes.
+POWER = f"{BASE}/power"
 DISCOVERY = "homeassistant"         # préfixe de découverte de Home Assistant
 POLL = 2                            # secondes entre deux lectures de l'état
 OFFLINE_AFTER = 30                  # secondes sans réponse de l'API avant d'annoncer la box hors ligne
@@ -75,6 +78,9 @@ def entities(streamers):
                              "value_template": "{{ value_json.delay if value_json.delay is not none else 0 }}"}),
         ("binary_sensor", "playing", {"name": "Lecture", "icon": "mdi:play-circle", "state_topic": state,
                                       "value_template": "{{ 'ON' if value_json.playing else 'OFF' }}"}),
+        # Pas d'« availability » : OFF quand la box est éteinte, au lieu d'« indisponible » (automatisations fiables)
+        ("binary_sensor", "power", {"name": "Allumée", "device_class": "power", "state_topic": POWER,
+                                    "payload_on": "ON", "payload_off": "OFF"}),
         ("event", "went_live", {"name": "Lancement de live", "icon": "mdi:bell-ring", "event_types": ["went_live"],
                                 "state_topic": f"{BASE}/event/went_live"}),
     ]
@@ -86,7 +92,7 @@ class Bridge:
         password = open(os.path.join(CONF_DIR, "mqtt-password")).read().strip()
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="stream-box")
         self.client.username_pw_set(conf["user"], password)
-        self.client.will_set(f"{BASE}/status", "offline", retain=True)
+        self.client.will_set(POWER, "OFF", retain=True)   # coupure, plantage : le broker annonce la box éteinte
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.client.connect_async(conf["host"], int(conf.get("port", 1883)))
@@ -97,12 +103,16 @@ class Bridge:
 
     def announce(self):
         for component, object_id, config in entities(self.streamers):
-            config = {**config, "unique_id": f"stream_box_{object_id}", "device": DEVICE,
-                      "availability_topic": f"{BASE}/status"}
+            config = {**config, "unique_id": f"stream_box_{object_id}", "device": DEVICE}
+            if object_id != "power":   # disponibles quand la box est allumée et prête
+                config.update(availability=[{"topic": f"{BASE}/status"},
+                                            {"topic": POWER, "payload_available": "ON", "payload_not_available": "OFF"}],
+                              availability_mode="all")
             self.client.publish(f"{DISCOVERY}/{component}/stream_box/{object_id}/config", json.dumps(config), retain=True)
 
     def on_connect(self, client, userdata, flags, reason, properties=None):
         client.subscribe([(f"{BASE}/cmd/#", 0), (f"{DISCOVERY}/status", 0)])
+        client.publish(POWER, "ON", retain=True)
         client.publish(f"{BASE}/status", "online" if self.available else "offline", retain=True)
         self.published = None   # republier l'état après une reconnexion
         if self.streamers is not None:
@@ -145,6 +155,7 @@ class Bridge:
             elif command == "go_live":
                 api("/api/live_seek", {"delta": "live"})
             elif command == "poweroff":
+                self.off()
                 api("/api/poweroff", {})
             elif command == "play" and payload:
                 api("/api/play", {"url": payload})
@@ -192,7 +203,23 @@ class Bridge:
                 if time.time() - received < PENDING_FOR:
                     self.run_command(command, payload)
 
+    def off(self):
+        """Box qui s'éteint : annoncée tout de suite, sans attendre que le broker constate la coupure"""
+        self.client.publish(f"{BASE}/status", "offline", retain=True)
+        try:
+            self.client.publish(POWER, "OFF", retain=True).wait_for_publish(3)
+        except (RuntimeError, ValueError):   # pas connecté : le message de dernière volonté fera l'affaire
+            pass
+
+    def stop(self, *_):   # arrêt du service (extinction, redémarrage) : OFF, puis déconnexion propre
+        try:
+            self.off()
+            self.client.disconnect()
+        finally:
+            sys.exit(0)
+
     def run(self):
+        signal.signal(signal.SIGTERM, self.stop)
         self.client.loop_start()
         while True:
             self.poll()
