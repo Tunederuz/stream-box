@@ -869,14 +869,15 @@ end
 
 local function draw_health(out)
     for i, tile in ipairs(health_tiles()) do
-        local col, row = (i - 1) % 3, math.floor((i - 1) / 3)
-        local x, y = 460 + col * 272, 650 + row * 106
-        local w = i == 7 and 262 * 2 + 10 or 262
+        -- à droite des lignes, sous le QR code : deux tuiles par rangée, « Lecture » sur toute la largeur
+        local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
+        local x, y = 1310 + col * 290, 430 + row * 102
+        local w = i == 7 and 570 or 280
         local tone = tile[4] == "bad" and "6B6BFF" or tile[4] == "warn" and "4AB4FF" or "FFFFFF"   -- BGR
-        out[#out + 1] = rrect(x, y, w, 96, 18, "FFFFFF", "E6")
+        out[#out + 1] = rrect(x, y, w, 92, 18, "FFFFFF", "E6")
         out[#out + 1] = label(x + 18, y + 22, 18, "C09FA9", ass_escape(tile[1]), 4, "\\b1\\fsp1")
-        out[#out + 1] = label(x + 18, y + 51, 28, tone, ass_escape(shorten(tile[2], i == 7 and 34 or 16)), 4, "\\b1")
-        out[#out + 1] = label(x + 18, y + 78, 19, "C2AFB4", ass_escape(shorten(tile[3], i == 7 and 46 or 26)), 4)
+        out[#out + 1] = label(x + 18, y + 51, 28, tone, ass_escape(shorten(tile[2], i == 7 and 34 or 15)), 4, "\\b1")
+        out[#out + 1] = label(x + 18, y + 78, 19, "C2AFB4", ass_escape(shorten(tile[3], i == 7 and 46 or 22)), 4)
     end
 end
 
@@ -1115,11 +1116,12 @@ function draw()
             end)
         end
         -- QR code de la télécommande web : pour tout ce qui demande de taper du texte
-        local side = draw_qr(out, 1340, 230, 300)
+        -- QR code de la télécommande web à droite, textes à côté ; tuiles d'état dessous (draw_health)
+        local side = draw_qr(out, 1310, 210, 170)
         if side then
-            out[#out + 1] = label(1340, 230 + side + 44, 30, "FFFFFF", "Télécommande sur le téléphone", 4, "\\b1")
-            out[#out + 1] = label(1340, 230 + side + 86, 25, "C2AFB4", "Lien, streamer, compte Twitch…", 4)
-            out[#out + 1] = label(1340, 230 + side + 124, 25, "C2AFB4",
+            out[#out + 1] = label(1310 + side + 20, 260, 20, "FFFFFF", "Télécommande sur le téléphone", 4, "\\b1")
+            out[#out + 1] = label(1310 + side + 20, 300, 18, "C2AFB4", "Lien, streamer, compte Twitch…", 4)
+            out[#out + 1] = label(1310 + side + 20, 336, 18, "C2AFB4",
                                   ass_escape((qr.url or ""):gsub("^https?://", ""):gsub("/$", "")), 4)
         end
     end
