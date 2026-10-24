@@ -2,6 +2,7 @@
 // direct (photo, titre, jeu, spectateurs, durée du live, mémoire du différé et « EN DIRECT » ou le retard) ou barre de
 // lecture d'une vidéo (titre, position, partie chargée, aperçu YouTube au-dessus du curseur). Monte en glissant.
 import QtQuick
+import QtQuick.Effects
 import "fmt.js" as Fmt
 
 Item {
@@ -51,9 +52,11 @@ Item {
         Rectangle {   // fondu vers le noir en bas de l'écran
             anchors.fill: parent
             gradient: Gradient {
+                // plus sombre plus tôt : le titre, en haut du bandeau, reste lisible sur une image claire
                 GradientStop { position: 0.0; color: "#00000000" }
-                GradientStop { position: 0.45; color: "#a0000000" }
-                GradientStop { position: 1.0; color: "#e6000000" }
+                GradientStop { position: 0.22; color: "#99000000" }
+                GradientStop { position: 0.55; color: "#cc000000" }
+                GradientStop { position: 1.0; color: "#ee000000" }
             }
         }
 
@@ -61,6 +64,8 @@ Item {
         Row {
             x: 96; y: root.live ? 70 : 60
             spacing: 22
+            layer.enabled: true   // ombre sous les textes, lisibles quel que soit l'image derrière
+            layer.effect: MultiEffect { shadowEnabled: true; shadowColor: "black"; shadowBlur: 0.7; shadowOpacity: 0.9; shadowVerticalOffset: 2 }
             Rectangle {
                 visible: root.live
                 width: 82; height: 82; radius: 41

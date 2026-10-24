@@ -85,10 +85,10 @@ end
 -- user-data/streambox/loading { title, thumb } jusqu'à la première image (playback-restart), une erreur ou 45 s au plus ;
 -- dessiné par qml/LoadingOverlay.qml, ou simple message à l'écran avec mpv seul
 local loading_timer, loading_osd = nil, false
-local function set_loading(title, thumb)
+local function set_loading(title, thumb, kind)   -- kind : twitch, youtube, jellyfin ou video (couleur de l'animation)
     if loading_timer then loading_timer:kill() loading_timer = nil end
     if title then
-        mp.set_property_native("user-data/streambox/loading", { title = title, thumb = thumb or "" })
+        mp.set_property_native("user-data/streambox/loading", { title = title, thumb = thumb or "", kind = kind or "video" })
         -- appli Qt (vo=libmpv, connu dès le démarrage, contrairement à chat_ui) : l'écran QML suffit
         loading_osd = mp.get_property("vo") ~= "libmpv"
         if loading_osd then mp.osd_message("Chargement de " .. title .. "…", 45) end
@@ -170,7 +170,7 @@ local function start_channel(name)
     write_state("channel", name)
     mp.set_property_native("user-data/streambox/channel", name)
     set_mode("twitch")   -- avant le « stop » ci-dessous, pour que sa fin de fichier soit lue comme un changement de chaîne
-    set_loading(name)
+    set_loading(name, nil, "twitch")
     mp.set_property_bool("pause", false)   -- mpv garde la pause d'un fichier à l'autre
     offline, channel_since = false, mp.get_time()
     stop_twitch()
@@ -189,7 +189,9 @@ end
 local function play_media(url, start, title, thumb, label)
     stop_twitch()
     set_mode("media")
-    set_loading((label and label ~= "" and label) or (title and title ~= "" and title) or "la vidéo", thumb)
+    local kind = (url:find("youtube%.com/") or url:find("youtu%.be/")) and "youtube"
+        or url:find("/Videos/%x+/stream") and "jellyfin" or url:find("twitch%.tv/") and "twitch" or "video"
+    set_loading((label and label ~= "" and label) or (title and title ~= "" and title) or "la vidéo", thumb, kind)
     mp.set_property_bool("pause", false)   -- mpv garde la pause d'un fichier à l'autre
     local at = tonumber(start) or 0
     local opts = title and title ~= "" and ("force-media-title=%%%d%%%s"):format(#title, title) or nil
