@@ -13,7 +13,7 @@ Item {
     readonly property bool shown: !!l.title
     property var last: ({})
     onLChanged: if (l.title) last = l
-    readonly property color accent: last.kind === "youtube" ? "#ff0033" : last.kind === "jellyfin" ? "#00a4dc"
+    readonly property color accent: last.kind === "youtube" ? "#ff0033" : last.kind === "jellyfin" ? "#1565c0"
                                   : last.kind === "twitch" ? "#9146ff" : "#e8e8ee"
     readonly property string source: last.kind === "youtube" ? "YouTube" : last.kind === "jellyfin" ? "Jellyfin"
                                    : last.kind === "twitch" ? "Twitch" : "Vidéo"

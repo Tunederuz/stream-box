@@ -1,6 +1,7 @@
 // Bandeau du bas (appli Qt), affiché quand stream-box.lua le décide (OK pendant un direct, ←/→ ou pause en vidéo) :
 // direct (photo, titre, jeu, spectateurs, durée du live, mémoire du différé et « EN DIRECT » ou le retard) ou barre de
-// lecture d'une vidéo (titre, position, partie chargée, aperçu YouTube au-dessus du curseur). Monte en glissant.
+// lecture d'une vidéo (titre, chaîne ou série, chapitre, position, partie chargée, repères de chapitres, aperçu YouTube
+// au-dessus du curseur, saut en cours « +30 s », temps restant et heure de fin, rangée de boutons). Monte en glissant.
 import QtQuick
 import QtQuick.Effects
 import "fmt.js" as Fmt
@@ -24,7 +25,23 @@ Item {
     readonly property string source: live ? "twitch" : /youtube\.com|youtu\.be|googlevideo/.test(pb.path || "") ? "youtube"
         : /\/Videos\/|\/videos\/[0-9a-f]{32}|api_key=|MediaSourceId=/i.test(pb.path || "") ? "jellyfin" : "other"
     readonly property var colors: source === "youtube" ? ["#ff0033", "#ff4e45"]
-        : source === "jellyfin" ? ["#00a4dc", "#3fc1f0"] : ["#8a3ffc", "#b062ff"]
+        : source === "jellyfin" ? ["#1565c0", "#4a90e2"] : ["#8a3ffc", "#b062ff"]
+    // Vidéo : infos (remote.py : chaîne, série, épisode…), chapitres (mpv), boutons et saut (stream-box.lua)
+    readonly property var meta: { try { return JSON.parse(osd.meta || "{}") } catch (e) { return {} } }
+    readonly property var ctl: { try { return JSON.parse(osd.controls || "{}") } catch (e) { return {} } }
+    readonly property var fx: { try { return JSON.parse(osd.seekfx || "{}") } catch (e) { return {} } }
+    readonly property var chapters: pb.chapters || []
+    readonly property string chapterTitle: {
+        var c = chapters[pb.chapter]
+        return c && chapters.length > 1 ? "Chapitre " + (pb.chapter + 1) + (c.title && !/^Chapter \d+$/i.test(c.title) ? " · " + c.title : "") : ""
+    }
+    readonly property string details: (meta.source === "youtube" ? [meta.channel, meta.date, meta.views ? Fmt.big(meta.views) + " vues" : ""]
+        : meta.source === "jellyfin" ? [meta.year, meta.rating ? "★ " + Number(meta.rating).toFixed(1).replace(".", ",") : ""]   // série et épisode : déjà dans le titre
+        : []).concat([chapterTitle]).filter(function (t) { return !!t }).join("  ·  ")
+    property date now: new Date()
+    Timer { interval: 15000; repeat: true; running: root.visible; triggeredOnStart: true; onTriggered: root.now = new Date() }
+    readonly property real remaining: Math.max(0, span - at)
+    readonly property string endsAt: Qt.formatTime(new Date(now.getTime() + remaining * 1000), "hh:mm")
 
     opacity: shown ? 1 : 0
     visible: opacity > 0
@@ -45,7 +62,7 @@ Item {
         id: panel
         width: parent.width
         // En vidéo, plus haut : l'aperçu YouTube s'affiche entre le titre et la barre
-        height: root.live ? 300 : 420
+        height: root.live ? 300 : 520
         y: root.shown ? parent.height - height : parent.height - height + 60
         Behavior on y { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
@@ -76,8 +93,8 @@ Item {
                     source: root.avatars[root.b.channel] || ""
                 }
             }
-            Row {   // pause
-                visible: !root.live && !!root.pb.pause
+            Row {   // pause (vidéo : PauseScreen.qml affiche déjà la grande icône)
+                visible: false
                 spacing: 9
                 anchors.verticalCenter: parent.verticalCenter
                 Rectangle { width: 12; height: 38; radius: 3; color: "white" }
@@ -93,10 +110,11 @@ Item {
                                     : (root.pb.title || "")
                     pixelSize: 31; bold: true; running: root.shown
                 }
-                Text {   // vidéo : rappel de la touche des sous-titres
-                    visible: !root.live
-                    text: "≡  sous-titres et audio"
-                    color: "#b4afc2"; font.pixelSize: 21
+                Text {   // vidéo : chaîne ou série, épisode, chapitre
+                    visible: !root.live && !!root.details
+                    width: parent.width; elide: Text.ElideRight
+                    text: root.details
+                    color: "#d0c8e0"; font.pixelSize: 22
                 }
                 Text {
                     visible: root.live && !!root.info
@@ -111,7 +129,7 @@ Item {
         // Barre
         Item {
             id: track
-            x: 96; y: root.live ? 200 : 320
+            x: 96; y: root.live ? 200 : 330
             width: parent.width - 192
             height: 8
             readonly property real played: root.span > 0 ? Math.max(0, Math.min(1, root.at / root.span)) : 0
@@ -130,6 +148,15 @@ Item {
                     GradientStop { position: 1; color: root.colors[1] }
                 }
                 Behavior on width { NumberAnimation { duration: 240 } }
+            }
+            Repeater {   // repères des chapitres
+                model: root.live || root.span <= 0 ? 0 : root.chapters.length
+                Rectangle {
+                    visible: index > 0
+                    x: track.width * Math.min(1, root.chapters[index].time / root.span) - 2
+                    width: 4; height: 16; radius: 2; anchors.verticalCenter: parent.verticalCenter
+                    color: "#d0ffffff"
+                }
             }
             Rectangle {   // curseur
                 width: 22; height: 22; radius: 11; color: "white"
@@ -177,17 +204,76 @@ Item {
                 }
             }
         }
+        // Saut en cours au-dessus du curseur (« +30 s », total des appuis rapprochés), le temps d'un instant
+        Rectangle {
+            id: seekBubble
+            property int lastN: -1
+            visible: opacity > 0
+            opacity: 0
+            readonly property real cx: track.x + track.width * (root.span > 0 ? Math.min(1, root.at / root.span) : 0)
+            x: Math.max(track.x, Math.min(track.x + track.width - width, cx - width / 2))
+            y: track.y - height - 30 - (preview.visible ? preview.height + 10 : 0)
+            width: fxText.implicitWidth + 44; height: 58; radius: 29
+            color: "#ee17151c"; border.color: root.colors[0]; border.width: 2
+            Text { id: fxText; anchors.centerIn: parent; text: root.fx.text || ""; color: "white"; font.pixelSize: 28; font.bold: true }
+            Connections {
+                target: root
+                function onFxChanged() {
+                    if (root.fx.n !== undefined && root.fx.n !== seekBubble.lastN) {
+                        seekBubble.lastN = root.fx.n
+                        seekBubble.opacity = 1
+                        fxHide.restart()
+                    }
+                }
+            }
+            Timer { id: fxHide; interval: 1100; onTriggered: seekBubble.opacity = 0 }
+            Behavior on opacity { NumberAnimation { duration: 200 } }
+        }
         Text {
             x: 96; y: track.y + 26
             visible: !root.live
-            text: Fmt.clock(root.at)
+            text: Fmt.clock(root.at) + "  /  " + Fmt.clock(root.span)
             color: "white"; font.pixelSize: 23
         }
         Text {
             anchors.right: track.right; y: track.y + 26
-            text: root.live ? (root.delay < 4 ? "● EN DIRECT" : "−" + Fmt.clock(root.delay)) : Fmt.clock(root.span)
+            text: root.live ? (root.delay < 4 ? "● EN DIRECT" : "−" + Fmt.clock(root.delay))
+                            : root.span > 0 ? "−" + Fmt.clock(root.remaining) + "   ·   fin à " + root.endsAt : ""
             color: root.live && root.delay < 4 ? "#ff4f5e" : "white"
             font.pixelSize: 23; font.bold: root.live && root.delay < 4
+        }
+        // Rangée de boutons (vidéo) : ↓ pour y aller, ← → et OK ; discrète tant qu'aucun n'est choisi
+        Row {
+            visible: !root.live && (root.ctl.items || []).length > 0
+            x: 96; y: track.y + 86
+            spacing: 14
+            opacity: root.ctl.focus >= 0 ? 1 : 0.55
+            Behavior on opacity { NumberAnimation { duration: 160 } }
+            Repeater {
+                model: (root.ctl.items || []).length
+                Rectangle {
+                    readonly property var it: root.ctl.items[index] || {}
+                    readonly property bool foc: index === root.ctl.focus
+                    width: btnText.implicitWidth + 56; height: 56; radius: 28
+                    color: foc ? "white" : "#26ffffff"
+                    border.color: foc ? "white" : "#40ffffff"; border.width: 1
+                    scale: foc ? 1.06 : 1
+                    Behavior on scale { NumberAnimation { duration: 140 } }
+                    Behavior on color { ColorAnimation { duration: 140 } }
+                    Text {
+                        id: btnText
+                        anchors.centerIn: parent
+                        text: ({ back: "⟲  ", play: root.pb.pause ? "▶  " : "❚❚  ", fwd: "⟳  ", tracks: "≡  ", chapter: "⏭  ", next: "▶▶  " }[it.id] || "") + (it.label || "")
+                        color: parent.foc ? "#17151c" : "white"; font.pixelSize: 22; font.bold: parent.foc
+                    }
+                }
+            }
+            Text {
+                visible: root.ctl.focus < 0
+                anchors.verticalCenter: parent.verticalCenter
+                text: "↓ commandes"
+                color: "#a0ffffff"; font.pixelSize: 20
+            }
         }
     }
 }

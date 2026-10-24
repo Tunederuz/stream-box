@@ -47,7 +47,7 @@ Item {
         ? { accent: "#ff0033", veil: "#180407", rail: "#1a0709", glow: 0.42, glowLow: 0.30, sheet: "#261216", key: "#3a1f24",
             surface: "#33171c", surfaceFocus: "#4a2027", label: "#c9a3aa" }
         : theme === "jellyfin"
-        ? { accent: "#00a4dc", veil: "#030f17", rail: "#06131c", glow: 0.40, glowLow: 0.28, sheet: "#0f202c", key: "#173244",
+        ? { accent: "#1565c0", veil: "#030f17", rail: "#06131c", glow: 0.40, glowLow: 0.28, sheet: "#0f202c", key: "#173244",
             surface: "#12293a", surfaceFocus: "#1b3c54", label: "#9cc3d8" }
         : theme === "twitch"
         ? { accent: "#9146ff", veil: "#0a0612", rail: "#100b17", glow: 0.32, glowLow: 0.20, sheet: "#21182c", key: "#33283f",
