@@ -573,6 +573,37 @@ def player_choice():
         return "mpv"
 
 
+# Action du bouton d'arrêt de la télécommande web et de Home Assistant : « suspend » (mise en veille, réveil par le
+# réseau) ou « poweroff » (arrêt complet, par défaut). Le menu de la TV a ses deux lignes, « Mettre en veille » et
+# « Éteindre la box », qui ne dépendent pas de ce réglage. Lu aussi par mqtt_bridge.py.
+POWER_ACTION_FILE = os.path.join(COOKIES_DIR, "power-action")
+
+
+def power_action():
+    try:
+        with open(POWER_ACTION_FILE, encoding="utf-8") as f:
+            return "suspend" if f.readline().strip() == "suspend" else "poweroff"
+    except OSError:
+        return "poweroff"
+
+
+def set_power_action(mode):
+    if mode not in ("suspend", "poweroff"):
+        raise ValueError("action inconnue")
+    os.makedirs(COOKIES_DIR, mode=0o700, exist_ok=True)
+    with open(POWER_ACTION_FILE, "w", encoding="utf-8") as f:
+        f.write(mode + "\n")
+
+
+def power(mode):
+    """« suspend » ou « poweroff ». Autorisé sans mot de passe pour media par
+    /etc/polkit-1/rules.d/50-stream-box.rules (la veille l'est aussi d'office pour une session locale active)"""
+    r = subprocess.run(["systemctl", "suspend" if mode == "suspend" else "poweroff"],
+                       capture_output=True, text=True, timeout=10)
+    if r.returncode != 0:
+        raise ValueError(f"{'Mise en veille' if mode == 'suspend' else 'Extinction'} refusée : {r.stderr.strip() or r.returncode}")
+
+
 def set_player(mode):
     """Choix du lecteur, appliqué tout de suite : on quitte le lecteur, la boucle de player.sh relance le bon"""
     if mode not in ("qt", "mpv"):
@@ -602,7 +633,7 @@ def state():
         "auto_switch": user.get("auto_switch", True), "night": user.get("night", False),
         "events": user.get("events", True), "qr": user.get("qr", "always"),
         # Lecteur choisi, et celui qui tourne vraiment (mpv seul après plusieurs plantages de l'appli Qt)
-        "player": player_choice(), "player_running": "qt" if vo == "libmpv" else "mpv",
+        "player": player_choice(), "player_running": "qt" if vo == "libmpv" else "mpv", "power_action": power_action(),
         "pip": user.get("pip") or {"channel": "", "layout": ""},
         "volume": round(volume or 0), "mute": bool(mute), "pause": bool(pause), "playing": bool(video),
         "live": live_now, "mode": user.get("mode", "twitch"), "delay": delay, "title": title if media else None,
@@ -1857,10 +1888,11 @@ def action(name, body):
     elif name == "follows_logout":
         follows_logout()
     elif name == "poweroff":
-        # Autorisé sans mot de passe pour media par /etc/polkit-1/rules.d/50-stream-box.rules
-        r = subprocess.run(["systemctl", "poweroff"], capture_output=True, text=True, timeout=10)
-        if r.returncode != 0:
-            raise ValueError(f"Extinction refusée : {r.stderr.strip() or r.returncode}")
+        # mode : « suspend » (Mettre en veille), « full » (Éteindre la box, menu de la TV) ; sinon le réglage
+        mode = str(body.get("mode") or "")
+        power("suspend" if mode == "suspend" else "poweroff" if mode == "full" else power_action())
+    elif name == "power_action":
+        set_power_action(str(body.get("mode", "")))
     else:
         raise ValueError("action inconnue")
 

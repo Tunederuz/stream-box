@@ -6,7 +6,7 @@ reçues de Home Assistant en appels à cette même API : les vérifications de r
 Config : ~/.config/stream-box/mqtt.json ({"host", "port", "user"}) et le mot de passe seul dans mqtt-password (600).
 Lancé par le service utilisateur stream-box-mqtt, avec le Python du venv media (paho-mqtt).
 """
-import json, os, signal, subprocess, sys, time, urllib.request
+import json, os, signal, subprocess, sys, threading, time, urllib.request
 
 import paho.mqtt.client as mqtt
 
@@ -21,6 +21,8 @@ POLL = 2                            # secondes entre deux lectures de l'état
 OFFLINE_AFTER = 30                  # secondes sans réponse de l'API avant d'annoncer la box hors ligne
 PENDING_FOR = 120                   # une commande reçue avant que la box soit prête est gardée ce temps-là
 QR_MODES = {"always": "Toujours", "timed": "30 secondes", "never": "Jamais"}   # select de Home Assistant
+POWER_MODES = {"suspend": "Mise en veille", "poweroff": "Arrêt complet"}       # action du bouton « Éteindre »
+POWER_ACTION_FILE = os.path.join(CONF_DIR, "power-action")                     # même fichier que remote.py
 DEVICE = {"identifiers": ["stream_box"], "name": "Stream Box", "model": "Stream Box", "manufacturer": "Stream Box"}
 
 
@@ -62,8 +64,12 @@ def entities(streamers):
                                       "command_topic": cmd("back_to_stream")}),
         ("button", "home", {"name": "Écran d'accueil", "icon": "mdi:home", "command_topic": cmd("home")}),
         ("button", "go_live", {"name": "Revenir au direct", "icon": "mdi:skip-forward", "command_topic": cmd("go_live")}),
-        ("button", "poweroff", {"name": "Éteindre", "icon": "mdi:power",
+        ("button", "poweroff", {"name": "Éteindre", "icon": "mdi:power",   # veille ou arrêt complet, selon le réglage
                                 "command_topic": cmd("poweroff")}),
+        ("select", "power_action", {"name": "Bouton d'arrêt", "icon": "mdi:power-sleep",
+                                    "options": list(POWER_MODES.values()), "state_topic": state,
+                                    "command_topic": cmd("power_action"),
+                                    "value_template": "{{ %s.get(value_json.power_action, '') }}" % json.dumps(POWER_MODES)}),
         ("text", "play_url", {"name": "Lire un lien", "icon": "mdi:play-box", "mode": "text", "max": 255,
                               "command_topic": cmd("play"), "state_topic": f"{BASE}/play_url"}),
         ("sensor", "mode", {"name": "Mode", "icon": "mdi:television-play", "state_topic": state,
@@ -143,6 +149,8 @@ class Bridge:
                 api("/api/chat", {})
             elif command == "auto_switch":
                 api("/api/auto_switch", {"enabled": payload == "ON"})
+            elif command == "power_action" and payload in POWER_MODES.values():
+                api("/api/power_action", {"mode": next(k for k, v in POWER_MODES.items() if v == payload)})
             elif command == "qr" and payload in QR_MODES.values():
                 api("/api/qr", {"mode": next(k for k, v in QR_MODES.items() if v == payload)})
             elif command in ("night", "events"):
@@ -188,7 +196,7 @@ class Bridge:
         self.live = live
         delay = s.get("delay")
         public = {k: s.get(k) for k in ("channel", "mode", "title", "chat_visible", "pause", "volume", "playing",
-                                        "auto_switch", "night", "events", "qr")}
+                                        "auto_switch", "night", "events", "qr", "power_action")}
         public.update(live=sorted(live), delay=None if delay is None else int(delay))
         if public != self.published:
             self.client.publish(f"{BASE}/state", json.dumps(public), retain=True)
@@ -204,12 +212,48 @@ class Bridge:
                     self.run_command(command, payload)
 
     def poweroff(self):
-        # Autorisé sans mot de passe pour media par /etc/polkit-1/rules.d/50-stream-box.rules (comme pour remote.py)
-        self.off()
-        r = subprocess.run(["systemctl", "poweroff"], capture_output=True, text=True, timeout=10)
+        """Bouton « Éteindre » : mise en veille ou arrêt complet selon le réglage (fichier power-action)"""
+        try:
+            with open(POWER_ACTION_FILE, encoding="utf-8") as f:
+                suspend = f.readline().strip() == "suspend"
+        except OSError:
+            suspend = False
+        if suspend:
+            # Par remote.py, qui tourne dans la session (veille permise d'office à une session locale active) ; le
+            # capteur passe à OFF par watch_sleep. Box pas encore prête : systemctl, permis par la règle polkit.
+            try:
+                api("/api/poweroff", {"mode": "suspend"})
+                return
+            except (OSError, ValueError):
+                pass
+        else:
+            self.off()
+        r = subprocess.run(["systemctl", "suspend" if suspend else "poweroff"], capture_output=True, text=True, timeout=10)
         if r.returncode != 0:
-            print(f"extinction refusée : {r.stderr.strip() or r.returncode}", flush=True)
+            print(f"{'mise en veille' if suspend else 'extinction'} refusée : {r.stderr.strip() or r.returncode}", flush=True)
             self.client.publish(POWER, "ON", retain=True)
+
+    def watch_sleep(self):
+        """Mise en veille (quelle qu'en soit l'origine : menu, page, Home Assistant) : Allumée passe à OFF avant, puis à
+        ON au réveil. Un verrou « delay » de logind retarde la veille le temps d'envoyer le message ; logind signale
+        PrepareForSleep (true avant, false après), suivi par gdbus."""
+        while True:
+            lock = subprocess.Popen(["systemd-inhibit", "--what=sleep", "--mode=delay", "--who=Stream Box MQTT",
+                                     "--why=Annoncer la mise en veille à Home Assistant", "sleep", "infinity"])
+            mon = subprocess.Popen(["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1",
+                                    "--object-path", "/org/freedesktop/login1"], stdout=subprocess.PIPE, text=True)
+            for line in mon.stdout:
+                if "PrepareForSleep (true" in line:
+                    self.off()
+                    lock.terminate()   # veille autorisée
+                elif "PrepareForSleep (false" in line:
+                    self.client.publish(POWER, "ON", retain=True)
+                    self.client.publish(f"{BASE}/status", "online" if self.available else "offline", retain=True)
+                    self.published = None   # republier l'état au réveil
+                    break
+            mon.terminate()
+            lock.terminate()
+            time.sleep(1)
 
     def off(self):
         """Box qui s'éteint : annoncée tout de suite, sans attendre que le broker constate la coupure"""
@@ -228,6 +272,7 @@ class Bridge:
 
     def run(self):
         signal.signal(signal.SIGTERM, self.stop)
+        threading.Thread(target=self.watch_sleep, daemon=True).start()
         self.client.loop_start()
         while True:
             self.poll()

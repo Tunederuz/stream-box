@@ -17,11 +17,12 @@ La box s'annonce toute seule dans Home Assistant par la **découverte MQTT** (`m
 | `text.stream_box_lire_un_lien` | Écrire une URL la lance sur la TV |
 | `sensor.stream_box_mode`, `sensor.stream_box_en_cours`, `sensor.stream_box_streamers_en_live`, `sensor.stream_box_retard_sur_le_direct` | État (les streamers en live en attributs) |
 | `binary_sensor.stream_box_lecture` | Quelque chose joue |
+| `select.stream_box_bouton_d_arret` | Action du bouton « Éteindre » (et de celui de la télécommande web) : Mise en veille ou Arrêt complet |
 | `binary_sensor.stream_box_allumee` | Box allumée : `on` / `off`, jamais `unavailable` (à utiliser dans les automatisations) |
 | `event.stream_box_lancement_de_live` | Un streamer de la liste lance son live (seulement quand la box est allumée) |
 
 **Allumée** passe à `on` dès que le système a démarré (le pont MQTT est connecté) et à `off` tout de suite à l'extinction
-(arrêt du service) ou, en cas de coupure, quand le broker constate la déconnexion (message de dernière volonté). Les
+(arrêt du service), à la mise en veille, ou, en cas de coupure, quand le broker constate la déconnexion (message de dernière volonté). Les
 autres entités passent alors à `unavailable`. Au démarrage,
 elles ne redeviennent disponibles qu'une fois la box prête à recevoir des commandes : on peut donc attendre ce retour
 avant de choisir le streamer (une commande envoyée trop tôt est de toute façon gardée deux minutes).

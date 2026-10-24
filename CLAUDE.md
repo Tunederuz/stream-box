@@ -589,3 +589,14 @@ graphical.target (après le `systemctl preset-all` de mkosi, qui annulerait des 
 personnel dans l'image : tout passe par la télécommande web. Testé dans QEMU (écran d'accueil de l'appli Qt, API).
 Piège : `pkill -f motif` dans une commande dont le texte contient ce motif se tue lui-même (`[q]emu…`).
 
+### Mise en veille
+
+Menu de la TV (Système) : « Mettre en veille » (`POST /api/poweroff {"mode": "suspend"}`) et « Éteindre la box »
+(`{"mode": "full"}`), plus le réglage « Bouton d'arrêt (téléphone, Home Assistant) » : `~/.config/stream-box/power-action`
+(`suspend` ou `poweroff`, défaut), lu par remote.py (`POST /api/poweroff` sans mode, bouton de la page) et
+mqtt_bridge.py (bouton « Éteindre » ; select « Bouton d'arrêt »). Veille par `systemctl suspend` : permise d'office à
+remote.py (session locale active) ; règle polkit `login1.suspend*` ajoutée (install.sh, image) pour le pont, qui
+tourne hors session. Pendant la veille, Allumée passe à OFF : le pont prend un verrou logind « delay » et suit
+PrepareForSleep (gdbus monitor), publie OFF avant la veille et ON + status au réveil. Réveil : Wake-on-LAN (même paquet
+que pour l'allumage) ou bouton power.
+
