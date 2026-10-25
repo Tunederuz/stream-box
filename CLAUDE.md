@@ -94,10 +94,7 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   chaque réplique au début de la suivante), en EDL `delay_open` pour ne télécharger que la piste choisie : YouTube
   répond 429 aux rafales, surtout pour les traductions automatiques (`tlang`). yt-dlp et jellyfin-mpv-shim sont dans `~media/.local/share/media-venv` (liens dans
   `~/.local/bin`, mise à jour : `…/media-venv/bin/pip install -U yt-dlp jellyfin-mpv-shim`).
-- Page : carte « En cours » visible seulement en mode média (titre, barre de lecture qu'on touche pour sauter —
-  pas de glisser, qui partirait en faisant défiler — via `POST /api/seek_to {position}`, ±, sous-titres via `POST /api/sub {id}`
-  → `sid`, retour au stream), et bloc replié « Lire un lien sur la TV » (`POST /api/play {url}`, `/api/seek {delta}`,
-  `/api/twitch`) et cible de partage Android
+- Page : bloc replié « Lire un lien sur la TV » (`POST /api/play {url}`, `/api/twitch`) et cible de partage Android
   (`share_target` du manifeste → `GET /share?title&text&url`, premier lien http(s) trouvé, puis redirection vers `/`).
 - Jellyfin (jellyfin.example.com) : jellyfin-mpv-shim en mode mpv externe (`mpv_ext`, `mpv_ext_start=false`,
   `mpv_ext_ipc=/tmp/stream-box-mpv.sock`, `mpv_ext_no_ovr`, `enable_gui=false`, `mpv_idle_quit=false`) pilote le mpv de la

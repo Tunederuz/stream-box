@@ -112,17 +112,6 @@
   .on > .icon-main { display: none; }
   .on > .icon-alt { display: inline; }
 
-  /* Interrupteurs (réglages oui / non) : bouton pleine largeur, libellé à gauche, interrupteur dessiné à droite */
-  button.toggle { width: 100%; justify-content: space-between; text-align: left; padding: 12px 14px; gap: 14px; }
-  button.toggle .label { display: grid; gap: 2px; }
-  button.toggle small { color: var(--muted); font-size: 13px; line-height: 1.35; }
-  button.toggle::after {
-    content: ""; flex: 0 0 48px; height: 28px; border-radius: 14px;
-    background: radial-gradient(circle at 14px 50%, #fff 10px, transparent 10.5px), rgba(255, 255, 255, .16);
-  }
-  button.toggle[aria-pressed="true"]::after {
-    background: radial-gradient(circle at 34px 50%, #fff 10px, transparent 10.5px), var(--grad);
-  }
 
   /* Carte « Sur la TV » */
   .hero { padding: 0; overflow: hidden; }
@@ -160,17 +149,9 @@
   .avatar.live { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--live); }
   .avatar.off { filter: grayscale(1); opacity: .55; }
 
-  .grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); margin-top: 8px; }
   button.streamer { justify-content: flex-start; text-align: left; gap: 9px; padding: 10px 8px; min-height: 64px; }
   .streamer .avatar { width: 38px; height: 38px; }
-  .streamer .who { display: grid; min-width: 0; }
   .streamer .name { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .live-info { font-size: 12px; color: var(--muted); line-height: 1.3; overflow: hidden; text-overflow: ellipsis;
-               white-space: nowrap; }
-  button.current .live-info { color: rgba(255, 255, 255, .85); }
-  .live-dot { color: var(--live); font-weight: 700; }
-  button.current .live-dot { color: #fff; }
-  .offline { opacity: .7; }
   #home { width: 100%; }
 
   /* Volume */
@@ -225,19 +206,6 @@
   .manage-row button:active { color: var(--error); }
   #manage-list { margin-top: 10px; }
 
-  .chips { display: flex; gap: 6px; overflow-x: auto; margin: 0 -16px 6px; padding: 0 16px 6px; scrollbar-width: none; }
-  .chips button { min-height: 36px; padding: 4px 14px; border-radius: 18px; flex: 0 0 auto; font-size: 14px; }
-  .replay { display: flex; gap: 12px; align-items: center; text-align: left; width: 100%; min-height: auto;
-            padding: 6px; margin-top: 8px; justify-content: flex-start; }
-  .replay img { width: 128px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; flex: 0 0 auto;
-                background: var(--surface-3); }
-  .replay > div { min-width: 0; flex: 1; }
-  .replay .t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-               font-size: 14px; font-weight: 500; }
-  .replay .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
-  .replay .bar { height: 4px; border-radius: 2px; background: var(--surface-3); margin-top: 6px; overflow: hidden; }
-  .replay .bar i { display: block; height: 100%; background: var(--grad); }
-  .yt-channel { cursor: pointer; }
   /* Télécommande virtuelle */
   .dpad { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 8px;
           width: min(100%, 300px); aspect-ratio: 1; margin: 4px auto 14px; touch-action: manipulation; }
@@ -250,32 +218,13 @@
   .keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; touch-action: manipulation; }
   .keys button { flex-direction: column; gap: 2px; font-size: 20px; padding: 8px 4px; user-select: none; -webkit-user-select: none; }
   .keys small { font-size: 11px; color: var(--muted); }
-  .yt-channel small { color: var(--muted); font-weight: normal; }
-  .replays-title { font-size: 12px; color: var(--muted); margin: 14px 0 0; text-transform: uppercase;
-                   letter-spacing: .1em; font-weight: 700; }
-  .history-item { margin-top: 8px; }
-  .history-item .actions { display: flex; gap: 6px; margin-top: 6px; }
-  .history-item .actions button { min-height: 40px; flex: 1; font-size: 14px; }
-  .history-item .actions button.remove { flex: 0 0 44px; color: var(--muted); }
-  #history-clear { width: 100%; margin-top: 12px; min-height: 44px; font-size: 14px; color: var(--muted); }
 
   #preview-img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border-radius: 12px; background: #000;
                  display: block; }
   #preview-note { text-align: center; padding: 48px 0; color: var(--muted); background: #000; border-radius: 12px; }
   #media-status:empty { display: none; }
 
-  /* Barre de lecture : on la touche pour sauter (pas de glisser, qui partirait en faisant défiler la page) */
-  .seek { position: relative; height: 10px; margin: 6px 0 8px; border-radius: 5px; background: var(--surface-3);
-          cursor: pointer; touch-action: manipulation; }
-  .seek::before { content: ""; position: absolute; inset: -12px 0; }   /* zone de toucher plus haute que la barre */
-  .seek-fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 5px; background: var(--grad); }
-  .times { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px;
-           font-variant-numeric: tabular-nums; margin-bottom: 10px; }
   .setting { display: block; margin: 16px 0 6px; font-size: 14px; color: var(--muted); }
-  .stepper .value { text-align: center; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums;
-                    flex: 0 0 88px; }
-  .stepper button { flex: 0 0 56px; border-radius: 50%; min-height: 56px; font-size: 22px; padding: 0; }
-  .stepper { justify-content: space-between; }
   /* Sondage et prédiction de la chaîne regardée */
   .vote-choice { width: 100%; position: relative; overflow: hidden; justify-content: space-between; margin-top: 8px;
                  padding: 10px 16px; }
@@ -299,11 +248,6 @@
   .tile.warn .v { color: #ffb44a; }
   .tile.bad .v { color: var(--error); }
   #update-log { font: 12px/1.5 ui-monospace, monospace; color: var(--muted); white-space: pre-wrap; margin: 8px 0 0; }
-  .segmented { display: flex; gap: 4px; padding: 4px; background: rgba(0, 0, 0, .25); border: 1px solid var(--line);
-               border-radius: 16px; }
-  .segmented button { flex: 1; min-height: 42px; border: 0; background: transparent; color: var(--muted); font-size: 14px;
-                      box-shadow: none; }
-  .segmented button.current { color: #fff; background: var(--grad); box-shadow: 0 4px 14px rgba(145, 70, 255, .35); }
 </style>
 </head>
 <body>
@@ -677,10 +621,6 @@ function avatar(s, name, extra = "") {
   if (url) Object.assign(el, { src: url, alt: "", loading: "lazy" });
   else el.textContent = (name ?? "?").charAt(0).toUpperCase();
   return el;
-}
-
-function setToggle(id, on) {
-  $(id).setAttribute("aria-pressed", String(!!on));
 }
 
 // Carte « Sur la TV » : le live en cours (miniature, streamer, titre), la chaîne hors ligne ou l'écran d'accueil

@@ -2452,19 +2452,12 @@ def action(name, body):
         mpv(["script-message", "streambox-twitch"])
     elif name == "home":
         mpv(["script-message", "streambox-home"])
-    elif name == "sub":
-        sid = body.get("id")
-        mpv(["set_property", "sid", int(sid) if str(sid).isdigit() else "no"])
-    elif name == "seek":
-        mpv(["seek", max(-600, min(600, int(body.get("delta", 0))))])
     elif name == "streamers":
         edit_streamers(str(body.get("action", "")), str(body.get("login", "")), int(body.get("delta", 0)))
     elif name == "live_seek":
         target = body.get("delta")
         arg = "live" if target == "live" else str(max(-600, min(600, int(target or 0))))
         mpv(["script-message", "streambox-live-seek", arg])
-    elif name == "seek_to":
-        mpv(["seek", max(0.0, float(body.get("position", 0))), "absolute"])
     elif name == "auto_switch":
         mpv(["script-message", "streambox-auto-switch", "yes" if body.get("enabled") else "no"])
     elif name == "backdrop":

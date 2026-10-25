@@ -24,7 +24,6 @@ Item {
         { id: "history", label: "Historique" },
         { id: "settings", label: "Réglages" }, { id: "system", label: "Système" }]
     readonly property var corners: ({ tl: "↖ haut gauche", tr: "↗ haut droite", br: "↘ bas droite", bl: "↙ bas gauche" })
-    readonly property var cornerOrder: ["tl", "tr", "br", "bl"]
     readonly property var qrModes: [["always", "Toujours"], ["timed", "30 secondes"], ["never", "Jamais"]]
     readonly property var kinds: ({ youtube: "YouTube", "twitch-vod": "Rediffusion Twitch", "twitch-clip": "Clip Twitch", link: "Lien", jellyfin: "Jellyfin" })
 
@@ -63,7 +62,6 @@ Item {
             surface: "#2a2034", surfaceFocus: "#3a2c4e", label: "#a99fc0" }
         : { accent: "#e8e8ee", veil: "#0b0b0d", rail: "#121214", sheet: "#1e1e22", key: "#2f2f35",
             surface: "#232327", surfaceFocus: "#35353c", label: "#a3a3ad" }
-    readonly property bool ytTheme: theme === "youtube"
     readonly property color accent: pal.accent
     property var ytResults: null             // { query, results, channels } ou null
     property var ytPreview: null             // chaîne trouvée ouverte : { id, name, avatar, followers, videos, saved }

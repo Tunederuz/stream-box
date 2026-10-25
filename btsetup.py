@@ -4,7 +4,7 @@ Utilisé par remote.py (GET / POST /api/bluetooth), lui-même piloté par le men
 sans code (agent NoInputNoOutput : télécommandes, manettes, claviers « Just Works »), puis l'appareil est marqué de
 confiance (il se reconnecte seul) et connecté.
 """
-import re, subprocess, threading, time
+import re, subprocess, threading
 
 SCAN_SECONDS = 20
 state = {"scanning": False, "busy": None, "message": None, "found": {}}   # found : adresse -> nom vu à la recherche

@@ -625,7 +625,6 @@ def main():
         player.register_message_handler(
             "streambox-tvmenu-key", lambda k, *_: box.keyPressed.emit(k.decode() if isinstance(k, bytes) else k))
         # Clavier du menu tenu par la page (remote.py, /api/keyboard_input) : texte en entier, et « 1 » pour lancer
-        dec = lambda v: v.decode() if isinstance(v, bytes) else v
         player.register_message_handler(
             "streambox-tvmenu-text", lambda t, submit="0", *_: box.textInput.emit(dec(t), dec(submit) == "1"))
         player.observe_property("user-data/streambox/ambient",

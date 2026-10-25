@@ -712,7 +712,7 @@ local function scroll(first, sel, visible)
 end
 
 local function date_fr(iso)
-    local y, m, d = tostring(iso or ""):match("(%d+)-(%d+)-(%d+)")
+    local _, m, d = tostring(iso or ""):match("(%d+)-(%d+)-(%d+)")
     local months = { "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc." }
     return d and ("%d %s"):format(tonumber(d), months[tonumber(m)]) or ""
 end
