@@ -864,6 +864,30 @@ mp.observe_property("track-list", "native", function()
 end)
 mp.register_event("end-file", close_tracks)
 
+-- Panneau Infos (appli Qt, qml/InfoPanel.qml) : titre, chaîne ou série, description complète (user-data/streambox/meta
+-- de remote.py). Ouvert par le bouton Infos de la rangée ou ↑ en pause ; ↑ ↓ font défiler, Retour / OK / ≡ ferment
+local info_open, info_scroll = false, 0
+local function publish_info()
+    mp.set_property_native("user-data/streambox/info", info_open and { open = true, scroll = info_scroll } or {})
+end
+local function open_info()
+    info_open, info_scroll = true, 0
+    hide_bar()
+    publish_info()
+end
+local function close_info()
+    if not info_open then return end
+    info_open = false
+    publish_info()
+end
+local function info_key(key)
+    if key == "down" then info_scroll = info_scroll + 1
+    elseif key == "up" then info_scroll = math.max(0, info_scroll - 1)
+    else return close_info() end
+    publish_info()
+end
+mp.register_event("end-file", close_info)
+
 -- Lecture d'une vidéo : avance rapide qui accélère, rangée de boutons sous la barre (appli Qt), épisode suivant
 -- (Jellyfin). États publiés pour InfoBar.qml et NextUp.qml : seekfx, controls, next_card ; remote.py publie next_up.
 
@@ -937,7 +961,7 @@ end)
 local function controls_list()
     local paused = mp.get_property_native("pause")
     local list = { { id = "back", label = "−10 s" }, { id = "play", label = paused and "Lecture" or "Pause" },
-                   { id = "fwd", label = "+10 s" }, { id = "tracks", label = "Sous-titres" } }
+                   { id = "fwd", label = "+10 s" }, { id = "tracks", label = "Sous-titres" }, { id = "info", label = "Infos" } }
     if #(mp.get_property_native("chapter-list") or {}) > 1 then list[#list + 1] = { id = "chapter", label = "Chapitre suivant" } end
     if next_up() then list[#list + 1] = { id = "next", label = "Épisode suivant" } end
     return list
@@ -960,7 +984,12 @@ local function controls_key(key)
         elseif id == "play" then mp.commandv("cycle", "pause")
         elseif id == "tracks" then open_tracks()
         elseif id == "chapter" then mp.commandv("add", "chapter", "1")
-        elseif id == "next" then play_next() end
+        elseif id == "next" then play_next()
+        elseif id == "info" then
+            ctrl_focus = nil
+            publish_controls()
+            return open_info()
+        end
     end
     show_bar()
     publish_controls()
@@ -1037,6 +1066,10 @@ local function on_key(key)
         tracks_key(key)
         return
     end
+    if info_open then
+        info_key(key)
+        return
+    end
     if next_shown and mode == "media" and (key == "ok" or key == "back") then   -- carte « Épisode suivant »
         if key == "ok" then play_next() else hide_next(true) end
         return
@@ -1104,7 +1137,8 @@ local function on_key(key)
             media_seek(key == "right" and 1 or -1)
             show_bar()
         elseif key == "up" then
-            if bar_visible and not mp.get_property_native("pause") then hide_bar() else show_bar() end
+            if mp.get_property_native("pause") and qt_ui() then open_info()   -- en pause : le panneau Infos
+            elseif bar_visible then hide_bar() else show_bar() end
         elseif key == "down" then
             if qt_ui() then   -- barre et rangée de boutons, focus sur Pause / Lecture
                 ctrl_focus = 2

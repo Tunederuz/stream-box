@@ -933,3 +933,10 @@ pistes « forcées » en dernier). Une vidéo sans cette langue garde le choix d
 `close()`). Envoyé par stream-box.lua quand une vidéo arrive par `streambox-play` (téléphone, Cast, Home Assistant,
 historique…), quand jellyfin-mpv-shim charge un fichier, quand une chaîne arrive par `streambox-channel`, et par
 l'assistant des touches. Pas pour les relances automatiques du direct (bascule, direct figé).
+
+### Panneau Infos (vidéo)
+`qml/InfoPanel.qml` : glisse depuis la droite, miniature (YouTube) ou image de l'épisode (Jellyfin), titre, chaîne ou
+série, date, vues ou note, puis la description complète (`user-data/streambox/meta` : `overview` jusqu'à 3000
+caractères, `thumb`). Ouvert par le bouton Infos de la rangée (icône « i », PlayerIcon) ou ↑ en pause ; stream-box.lua
+`info_open` / `info_scroll` → `user-data/streambox/info` {open, scroll} ; ↑ ↓ défilent par 4 lignes (borné à la
+longueur du texte), Retour / OK / ≡ ferment ; refermé à la fin du fichier.

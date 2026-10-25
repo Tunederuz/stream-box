@@ -1393,7 +1393,7 @@ def jellyfin_play(item_id, from_start=False):
     mpv(["set_property", "user-data/streambox/meta",
          {"source": "jellyfin", "series": raw.get("SeriesName") or "", "episode": i.get("episode") or "",
           "year": raw.get("ProductionYear") or "", "rating": raw.get("CommunityRating") or 0,
-          "overview": (raw.get("Overview") or "")[:600]}])
+          "overview": (raw.get("Overview") or "")[:3000], "thumb": i.get("thumb") or ""}])
     nxt = {}
     if i["type"] == "Episode" and raw.get("SeriesId"):
         try:
@@ -1513,7 +1513,8 @@ def fetch_storyboard(url, ident):
             mpv(["set_property", "user-data/streambox/meta",
                  {"source": "youtube", "channel": info.get("channel") or info.get("uploader") or "",
                   "date": f"{d[6:8]}/{d[4:6]}/{d[:4]}" if len(d) == 8 else "",
-                  "views": info.get("view_count") or 0, "overview": (info.get("description") or "")[:600]}])
+                  "views": info.get("view_count") or 0, "overview": (info.get("description") or "")[:3000],
+                  "thumb": info.get("thumbnail") or ""}])
         boards = [f for f in info.get("formats") or [] if f.get("format_note") == "storyboard" and f.get("fragments")]
         if not boards:
             return

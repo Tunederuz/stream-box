@@ -453,7 +453,7 @@ class Osd(QObject):
     def __init__(self):
         super().__init__()
         self.data = {"bar": False, "toast": {}, "polls": {}, "storyboard": {}, "playback": {}, "live": {}, "tracks": {}, "loading": {}, "learn": {}, "meta": {}, "controls": {}, "seekfx": {},
-                     "next_card": {}, "notice": {},
+                     "next_card": {}, "notice": {}, "info": {},
                      "mode": "", "channel": "", "events": True}
         self._in.connect(self._set, Qt.QueuedConnection)
 
@@ -496,6 +496,7 @@ class Osd(QObject):
     seekfx = Property(str, lambda self: json.dumps(self.data["seekfx"] or {}), notify=changed)
     nextCard = Property(str, lambda self: json.dumps(self.data["next_card"] or {}), notify=changed)
     notice = Property(str, lambda self: json.dumps(self.data["notice"] or {}), notify=changed)   # Notice.qml
+    info = Property(str, lambda self: json.dumps(self.data["info"] or {}), notify=changed)   # InfoPanel.qml
     eventsOn = Property(bool, lambda self: self.data["events"] is not False, notify=changed)
 
 
@@ -612,7 +613,7 @@ def main():
     player.observe_property("user-data/streambox/input", input_beat)
 
     for key in ("bar", "toast", "polls", "storyboard", "live", "mode", "channel", "events", "tracks", "loading", "learn", "meta", "controls", "seekfx",
-                "next_card", "notice"):
+                "next_card", "notice", "info"):
         player.observe_property(f"user-data/streambox/{key}", osd.receive(key))
     threading.Thread(target=osd.poll_loop, daemon=True).start()
 

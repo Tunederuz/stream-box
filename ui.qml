@@ -85,6 +85,7 @@ Item {
         NextUp {}
         Toast {}
         TracksPanel {}
+        InfoPanel {}
         KeyWizard {}
         TvMenu {
             id: tvMenu
