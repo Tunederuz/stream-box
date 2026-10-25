@@ -281,7 +281,8 @@ Item {
                             Behavior on color { ColorAnimation { duration: 140 } }
                             PlayerIcon {
                                 anchors.centerIn: parent
-                                scale: parent.parent.big ? 1.25 : 1
+                                // −10 / +10 : cercle fin, agrandi pour remplir le bouton comme les autres icônes
+                                scale: parent.parent.big ? 1.25 : (parent.parent.it.id === "back" || parent.parent.it.id === "fwd") ? 1.4 : 1
                                 name: parent.parent.it.id === "play" ? (root.pb.pause ? "play" : "pause") : (parent.parent.it.id || "")
                                 color: parent.parent.foc ? "#17151c" : "white"
                             }
