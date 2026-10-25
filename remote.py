@@ -419,9 +419,13 @@ def remote_url():
             return url
     except OSError:
         pass
+    return f"http://{lan_ip()}:{PORT}"
+
+
+def lan_ip():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         s.connect(("192.0.2.1", 9))   # rien n'est envoyé : sert seulement à connaître l'adresse de sortie
-        return f"http://{s.getsockname()[0]}:{PORT}"
+        return s.getsockname()[0]
 
 
 def custom_remote_url():
@@ -753,7 +757,7 @@ def ssh_status(local=False):
         return subprocess.run(["systemctl", *args, "sshd.service"], capture_output=True, text=True, timeout=10).stdout.strip()
     s = {"available": any(os.path.exists(p) for p in SSH_UNIT),
          "enabled": systemctl("is-enabled") == "enabled", "active": systemctl("is-active") == "active",
-         "address": "media@" + urllib.parse.urlsplit(remote_url()).hostname if not custom_remote_url() else None}
+         "address": "media@" + lan_ip()}
     if local:
         try:
             with open(SSH_PASS_FILE) as f:
