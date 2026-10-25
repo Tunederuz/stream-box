@@ -1,4 +1,4 @@
-// Écran de pause (vidéo) : l'image s'assombrit, une grande icône pause au centre, et le résumé de la vidéo ou de
+// Écran de pause (vidéo) : l'image s'assombrit, une grande icône pause au centre de l'écran, et le résumé de la vidéo ou de
 // l'épisode (remote.py, user-data/streambox/meta) au-dessus de la barre de lecture. Fondu à l'entrée et à la sortie.
 import QtQuick
 import QtQuick.Effects
@@ -14,9 +14,9 @@ Item {
     Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
 
     Rectangle { anchors.fill: parent; color: "black"; opacity: 0.55 }
-    Rectangle {   // icône pause
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: 190
+    Rectangle {   // icône pause, au centre de l'écran (un peu remontée : le résumé et le titre sont dessous)
+        anchors.centerIn: parent
+        anchors.verticalCenterOffset: -40
         width: 132; height: 132; radius: 66
         color: "#40ffffff"; border.color: "#80ffffff"; border.width: 2
         scale: root.shown ? 1 : 0.85
