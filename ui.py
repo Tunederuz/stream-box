@@ -653,6 +653,22 @@ def main():
         bridge.ready.connect(lambda: to_mpv(player._set_property, "user-data/streambox/chat_ui", "qml"),
                              Qt.QueuedConnection)
     view.showFullScreen()
+    # Image de démarrage de start.sh (mpv, même image que l'écran de Plymouth) : retirée une fois la première image de
+    # l'appli à l'écran (petit délai : cage passe à la fenêtre la plus récente)
+    def drop_splash():
+        path = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "stream-box-splash.pid")
+        try:
+            with open(path) as f:
+                os.kill(int(f.read().strip()), signal.SIGTERM)
+            os.remove(path)
+        except (OSError, ValueError):
+            pass
+    first_frame = []
+    def on_frame():
+        if not first_frame:
+            first_frame.append(True)
+            QTimer.singleShot(300, drop_splash)
+    view.frameSwapped.connect(on_frame)
     threading.Thread(target=mpv_worker, daemon=True).start()
     for f in files:
         to_mpv(player.command, "loadfile", f, "append-play")

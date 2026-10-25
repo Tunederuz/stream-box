@@ -59,6 +59,7 @@ while true; do
       quick_fails=0
     fi
   else
+    kill "$(cat "${XDG_RUNTIME_DIR:-/tmp}/stream-box-splash.pid" 2> /dev/null)" 2> /dev/null   # image de démarrage
     mpv "${MPV_ARGS[@]}"
   fi
   sleep 2

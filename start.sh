@@ -5,6 +5,16 @@ export PATH="$HOME/.local/bin:$PATH"
 # Curseur invisible pour cage seul (cursors/blank, voir la session) : sinon son pointeur apparaît pendant les
 # transitions, quand aucune fenêtre ne couvre l'écran. Les applis reprennent le thème normal (souris qui bouge)
 unset XCURSOR_THEME XCURSOR_PATH
+# Résolution enregistrée depuis la télécommande (« auto » par défaut : jamais de 4K à 30 Hz), d'abord : puis image de
+# démarrage (la même que l'écran de Plymouth) le temps que tout se lance, sinon ~3 s de noir. ui.py la retire à sa
+# première image dessinée (player.sh pour mpv seul), et de toute façon au bout de 30 s
+python3 "$DIR/display.py" apply
+SPLASH_PID="${XDG_RUNTIME_DIR:-/tmp}/stream-box-splash.pid"
+mpv --no-config --really-quiet --fs --no-osc --osd-level=0 --no-input-default-bindings --input-vo-keyboard=no \
+    --no-audio --image-display-duration=inf --background=color --background-color='#0b0710' \
+    "$DIR/boot-splash.png" > /dev/null 2>&1 &
+echo $! > "$SPLASH_PID"
+( sleep 30; kill "$(cat "$SPLASH_PID" 2> /dev/null)" 2> /dev/null; rm -f "$SPLASH_PID" ) &
 # Réseau : on l'attend 20 s au plus. Sans réseau, la box démarre quand même : écran d'accueil, et mode configuration
 # Wi-Fi (point d'accès de la box, voir netsetup.py) s'il y a une carte Wi-Fi
 for _ in $(seq 10); do getent hosts www.twitch.tv > /dev/null && break; sleep 2; done
@@ -12,8 +22,6 @@ for _ in $(seq 10); do getent hosts www.twitch.tv > /dev/null && break; sleep 2;
 python3 "$DIR/chat_overlay.py" &
 python3 "$DIR/remote.py" &   # télécommande web, port 8080
 
-# Résolution enregistrée depuis la télécommande (« auto » par défaut : jamais de 4K à 30 Hz)
-python3 "$DIR/display.py" apply
 # Sortie son (voir audio.py) : la TV branchée en HDMI / DisplayPort, ou un appareil USB / Bluetooth, ou le choix fait
 # dans les réglages ; suivie en continu (branchements, débranchements)
 python3 "$DIR/audio.py" watch &
