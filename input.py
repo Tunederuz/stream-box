@@ -19,7 +19,7 @@ EVENT = struct.Struct("llHHi")   # input_event : temps (2 longs), type, code, va
 EV_KEY, EV_ABS = 1, 3
 ABS_HAT0X, ABS_HAT0Y = 16, 17
 REPEATABLE = {"up", "down", "left", "right", "volume_up", "volume_down"}
-LONG_PRESS = 2   # secondes : power maintenu → fenêtre « veille, redémarrer, éteindre » (power_menu) au lieu de power
+LONG_PRESS = 1   # secondes : power maintenu → fenêtre « veille, redémarrer, éteindre » (power_menu) au lieu de power
 DEFAULTS = {
     # Télécommandes (dont Xiaomi : OK = KEY_SELECT, ≡ = KEY_VIDEOPHONE, assistant = KEY_VOICECOMMAND), claviers
     "KEY_UP": "up", "KEY_DOWN": "down", "KEY_LEFT": "left", "KEY_RIGHT": "right",
