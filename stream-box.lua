@@ -279,11 +279,31 @@ local function fix_auto_subs()
     end
 end
 
+-- Sous-titres retenus d'une vidéo à l'autre : dernier choix du panneau Sous-titres / audio (langue, ou « no » pour
+-- désactivés), dans l'état « sub_lang » ; appliqué à chaque vidéo qui a une piste dans cette langue
+local function same_lang(a, b)
+    a, b = (a or ""):lower(), (b or ""):lower()
+    return a ~= "" and b ~= "" and (a == b or a:sub(1, 2) == b:sub(1, 2))
+end
+local function apply_sub_pref()
+    local pref = read_state("sub_lang")
+    if not pref or pref == "" then return end
+    if pref == "no" then return mp.set_property("sid", "no") end
+    local best
+    for _, t in ipairs(mp.get_property_native("track-list") or {}) do
+        if t.type == "sub" and same_lang(t.lang, pref) and (not best or (best.forced and not t.forced)) then best = t end
+    end
+    if best then mp.set_property("sid", tostring(best.id)) end
+end
+
 mp.register_event("file-loaded", function()
     attempts = 0
     offline = false
     set_status("")
-    if mode == "media" then fix_auto_subs() end
+    if mode == "media" then
+        fix_auto_subs()
+        apply_sub_pref()
+    end
 end)
 
 -- Chaîne hors ligne depuis plus d'AUTO_SWITCH secondes : on passe au premier streamer en live, dans l'ordre de
@@ -768,7 +788,7 @@ local function build_tracks()
     local subs, audio, sub_on = {}, {}, false
     for _, t in ipairs(mp.get_property_native("track-list") or {}) do
         if t.type == "sub" then
-            subs[#subs + 1] = { kind = "sub", id = t.id, label = track_label(t), selected = t.selected == true }
+            subs[#subs + 1] = { kind = "sub", id = t.id, label = track_label(t), selected = t.selected == true, lang = t.lang }
             sub_on = sub_on or t.selected == true
         elseif t.type == "audio" then
             audio[#audio + 1] = { kind = "audio", id = t.id, label = track_label(t), selected = t.selected == true }
@@ -816,6 +836,10 @@ local function tracks_key(key)
     elseif key == "ok" then
         local it = tracks_items[tracks_sel]
         if it then mp.set_property(it.kind == "sub" and "sid" or "aid", it.id and tostring(it.id) or "no") end
+        -- Choix retenu pour les vidéos suivantes (apply_sub_pref) : la langue, ou désactivés
+        if it and it.kind == "sub" then
+            if not it.id then write_state("sub_lang", "no") elseif it.lang and it.lang ~= "" then write_state("sub_lang", it.lang) end
+        end
         close_tracks()
     else   -- Retour, ≡, Accueil…
         close_tracks()
