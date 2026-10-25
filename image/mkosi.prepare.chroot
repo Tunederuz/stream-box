@@ -20,6 +20,8 @@ usermod -p '*' "$BOX_USER"   # pas de mot de passe ; connexion SSH par clé poss
 rm -rf "$BOX_HOME/stream-box"
 git -c safe.directory='*' clone -q /work/src/stream-box "$BOX_HOME/stream-box"
 git -C "$BOX_HOME/stream-box" remote set-url origin https://github.com/Tunederuz/stream-box.git
+# Les droits d'exécution posés à l'installation ne sont pas des modifications (sinon git pull refuse de mettre à jour)
+git -C "$BOX_HOME/stream-box" config core.fileMode false
 # Modifications pas encore validées (git clone ne prend que le dernier commit) : copie de l'arbre de travail
 tar -C /work/src/stream-box --exclude=.git --exclude=image --exclude=node_modules -cf - . | tar -C "$BOX_HOME/stream-box" -xf -
 cp "$BOX_HOME/stream-box/streamers.example.txt" "$BOX_HOME/stream-box/streamers.txt"

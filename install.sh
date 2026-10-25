@@ -121,6 +121,8 @@ if [ ! -f "$BOX_DIR/streamers.txt" ]; then
 fi
 chown -R "$BOX_USER:$BOX_USER" "$BOX_DIR"
 chmod +x "$BOX_DIR"/*.sh "$BOX_DIR"/*.py
+# Ces droits ne sont pas des modifications pour git (sinon git pull refuse de mettre à jour)
+git -c safe.directory='*' -C "$BOX_DIR" config core.fileMode false 2> /dev/null || true
 
 step "streamlink, yt-dlp, jellyfin-mpv-shim… (venvs de $BOX_USER)"
 as_box '
