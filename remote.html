@@ -504,6 +504,51 @@
   </section>
 
   <section>
+    <h2>Compte YouTube</h2>
+    <!-- Abonnements du compte : appli Google à soi, autorisation par code (lecture seule) -->
+    <div id="ytacc-setup" hidden>
+      <p>Pour la rangée <b>Abonnements</b> du menu de la TV, la box a besoin de ta propre appli Google (gratuit, une fois).</p>
+      <details>
+        <summary>Créer l'appli</summary>
+        <ol>
+          <li>Sur <code>console.cloud.google.com</code>, crée un projet, puis active <b>YouTube Data API v3</b>
+            (API et services → Bibliothèque).</li>
+          <li><b>Google Auth Platform</b> : audience <b>Externe</b>, niveau d'accès <code>youtube.readonly</code>, puis
+            <b>Publier l'application</b> (sinon Google déconnecte la box tous les 7 jours).</li>
+          <li><b>Clients → Créer un client</b>, type <b>TV et appareils à saisie limitée</b>.</li>
+          <li>Colle ici l'<b>ID client</b> et le <b>code secret</b>.</li>
+        </ol>
+      </details>
+      <div class="stack">
+        <input id="ytapp-id" autocomplete="off" autocapitalize="none" placeholder="ID client (….apps.googleusercontent.com)"
+               aria-label="ID client Google">
+        <input id="ytapp-secret" type="password" autocomplete="off" placeholder="Code secret du client"
+               aria-label="Code secret du client Google">
+        <button id="ytapp-save" class="current">Enregistrer</button>
+      </div>
+    </div>
+    <div id="ytacc-auth" hidden>
+      <p>Appli enregistrée. Autorise la box à lire tes abonnements (lecture seule).</p>
+      <button id="ytacc-login" class="current" style="width: 100%">Autoriser la box</button>
+      <div id="ytacc-code" hidden style="margin-top: 12px; text-align: center">
+        <p style="margin-bottom: 6px">Sur <b>google.com/device</b>, tape ce code :</p>
+        <div id="ytacc-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
+        <a id="ytacc-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Ouvrir la page d'activation</a>
+        <p>« Appli non vérifiée » : <b>Paramètres avancés</b>, puis <b>Accéder à …</b></p>
+      </div>
+    </div>
+    <div id="ytacc-ok" hidden>
+      <p id="ytacc-summary"></p>
+      <div class="row">
+        <button id="ytacc-sync">Relire mes abonnements</button>
+        <button id="ytacc-logout">Déconnecter</button>
+        <button id="ytapp-change">Changer d'appli</button>
+      </div>
+    </div>
+    <div class="status" id="ytacc-status"></div>
+  </section>
+
+  <section>
     <h2>Sortie son</h2>
     <select id="audio-out" aria-label="Sortie son"><option>Chargement…</option></select>
     <p id="audio-hint">Automatique : un casque ou une enceinte USB ou Bluetooth passe en premier, sinon la TV branchée en
@@ -1087,6 +1132,60 @@ $("follows-login").onclick = () => followsAction("follows_login");
 $("follows-logout").onclick = () => { if (confirm("Retirer l'autorisation des chaînes suivies ?")) followsAction("follows_logout"); };
 $("app-change").onclick = () => { followsChanging = true; refreshFollows(); };
 refreshFollows();
+
+// Compte YouTube : appli Google, autorisation par code, état
+let ytaccTimer = null, ytaccChanging = false;
+async function refreshYtAccount() {
+  clearTimeout(ytaccTimer);
+  try {
+    const r = await fetch("/api/youtube_account");
+    const a = await r.json();
+    if (!r.ok) throw new Error(a.error);
+    const pending = a.pending && !a.authorized;
+    $("ytacc-setup").hidden = a.configured && !ytaccChanging;
+    $("ytacc-auth").hidden = !a.configured || a.authorized || ytaccChanging;
+    $("ytacc-ok").hidden = !a.authorized || ytaccChanging;
+    $("ytacc-code").hidden = !pending || !!a.pending.error;
+    if (pending) {
+      $("ytacc-user-code").textContent = a.pending.user_code;
+      $("ytacc-link").href = a.pending.verification_uri;
+    }
+    $("ytacc-status").className = a.pending?.error ? "status error" : "status";
+    $("ytacc-status").textContent = a.pending?.error ? `Autorisation refusée : ${a.pending.error}` : "";
+    if (a.authorized) {
+      $("ytacc-summary").textContent = a.channels === null ? "Connecté · abonnements relus à la prochaine ouverture de l'onglet YouTube."
+        : `Connecté · ${a.channels} abonnements, relus le ${new Date(a.synced * 1000).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}.`;
+    }
+    if (pending && !a.pending.error) ytaccTimer = setTimeout(refreshYtAccount, 3000);   // en attente du code
+  } catch (e) {
+    $("ytacc-status").className = "status error";
+    $("ytacc-status").textContent = e.message || "Box injoignable";
+  }
+}
+async function ytaccAction(action, body = {}) {
+  $("ytacc-status").className = "status";
+  $("ytacc-status").textContent = "";
+  try {
+    const r = await fetch(`/api/${action}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+  } catch (e) {
+    $("ytacc-status").className = "status error";
+    $("ytacc-status").textContent = e.message || "Box injoignable";
+  }
+  refreshYtAccount();
+}
+$("ytapp-save").onclick = async () => {
+  ytaccChanging = false;
+  await ytaccAction("youtube_app", { client_id: $("ytapp-id").value, client_secret: $("ytapp-secret").value });
+  $("ytapp-secret").value = "";
+};
+$("ytacc-login").onclick = () => ytaccAction("youtube_login");
+$("ytacc-sync").onclick = () => ytaccAction("youtube_sync");
+$("ytacc-logout").onclick = () => { if (confirm("Déconnecter le compte YouTube ?")) ytaccAction("youtube_logout"); };
+$("ytapp-change").onclick = () => { ytaccChanging = true; refreshYtAccount(); };
+refreshYtAccount();
 
 // YouTube : recherche (vidéos et chaînes), gestion de la liste des chaînes (Réglages). Les dernières vidéos des chaînes
 // se parcourent sur la TV

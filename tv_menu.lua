@@ -755,6 +755,10 @@ local function media_rows(id)
     local m, rows = media[id], {}
     local d = m.data or {}
     if id == "youtube" then
+        -- Abonnements du compte (le compte se connecte depuis le menu animé ou la page)
+        if type(d.subs) == "table" and d.subs.authorized and type(d.subs.videos) == "table" then
+            rows[#rows + 1] = { key = "subs", title = "Abonnements", items = d.subs.videos }
+        end
         for _, c in ipairs(d.channels or {}) do
             rows[#rows + 1] = { key = c.id, title = c.name, items = c.videos or {} }
         end
@@ -787,6 +791,7 @@ local function media_meta(id, it)
     local parts = {}
     local function add(v) if v and v ~= "" then parts[#parts + 1] = tostring(v) end end
     if id == "youtube" then
+        add(it.channel_id and it.channel)   -- rangée « Abonnements » : nom de la chaîne
         add(days_ago(it.date))
         if it.views then add(viewers(it.views) .. " vues") end
     elseif it.type == "Series" then

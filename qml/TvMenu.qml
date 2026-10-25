@@ -44,6 +44,10 @@ Item {
     property string btPhase: ""              // /api/audio : sorties son, choix (« auto » ou une sortie), sortie actuelle                  // /api/wifi, idem (ligne « Wi-Fi » : mode configuration)
     // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
     property var yt: null
+    // Compte YouTube : fenêtre du code à taper sur google.com/device (/api/youtube_account), et son QR code
+    property var ytAuth: null
+    property var ytAuthQr: null
+    property var ytAccount: null             // même état, pour la ligne « Compte YouTube » du menu Système
     // Couleurs selon l'onglet : violet pour Twitch (direct, suivis, rediffusions), rouge pour YouTube, neutre
     // (anthracite, halo blanc) pour ce qui n'appartient à aucun service (historique, réglages, système), bleu Jellyfin
     readonly property string theme: tabId === "youtube" || tabId === "jellyfin" ? tabId
@@ -184,6 +188,12 @@ Item {
             rows.push({ kind: "preview", key: "preview", title: ytPreview.name + " · dernières vidéos", avatar: ytPreview.avatar,
                         items: ytPreview.videos || [], loading: ytPreview.videos === null })
         if (ytResults) rows.push({ kind: "results", key: "search", title: "Résultats pour « " + ytResults.query + " »", items: ytResults.results })
+        var subs = yt && yt.subs
+        if (subs && subs.authorized)
+            rows.push({ kind: "subs", key: "subs", title: "Abonnements", items: subs.videos || [], loading: subs.videos === null })
+        else if (subs && subs.configured)
+            rows.push({ kind: "connect", key: "connect", title: "Abonnements",
+                        items: [{ title: "Connecter mon compte", connect: true }] })
         var chans = yt ? yt.channels : []
         for (var i = 0; i < chans.length; i++)
             rows.push({ kind: "channel", key: chans[i].id, title: chans[i].name, avatar: chans[i].avatar, items: chans[i].videos || [] })
@@ -202,6 +212,42 @@ Item {
         call("GET", "/api/youtube_channel?id=" + encodeURIComponent(c.id), undefined, function (d) {
             if (ytPreview && ytPreview.id === c.id) ytPreview = Object.assign({}, ytPreview, { videos: d ? d.videos : [] })
         })
+    }
+    // Compte YouTube : code à taper sur google.com/device ; la fenêtre se relit toutes les 3 s jusqu'à l'autorisation
+    function ytConnect() {
+        ytAuth = { pending: null }
+        call("POST", "/api/youtube_login", {}, function (d) {
+            if (!d) ytAuth = { pending: { error: "Google injoignable, ou appli mal configurée" } }
+            else loadYtAuth()
+        })
+    }
+    function loadYtAccount() { call("GET", "/api/youtube_account", undefined, function (d) { if (d) ytAccount = d }) }
+    function loadYtAuth() {
+        if (!ytAuth) return
+        call("GET", "/api/youtube_account", undefined, function (d) {
+            if (!ytAuth || !d) return
+            ytAccount = d
+            if (d.authorized) { ytAuth = null; loadYoutube(); return }
+            ytAuth = d
+            var p = d.pending
+            if (p && p.verification_uri && !p.error) {
+                if (!ytAuthQr || ytAuthQr.text !== p.verification_uri)
+                    call("GET", "/api/qr?text=" + encodeURIComponent(p.verification_uri), undefined, function (q) {
+                        ytAuthQr = q ? { text: p.verification_uri, rows: q.rows } : null
+                    })
+                ytAuthPoll.restart()
+            }
+        })
+    }
+    function ytAccountMenu() {
+        var a = ytAccount
+        if (!a || !a.configured) return
+        if (!a.authorized) { ytConnect(); return }
+        openModal("Compte YouTube" + (a.channels !== null ? " · " + a.channels + " abonnements" : ""), [
+            { label: "↻  Relire mes abonnements", ok: function () {
+                call("POST", "/api/youtube_sync", {}, function () { yt = null; loadYoutube() }) } },
+            { label: "✕  Déconnecter le compte", danger: true, ok: function () {
+                call("POST", "/api/youtube_logout", {}, function () { yt = null; loadYtAccount() }) } }])
     }
     function ytToggleSaved(c) {
         call("POST", "/api/youtube_channels", { action: c.saved ? "remove" : "add", channel: c.id }, function (d) {
@@ -283,6 +329,10 @@ Item {
         if (jfTab)
             parts = it.type === "Series" ? [it.unplayed ? it.unplayed + " à voir" : "Série", it.year]
                 : it.episode ? [it.episode] : [it.year, it.seconds ? hm(it.seconds) : ""]
+        else if (row.kind === "subs")
+            parts = [it.channel, ago(it.date), it.seconds ? Fmt.clock(it.seconds) : ""]
+        else if (row.kind === "connect")
+            parts = ["Tes abonnements YouTube"]
         else if (row.kind === "results")
             parts = [it.channel, it.seconds ? Fmt.clock(it.seconds) : "", it.views ? Fmt.big(it.views) + " vues" : ""]
         else
@@ -311,6 +361,7 @@ Item {
         }
     }
     Timer { interval: 4000; repeat: true; running: menu.isOpen; onTriggered: menu.refresh() }
+    Timer { id: ytAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadYtAuth() }
     Timer { id: followsPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadFollows() }
     Timer { interval: 10000; repeat: true; running: menu.isOpen; triggeredOnStart: true; onTriggered: menu.now = new Date() }
     Timer { id: idleClose; interval: 90000; onTriggered: menu.close() }   // écran de TV : pas d'image fixe
@@ -494,6 +545,11 @@ Item {
         return [
             { label: "Compte Twitch", value: login ? "Connecté : " + login : "Non connecté",
               hint: login ? "Pas de pub sur les chaînes où tu es abonné" : "Se connecte depuis la télécommande du téléphone" },
+            { label: "Compte YouTube", visible: !!(ytAccount && ytAccount.configured),
+              value: ytAccount && ytAccount.authorized
+                   ? "Connecté" + (ytAccount.channels !== null ? " · " + ytAccount.channels + " abonnements" : "") : "Non connecté",
+              hint: ytAccount && ytAccount.authorized ? "Rangée « Abonnements » de l'onglet YouTube" : "OK : code à taper sur google.com/device",
+              ok: function () { ytAccountMenu() } },
             { label: "Lecteur", value: (pendingPlayer || st.player) === "mpv" ? "mpv seul" : "Appli Qt (menu animé)",
               hint: pendingPlayer && pendingPlayer !== st.player ? "OK pour appliquer : le lecteur redémarre" : undefined,
               step: function (d) { pendingPlayer = (pendingPlayer || st.player) === "qt" ? "mpv" : "qt" },
@@ -614,6 +670,8 @@ Item {
                 : (history.length === 1 ? "1 vidéo" : history.length + " vidéos") + " · OK pour reprendre ou retirer"
         case "youtube":
             if (!yt) return "Chargement…"
+            if (yt.subs && yt.subs.authorized) return "Tes abonnements" + (yt.channels.length ? " et " + yt.channels.length
+                + (yt.channels.length === 1 ? " chaîne" : " chaînes") : "") + " · dernières vidéos"
             return yt.channels.length ? yt.channels.length + (yt.channels.length === 1 ? " chaîne" : " chaînes") + " · dernières vidéos"
                 : "Recherche une vidéo, ou ajoute des chaînes depuis la télécommande"
         case "jellyfin":
@@ -682,7 +740,7 @@ Item {
     function loadAudio() { call("GET", "/api/audio", undefined, function (d) { if (d && d.outputs) audioOut = d }) }
     function loadTab(id) {
         if (id === "settings") loadAudio()
-        if (id === "system") loadBt()
+        if (id === "system") { loadBt(); loadYtAccount() }
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
         if (id === "youtube" && yt === null) loadYoutube()
@@ -716,6 +774,7 @@ Item {
             else if (k === "back" || k === "left") { modal = null; if (powerOnly) close() }
             return
         }
+        if (ytAuth) { if (k === "back" || k === "left" || k === "ok") ytAuth = null; return }
         if (area === "rail") {
             if (k === "up" || k === "down") tab = Math.max(0, Math.min(tabs.length - 1, tab + (k === "down" ? 1 : -1)))
             else if (k === "right" || k === "ok") enterContent()
@@ -809,6 +868,7 @@ Item {
         else if (k === "right") { s[row.key] = Math.min(row.items.length - 1, sel + 1); setMediaSel(s) }
         else if (k === "ok" && row.items[sel]) {
             if (row.kind === "chans") ytChannelMenu(row.items[sel])
+            else if (row.kind === "connect") ytConnect()
             else if (jfTab) jfChoose(row.items[sel])
             else chooseVideo(row.items[sel])
         }
@@ -1203,7 +1263,7 @@ Item {
             }
             Text {
                 visible: menu.jfTab ? !!menu.jf && !menu.jf.configured && !menu.jf.error
-                                    : !!menu.yt && menu.yt.channels.length === 0 && !menu.ytResults
+                                    : !!menu.yt && menu.yt.channels.length === 0 && !menu.ytResults && !(menu.yt.subs && menu.yt.subs.configured)
                 y: 320; text: menu.jfTab ? "Jellyfin n'est pas associé à la box : dans l'appli Jellyfin, « Lire sur… » → la box."
                                          : "Ajoute des chaînes YouTube depuis la télécommande web (Réglages → Chaînes YouTube)."
                 color: "#b4afc2"; font.pixelSize: 27
@@ -1311,6 +1371,7 @@ Item {
                                         title: it.title || ""
                                         thumb: it.thumb || ""
                                         meta: menu.cardMeta(row, it)
+                                        glyph: it.connect ? "+" : "▶"
                                         progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
                                         accent: menu.accent
                                         focused: menu.area === "content" && menu.mRow === r && index === (menu.mSel[row.key] || 0)
@@ -1464,6 +1525,47 @@ Item {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // Compte YouTube : code à taper sur google.com/device (ou QR code), mis à jour tout seul
+    Item {
+        id: ytAuthBox
+        anchors.fill: parent
+        opacity: menu.ytAuth ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: 160 } }
+        readonly property var pend: menu.ytAuth ? menu.ytAuth.pending : null
+        readonly property bool waiting: !!(pend && pend.user_code && !pend.error)
+        Rectangle { anchors.fill: parent; color: "#05030a"; opacity: 0.6 }
+        Rectangle {
+            width: 1240; height: 520; radius: 28
+            anchors.centerIn: parent
+            color: menu.pal.sheet
+            Column {
+                x: 60; y: 60; spacing: 26; width: 700
+                Text { text: "Connecter mon compte YouTube"; color: "white"; font.pixelSize: 30; font.bold: true }
+                Text {
+                    width: parent.width; wrapMode: Text.WordWrap; color: "white"; font.pixelSize: 25
+                    text: ytAuthBox.waiting ? "Sur ton téléphone, ouvre google.com/device et tape :"
+                        : ytAuthBox.pend && ytAuthBox.pend.error ? "Autorisation refusée : " + ytAuthBox.pend.error
+                        : "Demande du code…"
+                }
+                Text {
+                    visible: ytAuthBox.waiting
+                    text: visible ? ytAuthBox.pend.user_code : ""
+                    color: "white"; font.pixelSize: 68; font.bold: true; font.letterSpacing: 8
+                }
+                Text {
+                    width: parent.width; wrapMode: Text.WordWrap; color: "#b4afc2"; font.pixelSize: 21
+                    text: "Google prévient que l'appli n'est pas vérifiée : « Paramètres avancés », puis « Accéder à Stream Box ». "
+                        + "Lecture seule. La TV se met à jour toute seule ; Retour pour fermer."
+                }
+            }
+            QrCode {
+                visible: ytAuthBox.waiting && n > 0
+                x: 820; y: 80; size: 360; rows: menu.ytAuthQr ? menu.ytAuthQr.rows : []
             }
         }
     }

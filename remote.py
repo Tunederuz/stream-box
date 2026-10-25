@@ -988,7 +988,12 @@ def youtube_home():
         except (OSError, ValueError):
             videos = None   # flux injoignable : la chaîne reste affichée, sans vidéos
         out.append({**c, "videos": videos})
-    return {"channels": out}
+    try:
+        subs = yt_subscriptions()
+    except (OSError, ValueError, KeyError) as e:   # compte YouTube en panne : les chaînes de la liste restent
+        print(f"remote.py : abonnements YouTube : {e}", flush=True)
+        subs = None
+    return {"channels": out, "subs": subs}
 
 
 def yt_search(query):
@@ -1646,6 +1651,292 @@ def follows_logout():
         follows_cache.update(at=0.0, data=None)
 
 
+# Compte YouTube (rangée « Abonnements » de l'onglet YouTube) : appli Google à soi (console.cloud.google.com, API
+# YouTube Data v3, client « TV et appareils à saisie limitée »), autorisation par code sur google.com/device, lecture
+# seule. Config dans youtube-app.json ({"client_id", "client_secret"}), jetons dans youtube-token.json, liste des
+# abonnements dans youtube-subs.json, en 600 dans ~/.config/stream-box. Tout passe par l'API Google (googleapis.com),
+# pas par youtube.com : rien ne s'ajoute aux requêtes qui font limiter l'adresse IP de la box. Quota de l'API : 10 000
+# unités par jour ; abonnements relus une fois par jour (1 unité par 50), puis par chaîne 1 unité pour ses dernières
+# vidéos (playlist « UULF… » : vidéos sans les Shorts) et 1 unité par 50 vidéos pour durées et vues ; fil gardé 30 min.
+
+YT_APP_FILE = os.path.join(COOKIES_DIR, "youtube-app.json")
+YT_TOKEN_FILE = os.path.join(COOKIES_DIR, "youtube-token.json")
+YT_SUBS_FILE = os.path.join(COOKIES_DIR, "youtube-subs.json")
+YT_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
+YT_SUBS_EVERY = 86400
+YT_SUBFEED_CACHE = 1800
+YT_SUBFEED_PER_CHANNEL = 4
+YT_SUBFEED_MAX = 60
+yt_account_lock = threading.Lock()
+yt_pending = {}                # autorisation en cours : user_code, verification_uri, expires_at, error
+yt_subfeed = {"at": 0.0, "videos": None, "refreshing": False}
+
+
+def google_oauth(path, fields):
+    """POST sur oauth2.googleapis.com ; renvoie (code HTTP, réponse JSON)."""
+    req = urllib.request.Request(f"https://oauth2.googleapis.com/{path}", data=urllib.parse.urlencode(fields).encode())
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status, json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.load(e)
+        except ValueError:
+            return e.code, {}
+
+
+def yt_app():
+    app = read_json_file(YT_APP_FILE)
+    if not app.get("client_id") or not app.get("client_secret"):
+        raise ValueError("aucune appli Google configurée")
+    return app
+
+
+def save_yt_token(d, refresh_token=None):
+    write_private_json(YT_TOKEN_FILE, {"access_token": d["access_token"],
+                                       "refresh_token": d.get("refresh_token") or refresh_token,
+                                       "expires_at": time.time() + int(d.get("expires_in") or 3600)})
+
+
+def yt_poll(device_code, interval, expires_at):
+    """Attend que l'utilisateur tape le code sur google.com/device (fil séparé)."""
+    while time.time() < expires_at:
+        time.sleep(interval)
+        try:
+            app = yt_app()
+            code, d = google_oauth("token", {"client_id": app["client_id"], "client_secret": app["client_secret"],
+                                             "device_code": device_code,
+                                             "grant_type": "urn:ietf:params:oauth:grant-type:device_code"})
+        except (OSError, ValueError):
+            continue
+        if code == 200 and d.get("access_token"):
+            save_yt_token(d)
+            with yt_account_lock:
+                yt_pending.clear()
+            yt_reset_subs()
+            return
+        error = d.get("error", "")
+        if error == "slow_down":
+            interval += 5
+        elif error != "authorization_pending":
+            with yt_account_lock:
+                yt_pending.update(error={"access_denied": "accès refusé"}.get(error, error or f"refus de Google ({code})"))
+            return
+    with yt_account_lock:
+        yt_pending.update(error="code expiré")
+
+
+def yt_login():
+    app = yt_app()
+    code, d = google_oauth("device/code", {"client_id": app["client_id"], "scope": YT_SCOPE})
+    if code != 200 or not d.get("device_code"):
+        raise ValueError(f"Google refuse l'appli : {d.get('error_description') or d.get('error') or code}"
+                         " (vérifie l'ID client et son type « TV et appareils à saisie limitée »)")
+    expires_at = time.time() + int(d.get("expires_in") or 1800)
+    with yt_account_lock:
+        yt_pending.clear()
+        yt_pending.update(user_code=d["user_code"], verification_uri=d.get("verification_url") or d.get("verification_uri"),
+                          expires_at=expires_at)
+    threading.Thread(target=yt_poll, args=(d["device_code"], int(d.get("interval") or 5), expires_at),
+                     daemon=True).start()
+
+
+def yt_token():
+    """Jeton valide pour l'API YouTube, renouvelé si besoin ; None si la box n'est pas autorisée."""
+    tok = read_json_file(YT_TOKEN_FILE)
+    if not tok.get("access_token"):
+        return None
+    if time.time() > tok.get("expires_at", 0) - 120:
+        if not tok.get("refresh_token"):
+            return None
+        app = yt_app()
+        code, d = google_oauth("token", {"client_id": app["client_id"], "client_secret": app["client_secret"],
+                                         "grant_type": "refresh_token", "refresh_token": tok["refresh_token"]})
+        if code != 200 or not d.get("access_token"):
+            if code in (400, 401):   # autorisation retirée sur le compte Google : il faudra recommencer
+                os.remove(YT_TOKEN_FILE)
+            return None
+        save_yt_token(d, tok["refresh_token"])
+        tok = read_json_file(YT_TOKEN_FILE)
+    return tok["access_token"]
+
+
+def yt_api(path, token, **params):
+    req = urllib.request.Request(f"https://www.googleapis.com/youtube/v3/{path}?{urllib.parse.urlencode(params)}",
+                                 headers={"Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.load(r)
+
+
+def yt_fetch_subs(token):
+    """Chaînes abonnées du compte : [{id, name, avatar}] (jusqu'à 1000)"""
+    subs, page = [], None
+    for _ in range(20):
+        d = yt_api("subscriptions", token, part="snippet", mine="true", maxResults=50, order="alphabetical",
+                   **({"pageToken": page} if page else {}))
+        for it in d.get("items", []):
+            sn = it.get("snippet") or {}
+            cid = (sn.get("resourceId") or {}).get("channelId")
+            if cid:
+                thumbs = sn.get("thumbnails") or {}
+                subs.append({"id": cid, "name": sn.get("title") or cid,
+                             "avatar": (thumbs.get("medium") or thumbs.get("default") or {}).get("url")})
+        page = d.get("nextPageToken")
+        if not page:
+            break
+    write_private_json(YT_SUBS_FILE, {"at": time.time(), "channels": subs})
+    return subs
+
+
+def iso_seconds(text):
+    """« PT1H2M3S » → 3723"""
+    m = re.fullmatch(r"P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", text or "")
+    if not m:
+        return None
+    d, h, mi, s = (int(x or 0) for x in m.groups())
+    return ((d * 24 + h) * 60 + mi) * 60 + s
+
+
+def yt_channel_uploads(channel, token):
+    for prefix in ("UULF", "UU"):   # UULF : vidéos longues seulement (sans Shorts ni directs) ; UU : tout, en secours
+        try:
+            d = yt_api("playlistItems", token, part="snippet,contentDetails", maxResults=YT_SUBFEED_PER_CHANNEL,
+                       playlistId=prefix + channel["id"][2:])
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                continue
+            raise
+        out = []
+        for it in d.get("items", []):
+            sn, cd = it.get("snippet") or {}, it.get("contentDetails") or {}
+            vid = cd.get("videoId")
+            if vid:
+                out.append({"id": vid, "title": sn.get("title") or "", "channel": channel["name"],
+                            "channel_id": channel["id"], "avatar": channel.get("avatar"),
+                            "date": cd.get("videoPublishedAt") or sn.get("publishedAt") or "",
+                            "thumb": f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg",
+                            "url": f"https://www.youtube.com/watch?v={vid}"})
+        return out
+    return []
+
+
+def yt_refresh_subfeed():
+    """Dernières vidéos de tous les abonnements, les plus récentes d'abord"""
+    from concurrent.futures import ThreadPoolExecutor
+    try:
+        token = yt_token()
+        if not token:
+            return
+        cached = read_json_file(YT_SUBS_FILE)
+        subs = cached.get("channels")
+        if subs is None or time.time() - cached.get("at", 0) > YT_SUBS_EVERY:
+            subs = yt_fetch_subs(token)
+        with ThreadPoolExecutor(8) as pool:
+            lists = list(pool.map(lambda c: yt_safe(yt_channel_uploads, c, token), subs))
+        videos = sorted((v for l in lists for v in l), key=lambda v: v["date"], reverse=True)[:YT_SUBFEED_MAX]
+        details = {}
+        for i in range(0, len(videos), 50):
+            d = yt_api("videos", token, part="snippet,contentDetails,statistics",
+                       id=",".join(v["id"] for v in videos[i:i + 50]), maxResults=50)
+            details.update({it["id"]: it for it in d.get("items", [])})
+        out = []
+        for v in videos:
+            it = details.get(v["id"])
+            if not it or (it.get("snippet") or {}).get("liveBroadcastContent") == "upcoming":
+                continue   # supprimée, privée, ou direct pas encore commencé
+            views = (it.get("statistics") or {}).get("viewCount")
+            out.append({**v, "date": v["date"][:10], "seconds": iso_seconds((it.get("contentDetails") or {}).get("duration")),
+                        "views": int(views) if views else None})
+        with yt_account_lock:
+            yt_subfeed.update(at=time.time(), videos=out)
+    except (OSError, ValueError) as e:
+        print(f"remote.py : abonnements YouTube : {e}", flush=True)
+        with yt_account_lock:
+            if yt_subfeed["videos"] is None:
+                yt_subfeed.update(at=time.time(), videos=[])
+    finally:
+        with yt_account_lock:
+            yt_subfeed["refreshing"] = False
+
+
+def yt_safe(fn, *args):
+    try:
+        return fn(*args)
+    except (OSError, ValueError):
+        return []   # chaîne fermée ou injoignable : les autres restent
+
+
+def yt_reset_subs(refetch_list=True):
+    if refetch_list:
+        for path in (YT_SUBS_FILE,):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+    with yt_account_lock:
+        yt_subfeed.update(at=0.0, videos=None)
+
+
+def yt_subscriptions():
+    """Rangée « Abonnements » pour /api/youtube : premier relevé attendu, les suivants en arrière-plan"""
+    status = yt_account_status()
+    if not status["authorized"]:
+        return {**status, "videos": None}
+    with yt_account_lock:
+        stale = time.time() - yt_subfeed["at"] > YT_SUBFEED_CACHE
+        start = stale and not yt_subfeed["refreshing"]
+        if start:
+            yt_subfeed["refreshing"] = True
+        first = yt_subfeed["videos"] is None
+    if start:
+        if first:
+            yt_refresh_subfeed()
+        else:
+            threading.Thread(target=yt_refresh_subfeed, daemon=True).start()
+    with yt_account_lock:
+        videos = yt_subfeed["videos"]
+    return {**status, "videos": with_progress(videos) if videos is not None else None}
+
+
+def yt_account_status():
+    app = read_json_file(YT_APP_FILE)
+    out = {"configured": bool(app.get("client_id") and app.get("client_secret")), "authorized": False, "pending": None,
+           "channels": None, "synced": None}
+    with yt_account_lock:
+        if yt_pending and yt_pending.get("expires_at", 0) > time.time():
+            out["pending"] = {k: yt_pending.get(k) for k in ("user_code", "verification_uri", "error")}
+    if not out["configured"]:
+        return out
+    try:
+        out["authorized"] = bool(yt_token())
+    except (OSError, ValueError):
+        out["authorized"] = bool(read_json_file(YT_TOKEN_FILE).get("refresh_token"))   # Google injoignable : on y croit
+    subs = read_json_file(YT_SUBS_FILE)
+    if out["authorized"] and subs.get("channels") is not None:
+        out["channels"], out["synced"] = len(subs["channels"]), int(subs.get("at") or 0)
+    return out
+
+
+def set_yt_app(client_id, client_secret):
+    client_id, client_secret = client_id.strip(), client_secret.strip()
+    if not re.fullmatch(r"[\w-]+\.apps\.googleusercontent\.com", client_id):
+        raise ValueError("Ce n'est pas un ID client Google (il finit par .apps.googleusercontent.com).")
+    if not client_secret:
+        raise ValueError("Il manque le code secret du client.")
+    write_private_json(YT_APP_FILE, {"client_id": client_id, "client_secret": client_secret})
+    yt_logout()   # nouvelle appli : l'ancienne autorisation ne vaut plus
+
+
+def yt_logout():
+    try:
+        os.remove(YT_TOKEN_FILE)
+    except FileNotFoundError:
+        pass
+    with yt_account_lock:
+        yt_pending.clear()
+    yt_reset_subs()
+
+
 # État de la box (page, Réglages → Système) : températures, processeur, mémoire, disque, réseau, lecteur, services,
 # mises à jour. Le processeur et le débit réseau se mesurent sur un intervalle : relevés toutes les 5 s par un fil.
 
@@ -1977,6 +2268,14 @@ def action(name, body):
         follows_start()
     elif name == "follows_logout":
         follows_logout()
+    elif name == "youtube_app":
+        set_yt_app(str(body.get("client_id", "")), str(body.get("client_secret", "")))
+    elif name == "youtube_login":
+        yt_login()
+    elif name == "youtube_logout":
+        yt_logout()
+    elif name == "youtube_sync":
+        yt_reset_subs()
     elif name == "poweroff":
         # mode : « suspend » (Mettre en veille), « full » (Éteindre la box, menu de la TV) ; sinon le réglage
         mode = str(body.get("mode") or "")
@@ -2151,6 +2450,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, events_for_page())
                 except (OSError, ValueError, KeyError) as e:
                     self.send(503, {"error": f"Twitch injoignable : {e}"})
+            elif self.path == "/api/youtube_account":
+                self.send(200, yt_account_status())
             elif self.path == "/api/follows":
                 try:
                     self.send(200, follows_status())

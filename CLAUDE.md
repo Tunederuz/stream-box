@@ -475,6 +475,19 @@ l'historique (position, vu). `GET /api/youtube_search?q=` : `yt-dlp --flat-playl
 requête ; id UC…, abonnés, photo, `saved`), playlists écartées. `GET /api/youtube_channel?id=UC…` : dernières vidéos
 d'une chaîne trouvée, même hors de la liste. Peu de requêtes : YouTube a déjà limité
 l'adresse IP de la box.
+Compte YouTube (rangée « Abonnements », en tête des rangées de chaînes) : appli Google à soi (console.cloud.google.com,
+YouTube Data API v3, audience Externe publiée sinon jetons valables 7 jours, client « TV et appareils à saisie
+limitée »), autorisation par code sur google.com/device, droit `youtube.readonly`. `youtube-app.json` (client_id,
+client_secret), `youtube-token.json`, `youtube-subs.json` (abonnements relus une fois par jour), en 600 dans
+`~/.config/stream-box`. Tout passe par googleapis.com (quota 10 000 unités par jour), rien par youtube.com :
+`subscriptions` (1 unité par 50), puis par chaîne `playlistItems` sur la playlist `UULF` + id sans « UC » (vidéos sans
+Shorts ni directs ; `UU` en secours), 4 dernières, 8 en parallèle ; `videos` pour durées, vues et directs à venir
+(écartés), 60 vidéos gardées, fil gardé 30 min (premier relevé attendu par `/api/youtube`, les suivants en arrière-plan).
+`GET /api/youtube` → `subs` {configured, authorized, pending, channels, synced, videos} ; `GET /api/youtube_account` ;
+`POST /api/youtube_app|youtube_login|youtube_logout|youtube_sync`. TV : carte « + Connecter mon compte » dans la rangée
+tant que la box n'est pas autorisée → fenêtre du code et QR code (`ytAuth`, relue toutes les 3 s) ; ligne « Compte
+YouTube » du menu Système (relire les abonnements, déconnecter). Page : section « Compte YouTube » des Réglages
+(création de l'appli, code, état). tv_menu.lua affiche la rangée, sans connexion.
 Page : bloc YouTube de l'onglet Télécommande (recherche, une puce par chaîne) et « Chaînes YouTube » dans Réglages.
 TV (onglet YouTube du menu QML) : ligne de recherche → clavier à l'écran (grille de 10 de large, ↑↓←→ et OK, Retour
 ferme), puis les chaînes trouvées (photos rondes ; OK : « Voir ses dernières vidéos », rangée `preview` juste dessous, ou

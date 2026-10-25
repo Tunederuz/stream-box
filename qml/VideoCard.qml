@@ -9,6 +9,7 @@ Item {
     property real progress: 0
     property bool focused: false
     property color accent: "#9146ff"   // halo et progression : rouge sur l'onglet YouTube
+    property string glyph: "▶"         // au centre, sans miniature (« + » : carte d'action, « Connecter mon compte »)
     width: 330
     height: 302
     z: focused ? 2 : 1
@@ -34,6 +35,13 @@ Item {
                 color: "#5a5068"
                 font.pixelSize: 42
             }
+        }
+        Text {   // carte d'action, sans miniature
+            visible: root.glyph !== "▶"
+            anchors.centerIn: parent
+            text: root.glyph
+            color: "white"
+            font.pixelSize: 72
         }
     }
     Rectangle {
