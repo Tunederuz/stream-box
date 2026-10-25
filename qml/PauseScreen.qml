@@ -28,12 +28,14 @@ Item {
             Rectangle { width: 16; height: 50; radius: 4; color: "white" }
         }
     }
-    // Résumé, au-dessus du bandeau : sans les liens, adresses et hashtags des descriptions YouTube, 3 lignes au plus
-    readonly property string overview: (meta.overview || "").replace(/https?:\/\/\S+|www\.\S+|\S+@\S+\.\S+|#\S+/g, "")
+    // Résumé, au-dessus du bandeau, 3 lignes au plus. YouTube : seulement le début de la description, avant le premier
+    // lien (la suite, ce sont des liens vers Discord, Twitter…), sans adresses ni hashtags
+    readonly property string overview: (meta.source === "youtube" ? (meta.overview || "").split(/https?:\/\/|www\./)[0]
+                                                                  : (meta.overview || "")).replace(/https?:\/\/\S+|www\.\S+|\S+@\S+\.\S+|#\S+/g, "")
         .replace(/\s*[:|\-–—]+\s*(?=\s|$)/g, " ").replace(/\s+/g, " ").trim()
     Text {
         x: 96; width: 1100
-        anchors.bottom: parent.bottom; anchors.bottomMargin: 580
+        anchors.bottom: parent.bottom; anchors.bottomMargin: 360
         visible: root.overview.length > 20
         text: root.overview
         wrapMode: Text.WordWrap; maximumLineCount: 3; elide: Text.ElideRight

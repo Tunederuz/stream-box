@@ -84,7 +84,9 @@ Item {
 
         // En-tête : photo du streamer (direct) ou symbole pause (vidéo), titre, ligne d'infos
         Row {
-            x: 96; y: root.live ? 70 : 60
+            id: header
+            // Vidéo : juste au-dessus de la barre (l'aperçu et la bulle de saut s'affichent au-dessus du titre)
+            x: 96; y: root.live ? 70 : 222
             spacing: 22
             layer.enabled: true   // ombre sous les textes, lisibles quel que soit l'image derrière
             layer.effect: MultiEffect { shadowEnabled: true; shadowColor: "black"; shadowBlur: 0.7; shadowOpacity: 0.9; shadowVerticalOffset: 2 }
@@ -193,7 +195,7 @@ Item {
                 width: (bd.width || 160) * s
                 height: (bd.height || 90) * s
                 x: Math.max(0, Math.min(track.width - width, track.width * track.played - width / 2))
-                y: -height - 26
+                y: header.y - track.y - height - 24   // au-dessus du titre
                 Rectangle { anchors.fill: parent; anchors.margins: -3; radius: 10; color: "white" }
                 Item {
                     anchors.fill: parent
@@ -217,7 +219,7 @@ Item {
             opacity: 0
             readonly property real cx: track.x + track.width * (root.span > 0 ? Math.min(1, root.at / root.span) : 0)
             x: Math.max(track.x, Math.min(track.x + track.width - width, cx - width / 2))
-            y: track.y - height - 30 - (preview.visible ? preview.height + 10 : 0)
+            y: header.y - height - 20 - (preview.visible ? preview.height + 30 : 0)   // au-dessus du titre (et de l'aperçu)
             width: fxText.implicitWidth + 44; height: 58; radius: 29
             color: "#ee17151c"; border.color: root.colors[0]; border.width: 2
             Text { id: fxText; anchors.centerIn: parent; text: root.fx.text || ""; color: "white"; font.pixelSize: 28; font.bold: true }
