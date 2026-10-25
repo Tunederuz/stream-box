@@ -38,6 +38,11 @@ Item {
     readonly property string details: (meta.source === "youtube" ? [meta.channel, meta.date, meta.views ? Fmt.big(meta.views) + " vues" : ""]
         : meta.source === "jellyfin" ? [meta.year, meta.rating ? "★ " + Number(meta.rating).toFixed(1).replace(".", ",") : ""]   // série et épisode : déjà dans le titre
         : []).concat([chapterTitle]).filter(function (t) { return !!t }).join("  ·  ")
+    // Aperçu YouTube et bulle « +30 s » : seulement pendant qu'on avance ou recule (pas quand la barre est juste affichée)
+    property bool seeking: false
+    property int lastSeekN: -1
+    onFxChanged: if (fx.n !== undefined && fx.n !== lastSeekN) { lastSeekN = fx.n; seeking = true; seekEnd.restart() }
+    Timer { id: seekEnd; interval: 1500; onTriggered: root.seeking = false }
     property date now: new Date()
     Timer { interval: 15000; repeat: true; running: root.visible; triggeredOnStart: true; onTriggered: root.now = new Date() }
     readonly property real remaining: Math.max(0, span - at)
@@ -61,8 +66,8 @@ Item {
     Item {
         id: panel
         width: parent.width
-        // En vidéo, plus haut : l'aperçu YouTube s'affiche entre le titre et la barre
-        height: root.live ? 300 : 520
+        // En vidéo, plus haut : l'aperçu YouTube s'affiche entre le titre et la barre, boutons et leur nom dessous
+        height: root.live ? 300 : 560
         y: root.shown ? parent.height - height : parent.height - height + 60
         Behavior on y { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
@@ -129,7 +134,7 @@ Item {
         // Barre
         Item {
             id: track
-            x: 96; y: root.live ? 200 : 330
+            x: 96; y: root.live ? 200 : 340
             width: parent.width - 192
             height: 8
             readonly property real played: root.span > 0 ? Math.max(0, Math.min(1, root.at / root.span)) : 0
@@ -184,7 +189,7 @@ Item {
                     return null
                 }
                 readonly property real s: 280 / Math.max(1, bd.width || 160)
-                visible: ok && !!tile
+                visible: ok && !!tile && root.seeking
                 width: (bd.width || 160) * s
                 height: (bd.height || 90) * s
                 x: Math.max(0, Math.min(track.width - width, track.width * track.played - width / 2))
@@ -242,35 +247,54 @@ Item {
             color: root.live && root.delay < 4 ? "#ff4f5e" : "white"
             font.pixelSize: 23; font.bold: root.live && root.delay < 4
         }
-        // Rangée de boutons (vidéo) : ↓ pour y aller, ← → et OK ; discrète tant qu'aucun n'est choisi
-        Row {
+        // Rangée de boutons (vidéo), centrée : ↓ pour y aller, ← → et OK. Boutons ronds à icônes dessinées (PlayerIcon),
+        // Lecture / Pause plus grand ; le nom du bouton choisi s'affiche dessous. Discrète tant qu'aucun n'est choisi
+        Item {
             visible: !root.live && (root.ctl.items || []).length > 0
-            x: 96; y: track.y + 86
-            spacing: 14
-            opacity: root.ctl.focus >= 0 ? 1 : 0.55
+            x: 0; y: track.y + 62
+            width: parent.width; height: 140
+            opacity: root.ctl.focus >= 0 ? 1 : 0.6
             Behavior on opacity { NumberAnimation { duration: 160 } }
-            Repeater {
-                model: (root.ctl.items || []).length
-                Rectangle {
-                    readonly property var it: root.ctl.items[index] || {}
-                    readonly property bool foc: index === root.ctl.focus
-                    width: btnText.implicitWidth + 56; height: 56; radius: 28
-                    color: foc ? "white" : "#26ffffff"
-                    border.color: foc ? "white" : "#40ffffff"; border.width: 1
-                    scale: foc ? 1.06 : 1
-                    Behavior on scale { NumberAnimation { duration: 140 } }
-                    Behavior on color { ColorAnimation { duration: 140 } }
-                    Text {
-                        id: btnText
-                        anchors.centerIn: parent
-                        text: ({ back: "⟲  ", play: root.pb.pause ? "▶  " : "❚❚  ", fwd: "⟳  ", tracks: "≡  ", chapter: "⏭  ", next: "▶▶  " }[it.id] || "") + (it.label || "")
-                        color: parent.foc ? "#17151c" : "white"; font.pixelSize: 22; font.bold: parent.foc
+            Row {
+                id: buttons
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 22
+                Repeater {
+                    model: (root.ctl.items || []).length
+                    Item {
+                        readonly property var it: root.ctl.items[index] || {}
+                        readonly property bool foc: index === root.ctl.focus
+                        readonly property bool big: it.id === "play"
+                        width: big ? 92 : 72; height: 92
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: parent.width; height: width; radius: width / 2
+                            color: parent.foc ? "white" : "#2effffff"
+                            border.color: parent.foc ? "white" : "#40ffffff"; border.width: 1
+                            scale: parent.foc ? 1.1 : 1
+                            Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+                            Behavior on color { ColorAnimation { duration: 140 } }
+                            PlayerIcon {
+                                anchors.centerIn: parent
+                                scale: parent.parent.big ? 1.25 : 1
+                                name: parent.parent.it.id === "play" ? (root.pb.pause ? "play" : "pause") : (parent.parent.it.id || "")
+                                color: parent.parent.foc ? "#17151c" : "white"
+                            }
+                        }
+                        Text {   // nom du bouton choisi
+                            visible: parent.foc
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: parent.height + 12
+                            text: parent.it.label || ""
+                            color: "white"; font.pixelSize: 21; font.bold: true
+                        }
                     }
                 }
             }
             Text {
                 visible: root.ctl.focus < 0
-                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: buttons.right; anchors.leftMargin: 26
+                anchors.verticalCenter: buttons.verticalCenter
                 text: "↓ commandes"
                 color: "#a0ffffff"; font.pixelSize: 20
             }
