@@ -11,6 +11,7 @@ unset XCURSOR_THEME XCURSOR_PATH
 python3 "$DIR/display.py" apply
 SPLASH_PID="${XDG_RUNTIME_DIR:-/tmp}/stream-box-splash.pid"
 mpv --no-config --really-quiet --fs --no-osc --osd-level=0 --no-input-default-bindings --input-vo-keyboard=no \
+    --cursor-autohide=always \
     --no-audio --image-display-duration=inf --background=color --background-color='#0b0710' \
     "$DIR/boot-splash.png" > /dev/null 2>&1 &
 echo $! > "$SPLASH_PID"
