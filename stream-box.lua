@@ -188,6 +188,8 @@ end
 -- en octets, pour que virgules et signes égal du titre passent tels quels)
 -- thumb, label : image et titre de l'écran de chargement (label : titre connu, sans l'imposer à mpv)
 local function play_media(url, start, title, thumb, label)
+    -- Lancée d'ailleurs (téléphone, Cast, Home Assistant…) pendant que le menu est ouvert : il se referme sur la vidéo
+    mp.commandv("script-message", "streambox-tvmenu-close")
     stop_twitch()
     set_mode("media")
     local kind = (url:find("youtube%.com/") or url:find("youtu%.be/")) and "youtube"
@@ -249,7 +251,8 @@ end
 mp.register_event("start-file", function()
     if mp.get_property("path") == stream_url() then return end
     if mode == "twitch" or mode == "home" then
-        -- Fichier chargé par quelqu'un d'autre (Jellyfin) : on lui laisse la place
+        -- Fichier chargé par quelqu'un d'autre (Jellyfin) : on lui laisse la place, menu refermé
+        mp.commandv("script-message", "streambox-tvmenu-close")
         stop_twitch()
         set_mode("media")
     elseif back_timer then
@@ -1272,7 +1275,11 @@ local function from_remote(fn)
         if menu_visible then draw_menu() end
     end
 end
-mp.register_script_message("streambox-channel", from_remote(start_channel))
+-- Chaîne choisie depuis le téléphone ou Home Assistant : menu refermé (pas pour les relances automatiques du direct)
+mp.register_script_message("streambox-channel", from_remote(function(name)
+    mp.commandv("script-message", "streambox-tvmenu-close")
+    start_channel(name)
+end))
 mp.register_script_message("streambox-toggle-chat", from_remote(toggle_chat))
 mp.register_script_message("streambox-cycle-corner", from_remote(toggle_corner))
 mp.register_script_message("streambox-play", play_media)

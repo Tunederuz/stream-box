@@ -927,3 +927,9 @@ piste, ou `no` pour désactivés) et appliqué à chaque vidéo qui a une piste 
 `apply_sub_pref`, après `fix_auto_subs`, sur `file-loaded` en mode média, puis à chaque changement de `track-list`
 pendant 20 s : les sous-titres externes de Jellyfin arrivent après l'ouverture ; même langue sur les deux premières lettres,
 pistes « forcées » en dernier). Une vidéo sans cette langue garde le choix de mpv.
+
+### Menu refermé par une lecture lancée d'ailleurs
+`streambox-tvmenu-close` (script-message) : écouté par tv_menu.lua et par ui.py (→ `box.closeRequested` → TvMenu
+`close()`). Envoyé par stream-box.lua quand une vidéo arrive par `streambox-play` (téléphone, Cast, Home Assistant,
+historique…), quand jellyfin-mpv-shim charge un fichier, quand une chaîne arrive par `streambox-channel`, et par
+l'assistant des touches. Pas pour les relances automatiques du direct (bascule, direct figé).

@@ -141,6 +141,7 @@ def set_flag(name, value):
 class Box(QObject):
     """Ce que voit le QML (« box ») : ouverture du menu, touches, données de mpv utiles au menu"""
     openRequested = Signal()
+    closeRequested = Signal()      # vidéo lancée d'ailleurs (téléphone, Cast…), assistant des touches : menu refermé
     keyPressed = Signal(str)
     textInput = Signal(str, bool)
     powerMenuRequested = Signal()   # power maintenu (stream-box.lua) : fenêtre « veille, redémarrer, éteindre »    # texte tapé sur le téléphone pour le clavier du menu (texte, lancer la recherche)
@@ -622,6 +623,7 @@ def main():
     if qml_menu:
         player.register_message_handler("streambox-tvmenu-open", lambda *_: box.openRequested.emit())
         player.register_message_handler("streambox-power-menu", lambda *_: box.powerMenuRequested.emit())
+        player.register_message_handler("streambox-tvmenu-close", lambda *_: box.closeRequested.emit())
         # Touches envoyées par l'IPC (keypress → stream-box.lua → streambox-tvmenu-key) : tests, Home Assistant
         player.register_message_handler(
             "streambox-tvmenu-key", lambda k, *_: box.keyPressed.emit(k.decode() if isinstance(k, bytes) else k))

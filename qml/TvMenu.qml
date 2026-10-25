@@ -434,6 +434,7 @@ Item {
         target: box
         function onOpenRequested() { menu.open() }
         function onPowerMenuRequested() { menu.open(); menu.powerMenu() }
+        function onCloseRequested() { menu.close() }
         function onKeyPressed(k) { menu.key(k) }
         // Texte tapé sur le téléphone pendant que le clavier de recherche est ouvert
         function onTextInput(text, submit) {
