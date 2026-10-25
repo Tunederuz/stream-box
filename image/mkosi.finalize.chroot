@@ -4,7 +4,11 @@
 set -euo pipefail
 systemctl enable greetd.service NetworkManager.service bluetooth.service systemd-timesyncd.service
 # SSH coupé par défaut : il s'active depuis le menu Système (« Accès SSH », « Mode développeur »), mot de passe affiché
-systemctl disable sshd.service 2> /dev/null || true
+if [ -f /etc/ssh/stream-box-test-keys ]; then   # image de test : SSH par la clé de test, pour les essais en VM
+  systemctl enable sshd.service
+else
+  systemctl disable sshd.service 2> /dev/null || true
+fi
 systemctl set-default graphical.target   # greetd (display-manager) n'est lancé que par graphical.target
 
 # Allègement, sans toucher à la compatibilité : en-têtes, documentation, traductions autres que français et anglais,

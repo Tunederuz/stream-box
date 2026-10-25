@@ -866,3 +866,18 @@ confiance, et tous pendant une recherche ou un appairage du menu (btsetup.py tou
 - Dell OptiPlex en « RAID On » (Intel RST) : le SSD NVMe est caché au noyau d'Arch (« remapped NVMe », seul le noyau
   de CachyOS a un correctif) ; BIOS → SATA Operation → AHCI. L'installateur le détecte (contrôleur de classe 0x010400,
   `raid_mode`) et le dit.
+
+### Écran de démarrage (Plymouth, image)
+Thème `stream-box` (créé par mkosi.postinst.chroot à partir de « spinner » : logo arrondi + « Stream Box » rendu par
+ffmpeg, roue, fond de l'écran d'accueil 0x0b0710), `/etc/plymouth/plymouthd.conf`, ligne de commande `splash
+plymouth.ignore-serial-consoles vt.global_cursor_default=0` (en VM, systemd ajoute une console série : sans
+ignore-serial-consoles, Plymouth passe en texte). `plymouth-quit.service.d/10-retain-splash.conf` : `plymouth quit
+--retain-splash`, l'image reste jusqu'à ce que cage prenne l'écran. Ne pas masquer plymouth-quit : greetd attend
+plymouth-quit-wait (démarrage bloqué « Hold until boot process finishes up »). Pas de Plymouth dans l'initrd : l'écran
+apparaît après le passage sur la partition système. Sur clé USB, le chargeur (~20 s) et Mesa (~11 s) sont lents ; sur
+le SSD, bien plus courts.
+
+### Essais en VM (image de test)
+`bash image/build.sh test` : image `stream-box-test.raw` avec SSH activé par la clé `image/test-key` (créée au premier
+essai, jamais publiée : `/etc/ssh/stream-box-test-keys`). QEMU dans le conteneur mkosi (KVM, OVMF), clé en
+`usb-storage` + NVMe vierge pour l'installateur, `-vga std`, moniteur QEMU pour des captures (`screendump`).

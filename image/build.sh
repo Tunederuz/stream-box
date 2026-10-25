@@ -17,7 +17,10 @@ case "${1:-build}" in
   # Version à télécharger : compressée (Etcher et Rufus la décompressent eux-mêmes)
   xz) docker run --rm -v "$HERE/..":/src -w /src/image stream-box-mkosi \
         xz -T0 -6 -k -f -v mkosi.output/stream-box.raw ;;
-  test) docker run --rm --privileged -v "$HERE/..":/src -w /src/image stream-box-mkosi \
+  # Clé SSH de test : image/test-key(.pub), créée au premier essai, jamais publiée (.gitignore)
+  test) [ -f "$HERE/test-key" ] || ssh-keygen -q -t ed25519 -N "" -C stream-box-test -f "$HERE/test-key"
+        install -m 644 "$HERE/test-key.pub" "$HERE/mkosi.profiles/test/mkosi.extra/etc/ssh/stream-box-test-keys"
+        docker run --rm --privileged -v "$HERE/..":/src -w /src/image stream-box-mkosi \
           mkosi --profile=test --output=stream-box-test -f build ;;
   vm) docker run --rm -it --privileged --device /dev/kvm -v "$HERE/..":/src -w /src/image stream-box-mkosi \
         mkosi vm -m 4G ;;
