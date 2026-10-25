@@ -107,6 +107,7 @@ Item {
     property string pendingDisplay: ""
     property string pendingPlayer: ""        // lecteur choisi aux flèches, appliqué par OK (le lecteur redémarre)
     property real poweroffUntil: 0
+    property real rebootUntil: 0             // « Redémarrer la box » : deuxième OK dans les 4 s
     property var modal: null                 // { title, items: [{ label, danger, ok }] }
     property int modalSel: 0
     property date now: new Date()
@@ -313,6 +314,7 @@ Item {
     Timer { interval: 10000; repeat: true; running: menu.isOpen; triggeredOnStart: true; onTriggered: menu.now = new Date() }
     Timer { id: idleClose; interval: 90000; onTriggered: menu.close() }   // écran de TV : pas d'image fixe
     Timer { id: poweroffReset; interval: 4100; onTriggered: menu.poweroffUntil = 0 }
+    Timer { id: rebootReset; interval: 4100; onTriggered: menu.rebootUntil = 0 }
 
     // Ouverture, fermeture
 
@@ -329,7 +331,7 @@ Item {
         var t = mediaTab(st)
         for (var i = 0; i < tabs.length; i++) if (tabs[i].id === t) tab = i
         area = "content"
-        shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0
+        shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0; rebootUntil = 0
         follows = null; replays = ({}); history = null; rpLogin = ""; rpRow = 0; rpSel = [0, 0, 0]
         yt = null; jf = null; kbOpen = false   // les résultats de recherche restent d'une ouverture à l'autre
         var list = st.streamers || []
@@ -520,6 +522,12 @@ Item {
               step: function (d) { act("power_action", { mode: st.power_action === "suspend" ? "poweroff" : "suspend" }) } },
             { label: "Mettre en veille", hint: "Réveil par la télécommande, Home Assistant ou le bouton power",
               ok: function () { act("poweroff", { mode: "suspend" }); close() } },
+            { label: "Redémarrer la box",
+              hint: rebootUntil > 0 ? "Appuie encore sur OK pour redémarrer" : undefined,
+              ok: function () {
+                  if (rebootUntil > 0) { act("reboot"); close() }
+                  else { rebootUntil = 1; rebootReset.restart() }
+              } },
             { label: "Éteindre la box", danger: true,
               hint: poweroffUntil > 0 ? "Appuie encore sur OK pour éteindre" : undefined,
               ok: function () {

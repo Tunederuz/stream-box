@@ -526,6 +526,7 @@
     <div class="setting" style="margin-top: 0">État de la box</div>
     <div class="health" id="health"></div>
     <button id="update-now" style="width: 100%; margin-top: 10px">Mettre à jour maintenant</button>
+    <button id="reboot" style="width: 100%; margin-top: 8px">Redémarrer la box</button>
     <details style="margin-top: 10px">
       <summary>Journal de la dernière mise à jour</summary>
       <pre id="update-log"></pre>
@@ -1009,6 +1010,12 @@ if (new URLSearchParams(location.search).has("partage")) {
   $("media-status").textContent = "Aucun lien vidéo dans ce partage.";
   history.replaceState(null, "", "/");
 }
+$("reboot").onclick = async () => {
+  if (!confirm("Redémarrer la box ?")) return;
+  await send("reboot");
+  $("status").className = "status";
+  $("status").textContent = "La box redémarre (environ une minute)…";
+};
 let powerAction = "poweroff";   // réglage « Bouton d'arrêt » : mise en veille ou arrêt complet
 $("poweroff").onclick = async () => {
   const sleep = powerAction === "suspend";

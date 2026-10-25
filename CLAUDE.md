@@ -694,4 +694,5 @@ noms mpv en secours), état dans `user-data/streambox/learn` → `qml/KeyWizard.
 ui.py applique aussi keymap.json au menu QML ouvert. Bluetooth (btsetup.py, `GET/POST /api/bluetooth`) : liste des
 appareils appairés, recherche de 20 s, appairage sans code (agent NoInputNoOutput) + trust + connect, dissociation ;
 fenêtre « Télécommandes et manettes » du menu Système (QML : `btMenu`, `btScan`, relue toutes les 2 s).
-
+Redémarrage : `POST /api/reboot` (`systemctl reboot`, polkit login1.reboot* ajouté), « Redémarrer la box » dans le menu Système
+(QML et Lua, deuxième OK dans les 4 s), bouton dans Réglages → Système de la page, bouton « Redémarrer » dans Home Assistant.

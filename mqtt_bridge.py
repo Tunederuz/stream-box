@@ -64,6 +64,7 @@ def entities(streamers):
                                       "command_topic": cmd("back_to_stream")}),
         ("button", "home", {"name": "Écran d'accueil", "icon": "mdi:home", "command_topic": cmd("home")}),
         ("button", "go_live", {"name": "Revenir au direct", "icon": "mdi:skip-forward", "command_topic": cmd("go_live")}),
+        ("button", "reboot", {"name": "Redémarrer", "icon": "mdi:restart", "command_topic": cmd("reboot")}),
         ("button", "poweroff", {"name": "Éteindre", "icon": "mdi:power",   # veille ou arrêt complet, selon le réglage
                                 "command_topic": cmd("poweroff")}),
         ("select", "power_action", {"name": "Bouton d'arrêt", "icon": "mdi:power-sleep",
@@ -159,6 +160,8 @@ class Bridge:
                 api("/api/pause", {})
             elif command == "volume":
                 api("/api/volume", {"delta": max(-20, min(20, round(float(payload)) - int(s.get("volume", 0))))})
+            elif command == "reboot":
+                api("/api/reboot", {})
             elif command == "back_to_stream":
                 api("/api/twitch", {})
             elif command == "home":

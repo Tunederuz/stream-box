@@ -2033,6 +2033,11 @@ def action(name, body):
             netsetup.manual_hotspot()
         else:
             netsetup.connect(str(body.get("ssid", ""))[:64], str(body.get("password", ""))[:128])
+    elif name == "reboot":
+        # Autorisé à la session de la TV d'office, ailleurs par la règle polkit (login1.reboot*)
+        r = subprocess.run(["systemctl", "reboot"], capture_output=True, text=True, timeout=10)
+        if r.returncode != 0:
+            raise ValueError(f"Redémarrage refusé : {r.stderr.strip() or r.returncode}")
     elif name == "power_action":
         set_power_action(str(body.get("mode", "")))
     else:

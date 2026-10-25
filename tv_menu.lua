@@ -36,6 +36,7 @@ local shortcut = nil                                -- En direct : raccourci sé
 local pending_display = nil                         -- résolution choisie aux flèches, appliquée par OK
 local pending_player = nil                          -- lecteur choisi aux flèches, appliqué par OK (il redémarre)
 local poweroff_until = 0
+local reboot_until = 0
 local idle_timer, refresh_timer
 local images, shown = {}, {}                        -- cache des images préparées ; overlays posés (id → signature)
 local replays, rp_login = {}, nil                   -- rediffusions par streamer (/api/replays) ; streamer affiché
@@ -471,6 +472,17 @@ local function system_rows()
               close_menu()
           end },
         { label = "Touches par défaut", ok = function() act("keymap", { action = "reset" }) end },
+        { label = "Redémarrer la box",
+          hint = mp.get_time() < reboot_until and "Appuie encore sur OK pour redémarrer" or nil,
+          ok = function()
+              if mp.get_time() < reboot_until then
+                  act("reboot")
+                  close_menu()
+              else
+                  reboot_until = mp.get_time() + 4
+                  mp.add_timeout(4.1, function() if is_open then draw() end end)
+              end
+          end },
         { label = "Éteindre la box",
           hint = mp.get_time() < poweroff_until and "Appuie encore sur OK pour éteindre" or nil,
           danger = true, ok = function()
