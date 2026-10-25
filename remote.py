@@ -659,6 +659,14 @@ def resume_loop():
                                     "--object-path", "/org/freedesktop/login1"], stdout=subprocess.PIPE, text=True)
             for line in mon.stdout:
                 if "PrepareForSleep (false" in line:
+                    # Dongle Bluetooth (clones CSR surtout) bloqué au réveil : la télécommande reste « connectée » sans
+                    # que ses touches arrivent. On le redémarre ; elle se reconnecte à la première touche
+                    for args in (["power", "off"], ["power", "on"]):
+                        try:
+                            subprocess.run(["bluetoothctl", *args], capture_output=True, timeout=10)
+                        except (OSError, subprocess.SubprocessError):
+                            pass
+                        time.sleep(2)
                     # Réseau revenu (NetworkManager reprend la connexion en quelques secondes) : sinon streamlink
                     # échoue et la box croit le streamer hors ligne, puis réessaie 15 s plus tard
                     for _ in range(60):
