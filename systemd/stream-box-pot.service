@@ -3,7 +3,8 @@ Description=Stream Box : jetons anti-robot YouTube pour yt-dlp (bgutil-ytdlp-pot
 
 [Service]
 WorkingDirectory=%h/.local/share/bgutil-pot-provider/server
-ExecStart=%h/.local/share/media-venv/bin/node build/main.js
+# Node du venv (install.sh : nodejs-wheel) s'il existe, sinon celui du système (image : paquet nodejs)
+ExecStart=/usr/bin/env PATH=%h/.local/share/media-venv/bin:/usr/local/bin:/usr/bin node build/main.js
 Restart=always
 RestartSec=10
 
