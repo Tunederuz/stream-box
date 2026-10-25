@@ -6,7 +6,7 @@
 Mini PC Linux branché sur la TV. Au démarrage, il lance en plein écran le dernier stream Twitch regardé, avec le chat
 en overlay. Quand la souris bouge (ou avec une télécommande Bluetooth), un menu permet de changer de streamer et de
 régler le chat. Une télécommande web (installable comme appli) fait la même chose depuis un téléphone, et plus encore.
-Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des réglages : `backup.sh`.
+Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des réglages : menu Système de la TV et page web (`backup.py`), ou `backup.sh`.
 
 ## Système
 - **Distribution Arch** (testé sur CachyOS). La box tourne sous l'utilisateur dédié **`media`** (shell bash, pas de mot
@@ -765,3 +765,19 @@ Menu QML : `/api/state` toutes les 4 s, mais `st` remplacé seulement si la rép
 sans calcul (`rows: visible ? … : []` pour Rediffusions, YouTube/Jellyfin, Réglages, Système, tuiles d'état) ; liste
 des suivis calculée une fois (`followItems`). Page : `/api/state` en pause quand la page est en arrière-plan ; sections
 des Réglages (chaînes suivies, compte YouTube, Wi-Fi) chargées à l'ouverture de l'onglet (`settingsLoaders`).
+
+### Sauvegarde et restauration (backup.py)
+Menu Système → « Sauvegarde et restauration » (QML `backupMenu`, Lua `backup_menu`, fenêtre relue toutes les 2 s) :
+par clé USB branchée, « Sauvegarder sur … » puis ses 4 dernières sauvegardes (OK → confirmation → restauration puis
+redémarrage). Page : Réglages → Sauvegarde, « Télécharger la sauvegarde » (`GET /api/backup/download`) et « Restaurer
+depuis un fichier » (`POST /api/backup_restore`, corps brut). API : `GET /api/backup` (clés, sauvegardes, busy,
+message affiché une minute), `POST /api/backup` `{action: save_usb|restore_usb, path, name}`.
+Archive au format de `backup.sh` (`home/<utilisateur>/…`, reprise par `install.sh --restore` et inversement) +
+`stream-box-backup.json` (date, nom de la box) + `stream-box-wifi.json` (Wi-Fi enregistrés dont le mot de passe est
+lisible par nmcli, recréés s'ils manquent). Pas les appairages Bluetooth (root ; `backup.sh` les garde). Restauration :
+seuls les chemins de la liste, remappés vers le dossier personnel d'ici, filtre « data » de tarfile, droits des
+dossiers remis (700) ; les réglages d'avant sont gardés dans `~/.local/state/stream-box/before-restore.tar.gz`.
+Clés : `lsblk` (USB / amovible, jamais le disque de la box), montées par `udisksctl` le temps de lire ou d'écrire puis
+démontées (retirables tout de suite) ; fichiers `stream-box-backup-AAAA-MM-JJ-HHMM.tar.gz` à la racine. Liste lue une
+fois par clé branchée. Image : udisks2, exfatprogs, dosfstools et règle polkit `52-stream-box-usb.rules` (montage pour
+media même hors de la session de la TV ; install.sh l'ajoute aussi).

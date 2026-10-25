@@ -56,7 +56,7 @@ télécommande web installable sur téléphone (PWA).
 | `display.py` | Résolution de la sortie vidéo (wlr-randr), jamais en dessous de 60 Hz |
 | `mqtt_bridge.py` | Pont MQTT vers Home Assistant (découverte automatique) |
 | `update.sh`, `systemd/` | Mises à jour, jetons anti-robot YouTube, pont MQTT |
-| `install.sh`, `backup.sh`, `boot-mode.py` | Installation, mise à jour, sauvegarde ; mode selon le clavier au démarrage |
+| `install.sh`, `backup.sh`, `backup.py`, `boot-mode.py` | Installation, mise à jour, sauvegarde (ligne de commande, menu et page) ; mode selon le clavier au démarrage |
 | `audio.py` | Sortie son sur l'HDMI de la TV au démarrage |
 | `CLAUDE.md` | Documentation technique détaillée (décisions, pièges, comment tester) |
 
@@ -91,7 +91,10 @@ Les options sont facultatives (`sudo bash install.sh --help`) :
 
 ### Sauvegarde et réinstallation
 
-`sudo bash backup.sh` crée une archive de tout ce qui est propre à la box : liste des streamers, réglages, jeton
+Le plus simple : menu Système de la TV → « Sauvegarde et restauration » (sur une clé USB), ou Réglages → Sauvegarde
+dans la télécommande web (fichier téléchargé sur le téléphone). Restaurer remet tout, puis la box redémarre.
+
+En ligne de commande, `sudo bash backup.sh` crée une archive de tout ce qui est propre à la box : liste des streamers, réglages, jeton
 Twitch, connexion Jellyfin, configuration MQTT et météo, son, appairages Bluetooth. Elle contient des secrets : elle
 n'est lisible que par celui qui la crée, et n'a rien à faire dans le dépôt. Après une réinstallation du système :
 

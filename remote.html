@@ -579,6 +579,17 @@
   </section>
 
   <section>
+    <h2>Sauvegarde</h2>
+    <p style="margin-top: 0">Réglages, historique, favoris, comptes (Twitch, YouTube, Jellyfin, MQTT) et Wi-Fi, pour
+      les remettre après une réinstallation. Le fichier contient tes connexions : garde-le pour toi. Aussi dans le menu
+      Système de la TV, sur une clé USB.</p>
+    <button id="backup-download" style="width: 100%">Télécharger la sauvegarde</button>
+    <button id="backup-restore" style="width: 100%; margin-top: 8px">Restaurer depuis un fichier…</button>
+    <input id="backup-file" type="file" accept=".gz,.tgz,application/gzip" hidden>
+    <div class="status" id="backup-status"></div>
+  </section>
+
+  <section>
     <h2>Compte Twitch</h2>
     <div id="account-on" hidden>
       <p>Connecté : <span class="account-name" id="account-name"></span>. Pas de pub sur les chaînes où tu es abonné.</p>
@@ -1061,6 +1072,25 @@ $("reboot").onclick = async () => {
   await send("reboot");
   $("status").className = "status";
   $("status").textContent = "La box redémarre (environ une minute)…";
+};
+// Sauvegarde : restauration d'un fichier téléchargé plus tôt (la box remet tout et redémarre)
+$("backup-download").onclick = () => { location.href = "/api/backup/download"; };
+$("backup-restore").onclick = () => $("backup-file").click();
+$("backup-file").onchange = async () => {
+  const file = $("backup-file").files[0];
+  $("backup-file").value = "";
+  if (!file || !confirm(`Remplacer les réglages de la box par ceux de « ${file.name} » ? Elle redémarre ensuite.`)) return;
+  const st = $("backup-status");
+  st.className = "status";
+  st.textContent = "Restauration…";
+  try {
+    const r = await fetch("/api/backup_restore", { method: "POST", body: file, headers: { "Content-Type": "application/gzip" } });
+    if (!r.ok) throw new Error((await r.json()).error);
+    st.textContent = "Sauvegarde restaurée : la box redémarre (environ une minute)…";
+  } catch (e) {
+    st.className = "status error";
+    st.textContent = e.message || "Restauration impossible.";
+  }
 };
 let powerAction = "poweroff";   // réglage « Bouton d'arrêt » : mise en veille ou arrêt complet
 $("poweroff").onclick = async () => {

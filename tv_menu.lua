@@ -431,6 +431,45 @@ local function fr_date(text)
     return ("%d %s à %s:%s"):format(tonumber(d), months[tonumber(m)], hh, mm)
 end
 
+-- Fenêtre « Sauvegarde et restauration » : par clé USB branchée, « Sauvegarder » puis ses dernières sauvegardes
+-- (OK : restaurer, après confirmation) ; relue toutes les 2 s tant qu'elle est ouverte (clé branchée, sauvegarde finie)
+local backup_timer = nil
+local function backup_menu(again)
+    api("GET", "/api/backup", nil, function(d)
+        if not d or (again and not (modal and modal.kind == "backup")) or not is_open then return end
+        local items = {}
+        if not d.busy then
+            for _, u in ipairs(d.usb or {}) do
+                items[#items + 1] = { label = "↓  Sauvegarder sur " .. u.name, ok = function()
+                    api("POST", "/api/backup", { action = "save_usb", path = u.path }, function() backup_menu() end)
+                end }
+                for _, b in ipairs(u.backups or {}) do
+                    items[#items + 1] = { label = "↺  Restaurer celle du " .. fr_date(b.date), ok = function()
+                        open_modal("Remplacer les réglages par ceux du " .. fr_date(b.date) .. " ? La box redémarre ensuite", {
+                            { label = "↺  Restaurer et redémarrer", danger = true, ok = function()
+                                api("POST", "/api/backup", { action = "restore_usb", path = u.path, name = b.name },
+                                    function() backup_menu() end)
+                            end },
+                            { label = "Annuler", ok = function() backup_menu() end } })
+                    end }
+                end
+            end
+        end
+        if d.busy ~= "reboot" then items[#items + 1] = { label = "Fermer", ok = function() end } end
+        local title = d.message or (#(d.usb or {}) > 0 and "Sauvegarde et restauration"
+                                    or "Branche une clé USB pour sauvegarder")
+        local sel = modal and modal.kind == "backup" and modal.sel or 1
+        modal = { title = title, items = items, sel = math.min(sel, #items), kind = "backup" }
+        draw()
+        if not backup_timer then
+            backup_timer = mp.add_periodic_timer(2, function()
+                if is_open and modal and modal.kind == "backup" then backup_menu(true)
+                else backup_timer:kill() backup_timer = nil end
+            end)
+        end
+    end)
+end
+
 local function system_rows()
     local s = state
     local login = account and account.login
@@ -451,6 +490,8 @@ local function system_rows()
               pending_player = nil
               close_menu()
           end },
+        { label = "Sauvegarde et restauration", hint = "Sur une clé USB, ou en fichier depuis la page du téléphone",
+          ok = function() backup_menu() end },
         { label = "Mettre à jour maintenant",
           hint = u and (u.running and "Mise à jour en cours…"
               or ((u.last and ((u.last.ok and "Dernière : " or "Échec : ") .. fr_date(u.last.date)) or "Jamais")

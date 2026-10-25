@@ -14,6 +14,7 @@ import display   # display.py, même dossier
 import netsetup  # netsetup.py : point d'accès Wi-Fi de configuration
 import audio     # audio.py : sortie son (HDMI branché, USB, Bluetooth, choix manuel)
 import btsetup   # btsetup.py : télécommandes et manettes Bluetooth (appairage, dissociation)
+import backup    # backup.py : sauvegarde et restauration des réglages (clé USB, fichier de la page)
 
 PORT = 8080
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
@@ -2538,6 +2539,15 @@ def action(name, body):
             btsetup.remove(mac)
         else:
             raise ValueError("action inconnue")
+    elif name == "backup":
+        # Menu Système de la TV : {"action": "save_usb", "path"}, {"action": "restore_usb", "path", "name"}
+        what, path = str(body.get("action", "")), str(body.get("path", ""))[:100]
+        if what == "save_usb":
+            backup.save_usb(path)
+        elif what == "restore_usb":
+            backup.restore_usb(path, str(body.get("name", ""))[:100])
+        else:
+            raise ValueError("action inconnue")
     elif name == "keymap":
         # Touches de la télécommande : assistant d'apprentissage (stream-box.lua), ou retour aux touches par défaut
         what = str(body.get("action", ""))
@@ -2673,6 +2683,18 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(400, {"error": str(e)})
             elif self.path == "/api/bluetooth":
                 self.send(200, btsetup.status())
+            elif self.path == "/api/backup":
+                self.send(200, backup.status())
+            elif self.path.startswith("/api/backup/download"):
+                # Page web : fichier de sauvegarde enregistré sur le téléphone
+                data = backup.create()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/gzip")
+                self.send_header("Content-Disposition", f'attachment; filename="{backup.file_name()}"')
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(data)
             elif self.path == "/api/audio":
                 outs = audio.outputs()
                 self.send(200, {"choice": audio.choice(), "current": audio.current(outs),
@@ -2711,6 +2733,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(404, {"error": "introuvable"})
         try:
             length = int(self.headers.get("Content-Length") or 0)
+            if self.path == "/api/backup_restore":   # page web : fichier de sauvegarde brut, puis redémarrage
+                if length > backup.MAX_SIZE:
+                    raise ValueError("Fichier trop gros pour une sauvegarde.")
+                backup.restore_upload(self.rfile.read(length))
+                return self.send(200, {"ok": True})
             body = json.loads(self.rfile.read(length) or b"{}") if length else {}
             action(self.path[len("/api/"):], body)
             self.send(200, {"ok": True})

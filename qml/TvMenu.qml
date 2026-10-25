@@ -594,6 +594,8 @@ Item {
             { label: "Configurer les touches", hint: "Apprendre les touches d'une télécommande ou d'une manette, une par une",
               ok: function () { act("keymap", { action: "wizard" }); close() } },
             { label: "Touches par défaut", ok: function () { act("keymap", { action: "reset" }) } },
+            { label: "Sauvegarde et restauration", hint: "Sur une clé USB, ou en fichier depuis la page du téléphone",
+              ok: function () { backupMenu() } },
             { label: "Mettre à jour maintenant",
               hint: health && health.update ? (health.update.running ? "Mise à jour en cours…"
                     : (health.update.last ? (health.update.last.ok ? "Dernière : " : "Échec : ") + frDate(health.update.last.date) : "Jamais")
@@ -760,6 +762,34 @@ Item {
         })
     }
     Timer { interval: 2000; repeat: true; running: menu.btPhase !== "" && !!menu.modal; onTriggered: menu.btRefresh() }
+    // Fenêtre « Sauvegarde et restauration » : par clé USB branchée, « Sauvegarder » puis ses dernières sauvegardes
+    // (OK : restaurer, après confirmation) ; relue toutes les 2 s (clé branchée, sauvegarde finie)
+    function backupMenu(again) {
+        call("GET", "/api/backup", undefined, function (d) {
+            if (!d || (again && !(modal && modal.kind === "backup"))) return   // fermée, ou confirmation ouverte entre-temps
+            var items = []
+            if (!d.busy) d.usb.forEach(function (u) {
+                items.push({ label: "↓  Sauvegarder sur " + u.name, ok: function () {
+                    call("POST", "/api/backup", { action: "save_usb", path: u.path }, function () { backupMenu() }) } })
+                u.backups.forEach(function (b) {
+                    items.push({ label: "↺  Restaurer celle du " + frDate(b.date), ok: function () {
+                        openModal("Remplacer les réglages par ceux du " + frDate(b.date) + " ? La box redémarre ensuite", [
+                            { label: "↺  Restaurer et redémarrer", danger: true, ok: function () {
+                                call("POST", "/api/backup", { action: "restore_usb", path: u.path, name: b.name }, function () { backupMenu() }) } },
+                            { label: "Annuler", ok: function () { backupMenu() } }])
+                    } })
+                })
+            })
+            if (d.busy !== "reboot") items.push({ label: "Fermer", ok: function () {} })
+            var title = d.message || (d.usb.length ? "Sauvegarde et restauration"
+                                                    : "Branche une clé USB pour sauvegarder")
+            var same = modal && modal.kind === "backup"
+            var sel = modalSel
+            modal = { title: title, items: items, kind: "backup" }
+            modalSel = same ? Math.min(sel, items.length - 1) : 0
+        })
+    }
+    Timer { interval: 2000; repeat: true; running: !!menu.modal && menu.modal.kind === "backup"; onTriggered: menu.backupMenu(true) }
     function loadAudio() { call("GET", "/api/audio", undefined, function (d) { if (d && d.outputs) audioOut = d }) }
     function loadTab(id) {
         if (id === "settings") loadAudio()

@@ -70,7 +70,7 @@ if [ "$SKIP_SYSTEM" -eq 0 ]; then
 fi
 
 step "Paquets système"
-pacman -S --needed --noconfirm mpv ffmpeg grim cage wlr-randr python git curl polkit libpulse bluez bluez-utils
+pacman -S --needed --noconfirm mpv ffmpeg grim cage wlr-randr python git curl polkit libpulse bluez bluez-utils udisks2
 
 step "Utilisateur $BOX_USER"
 id "$BOX_USER" > /dev/null 2>&1 || useradd -m -s /bin/bash "$BOX_USER"
@@ -288,6 +288,18 @@ polkit.addRule(function (action, subject) {
 });
 RULES
   chmod 644 /etc/polkit-1/rules.d/50-stream-box.rules
+  # Clés USB : sauvegarde et restauration depuis le menu de la TV (backup.py)
+  cat > /etc/polkit-1/rules.d/52-stream-box-usb.rules << 'RULES'
+polkit.addRule(function (action, subject) {
+    if (subject.user == "media" &&
+        (action.id == "org.freedesktop.udisks2.filesystem-mount" ||
+         action.id == "org.freedesktop.udisks2.filesystem-mount-other-seat" ||
+         action.id == "org.freedesktop.udisks2.filesystem-unmount-others")) {
+        return polkit.Result.YES;
+    }
+});
+RULES
+  chmod 644 /etc/polkit-1/rules.d/52-stream-box-usb.rules
 
   step "Bluetooth et réseau"
   systemctl enable --now bluetooth.service 2> /dev/null || echo "(pas de Bluetooth sur cette machine)"

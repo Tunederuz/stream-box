@@ -1,0 +1,10 @@
+// Stream Box : media monte et démonte les clés USB (sauvegarde et restauration des réglages, backup.py), même hors de
+// la session de la TV
+polkit.addRule(function (action, subject) {
+    if (subject.user == "media" &&
+        (action.id == "org.freedesktop.udisks2.filesystem-mount" ||
+         action.id == "org.freedesktop.udisks2.filesystem-mount-other-seat" ||
+         action.id == "org.freedesktop.udisks2.filesystem-unmount-others")) {
+        return polkit.Result.YES;
+    }
+});
