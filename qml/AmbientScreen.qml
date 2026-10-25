@@ -15,6 +15,7 @@ Item {
     // Mode configuration (netsetup.py) : point d'accès Wi-Fi de la box, ou connexion en cours à un réseau
     readonly property var setup: ambient.setup || null
     property var st: ({})                     // /api/state : photos, streamers en live
+    property string backdrop: ""              // fond animé choisi, d'après l'état relu par le menu (ui.qml)
     property date now: new Date()
     property bool qrShown: true
     // QR code affiché (réglage : toujours, 30 secondes à chaque arrivée, jamais)
@@ -50,31 +51,8 @@ Item {
         function onAmbientOnChanged() { if (box.ambientOn) { root.qrShown = true; qrTimer.restart(); root.refresh() } }
     }
 
-    // Fond : presque noir, et des taches de couleur très floues qui dérivent lentement (ombres rectangulaires
-    // arrondies en disque : flou calculé par la puce graphique, sans calque)
-    Rectangle { anchors.fill: parent; color: "#0b0710" }
-    Repeater {
-        model: [{ c: "#9146ff", o: 0.42, s: 700, x0: 200, y0: 120, dx: 520, dy: 260, d: 47000 },
-                { c: "#2b4bdc", o: 0.30, s: 640, x0: 1150, y0: 420, dx: -480, dy: -220, d: 61000 },
-                { c: "#b03a7a", o: 0.28, s: 560, x0: 700, y0: 650, dx: 380, dy: -300, d: 53000 },
-                { c: "#5b2bdc", o: 0.25, s: 520, x0: 1400, y0: 60, dx: -300, dy: 340, d: 71000 }]
-        RectangularShadow {
-            width: modelData.s; height: modelData.s; radius: modelData.s / 2
-            blur: 260; spread: 0
-            color: modelData.c; opacity: modelData.o
-            x: modelData.x0; y: modelData.y0
-            SequentialAnimation on x {
-                loops: Animation.Infinite
-                NumberAnimation { to: modelData.x0 + modelData.dx; duration: modelData.d; easing.type: Easing.InOutSine }
-                NumberAnimation { to: modelData.x0; duration: modelData.d; easing.type: Easing.InOutSine }
-            }
-            SequentialAnimation on y {
-                loops: Animation.Infinite
-                NumberAnimation { to: modelData.y0 + modelData.dy; duration: modelData.d * 0.8; easing.type: Easing.InOutSine }
-                NumberAnimation { to: modelData.y0; duration: modelData.d * 0.8; easing.type: Easing.InOutSine }
-            }
-        }
-    }
+    // Fond animé, au choix dans les Réglages (Backdrop.qml)
+    Backdrop { anchors.fill: parent; style: root.backdrop || root.st.backdrop || "aurora"; running: root.visible }
 
     // Contenu, qui dérive de quelques dizaines de pixels sur plusieurs minutes (écran de TV : pas d'image fixe)
     Item {

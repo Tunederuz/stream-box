@@ -790,3 +790,12 @@ fermé par Menu ou au bout de 90 s : écran d'accueil animé), toute touche rouv
 lecture : Retour sur les onglets ne le ferme pas (QML `st.mode`, Lua `state.mode`). Fond du menu : lueurs de la
 couleur de l'onglet qui dérivent, deux de plus sans vidéo derrière (le voile y est opaque, pour cacher l'écran
 d'accueil).
+
+### Fonds animés (qml/Backdrop.qml)
+Écran d'accueil (AmbientScreen) et menu sans vidéo derrière (TvMenu, aux couleurs de l'onglet : `hueShift`) partagent
+`Backdrop.qml`, style choisi dans Réglages → Affichage → « Fond animé » (`POST /api/backdrop {style}`,
+`~/.config/stream-box/backdrop`, `backdrop` dans `/api/state` ; ui.qml passe celui du menu à l'accueil) : `aurora`
+(taches floues), `fluid` (bruit replié, nappes qui coulent), `borealis` (rideaux d'aurore boréale et étoiles), `silk`
+(fils lumineux), `bubbles` (particules). Shaders dans `qml/shaders/*.frag`, compilés en `.qsb` versionnés par
+`qml/shaders/build.sh` (Docker, PySide6 de la même version que la box : Essentials n'a pas qsb), rendus à mi-résolution
+(`layer.textureSize`). Coût mesuré : le même pour tous (~25 % d'un cœur pour ui.py, menu compris).

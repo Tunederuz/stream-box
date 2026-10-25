@@ -700,6 +700,20 @@ def set_player(mode):
     mpv(["quit"])
 
 
+# Fond animé de l'écran d'accueil et du menu sans vidéo (qml/Backdrop.qml), choisi dans les Réglages de la TV
+BACKDROP_FILE = os.path.expanduser("~/.config/stream-box/backdrop")
+BACKDROPS = ("aurora", "fluid", "borealis", "silk", "bubbles")
+
+
+def backdrop():
+    try:
+        with open(BACKDROP_FILE) as f:
+            b = f.read().strip()
+        return b if b in BACKDROPS else BACKDROPS[0]
+    except OSError:
+        return BACKDROPS[0]
+
+
 def state():
     user, volume, mute, pause, video, title, position, duration, tracks, cache, vo, path = mpv(
         ["get_property", "user-data/streambox"], ["get_property", "volume"], ["get_property", "mute"],
@@ -719,6 +733,7 @@ def state():
         "auto_switch": user.get("auto_switch", True), "night": user.get("night", False),
         "events": user.get("events", True), "qr": user.get("qr", "always"),
         # Lecteur choisi, et celui qui tourne vraiment (mpv seul après plusieurs plantages de l'appli Qt)
+        "backdrop": backdrop(),
         "player": player_choice(), "player_running": "qt" if vo == "libmpv" else "mpv", "power_action": power_action(),
         "remote_url": custom_remote_url(),
         # Clavier de recherche du menu de la TV ouvert (oublié au bout de 10 min, menu fermé entre-temps)
@@ -2426,6 +2441,11 @@ def action(name, body):
         mpv(["seek", max(0.0, float(body.get("position", 0))), "absolute"])
     elif name == "auto_switch":
         mpv(["script-message", "streambox-auto-switch", "yes" if body.get("enabled") else "no"])
+    elif name == "backdrop":
+        if body.get("style") not in BACKDROPS:
+            raise ValueError("fond inconnu")
+        with open(BACKDROP_FILE, "w") as f:
+            f.write(body["style"] + "\n")
     elif name == "flag":
         # Réglages oui / non de stream-box.lua : mode nuit (son compressé), encart des sondages et prédictions
         if body.get("key") not in ("night", "events"):

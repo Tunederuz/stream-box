@@ -533,6 +533,14 @@ Item {
               ok: function () { act("flag", { key: "night", enabled: !s.night }) } },
             { label: "Volume", value: s.mute ? "muet" : (s.volume || 0) + " %", step: function (d) { act("volume", { delta: 5 * d }) } },
             { header: "Affichage" },
+            { label: "Fond animé", hint: "Écran d'accueil et menu sans vidéo derrière",
+              value: backdropNames[s.backdrop || "aurora"] || "",
+              step: function (d) {
+                  var ids = Object.keys(backdropNames)
+                  var next = ids[(Math.max(0, ids.indexOf(s.backdrop || "aurora")) + d + ids.length) % ids.length]
+                  st = Object.assign({}, st, { backdrop: next })   // tout de suite à l'écran, sans attendre l'état
+                  act("backdrop", { style: next })
+              } },
             { label: "Résolution de la TV",
               value: !display ? "…" : cur === "auto" ? "Auto (" + prettyMode(display.auto) + ")" : prettyMode(cur),
               hint: pendingDisplay && display && pendingDisplay !== display.setting ? "OK pour appliquer" : undefined,
@@ -664,6 +672,13 @@ Item {
             { label: "↻  Redémarrer", ok: function () { act("reboot"); close() } },
             { label: "⏻  Éteindre", danger: true, ok: function () { act("poweroff", { mode: "full" }); close() } },
             { label: "Annuler", ok: function () { close() } }])
+    }
+    readonly property var backdropNames: ({ aurora: "Taches floues", fluid: "Fluide", borealis: "Aurore boréale",
+                                            silk: "Soie", bubbles: "Bulles" })
+    // Couleur voisine sur le cercle des teintes (fond animé aux couleurs de l'onglet) ; gris pour les onglets neutres
+    function hueShift(c, dh, light) {
+        if (c.hslHue < 0) return Qt.darker(c, 2.5)
+        return Qt.hsla((c.hslHue + dh + 1) % 1, c.hslSaturation, c.hslLightness * light, 1)
     }
     function openModal(title, items) { modal = { title: title, items: items }; modalSel = 0 }
     function chooseVideo(item) {
@@ -986,19 +1001,29 @@ Item {
         opacity: box.videoActive ? 0.89 : 1
         Behavior on color { ColorAnimation { duration: 400 } }
     }
-    // Lueurs floues de la couleur de l'onglet, qui dérivent lentement ; sans vidéo derrière (le menu est alors la page
-    // principale), deux de plus et plus vives : fond animé façon écran d'accueil, pas d'image fixe
+    // Sans vidéo derrière (le menu est alors la page principale) : fond animé aux couleurs de l'onglet, adouci
+    Backdrop {
+        anchors.fill: parent
+        visible: opacity > 0
+        opacity: box.videoActive ? 0 : 1
+        Behavior on opacity { NumberAnimation { duration: 500 } }
+        running: menu.isOpen && !box.videoActive
+        style: menu.st.backdrop || "aurora"
+        bg: menu.pal.veil
+        c1: menu.accent
+        c2: menu.hueShift(menu.accent, 0.10, 0.8)
+        c3: menu.hueShift(menu.accent, -0.12, 0.9)
+    }
+    Rectangle { anchors.fill: parent; color: menu.pal.veil; opacity: box.videoActive ? 0 : 0.30 }
+    // Lueurs floues de la couleur de l'onglet, qui dérivent lentement
     Repeater {
-        model: [{ x0: 1380, y0: -320, w: 820, h: 640, dx: -420, dy: 260, d: 38000, o: 1, idle: 0 },
-                { x0: 600, y0: 860, w: 900, h: 420, dx: 380, dy: -240, d: 46000, o: 0, idle: 0 },
-                { x0: 120, y0: 80, w: 700, h: 700, dx: 520, dy: 300, d: 52000, o: -1, idle: 0.30 },
-                { x0: 1100, y0: 520, w: 640, h: 640, dx: -460, dy: -260, d: 61000, o: -1, idle: 0.24 }]
+        model: [{ x0: 1380, y0: -320, w: 820, h: 640, dx: -420, dy: 260, d: 38000, o: 1 },
+                { x0: 600, y0: 860, w: 900, h: 420, dx: 380, dy: -240, d: 46000, o: 0 }]
         RectangularShadow {
             width: modelData.w; height: modelData.h; radius: Math.min(width, height) / 2
             blur: 240; spread: 0
             color: menu.accent
-            opacity: modelData.o < 0 ? (box.videoActive ? 0 : modelData.idle)
-                   : (modelData.o ? menu.pal.glow : menu.pal.glowLow) * (box.videoActive ? 1 : 1.4)
+            opacity: (modelData.o ? menu.pal.glow : menu.pal.glowLow) * (box.videoActive ? 1 : 0.5)
             x: modelData.x0; y: modelData.y0
             Behavior on color { ColorAnimation { duration: 400 } }
             Behavior on opacity { NumberAnimation { duration: 600 } }
@@ -1495,7 +1520,7 @@ Item {
                     visible: menu.tabId === modelData
                     readonly property var rows: !visible ? [] : modelData === "settings" ? menu.settingsRows() : menu.systemRows()
                     readonly property var sel: menu.selectable(rows)
-                    readonly property int focusedRow: menu.area === "content" ? sel[modelData === "settings" ? menu.setSel : menu.sysSel] : -1
+                    readonly property int focusedRow: menu.area === "content" ? (sel[modelData === "settings" ? menu.setSel : menu.sysSel] ?? -1) : -1
                     y: 15; x: 40; width: modelData === "settings" ? 980 : 810; height: 800   // s'arrête au-dessus de l'aide en bas
                     spacing: 10; interactive: false; clip: false; topMargin: 30
                     model: rows.length
