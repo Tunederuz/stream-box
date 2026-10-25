@@ -7,7 +7,7 @@ Les changements de streamer et de chat passent par les script-messages de stream
 Compte Twitch : le jeton du site (cookie auth-token) est rangé dans la config Twitch de streamlink, que
 streamlink lit tout seul. Twitch ne retire les pubs des abonnements qu'avec ce jeton-là.
 """
-import datetime, hashlib, json, os, uuid, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
+import calendar, datetime, hashlib, json, os, uuid, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import display   # display.py, même dossier
@@ -1657,22 +1657,26 @@ def follows_logout():
 # abonnements dans youtube-subs.json, en 600 dans ~/.config/stream-box. Tout passe par l'API Google (googleapis.com),
 # pas par youtube.com : rien ne s'ajoute aux requêtes qui font limiter l'adresse IP de la box. Quota de l'API : 10 000
 # unités par jour ; abonnements relus une fois par jour (1 unité par 50), puis par chaîne 1 unité pour ses dernières
-# vidéos (playlist « UULF… » : vidéos sans les Shorts) et 1 unité par 50 vidéos pour durées et vues. Le fil est relu en
-# arrière-plan (yt_subfeed_loop) au plus toutes les 30 min, moins souvent avec beaucoup d'abonnements pour rester
-# sous YT_DAILY_BUDGET unités par jour (350 abonnements : toutes les 72 min) ; l'onglet s'ouvre sur ce relevé.
+# vidéos (playlist « UULF… » : vidéos sans les Shorts) et 1 unité par 50 vidéos pour durées et vues. Chaque chaîne est
+# relue à son rythme (YT_CHANNEL_RHYTHM, d'après l'âge de sa dernière vidéo : toutes les heures si elle a publié ces
+# deux derniers jours, une fois par jour si elle se tait depuis un mois), par un tour toutes les minutes en
+# arrière-plan (yt_subfeed_loop) ; relevés gardés dans youtube-subfeed.json (rien à refaire au redémarrage), unités
+# comptées pour ne pas dépasser YT_DAILY_BUDGET par jour. L'onglet s'ouvre sur le dernier fil.
 
 YT_APP_FILE = os.path.join(COOKIES_DIR, "youtube-app.json")
 YT_TOKEN_FILE = os.path.join(COOKIES_DIR, "youtube-token.json")
 YT_SUBS_FILE = os.path.join(COOKIES_DIR, "youtube-subs.json")
+YT_FEED_FILE = os.path.join(COOKIES_DIR, "youtube-subfeed.json")
 YT_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
 YT_SUBS_EVERY = 86400
-YT_SUBFEED_EVERY = 1800
+YT_CHANNEL_RHYTHM = ((2 * 86400, 3600), (7 * 86400, 3 * 3600), (30 * 86400, 12 * 3600))   # (âge de la dernière vidéo, relecture)
 YT_DAILY_BUDGET = 7000   # sur les 10 000 du quota : marge pour « Relire mes abonnements » et les essais
 YT_SUBFEED_PER_CHANNEL = 4
 YT_SUBFEED_MAX = 60
 yt_account_lock = threading.Lock()
 yt_pending = {}                # autorisation en cours : user_code, verification_uri, expires_at, error
 yt_subfeed = {"at": 0.0, "videos": None, "refreshing": False}
+yt_units = {"day": "", "used": 0}  # unités du quota de l'API dépensées aujourd'hui
 
 
 def google_oauth(path, fields):
@@ -1716,7 +1720,7 @@ def yt_poll(device_code, interval, expires_at):
             save_yt_token(d)
             with yt_account_lock:
                 yt_pending.clear()
-            yt_reset_subs()
+            yt_reset_subs(everything=True)   # peut-être un autre compte
             return
         error = d.get("error", "")
         if error == "slow_down":
@@ -1765,6 +1769,7 @@ def yt_token():
 
 
 def yt_api(path, token, **params):
+    yt_count_units()
     req = urllib.request.Request(f"https://www.googleapis.com/youtube/v3/{path}?{urllib.parse.urlencode(params)}",
                                  headers={"Authorization": f"Bearer {token}"})
     with urllib.request.urlopen(req, timeout=15) as r:
@@ -1823,35 +1828,102 @@ def yt_channel_uploads(channel, token):
     return []
 
 
+def yt_quota_day():
+    return time.strftime("%Y-%m-%d", time.gmtime(time.time() - 8 * 3600))   # le quota repart à minuit, heure du Pacifique
+
+
+def yt_count_units(n=1):
+    with yt_account_lock:
+        if yt_units["day"] != yt_quota_day():
+            yt_units.update(day=yt_quota_day(), used=0)
+        yt_units["used"] += n
+
+
+def yt_channel_every(entry):
+    """Rythme de relecture d'une chaîne d'après sa dernière vidéo : souvent si elle publie souvent"""
+    if not entry or "checked" not in entry:
+        return 0
+    dates = [v["date"] for v in entry.get("videos") or [] if v.get("date")]
+    if not dates:
+        return 86400
+    try:
+        age = time.time() - calendar.timegm(time.strptime(max(dates)[:19], "%Y-%m-%dT%H:%M:%S"))
+    except ValueError:
+        return 86400
+    for limit, every in YT_CHANNEL_RHYTHM:
+        if age < limit:
+            return every
+    return 86400
+
+
+def yt_build_feed(cache, token):
+    """60 vidéos les plus récentes d'après les chaînes relues ; durées et vues relues au plus toutes les heures"""
+    details = cache.setdefault("details", {})
+    candidates = sorted((v for e in cache["channels"].values() for v in e.get("videos") or []),
+                        key=lambda v: v["date"], reverse=True)[:YT_SUBFEED_MAX + 20]   # marge : directs à venir écartés
+    if token:
+        stale = [v["id"] for v in candidates if time.time() - (details.get(v["id"]) or {}).get("at", 0) > 3600]
+        for i in range(0, len(stale), 50):
+            ids = stale[i:i + 50]
+            d = yt_api("videos", token, part="snippet,contentDetails,statistics", id=",".join(ids), maxResults=50)
+            found = {it["id"]: it for it in d.get("items", [])}
+            for vid in ids:
+                it = found.get(vid)
+                views = ((it or {}).get("statistics") or {}).get("viewCount")
+                details[vid] = {"at": time.time(), "gone": it is None,
+                                "upcoming": ((it or {}).get("snippet") or {}).get("liveBroadcastContent") == "upcoming",
+                                "seconds": iso_seconds(((it or {}).get("contentDetails") or {}).get("duration")),
+                                "views": int(views) if views else None}
+    keep = {v["id"] for v in candidates}
+    cache["details"] = {k: v for k, v in details.items() if k in keep}
+    out = []
+    for v in candidates:
+        det = details.get(v["id"]) or {}
+        if det.get("gone") or det.get("upcoming"):
+            continue   # supprimée, privée, ou direct pas encore commencé
+        out.append({**v, "date": v["date"][:10], "seconds": det.get("seconds"), "views": det.get("views")})
+    return out[:YT_SUBFEED_MAX]
+
+
 def yt_refresh_subfeed():
-    """Dernières vidéos de tous les abonnements, les plus récentes d'abord"""
+    """Relit les chaînes dont c'est le tour (yt_channel_every), puis refait le fil si quelque chose a bougé"""
     from concurrent.futures import ThreadPoolExecutor
     try:
         token = yt_token()
         if not token:
             return
-        cached = read_json_file(YT_SUBS_FILE)
-        subs = cached.get("channels")
-        if subs is None or time.time() - cached.get("at", 0) > YT_SUBS_EVERY:
+        cache = read_json_file(YT_FEED_FILE)
+        cache.setdefault("channels", {})
+        with yt_account_lock:   # unités déjà dépensées aujourd'hui avant un redémarrage
+            saved = cache.get("units") or {}
+            if not yt_units["day"] and saved.get("day") == yt_quota_day():
+                yt_units.update(saved)
+        listed = read_json_file(YT_SUBS_FILE)
+        subs = listed.get("channels")
+        if subs is None or time.time() - listed.get("at", 0) > YT_SUBS_EVERY:
             subs = yt_fetch_subs(token)
-        with ThreadPoolExecutor(16) as pool:
-            lists = list(pool.map(lambda c: yt_safe(yt_channel_uploads, c, token), subs))
-        videos = sorted((v for l in lists for v in l), key=lambda v: v["date"], reverse=True)[:YT_SUBFEED_MAX]
-        details = {}
-        for i in range(0, len(videos), 50):
-            d = yt_api("videos", token, part="snippet,contentDetails,statistics",
-                       id=",".join(v["id"] for v in videos[i:i + 50]), maxResults=50)
-            details.update({it["id"]: it for it in d.get("items", [])})
-        out = []
-        for v in videos:
-            it = details.get(v["id"])
-            if not it or (it.get("snippet") or {}).get("liveBroadcastContent") == "upcoming":
-                continue   # supprimée, privée, ou direct pas encore commencé
-            views = (it.get("statistics") or {}).get("viewCount")
-            out.append({**v, "date": v["date"][:10], "seconds": iso_seconds((it.get("contentDetails") or {}).get("duration")),
-                        "views": int(views) if views else None})
+        cache["channels"] = {c["id"]: cache["channels"].get(c["id"], {}) for c in subs}   # désabonnements oubliés
+        due = [c for c in subs if time.time() - cache["channels"][c["id"]].get("checked", 0) >= yt_channel_every(cache["channels"][c["id"]])]
         with yt_account_lock:
-            yt_subfeed.update(at=time.time(), videos=out)
+            left = YT_DAILY_BUDGET - (yt_units["used"] if yt_units["day"] == yt_quota_day() else 0)
+        due = due[:max(0, left - 10)]   # quota du jour presque épuisé : la suite attend demain
+        if due:
+            with ThreadPoolExecutor(16) as pool:
+                lists = list(pool.map(lambda c: yt_safe(yt_channel_uploads, c, token), due))
+            for c, videos in zip(due, lists):
+                entry = cache["channels"][c["id"]]
+                entry["checked"] = time.time()
+                if videos is not None:   # injoignable : l'ancien relevé reste, nouvel essai au prochain tour
+                    entry["videos"] = videos
+        if due or yt_subfeed["videos"] is None or time.time() - yt_subfeed["at"] > 3600:
+            videos = yt_build_feed(cache, token)
+            cache["units"] = dict(yt_units)
+            write_private_json(YT_FEED_FILE, cache)
+            with yt_account_lock:
+                yt_subfeed.update(at=time.time(), videos=videos)
+        if due:
+            print(f"remote.py : abonnements YouTube : {len(due)} chaînes relues, {yt_units['used']} unités aujourd'hui",
+                  flush=True)
     except (OSError, ValueError) as e:
         print(f"remote.py : abonnements YouTube : {e}", flush=True)
         with yt_account_lock:
@@ -1866,23 +1938,18 @@ def yt_safe(fn, *args):
     try:
         return fn(*args)
     except (OSError, ValueError):
-        return []   # chaîne fermée ou injoignable : les autres restent
+        return None   # chaîne fermée ou injoignable : les autres restent
 
 
-def yt_reset_subs(refetch_list=True):
-    if refetch_list:
-        for path in (YT_SUBS_FILE,):
-            try:
-                os.remove(path)
-            except FileNotFoundError:
-                pass
+def yt_reset_subs(everything=False):
+    """Liste des abonnements relue au prochain tour ; everything : relevés des chaînes oubliés aussi (déconnexion)"""
+    for path in (YT_SUBS_FILE, YT_FEED_FILE) if everything else (YT_SUBS_FILE,):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
     with yt_account_lock:
-        yt_subfeed.update(at=0.0, videos=None)
-
-
-def yt_subfeed_every():
-    n = len(read_json_file(YT_SUBS_FILE).get("channels") or [])
-    return max(YT_SUBFEED_EVERY, n * 86400 / YT_DAILY_BUDGET)
+        yt_subfeed.update(at=0.0, videos=None if everything else yt_subfeed["videos"])
 
 
 def yt_start_refresh():
@@ -1895,19 +1962,18 @@ def yt_start_refresh():
 
 
 def yt_subfeed_loop():
-    """Relevé du fil en arrière-plan, au rythme permis par le quota (et tout de suite après autorisation ou relecture)"""
+    """Tour des chaînes toutes les minutes en arrière-plan (seules celles dont c'est le tour sont relues)"""
     while True:
         try:
-            if read_json_file(YT_TOKEN_FILE).get("refresh_token") and time.time() - yt_subfeed["at"] > yt_subfeed_every():
-                if yt_start_refresh():
-                    yt_refresh_subfeed()
+            if read_json_file(YT_TOKEN_FILE).get("refresh_token") and yt_start_refresh():
+                yt_refresh_subfeed()
         except Exception as e:   # le fil ne doit pas mourir
             print(f"remote.py : abonnements YouTube : {e}", flush=True)
-        time.sleep(20)
+        time.sleep(60)
 
 
 def yt_subscriptions():
-    """Rangée « Abonnements » pour /api/youtube : relevé de yt_subfeed_loop ; le tout premier est attendu"""
+    """Rangée « Abonnements » pour /api/youtube : fil de yt_subfeed_loop ; le tout premier est attendu"""
     status = yt_account_status()
     if not status["authorized"]:
         return {**status, "videos": None}
@@ -1940,6 +2006,7 @@ def yt_account_status():
     subs = read_json_file(YT_SUBS_FILE)
     if out["authorized"] and subs.get("channels") is not None:
         out["channels"], out["synced"] = len(subs["channels"]), int(subs.get("at") or 0)
+    out["units_today"] = yt_units["used"] if yt_units["day"] == yt_quota_day() else 0
     return out
 
 
@@ -1960,7 +2027,7 @@ def yt_logout():
         pass
     with yt_account_lock:
         yt_pending.clear()
-    yt_reset_subs()
+    yt_reset_subs(everything=True)
 
 
 # État de la box (page, Réglages → Système) : températures, processeur, mémoire, disque, réseau, lecteur, services,
