@@ -8,7 +8,10 @@ Item {
     readonly property var n: { try { return JSON.parse(osd.notice || "{}") } catch (e) { return {} } }
     property string text: ""
     property bool shown: false
-    onNChanged: if (n.text) { text = n.text; shown = true; hide.restart() }
+    property real lastId: -1
+    // Toutes les données d'affichage partagent un seul signal (ui.py) : n est relu à chaque changement (bandeau d'infos…),
+    // on n'affiche que pour une nouvelle notification
+    onNChanged: if (n.text && n.id !== lastId) { lastId = n.id; text = n.text; shown = true; hide.restart() }
     Timer { id: hide; interval: 4000; onTriggered: root.shown = false }
 
     Rectangle {
