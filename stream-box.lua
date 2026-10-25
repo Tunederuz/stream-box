@@ -952,6 +952,18 @@ local function power_key()
                  "http://127.0.0.1:8080/api/poweroff" } }, function() end)
 end
 
+-- Retour deux fois pendant un stream : dernière vidéo de l'historique, reprise là où elle en était (remote.py)
+local function resume_last()
+    mp.command_native_async({ name = "subprocess", playback_only = false, capture_stdout = true,
+        args = { "curl", "-s", "-m", "20", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}",
+                 "http://127.0.0.1:8080/api/resume_last" } }, function(_, r)
+        local out = r and r.stdout or ""
+        if not out:find('"ok"') then
+            mp.osd_message(out:match('"error": "([^"]*)"') or "Pas de vidéo à reprendre", 3)
+        end
+    end)
+end
+
 local function on_key(key)
     if key == "power" then return power_key() end
     if key == "power_menu" then   -- power maintenu : fenêtre « veille, redémarrer, éteindre » (menu QML ou tv_menu.lua)
@@ -1027,7 +1039,15 @@ local function on_key(key)
         elseif key == "left" or key == "right" then
             live_seek(key == "right" and 10 or -10)
         elseif key == "back" then
-            live_seek("live")
+            -- Une fois : retour au direct ; deux fois en 2 s : dernière vidéo de l'historique
+            if mp.get_time() - back_pressed < 2 then
+                back_pressed = 0
+                resume_last()
+            else
+                back_pressed = mp.get_time()
+                live_seek("live")
+                mp.osd_message("Retour encore une fois pour reprendre la dernière vidéo", 2)
+            end
         elseif key == "menu" then
             toggle_chat()
             mp.osd_message(chat_visible and "Chat affiché" or "Chat masqué", 2)
@@ -1055,6 +1075,7 @@ local function on_key(key)
             if qt_ui() then open_tracks() show_bar() else mp.commandv("cycle", "sub") end
         elseif key == "back" then
             if mp.get_time() - back_pressed < 2 then
+                back_pressed = 0
                 start_channel(channel)
             else
                 back_pressed = mp.get_time()

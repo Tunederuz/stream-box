@@ -127,7 +127,7 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
 - **Retour en arrière dans le direct** : `on_load` garde `LIVE_BACK` (400 MiB ≈ 7-8 min en 1080p60) avec
   `demuxer-seekable-cache=yes`. `live_window()` lit `demuxer-cache-state.seekable-ranges`. En différé ou en pause,
   `set_live_buffer` passe le tampon avant à 150 MiB (sinon mpv cesse de lire le flux et le retard fond) ; retour au
-  direct → 750 KiB. Télécommande Bluetooth : ←/→ ±10 s, Retour = direct. Page : −30 s / +30 s / Direct
+  direct → 750 KiB. Télécommande Bluetooth : ←/→ ±10 s, Retour = direct, Retour ×2 (2 s) = dernière vidéo de l'historique reprise à sa position (`POST /api/resume_last`). Page : −30 s / +30 s / Direct
   (`POST /api/live_seek {delta|"live"}` → script-message `streambox-live-seek`), retard dans `/api/state` (`delay`).
   La barre de lecture affiche « −0:42 » ou « ● EN DIRECT ».
 - **Notification de live** : `remote.py` repère les streamers qui viennent de passer en live (pas au premier relevé)
@@ -207,7 +207,7 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   le grand menu (OK aussi sur l'écran d'accueil ; le petit menu ne sert plus qu'à la souris), Menu ≡ affiche/masque le chat. Dans tous les modes : WWW (le bouton
   « navigateur ») affiche l'écran d'accueil, Play (`PLAY`/`PLAYPAUSE`, lié exprès : sinon mpv met en pause, ce qui
   figeait le direct) fait changer le chat de coin. En vidéo : OK pause, ←/→ ±10 s,
-  ↑ affiche/retire la barre de lecture (↓ la retire), Menu ≡ change de sous-titres, Retour ×2 revient au stream. Menu ouvert : flèches = sélection (le bouton
+  ↑ affiche/retire la barre de lecture (↓ la retire), Menu ≡ change de sous-titres, Retour ×2 revient au dernier stream lancé (et pendant un stream : à la dernière vidéo de l'historique). Menu ouvert : flèches = sélection (le bouton
   le plus proche dans la direction), OK valide, Retour/Accueil ferment. Power éteint la box (logind).
   Appairage : mettre la télécommande en mode appairage (Xiaomi : Accueil + Retour jusqu'au clignotement), puis
   `bluetoothctl` → `scan on`, `pair`, `trust`. Les appairages sont dans la sauvegarde de `backup.sh`.
