@@ -1657,14 +1657,17 @@ def follows_logout():
 # abonnements dans youtube-subs.json, en 600 dans ~/.config/stream-box. Tout passe par l'API Google (googleapis.com),
 # pas par youtube.com : rien ne s'ajoute aux requêtes qui font limiter l'adresse IP de la box. Quota de l'API : 10 000
 # unités par jour ; abonnements relus une fois par jour (1 unité par 50), puis par chaîne 1 unité pour ses dernières
-# vidéos (playlist « UULF… » : vidéos sans les Shorts) et 1 unité par 50 vidéos pour durées et vues ; fil gardé 30 min.
+# vidéos (playlist « UULF… » : vidéos sans les Shorts) et 1 unité par 50 vidéos pour durées et vues. Le fil est relu en
+# arrière-plan (yt_subfeed_loop) au plus toutes les 30 min, moins souvent avec beaucoup d'abonnements pour rester
+# sous YT_DAILY_BUDGET unités par jour (350 abonnements : toutes les 72 min) ; l'onglet s'ouvre sur ce relevé.
 
 YT_APP_FILE = os.path.join(COOKIES_DIR, "youtube-app.json")
 YT_TOKEN_FILE = os.path.join(COOKIES_DIR, "youtube-token.json")
 YT_SUBS_FILE = os.path.join(COOKIES_DIR, "youtube-subs.json")
 YT_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
 YT_SUBS_EVERY = 86400
-YT_SUBFEED_CACHE = 1800
+YT_SUBFEED_EVERY = 1800
+YT_DAILY_BUDGET = 7000   # sur les 10 000 du quota : marge pour « Relire mes abonnements » et les essais
 YT_SUBFEED_PER_CHANNEL = 4
 YT_SUBFEED_MAX = 60
 yt_account_lock = threading.Lock()
@@ -1831,7 +1834,7 @@ def yt_refresh_subfeed():
         subs = cached.get("channels")
         if subs is None or time.time() - cached.get("at", 0) > YT_SUBS_EVERY:
             subs = yt_fetch_subs(token)
-        with ThreadPoolExecutor(8) as pool:
+        with ThreadPoolExecutor(16) as pool:
             lists = list(pool.map(lambda c: yt_safe(yt_channel_uploads, c, token), subs))
         videos = sorted((v for l in lists for v in l), key=lambda v: v["date"], reverse=True)[:YT_SUBFEED_MAX]
         details = {}
@@ -1877,22 +1880,45 @@ def yt_reset_subs(refetch_list=True):
         yt_subfeed.update(at=0.0, videos=None)
 
 
+def yt_subfeed_every():
+    n = len(read_json_file(YT_SUBS_FILE).get("channels") or [])
+    return max(YT_SUBFEED_EVERY, n * 86400 / YT_DAILY_BUDGET)
+
+
+def yt_start_refresh():
+    """Lance un relevé s'il n'y en a pas déjà un ; renvoie True s'il faut le faire dans ce fil"""
+    with yt_account_lock:
+        if yt_subfeed["refreshing"]:
+            return False
+        yt_subfeed["refreshing"] = True
+        return True
+
+
+def yt_subfeed_loop():
+    """Relevé du fil en arrière-plan, au rythme permis par le quota (et tout de suite après autorisation ou relecture)"""
+    while True:
+        try:
+            if read_json_file(YT_TOKEN_FILE).get("refresh_token") and time.time() - yt_subfeed["at"] > yt_subfeed_every():
+                if yt_start_refresh():
+                    yt_refresh_subfeed()
+        except Exception as e:   # le fil ne doit pas mourir
+            print(f"remote.py : abonnements YouTube : {e}", flush=True)
+        time.sleep(20)
+
+
 def yt_subscriptions():
-    """Rangée « Abonnements » pour /api/youtube : premier relevé attendu, les suivants en arrière-plan"""
+    """Rangée « Abonnements » pour /api/youtube : relevé de yt_subfeed_loop ; le tout premier est attendu"""
     status = yt_account_status()
     if not status["authorized"]:
         return {**status, "videos": None}
-    with yt_account_lock:
-        stale = time.time() - yt_subfeed["at"] > YT_SUBFEED_CACHE
-        start = stale and not yt_subfeed["refreshing"]
-        if start:
-            yt_subfeed["refreshing"] = True
-        first = yt_subfeed["videos"] is None
-    if start:
-        if first:
+    if yt_subfeed["videos"] is None:
+        if yt_start_refresh():
             yt_refresh_subfeed()
         else:
-            threading.Thread(target=yt_refresh_subfeed, daemon=True).start()
+            for _ in range(150):   # relevé en cours dans un autre fil
+                if yt_subfeed["videos"] is not None:
+                    break
+                time.sleep(0.2)
     with yt_account_lock:
         videos = yt_subfeed["videos"]
     return {**status, "videos": with_progress(videos) if videos is not None else None}
@@ -2494,5 +2520,6 @@ threading.Thread(target=events_loop, daemon=True).start()
 threading.Thread(target=health_loop, daemon=True).start()
 threading.Thread(target=resume_loop, daemon=True).start()
 threading.Thread(target=netsetup.setup_loop, daemon=True).start()
+threading.Thread(target=yt_subfeed_loop, daemon=True).start()
 hold_power_key()
 ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

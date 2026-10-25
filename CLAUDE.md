@@ -482,7 +482,9 @@ client_secret), `youtube-token.json`, `youtube-subs.json` (abonnements relus une
 `~/.config/stream-box`. Tout passe par googleapis.com (quota 10 000 unités par jour), rien par youtube.com :
 `subscriptions` (1 unité par 50), puis par chaîne `playlistItems` sur la playlist `UULF` + id sans « UC » (vidéos sans
 Shorts ni directs ; `UU` en secours), 4 dernières, 8 en parallèle ; `videos` pour durées, vues et directs à venir
-(écartés), 60 vidéos gardées, fil gardé 30 min (premier relevé attendu par `/api/youtube`, les suivants en arrière-plan).
+(écartés), 60 vidéos gardées. Relevé en arrière-plan (`yt_subfeed_loop`, 16 chaînes en parallèle, ~7 s pour 350) au
+plus toutes les 30 min, moins souvent avec beaucoup d'abonnements (`YT_DAILY_BUDGET` 7000 unités par jour : 350
+abonnements → toutes les 72 min) ; `/api/youtube` sert ce relevé (le tout premier, juste après l'autorisation, est attendu).
 `GET /api/youtube` → `subs` {configured, authorized, pending, channels, synced, videos} ; `GET /api/youtube_account` ;
 `POST /api/youtube_app|youtube_login|youtube_logout|youtube_sync`. TV : carte « + Connecter mon compte » dans la rangée
 tant que la box n'est pas autorisée → fenêtre du code et QR code (`ytAuth`, relue toutes les 3 s) ; ligne « Compte
