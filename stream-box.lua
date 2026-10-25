@@ -288,13 +288,23 @@ end
 local function apply_sub_pref()
     local pref = read_state("sub_lang")
     if not pref or pref == "" then return end
-    if pref == "no" then return mp.set_property("sid", "no") end
+    local current = mp.get_property("sid")
+    if pref == "no" then
+        if current ~= "no" then mp.set_property("sid", "no") end
+        return
+    end
     local best
     for _, t in ipairs(mp.get_property_native("track-list") or {}) do
         if t.type == "sub" and same_lang(t.lang, pref) and (not best or (best.forced and not t.forced)) then best = t end
     end
-    if best then mp.set_property("sid", tostring(best.id)) end
+    if best and current ~= tostring(best.id) then mp.set_property("sid", tostring(best.id)) end
 end
+-- Pistes ajoutées après l'ouverture (sous-titres externes de Jellyfin : remote.py jf_add_subtitles, jusqu'à 15 s
+-- après ; sous-titres auto de YouTube) : le choix retenu est réappliqué pendant les premières secondes de la vidéo
+local sub_pref_until = 0
+mp.observe_property("track-list", "native", function()
+    if mode == "media" and mp.get_time() < sub_pref_until then apply_sub_pref() end
+end)
 
 mp.register_event("file-loaded", function()
     attempts = 0
@@ -302,6 +312,7 @@ mp.register_event("file-loaded", function()
     set_status("")
     if mode == "media" then
         fix_auto_subs()
+        sub_pref_until = mp.get_time() + 20
         apply_sub_pref()
     end
 end)

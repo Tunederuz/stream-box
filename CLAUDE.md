@@ -924,5 +924,6 @@ complet sur le Dell : 13,6 s. Pour essayer une option de démarrage sans reconst
 ### Sous-titres retenus
 Le choix du panneau Sous-titres / audio (appli Qt) est gardé dans `~/.local/state/stream-box/sub_lang` (langue de la
 piste, ou `no` pour désactivés) et appliqué à chaque vidéo qui a une piste dans cette langue (stream-box.lua
-`apply_sub_pref`, après `fix_auto_subs`, sur `file-loaded` en mode média ; même langue sur les deux premières lettres,
+`apply_sub_pref`, après `fix_auto_subs`, sur `file-loaded` en mode média, puis à chaque changement de `track-list`
+pendant 20 s : les sous-titres externes de Jellyfin arrivent après l'ouverture ; même langue sur les deux premières lettres,
 pistes « forcées » en dernier). Une vidéo sans cette langue garde le choix de mpv.
