@@ -209,7 +209,7 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   Appairage : mettre la télécommande en mode appairage (Xiaomi : Accueil + Retour jusqu'au clignotement), puis
   `bluetoothctl` → `scan on`, `pair`, `trust`. Les appairages sont dans la sauvegarde de `backup.sh`.
 - **Barre de lecture des vidéos** (stream-box.lua, `draw_bar`) façon YouTube : bandeau en bas (titre, partie lue en
-  violet, partie chargée, temps). Affichée `BAR_SECONDS` (5 s) par ↑, ←/→ ou OK ; ↑ ou ↓ la retirent ; toujours
+  violet, partie chargée, temps). Affichée `BAR_SECONDS` (2,5 s) par ↑, ←/→ ou OK ; ↑ ou ↓ la retirent ; toujours
   visible pendant la pause (symbole pause dessiné). Préférée à l'OSC de mpv, désactivée (`--osc=no`) car pensée
   pour la souris et en conflit avec notre menu.
 - Icône d'extinction en haut à droite de la page (confirmation « Éteindre la box ? ») → `POST /api/poweroff` →

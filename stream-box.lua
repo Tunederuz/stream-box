@@ -562,7 +562,7 @@ end
 
 -- Barre de lecture des vidéos, façon YouTube : affichée quelques secondes par Haut, ←/→ ou OK, retirée par Haut ou
 -- Bas, et toujours affichée pendant la pause
-local BAR_SECONDS = 5
+local BAR_SECONDS = 2.5
 local bar = mp.create_osd_overlay("ass-events")
 local bar_visible, bar_until = false, 0
 
@@ -684,7 +684,7 @@ mp.observe_property("pause", "bool", function(_, paused)
     if paused then
         show_bar()
     elseif bar_visible then
-        show_bar(2)   -- à la reprise, la barre reste encore un peu
+        show_bar(1)   -- à la reprise, la barre reste encore un peu
     end
 end)
 
