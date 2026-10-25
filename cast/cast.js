@@ -2,12 +2,14 @@
 // grâce à yt-cast-receiver (protocole non officiel de YouTube : peut casser quand YouTube le change).
 // Une vidéo castée passe par remote.py (POST /api/play : écran de chargement, historique, sous-titres), le reste
 // (pause, reprise, avance, volume) directement par mpv (IPC). Fin de vidéo : vidéo suivante de la file de l'appli.
-// Lancé par start.sh si les modules sont installés (npm install dans ce dossier).
+// Lancé par start.sh si les modules sont installés (npm install dans ce dossier). Même processus : progression du compte
+// YouTube par l'accès « appli TV » (youtube_tv.js).
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import YouTubeCastReceiver, { Player, DataStore, Constants } from 'yt-cast-receiver';
+import { startYoutubeTv } from './youtube_tv.js';
 
 const API = 'http://127.0.0.1:8080/api/';
 const MPV_SOCKET = '/tmp/stream-box-mpv.sock';
@@ -126,5 +128,6 @@ receiver.on('senderDisconnect', (sender) => console.log(`cast.js : ${sender.name
 receiver.on('error', (error) => console.error('cast.js :', error));
 
 mpvConnect();
+startYoutubeTv();
 await receiver.start();
 console.log('cast.js : récepteur YouTube Cast prêt (« Stream Box » dans le bouton Caster de l\'appli YouTube)');

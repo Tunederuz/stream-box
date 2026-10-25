@@ -214,10 +214,11 @@ Item {
         })
     }
     // Compte YouTube : code à taper sur google.com/device ; la fenêtre se relit toutes les 3 s jusqu'à l'autorisation
-    function ytConnect() {
-        ytAuth = { pending: null }
-        call("POST", "/api/youtube_login", {}, function (d) {
-            if (!d) ytAuth = { pending: { error: "Google injoignable, ou appli mal configurée" } }
+    // tv : progression par l'accès « appli YouTube TV » (cast/youtube_tv.js), sinon abonnements (appli Google à soi)
+    function ytConnect(tv) {
+        ytAuth = { tv: !!tv, pending: null }
+        call("POST", tv ? "/api/youtube_tv_login" : "/api/youtube_login", {}, function (d) {
+            if (!d) ytAuth = { tv: !!tv, pending: { error: tv ? "YouTube injoignable" : "Google injoignable, ou appli mal configurée" } }
             else loadYtAuth()
         })
     }
@@ -227,9 +228,10 @@ Item {
         call("GET", "/api/youtube_account", undefined, function (d) {
             if (!ytAuth || !d) return
             ytAccount = d
-            if (d.authorized) { ytAuth = null; loadYoutube(); return }
-            ytAuth = d
-            var p = d.pending
+            var tv = ytAuth.tv, st = tv ? (d.tv || {}) : d
+            if (tv ? st.connected : st.authorized) { ytAuth = null; yt = null; loadYoutube(); return }
+            var p = st.pending || (st.error ? { error: st.error } : null)
+            ytAuth = { tv: tv, pending: p }
             if (p && p.verification_uri && !p.error) {
                 if (!ytAuthQr || ytAuthQr.text !== p.verification_uri)
                     call("GET", "/api/qr?text=" + encodeURIComponent(p.verification_uri), undefined, function (q) {
@@ -241,13 +243,23 @@ Item {
     }
     function ytAccountMenu() {
         var a = ytAccount
-        if (!a || !a.configured) return
-        if (!a.authorized) { ytConnect(); return }
-        openModal("Compte YouTube" + (a.channels !== null ? " · " + a.channels + " abonnements" : ""), [
-            { label: "↻  Relire mes abonnements", ok: function () {
-                call("POST", "/api/youtube_sync", {}, function () { yt = null; loadYoutube() }) } },
-            { label: "✕  Déconnecter le compte", danger: true, ok: function () {
-                call("POST", "/api/youtube_logout", {}, function () { yt = null; loadYtAccount() }) } }])
+        if (!a) return
+        var items = []
+        if (a.configured && !a.authorized)
+            items.push({ label: "+  Connecter mes abonnements", ok: function () { ytConnect(false) } })
+        if (a.authorized) {
+            items.push({ label: "↻  Relire mes abonnements", ok: function () {
+                call("POST", "/api/youtube_sync", {}, function () { yt = null; loadYoutube() }) } })
+        }
+        if (a.tv && !a.tv.unavailable)
+            items.push(a.tv.connected
+                ? { label: "✕  Ne plus synchroniser la progression", danger: true, ok: function () {
+                    call("POST", "/api/youtube_tv_logout", {}, function () { yt = null; loadYtAccount() }) } }
+                : { label: "⟳  Synchroniser la progression", ok: function () { ytConnect(true) } })
+        if (a.authorized)
+            items.push({ label: "✕  Déconnecter les abonnements", danger: true, ok: function () {
+                call("POST", "/api/youtube_logout", {}, function () { yt = null; loadYtAccount() }) } })
+        openModal("Compte YouTube" + (a.channels !== null ? " · " + a.channels + " abonnements" : ""), items)
     }
     // Options sur une vidéo des abonnements : lire, chaîne en favori (une rangée à elle)
     function ytSubOptions(v) {
@@ -554,10 +566,11 @@ Item {
         return [
             { label: "Compte Twitch", value: login ? "Connecté : " + login : "Non connecté",
               hint: login ? "Pas de pub sur les chaînes où tu es abonné" : "Se connecte depuis la télécommande du téléphone" },
-            { label: "Compte YouTube", visible: !!(ytAccount && ytAccount.configured),
+            { label: "Compte YouTube", visible: !!(ytAccount && (ytAccount.configured || (ytAccount.tv && !ytAccount.tv.unavailable))),
               value: ytAccount && ytAccount.authorized
                    ? "Connecté" + (ytAccount.channels !== null ? " · " + ytAccount.channels + " abonnements" : "") : "Non connecté",
-              hint: ytAccount && ytAccount.authorized ? "Rangée « Abonnements » de l'onglet YouTube" : "OK : code à taper sur google.com/device",
+              hint: ytAccount && ytAccount.tv && ytAccount.tv.connected ? "Progression synchronisée avec ton compte (téléphone, ordinateur)"
+                  : "Abonnements, et progression synchronisée avec ton compte",
               ok: function () { ytAccountMenu() } },
             { label: "Lecteur", value: (pendingPlayer || st.player) === "mpv" ? "mpv seul" : "Appli Qt (menu animé)",
               hint: pendingPlayer && pendingPlayer !== st.player ? "OK pour appliquer : le lecteur redémarre" : undefined,
@@ -878,7 +891,7 @@ Item {
         else if (k === "menu" && row.kind === "subs" && row.items[sel]) ytSubOptions(row.items[sel])
         else if (k === "ok" && row.items[sel]) {
             if (row.kind === "chans") ytChannelMenu(row.items[sel])
-            else if (row.kind === "connect") ytConnect()
+            else if (row.kind === "connect") ytConnect(false)
             else if (jfTab) jfChoose(row.items[sel])
             else chooseVideo(row.items[sel])
         }
@@ -1382,7 +1395,7 @@ Item {
                                         thumb: it.thumb || ""
                                         meta: menu.cardMeta(row, it)
                                         glyph: it.connect ? "+" : "▶"
-                                        progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
+                                        progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : (it.percent || 0) / 100)
                                         accent: menu.accent
                                         focused: menu.area === "content" && menu.mRow === r && index === (menu.mSel[row.key] || 0)
                                     }
@@ -1555,7 +1568,10 @@ Item {
             color: menu.pal.sheet
             Column {
                 x: 60; y: 60; spacing: 26; width: 700
-                Text { text: "Connecter mon compte YouTube"; color: "white"; font.pixelSize: 30; font.bold: true }
+                Text {
+                    text: menu.ytAuth && menu.ytAuth.tv ? "Synchroniser la progression YouTube" : "Connecter mon compte YouTube"
+                    color: "white"; font.pixelSize: 30; font.bold: true
+                }
                 Text {
                     width: parent.width; wrapMode: Text.WordWrap; color: "white"; font.pixelSize: 25
                     text: ytAuthBox.waiting ? "Sur ton téléphone, ouvre google.com/device et tape :"
@@ -1569,8 +1585,10 @@ Item {
                 }
                 Text {
                     width: parent.width; wrapMode: Text.WordWrap; color: "#b4afc2"; font.pixelSize: 21
-                    text: "Google prévient que l'appli n'est pas vérifiée : « Paramètres avancés », puis « Accéder à Stream Box ». "
-                        + "Lecture seule. La TV se met à jour toute seule ; Retour pour fermer."
+                    text: (menu.ytAuth && menu.ytAuth.tv
+                        ? "Google affiche « YouTube on TV » : la box se présente comme l'appli YouTube des TV, pour lire et renvoyer la progression. "
+                        : "Google prévient que l'appli n'est pas vérifiée : « Paramètres avancés », puis « Accéder à Stream Box ». Lecture seule. ")
+                        + "La TV se met à jour toute seule ; Retour pour fermer."
                 }
             }
             QrCode {

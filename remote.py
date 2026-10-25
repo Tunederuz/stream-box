@@ -972,33 +972,69 @@ def yt_feed(channel_id):
     return videos
 
 
-def yt_title(video_id):
-    """Titre d'une vidéo pour l'écran de chargement : API Google si le compte est connecté (1 unité), sinon oEmbed"""
+def yt_meta(video_id):
+    """(titre, durée) d'une vidéo : API Google si le compte est connecté (1 unité), sinon oEmbed (titre seul)"""
     try:
         token = yt_token()
         if token:
-            items = yt_api("videos", token, part="snippet", id=video_id).get("items") or []
+            items = yt_api("videos", token, part="snippet,contentDetails", id=video_id).get("items") or []
             if items:
-                return items[0]["snippet"]["title"]
+                return items[0]["snippet"]["title"], iso_seconds(items[0]["contentDetails"].get("duration"))
     except (OSError, ValueError, KeyError):
         pass
     try:
         url = "https://www.youtube.com/oembed?format=json&url=" + urllib.parse.quote(f"https://www.youtube.com/watch?v={video_id}")
         with urllib.request.urlopen(url, timeout=3) as r:
-            return json.load(r).get("title")
+            return json.load(r).get("title"), None
+    except (OSError, ValueError):
+        return None, None
+
+
+def with_progress(videos):
+    """Position et « vu » d'après l'historique de la box ; vidéo vue ailleurs : pourcentage du compte YouTube (percent,
+    indicatif : YouTube le met à jour avec retard)"""
+    known = {e["key"]: e for e in read_history()}
+    remote = yt_tv_progress()
+    out = []
+    for v in videos:
+        e = known.get(f"youtube:{v['id']}") or {}
+        seconds = v.get("seconds") or e.get("duration")
+        item = {**v, "position": e.get("position"), "seconds": seconds, "finished": bool(e.get("finished"))}
+        pct = remote.get(v["id"])
+        if not e and pct:
+            item.update(percent=pct, finished=pct >= 95,
+                        position=round(pct / 100 * seconds) if seconds else None)
+        out.append(item)
+    return out
+
+
+# Progression du compte YouTube par l'accès « appli TV » (cast/youtube_tv.js, 127.0.0.1:8091) : la box garde ses
+# positions (reprise exacte), les renvoie à YouTube (le téléphone reprend là où la TV s'arrête), et montre le
+# pourcentage du compte pour les vidéos vues ailleurs.
+YT_TV = "http://127.0.0.1:8091"
+YT_TV_PUSH = 30   # secondes entre deux envois de la position
+yt_tv_cache = {"at": 0.0, "data": {}}
+
+
+def yt_tv(path, body=None, timeout=10):
+    req = urllib.request.Request(YT_TV + path, data=None if body is None else json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.load(r)
     except (OSError, ValueError):
         return None
 
 
-def with_progress(videos):
-    """Position et « vu » d'après l'historique de la box"""
-    known = {e["key"]: e for e in read_history()}
-    out = []
-    for v in videos:
-        e = known.get(f"youtube:{v['id']}") or {}
-        out.append({**v, "position": e.get("position"), "seconds": v.get("seconds") or e.get("duration"),
-                    "finished": bool(e.get("finished"))})
-    return out
+def yt_tv_progress():
+    if time.time() - yt_tv_cache["at"] > 60:
+        yt_tv_cache.update(at=time.time(), data=yt_tv("/progress", timeout=15) or {})
+    return yt_tv_cache["data"]
+
+
+def yt_tv_report(video_id, position, final=False):
+    threading.Thread(target=yt_tv, args=("/report", {"id": video_id, "position": position, "final": final}),
+                     daemon=True).start()
 
 
 def youtube_home():
@@ -1348,7 +1384,13 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
              "thumb": entry.get("thumb") or thumb or (f"https://i.ytimg.com/vi/{ident}/mqdefault.jpg" if kind == "youtube" else None)}
     position, updated, duration = entry.get("position", 0), entry.get("updated", 0), entry.get("duration", 0)
     if kind == "youtube" and not video["title"]:   # vidéo castée depuis l'appli YouTube : seul son identifiant est connu
-        video["title"] = yt_title(ident)
+        video["title"], duration = yt_meta(ident)
+        duration = duration or 0
+    if kind == "youtube" and position < RESUME_MIN and not from_start and at is None:
+        pct = yt_tv_progress().get(ident) or 0   # vue ailleurs (téléphone…) : reprise au pourcentage du compte
+        if 3 <= pct < 95:
+            duration = duration or yt_meta(ident)[1] or 0
+            position = int(pct / 100 * duration)
     try:   # Twitch : titre, vignette, durée et position enregistrée sur le compte
         if kind == "twitch-vod":
             v = twitch_gql("query($id:ID!){video(id:$id){title lengthSeconds previewThumbnailURL(width:320,height:180) "
@@ -1444,12 +1486,17 @@ def history_loop():
                     now_playing["pushed"] = time.time()
                 except (OSError, ValueError, KeyError):
                     pass
+            if video["kind"] == "youtube" and time.time() - video["pushed"] >= YT_TV_PUSH:
+                yt_tv_report(video["ident"], position)
+                now_playing["pushed"] = time.time()
         elif not playing:   # vidéo terminée ou remplacée : dernière position envoyée à Twitch
             if video["kind"] == "twitch-vod" and video.get("position"):
                 try:
                     twitch_save_position(video["ident"], video["position"])
                 except (OSError, ValueError, KeyError):
                     pass
+            if video["kind"] == "youtube" and video.get("position"):
+                yt_tv_report(video["ident"], video["position"], final=True)
             if now_playing.get("key") == video["key"]:
                 now_playing.clear()
 
@@ -2033,6 +2080,7 @@ def yt_account_status():
     if out["authorized"] and subs.get("channels") is not None:
         out["channels"], out["synced"] = len(subs["channels"]), int(subs.get("at") or 0)
     out["units_today"] = yt_units["used"] if yt_units["day"] == yt_quota_day() else 0
+    out["tv"] = yt_tv("/status", timeout=3) or {"unavailable": True}   # progression (accès « appli TV »)
     return out
 
 
@@ -2412,6 +2460,13 @@ def action(name, body):
         yt_login()
     elif name == "youtube_logout":
         yt_logout()
+    elif name == "youtube_tv_login":
+        d = yt_tv("/login", {}, timeout=15)
+        if not d or d.get("error"):
+            raise ValueError(f"Connexion impossible : {(d or {}).get('error') or 'service cast arrêté'}")
+    elif name == "youtube_tv_logout":
+        yt_tv("/logout", {})
+        yt_tv_cache.update(at=0.0, data={})
     elif name == "youtube_sync":
         yt_reset_subs()
     elif name == "poweroff":

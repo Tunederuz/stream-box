@@ -735,3 +735,20 @@ fin de vidéo → suivante de la file ; « Arrêter la diffusion » → retour a
 (mkosi.prepare.chroot) et update.sh (si le fichier de versions a changé). Titre de l'écran de chargement : l'appli ne
 donne que l'identifiant, `yt_title` le demande à l'API Google (compte connecté, 1 unité) ou à l'oEmbed public.
 Testé : découverte, lecture, pause, avance, volume, file d'attente, pause à la télécommande, arrêt.
+
+### Progression YouTube du compte (mixte)
+
+L'API officielle ne donne ni historique ni positions : `cast/youtube_tv.js` (même processus que `cast.js`) se connecte
+comme l'appli YouTube des TV (youtubei.js, client TV, code sur google.com/device, Google affiche « YouTube on TV » ;
+jeton `~/.config/stream-box/youtube-tv-token.json`), serveur local 127.0.0.1:8091 (`/status`, `/login`, `/logout`,
+`/progress`, `/report`). Fonctionnement mixte, essayé avant de choisir :
+- la box garde ses positions (reprise exacte sur la TV) et les renvoie à YouTube (`history_loop` : toutes les
+  `YT_TV_PUSH` = 30 s, et à l'arrêt `final`) comme un lecteur : `/player` (URL de suivi, cpn), ping `playback`, puis
+  `watchtime` (segment st→et, temps réel rt). Vérifié : le téléphone reprend à la seconde près ;
+- pour une vidéo vue ailleurs (rien dans l'historique de la box), le pourcentage du compte (`percentDurationWatched`
+  des cartes de FEhistory et FEsubscriptions, gardé 10 min) donne la barre de progression (`percent`) et la reprise
+  (`play()` : pourcentage × durée, durée par l'API Google). YouTube ne met ce pourcentage à jour qu'avec 15 à 20 min de
+  retard, et seulement là : aucun autre client (web, Android, iOS, /next) ne donne la position exacte avec ce jeton.
+`/api/youtube_account` → `tv` {connected, pending, error} ; `POST /api/youtube_tv_login|youtube_tv_logout`. TV :
+Système → Compte YouTube → « Synchroniser la progression » (fenêtre du code, `ytAuth.tv`). Jellyfin : le serveur reste
+la référence ; rediffusions Twitch : positions déjà renvoyées au compte Twitch (`twitch_save_position`).
