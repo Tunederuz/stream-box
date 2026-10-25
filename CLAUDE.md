@@ -492,6 +492,8 @@ unités par jour. `/api/youtube` sert le dernier fil (le tout premier, juste apr
 tant que la box n'est pas autorisée → fenêtre du code et QR code (`ytAuth`, relue toutes les 3 s) ; ligne « Compte
 YouTube » du menu Système (relire les abonnements, déconnecter). Page : section « Compte YouTube » des Réglages
 (création de l'appli, code, état). tv_menu.lua affiche la rangée, sans connexion.
+Favoris (liste `youtube.json`, une rangée par chaîne) : Options sur une vidéo des abonnements → « Ajouter aux favoris »
+(chaîne prise dans `youtube-subs.json`, sans requête à YouTube), « Voir ses dernières vidéos », « Lire la vidéo ».
 Page : bloc YouTube de l'onglet Télécommande (recherche, une puce par chaîne) et « Chaînes YouTube » dans Réglages.
 TV (onglet YouTube du menu QML) : ligne de recherche → clavier à l'écran (grille de 10 de large, ↑↓←→ et OK, Retour
 ferme), puis les chaînes trouvées (photos rondes ; OK : « Voir ses dernières vidéos », rangée `preview` juste dessous, ou

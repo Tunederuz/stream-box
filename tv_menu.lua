@@ -815,7 +815,7 @@ local function draw_media(out, imgs, id)
     elseif d.error then subtitle = (id == "youtube" and "YouTube" or "Jellyfin") .. " injoignable pour l'instant"
     elseif id == "youtube" then
         subtitle = #rows > 0 and (#rows .. (#rows == 1 and " chaîne" or " chaînes") .. " · recherche depuis la télécommande web")
-            or "Ajoute des chaînes depuis la télécommande web (Réglages → Chaînes YouTube)"
+            or "Ajoute des favoris depuis la télécommande web (Réglages → Favoris YouTube)"
     else
         subtitle = d.configured and ((d.server or "Jellyfin") .. " · recherche depuis la télécommande web")
             or "Jellyfin n'est pas associé à la box (« Lire sur… » depuis l'appli Jellyfin)"

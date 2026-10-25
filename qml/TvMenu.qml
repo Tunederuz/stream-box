@@ -203,12 +203,12 @@ Item {
     function ytChannelMenu(c) {
         openModal(c.name + (c.followers ? " · " + Fmt.big(c.followers) + " abonnés" : ""), [
             { label: "▶  Voir ses dernières vidéos", ok: function () { ytOpenChannel(c) } },
-            { label: c.saved ? "✕  Retirer de mes chaînes" : "+  Ajouter à mes chaînes", ok: function () { ytToggleSaved(c) } }])
+            { label: c.saved ? "✕  Retirer des favoris" : "★  Ajouter aux favoris", ok: function () { ytToggleSaved(c) } }])
     }
     function ytOpenChannel(c) {
         ytPreview = { id: c.id, name: c.name, avatar: c.avatar, videos: null }
         var s = Object.assign({}, ytSel); s["preview"] = 0; ytSel = s
-        ytRow = 2   // recherche, chaînes, puis cette rangée
+        ytRow = Math.max(1, ytRows().findIndex(function (r) { return r.kind === "preview" }))   // juste sous les chaînes trouvées
         call("GET", "/api/youtube_channel?id=" + encodeURIComponent(c.id), undefined, function (d) {
             if (ytPreview && ytPreview.id === c.id) ytPreview = Object.assign({}, ytPreview, { videos: d ? d.videos : [] })
         })
@@ -248,6 +248,15 @@ Item {
                 call("POST", "/api/youtube_sync", {}, function () { yt = null; loadYoutube() }) } },
             { label: "✕  Déconnecter le compte", danger: true, ok: function () {
                 call("POST", "/api/youtube_logout", {}, function () { yt = null; loadYtAccount() }) } }])
+    }
+    // Options sur une vidéo des abonnements : lire, chaîne en favori (une rangée à elle)
+    function ytSubOptions(v) {
+        var fav = (yt ? yt.channels : []).some(function (c) { return c.id === v.channel_id })
+        var c = { id: v.channel_id, name: v.channel, avatar: v.avatar, saved: fav }
+        openModal(v.channel, [
+            { label: "▶  Lire la vidéo", ok: function () { chooseVideo(v) } },
+            { label: "▶  Voir ses dernières vidéos", ok: function () { ytOpenChannel(c) } },
+            { label: fav ? "✕  Retirer des favoris" : "★  Ajouter aux favoris", ok: function () { ytToggleSaved(c) } }])
     }
     function ytToggleSaved(c) {
         call("POST", "/api/youtube_channels", { action: c.saved ? "remove" : "add", channel: c.id }, function (d) {
@@ -866,6 +875,7 @@ Item {
         else if (k === "down") setRow(Math.min(rows.length - 1, r + 1))
         else if (k === "left") { if (sel === 0) area = "rail"; else { s[row.key] = sel - 1; setMediaSel(s) } }
         else if (k === "right") { s[row.key] = Math.min(row.items.length - 1, sel + 1); setMediaSel(s) }
+        else if (k === "menu" && row.kind === "subs" && row.items[sel]) ytSubOptions(row.items[sel])
         else if (k === "ok" && row.items[sel]) {
             if (row.kind === "chans") ytChannelMenu(row.items[sel])
             else if (row.kind === "connect") ytConnect()
@@ -1265,7 +1275,7 @@ Item {
                 visible: menu.jfTab ? !!menu.jf && !menu.jf.configured && !menu.jf.error
                                     : !!menu.yt && menu.yt.channels.length === 0 && !menu.ytResults && !(menu.yt.subs && menu.yt.subs.configured)
                 y: 320; text: menu.jfTab ? "Jellyfin n'est pas associé à la box : dans l'appli Jellyfin, « Lire sur… » → la box."
-                                         : "Ajoute des chaînes YouTube depuis la télécommande web (Réglages → Chaînes YouTube)."
+                                         : "Ajoute des chaînes favorites : Options sur une vidéo, ou recherche."
                 color: "#b4afc2"; font.pixelSize: 27
             }
             Item {   // découpe : ce qui défile s'arrête au bord de la zone (ni sur le titre, ni sur l'aide en bas)
@@ -1337,7 +1347,7 @@ Item {
                                         }
                                         Text {
                                             y: 242; width: parent.width; horizontalAlignment: Text.AlignHCenter
-                                            text: (c.followers ? Fmt.big(c.followers) + " abonnés" : "") + (c.saved ? (c.followers ? " · " : "") + "✓ suivie" : "")
+                                            text: (c.followers ? Fmt.big(c.followers) + " abonnés" : "") + (c.saved ? (c.followers ? " · " : "") + "★ favorite" : "")
                                             color: c.saved ? "#ff6b7f" : "#b4afc2"; font.pixelSize: 20
                                         }
                                     }

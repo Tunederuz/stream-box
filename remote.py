@@ -925,7 +925,10 @@ def edit_yt_channels(action, raw="", delta=0):
     with yt_lock:
         chans = yt_channels()
         if action == "add":
-            c = yt_resolve(raw)
+            # Chaîne des abonnements (id UC…) : déjà connue, sans requête à YouTube
+            c = next((dict(x) for x in read_json_file(YT_SUBS_FILE).get("channels") or [] if x["id"] == raw), None) \
+                or yt_resolve(raw)
+            c.setdefault("handle", "")
             if any(x["id"] == c["id"] for x in chans):
                 raise ValueError(f"{c['name']} est déjà dans la liste.")
             chans.append(c)
