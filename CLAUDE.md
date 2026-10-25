@@ -846,8 +846,8 @@ onglets (restaurer une sauvegarde ; sections Wi-Fi et streamers des Réglages d�
 (`backup.restore`) pose aussi la marque.
 
 ### Curseur
-cage a un thème de curseur invisible (`cursors/blank`, `XCURSOR_PATH` / `XCURSOR_THEME` donnés par la session : image
-et install.sh) : son pointeur n'apparaît plus pendant les transitions sans fenêtre. start.sh retire ces variables pour
+cage a un thème de curseur invisible (`cursors/blank`, lien `cursors/default` : wlroots ignore `XCURSOR_THEME` et
+charge toujours le thème « default », cherché d'abord dans le `XCURSOR_PATH` donné par la session : image et install.sh) : son pointeur n'apparaît plus pendant les transitions sans fenêtre. start.sh retire ces variables pour
 les applis (une vraie souris garde son pointeur, masqué au bout de 4 s).
 
 Assistant des touches : Retour sur la télécommande virtuelle de la page l'annule sans rien enregistrer (`learn_cancel`,

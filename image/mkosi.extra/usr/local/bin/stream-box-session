@@ -2,7 +2,8 @@
 # Stream Box : session de la box, lancée par greetd. Sortie de cage et de tout ce qu'il lance dans le journal
 # (journalctl -t stream-box-session). Si cage s'arrête en moins de 20 s (pas d'accélération graphique utilisable avec
 # cette carte : pilote manquant…), nouvel essai avec le rendu logiciel de wlroots, plus lent mais affiché.
-# Curseur de cage invisible (thème cursors/blank du dépôt ; start.sh le retire pour les applis)
+# Curseur de cage invisible (thème cursors/blank du dépôt, aussi nommé « default » : wlroots ignore XCURSOR_THEME et
+# charge toujours « default », cherché d'abord dans XCURSOR_PATH ; start.sh retire ces variables pour les applis)
 session() { XCURSOR_PATH=/home/media/stream-box/cursors XCURSOR_THEME=blank \
               systemd-cat --identifier=stream-box-session -- cage -s -- /home/media/stream-box/start.sh; }
 start=$(date +%s)
