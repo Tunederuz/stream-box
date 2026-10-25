@@ -17,6 +17,12 @@ python3 "$DIR/audio.py" watch &
 # Touches lues à la source (télécommandes, manettes, claviers : voir input.py) ; sans droits sur /dev/input, il
 # s'arrête et les touches restent à l'appli Qt et à mpv
 python3 "$DIR/input.py" &
+# Récepteur YouTube Cast (cast/cast.js : la box dans le bouton Caster de l'appli YouTube), si ses modules sont
+# installés (npm install dans cast/)
+if [ -d "$DIR/cast/node_modules" ]; then
+  NODE="$HOME/.local/share/media-venv/bin/node"; [ -x "$NODE" ] || NODE=node
+  "$NODE" "$DIR/cast/cast.js" &
+fi
 
 # Lecteur permanent (mpv, ou l'appli Qt qui l'embarque) : voir player.sh
 exec "$DIR/player.sh"

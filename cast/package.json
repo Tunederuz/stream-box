@@ -1,0 +1,9 @@
+{
+  "name": "stream-box-cast",
+  "private": true,
+  "type": "module",
+  "description": "Stream Box : la box apparaît comme une TV dans l'appli YouTube (bouton Caster)",
+  "dependencies": {
+    "yt-cast-receiver": "2.1.0"
+  }
+}

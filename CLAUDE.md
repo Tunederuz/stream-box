@@ -127,7 +127,8 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
 - **Retour en arrière dans le direct** : `on_load` garde `LIVE_BACK` (400 MiB ≈ 7-8 min en 1080p60) avec
   `demuxer-seekable-cache=yes`. `live_window()` lit `demuxer-cache-state.seekable-ranges`. En différé ou en pause,
   `set_live_buffer` passe le tampon avant à 150 MiB (sinon mpv cesse de lire le flux et le retard fond) ; retour au
-  direct → 750 KiB. Télécommande Bluetooth : ←/→ ±10 s, Retour = direct, Retour ×2 (2 s) = dernière vidéo de l'historique reprise à sa position (`POST /api/resume_last`). Page : −30 s / +30 s / Direct
+  direct → 750 KiB. Télécommande Bluetooth : ←/→ ±10 s, Retour = direct, Retour ×2 (2 s) = dernière vidéo de l'historique reprise à sa position (`POST /api/resume_last`) ; sur l'écran d'accueil,
+  le plus récent du dernier stream (`~/.local/state/stream-box/channel_at`, écrit au début et à la fin d'un stream) et de cette vidéo (`updated`). Page : −30 s / +30 s / Direct
   (`POST /api/live_seek {delta|"live"}` → script-message `streambox-live-seek`), retard dans `/api/state` (`delay`).
   La barre de lecture affiche « −0:42 » ou « ● EN DIRECT ».
 - **Notification de live** : `remote.py` repère les streamers qui viennent de passer en live (pas au premier relevé)
@@ -721,3 +722,13 @@ appui court. input.py mesure l'appui (valeurs 1 / 0 de evdev, action `power_menu
 stream-box.lua lie power en « complex » (down / up de mpv) et ui.py envoie keydown / keyup pour ces touches.
 La fenêtre s'affiche seule sur la vidéo, sans le menu derrière (`powerOnly` / `power_only`) ; Retour ferme tout.
 
+
+### YouTube Cast (prototype)
+
+`cast/cast.js` (Node, `yt-cast-receiver` 2.1.0, protocole non officiel) : la box apparaît comme « Stream Box » dans le
+bouton Caster de l'appli YouTube (découverte DIAL / SSDP sur le réseau local, port TCP 3000, UDP 1900 ; pare-feu à
+ouvrir s'il y en a un). Vidéo castée → `POST /api/play` {url, start} (position imposée par l'appli, `play(at=)`) ;
+pause, reprise, avance, volume → IPC mpv ; état changé à la télécommande renvoyé à l'appli (`notifyExternalStateChange`),
+fin de vidéo → suivante de la file ; « Arrêter la diffusion » → retour au stream (`/api/twitch`). Appairages dans
+`~/.config/stream-box/cast-receiver.json`. Lancé par start.sh si `cast/node_modules` existe (`npm install --omit=dev`
+dans `cast/`, avec le node de media-venv ou du système).

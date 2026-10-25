@@ -149,6 +149,9 @@ local function start_server(name)
 end
 
 local function set_mode(m)
+    -- Fin d'un stream (ou début, voir start_channel) : heure gardée pour Retour ×2 sur l'écran d'accueil, qui reprend
+    -- le plus récent du dernier stream et de la dernière vidéo (remote.py, resume_last)
+    if mode == "twitch" or m == "twitch" then write_state("channel_at", tostring(os.time())) end
     mode = m
     mp.set_property_native("user-data/streambox/mode", m)
     if back_timer then
@@ -952,10 +955,12 @@ local function power_key()
                  "http://127.0.0.1:8080/api/poweroff" } }, function() end)
 end
 
--- Retour deux fois pendant un stream : dernière vidéo de l'historique, reprise là où elle en était (remote.py)
+-- Retour deux fois pendant un stream : dernière vidéo de l'historique, reprise là où elle en était (remote.py) ;
+-- sur l'écran d'accueil : le plus récent du dernier stream et de la dernière vidéo
 local function resume_last()
     mp.command_native_async({ name = "subprocess", playback_only = false, capture_stdout = true,
-        args = { "curl", "-s", "-m", "20", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}",
+        args = { "curl", "-s", "-m", "20", "-X", "POST", "-H", "Content-Type: application/json",
+                 "-d", mode == "home" and '{"or_stream":true}' or "{}",
                  "http://127.0.0.1:8080/api/resume_last" } }, function(_, r)
         local out = r and r.stdout or ""
         if not out:find('"ok"') then
@@ -1046,7 +1051,8 @@ local function on_key(key)
             else
                 back_pressed = mp.get_time()
                 live_seek("live")
-                mp.osd_message("Retour encore une fois pour reprendre la dernière vidéo", 2)
+                mp.osd_message(mode == "home" and "Retour encore une fois pour reprendre"
+                    or "Retour encore une fois pour reprendre la dernière vidéo", 2)
             end
         elseif key == "menu" then
             toggle_chat()

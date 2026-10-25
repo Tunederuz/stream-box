@@ -3,3 +3,4 @@ __pycache__/
 .incoming-*
 CLAUDE.local.md
 streamers.txt
+cast/node_modules/

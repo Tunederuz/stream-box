@@ -1317,8 +1317,9 @@ def fetch_storyboard(url, ident):
         pass
 
 
-def play(url, from_start=False, title=None, thumb=None):
-    """title, thumb : connus de la page ou du menu qui lance la vidéo (écran de chargement, historique)"""
+def play(url, from_start=False, title=None, thumb=None, at=None):
+    """title, thumb : connus de la page ou du menu qui lance la vidéo (écran de chargement, historique) ;
+    at : position imposée (cast depuis l'appli YouTube), sinon reprise d'après l'historique"""
     if re.fullmatch(r"jellyfin:[0-9a-f]{32}", url or ""):   # depuis l'historique
         return jellyfin_play(url.split(":")[1], from_start)
     if not url or not re.match(r"https?://", url):
@@ -1346,6 +1347,8 @@ def play(url, from_start=False, title=None, thumb=None):
     except (OSError, ValueError, KeyError):
         pass   # Twitch injoignable : on se contente de l'historique de la box
     start = 0 if from_start or position < RESUME_MIN or finished(position, duration) else int(position)
+    if at is not None:
+        start = max(0, int(at))
     now_playing.clear()
     now_playing.update(video, pushed=0.0, position=start)
     mpv(["script-message", "streambox-play", url, str(start), "", video.get("thumb") or "", video.get("title") or ""])
@@ -2287,14 +2290,27 @@ def action(name, body):
     elif name == "corner":
         mpv(["script-message", "streambox-cycle-corner"])
     elif name == "resume_last":
-        # Retour deux fois pendant un stream (stream-box.lua) : dernière vidéo de l'historique, à sa position
+        # Retour deux fois (stream-box.lua) : pendant un stream, dernière vidéo de l'historique, à sa position ; sur
+        # l'écran d'accueil (or_stream), le plus récent du dernier stream et de cette vidéo
         entries = read_history()
-        if not entries:
+        state = os.path.expanduser("~/.local/state/stream-box/")
+        try:
+            with open(state + "channel") as f:
+                last_channel = f.read().strip()
+            with open(state + "channel_at") as f:
+                channel_at = float(f.read().strip() or 0)
+        except (OSError, ValueError):
+            last_channel, channel_at = "", 0
+        if body.get("or_stream") and last_channel and (not entries or channel_at > entries[0].get("updated", 0)):
+            mpv(["script-message", "streambox-channel", last_channel])
+        elif entries:
+            play(entries[0]["url"], title=entries[0].get("title"), thumb=entries[0].get("thumb"))
+        else:
             raise ValueError("Pas encore de vidéo dans l'historique")
-        play(entries[0]["url"], title=entries[0].get("title"), thumb=entries[0].get("thumb"))
     elif name == "play":
         play(find_url(str(body.get("url", ""))), bool(body.get("from_start")),
-             str(body.get("title") or "")[:200] or None, str(body.get("thumb") or "")[:500] or None)
+             str(body.get("title") or "")[:200] or None, str(body.get("thumb") or "")[:500] or None,
+             body.get("start") if isinstance(body.get("start"), (int, float)) else None)
     elif name == "history":
         edit_history(str(body.get("action", "")), str(body.get("key", "")))
     elif name == "twitch":
