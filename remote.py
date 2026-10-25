@@ -1015,7 +1015,8 @@ def with_progress(videos, known=None):
         seconds = v.get("seconds") or e.get("duration")
         item = {**v, "position": e.get("position"), "seconds": seconds, "finished": bool(e.get("finished"))}
         pct = remote.get(v["id"])
-        if not e and pct:
+        mine = 100 * e["position"] / e["duration"] if e.get("duration") else 0
+        if pct and (not e or (pct > mine + 2 and not e.get("finished"))):   # vue plus loin ailleurs : YouTube gagne
             item.update(percent=pct, finished=pct >= 95,
                         position=round(pct / 100 * seconds) if seconds else None)
         out.append(item)
@@ -1420,9 +1421,10 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
     if kind == "youtube" and not video["title"]:   # vidéo castée depuis l'appli YouTube : seul son identifiant est connu
         video["title"], duration = yt_meta(ident)
         duration = duration or 0
-    if kind == "youtube" and position < RESUME_MIN and not from_start and at is None:
-        pct = yt_tv_progress().get(ident) or 0   # vue ailleurs (téléphone…) : reprise au pourcentage du compte
-        if 3 <= pct < 95:
+    if kind == "youtube" and not from_start and at is None:
+        # Vue plus loin ailleurs (téléphone…) : reprise au pourcentage du compte, s'il dépasse la position de la box
+        pct = yt_tv_progress().get(ident) or 0
+        if 3 <= pct and (not duration or pct / 100 * duration > position + 30):
             duration = duration or yt_meta(ident)[1] or 0
             position = int(pct / 100 * duration)
     try:   # Twitch : titre, vignette, durée et position enregistrée sur le compte

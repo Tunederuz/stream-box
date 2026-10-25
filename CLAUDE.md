@@ -750,10 +750,18 @@ jeton `~/.config/stream-box/youtube-tv-token.json`), serveur local 127.0.0.1:809
 - la box garde ses positions (reprise exacte sur la TV) et les renvoie à YouTube (`history_loop` : toutes les
   `YT_TV_PUSH` = 30 s, et à l'arrêt `final`) comme un lecteur : `/player` (URL de suivi, cpn), ping `playback`, puis
   `watchtime` (segment st→et, temps réel rt). Vérifié : le téléphone reprend à la seconde près ;
-- pour une vidéo vue ailleurs (rien dans l'historique de la box), le pourcentage du compte (`percentDurationWatched`
-  des cartes de FEhistory et FEsubscriptions, gardé 10 min) donne la barre de progression (`percent`) et la reprise
+- pour une vidéo vue ailleurs, ou vue plus loin ailleurs que sur la box (la position la plus avancée gagne), le
+  pourcentage du compte (`percentDurationWatched` des cartes de FEhistory, 8 pages ≈ 120 vidéos, et de FEsubscriptions,
+  2 pages ; gardé 10 min, relu seulement quand l'onglet YouTube le demande) donne la barre de progression (`percent`) et la reprise
   (`play()` : pourcentage × durée, durée par l'API Google). YouTube ne met ce pourcentage à jour qu'avec 15 à 20 min de
   retard, et seulement là : aucun autre client (web, Android, iOS, /next) ne donne la position exacte avec ce jeton.
 `/api/youtube_account` → `tv` {connected, pending, error} ; `POST /api/youtube_tv_login|youtube_tv_logout`. TV :
 Système → Compte YouTube → « Synchroniser la progression » (fenêtre du code, `ytAuth.tv`). Jellyfin : le serveur reste
 la référence ; rediffusions Twitch : positions déjà renvoyées au compte Twitch (`twitch_save_position`).
+
+### Chargements évités (menu, page)
+
+Menu QML : `/api/state` toutes les 4 s, mais `st` remplacé seulement si la réponse change (`stJson`) ; onglets cachés
+sans calcul (`rows: visible ? … : []` pour Rediffusions, YouTube/Jellyfin, Réglages, Système, tuiles d'état) ; liste
+des suivis calculée une fois (`followItems`). Page : `/api/state` en pause quand la page est en arrière-plan ; sections
+des Réglages (chaînes suivies, compte YouTube, Wi-Fi) chargées à l'ouverture de l'onglet (`settingsLoaders`).

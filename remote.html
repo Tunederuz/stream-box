@@ -754,7 +754,7 @@ async function refresh() {
   } catch (e) {
     showError(e.message || "Box injoignable");
   }
-  refreshTimer = setTimeout(refresh, 3000);
+  if (!document.hidden) refreshTimer = setTimeout(refresh, 3000);   // page en arrière-plan : reprise par visibilitychange
 }
 
 async function send(action, body = {}) {
@@ -860,12 +860,13 @@ async function editStreamers(action, login, delta = 0) {
   renderManage();
 }
 
+var settingsLoaders = [];   // sections des Réglages chargées seulement quand l'onglet s'affiche (enregistrées plus bas)
 function showTab(name) {
   for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === name));
   $("tab-remote").hidden = name !== "remote";
   $("tab-settings").hidden = name !== "settings";
   try { localStorage.setItem("tab", name); } catch (e) { /* stockage indisponible : on oublie l'onglet */ }
-  if (name === "settings") { renderManage(); if (typeof refreshAudio === "function") refreshAudio(); if (typeof refreshHealth === "function") refreshHealth(); if (typeof loadYoutube === "function") loadYoutube(); }
+  if (name === "settings") { renderManage(); if (typeof refreshAudio === "function") refreshAudio(); if (typeof refreshHealth === "function") refreshHealth(); if (typeof loadYoutube === "function") loadYoutube(); settingsLoaders.forEach((f) => f()); }
   if (typeof previewTick === "function") previewTick();
 }
 document.querySelectorAll(".tabs button").forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
@@ -1131,7 +1132,8 @@ $("app-save").onclick = async () => {
 $("follows-login").onclick = () => followsAction("follows_login");
 $("follows-logout").onclick = () => { if (confirm("Retirer l'autorisation des chaînes suivies ?")) followsAction("follows_logout"); };
 $("app-change").onclick = () => { followsChanging = true; refreshFollows(); };
-refreshFollows();
+settingsLoaders.push(refreshFollows);
+if (!$("tab-settings").hidden) refreshFollows();
 
 // Compte YouTube : appli Google, autorisation par code, état
 let ytaccTimer = null, ytaccChanging = false;
@@ -1185,7 +1187,8 @@ $("ytacc-login").onclick = () => ytaccAction("youtube_login");
 $("ytacc-sync").onclick = () => ytaccAction("youtube_sync");
 $("ytacc-logout").onclick = () => { if (confirm("Déconnecter le compte YouTube ?")) ytaccAction("youtube_logout"); };
 $("ytapp-change").onclick = () => { ytaccChanging = true; refreshYtAccount(); };
-refreshYtAccount();
+settingsLoaders.push(refreshYtAccount);
+if (!$("tab-settings").hidden) refreshYtAccount();
 
 // YouTube : recherche (vidéos et chaînes), gestion de la liste des chaînes (Réglages). Les dernières vidéos des chaînes
 // se parcourent sur la TV
@@ -1206,7 +1209,7 @@ function renderYoutubeManage() {
   $("yt-manage-list").replaceChildren(...chans.map((c, i) => {
     const row = Object.assign(document.createElement("div"), { className: "manage-row" });
     const pic = Object.assign(document.createElement(c.avatar ? "img" : "span"), { className: "avatar" });
-    if (c.avatar) Object.assign(pic, { src: c.avatar, alt: "" }); else pic.textContent = c.name.charAt(0).toUpperCase();
+    if (c.avatar) Object.assign(pic, { src: c.avatar, alt: "", loading: "lazy" }); else pic.textContent = c.name.charAt(0).toUpperCase();
     row.append(Object.assign(document.createElement("span"), { className: "rank", textContent: i + 1 }), pic,
       Object.assign(document.createElement("span"), { className: "name", textContent: c.name }),
       btn("▲", `Monter ${c.name}`, () => editYoutube("move", c.id, -1), i === 0),
@@ -1287,7 +1290,8 @@ $("wifi-connect").onclick = async () => {
   }
   setTimeout(refreshWifi, 4000);
 };
-refreshWifi();
+settingsLoaders.push(refreshWifi);
+if (!$("tab-settings").hidden) refreshWifi();
 if (onSetupHotspot) {
   showTab("settings");
   $("wifi").scrollIntoView();

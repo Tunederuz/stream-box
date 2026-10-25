@@ -132,10 +132,12 @@ Item {
         if (body !== undefined) x.setRequestHeader("Content-Type", "application/json")
         x.send(body !== undefined ? JSON.stringify(body) : null)
     }
+    property string stJson: ""
     function refresh() {
         call("GET", "/api/state", undefined, function (d) {
             if (!d || !d.streamers) return
-            st = d
+            var j = JSON.stringify(d)
+            if (j !== stJson) { stJson = j; st = d }   // même état : rien à recalculer
             if (startFocus) {   // à l'ouverture, avant toute touche : onglet du média en cours
                 liveSel = Math.max(0, d.streamers.indexOf(d.channel))
                 var t = mediaTab(d)
@@ -467,10 +469,9 @@ Item {
         if (addToList) items.push({ label: "+  Ajouter à ma liste", ok: function () { act("streamers", { action: "add", login: name }) } })
         openModal(name, items)
     }
-    function followList() {
-        if (!follows || !follows.authorized) return []
-        return (follows.live || []).concat(follows.offline || [])
-    }
+    // Suivis : en live puis hors ligne, calculée une fois (et pas par carte)
+    readonly property var followItems: !follows || !follows.authorized ? [] : (follows.live || []).concat(follows.offline || [])
+    function followList() { return followItems }
     function inList(name) { return (st.streamers || []).indexOf(name) >= 0 }
     function replayRows() {
         var rows = [{ kind: "chips", items: st.streamers || [] }]
@@ -1161,7 +1162,7 @@ Item {
                     y: 15; x: 40; width: 1460; height: 4 * 176 + 60
                     cellWidth: 356; cellHeight: 176
                     interactive: false; clip: false; topMargin: 27
-                    model: menu.followList().length
+                    model: menu.followItems.length
                     currentIndex: menu.followSel
                     onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
                     Behavior on contentY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
@@ -1170,7 +1171,7 @@ Item {
                         readonly property real rel: y - GridView.view.contentY
                         opacity: rel > -88 && rel < GridView.view.height - 88 ? 1 : 0
                         Behavior on opacity { NumberAnimation { duration: 150 } }
-                        readonly property var c: menu.followList()[index] || {}
+                        readonly property var c: menu.followItems[index] || {}
                         StreamerCard {
                             x: 13; y: 13
                             name: c.login || ""
@@ -1190,7 +1191,7 @@ Item {
         Item {
             anchors.fill: parent
             visible: menu.tabId === "replays"
-            readonly property var rows: menu.replayRows()
+            readonly property var rows: visible ? menu.replayRows() : []   // onglet caché : rien à recalculer
             ListView {   // puces des streamers
                 y: 196; x: -40; width: 1440; height: 64   // s'arrête avant le bord de l'écran
                 orientation: ListView.Horizontal; spacing: 16; interactive: false; clip: false
@@ -1267,7 +1268,7 @@ Item {
             id: ytPage
             anchors.fill: parent
             visible: menu.tabId === "youtube" || menu.tabId === "jellyfin"
-            readonly property var rows: menu.mediaRows()
+            readonly property var rows: visible ? menu.mediaRows() : []
             // Rangées de hauteur fixe ; défilement vertical pour garder la rangée choisie à l'écran
             readonly property real rowH: 360   // deux rangées entières au-dessus de l'aide en bas
             readonly property real scrollY: Math.max(0, (menu.mRow - 1) * rowH)
@@ -1450,7 +1451,7 @@ Item {
                 ListView {
                     id: rowsView
                     visible: menu.tabId === modelData
-                    readonly property var rows: modelData === "settings" ? menu.settingsRows() : menu.systemRows()
+                    readonly property var rows: !visible ? [] : modelData === "settings" ? menu.settingsRows() : menu.systemRows()
                     readonly property var sel: menu.selectable(rows)
                     readonly property int focusedRow: menu.area === "content" ? sel[modelData === "settings" ? menu.setSel : menu.sysSel] : -1
                     y: 15; x: 40; width: modelData === "settings" ? 980 : 810; height: 800   // s'arrête au-dessus de l'aide en bas
@@ -1475,7 +1476,7 @@ Item {
             x: 860; y: 430; width: 520   // s'arrête à 80 px du bord de l'écran
             spacing: 10
             Repeater {
-                model: menu.healthTiles()
+                model: parent.visible ? menu.healthTiles() : []
                 Rectangle {
                     width: index === 6 ? 520 : 255; height: 92; radius: 18
                     color: "#1affffff"; border.color: "#22ffffff"; border.width: 1

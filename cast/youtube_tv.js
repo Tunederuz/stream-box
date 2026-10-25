@@ -15,6 +15,7 @@ import { Innertube, Log, ClientType, Constants } from 'youtubei.js';
 const TOKEN = os.homedir() + '/.config/stream-box/youtube-tv-token.json';
 const PORT = 8091;
 const PROGRESS_CACHE = 600e3;
+const PAGES_HISTORY = 8, PAGES_SUBS = 2;   // ~15 vidéos par page
 const SESSION_IDLE = 120e3;   // plus de signalement depuis 2 min : nouvelle session de lecture
 const CLIENT = { client_name: Constants.CLIENTS.TV.NAME, client_version: Constants.CLIENTS.TV.VERSION };
 Log.setLevel(Log.Level.NONE);
@@ -62,13 +63,27 @@ function scan(node, out, cur = null) {
   for (const v of Object.values(node)) scan(v, out, cur);
 }
 
+// Jeton de la page suivante d'une réponse brute
+const nextPage = (raw) => (raw.match(/"(?:nextContinuationData|continuationCommand|reloadContinuationData)":\{[^}]*?"(?:continuation|token)":"([^"]+)"/) || [])[1];
+
 async function getProgress() {
   if (!connected) return {};
   if (Date.now() - progress.at < PROGRESS_CACHE) return progress.data;
   const data = {};
-  for (const browseId of ['FEhistory', 'FEsubscriptions']) {
-    try { scan((await yt.actions.execute('/browse', { browseId, client: 'TV' })).data, data); }
-    catch (e) { console.error(`youtube_tv.js : ${browseId} :`, e.message); return progress.data; }   // réessai au prochain appel
+  // L'historique porte presque toutes les progressions (le fil des abonnements très peu) : plusieurs pages
+  for (const [browseId, pages] of [['FEhistory', PAGES_HISTORY], ['FEsubscriptions', PAGES_SUBS]]) {
+    try {
+      let r = await yt.actions.execute('/browse', { browseId, client: 'TV' });
+      for (let n = 1; ; n++) {
+        scan(r.data, data);
+        const token = n < pages && nextPage(JSON.stringify(r.data));
+        if (!token) break;
+        r = await yt.actions.execute('/browse', { continuation: token, client: 'TV' });
+      }
+    } catch (e) {
+      console.error(`youtube_tv.js : ${browseId} :`, e.message);
+      if (!Object.keys(data).length) return progress.data;   // réessai au prochain appel
+    }
   }
   progress = { at: Date.now(), data };
   return data;
