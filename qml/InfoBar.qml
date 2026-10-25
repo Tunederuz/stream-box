@@ -83,6 +83,23 @@ Item {
         }
 
         // En-tête : photo du streamer (direct) ou symbole pause (vidéo), titre, ligne d'infos
+        Rectangle {   // titre choisi (↑ depuis les boutons ou la barre) : OK ouvre le panneau Infos
+            visible: opacity > 0
+            opacity: !root.live && root.ctl.title ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 160 } }
+            x: header.x - 24; y: header.y - 14
+            // calé sur le titre et la ligne d'infos (la colonne, elle, est large de 1500)
+            width: Math.min(1500, Math.max(titleMetrics.width, detailsMetrics.width)) + 48 + infoHint.width + 40
+            TextMetrics { id: titleMetrics; font.pixelSize: 31; font.bold: true; text: root.pb.title || "" }
+            TextMetrics { id: detailsMetrics; font.pixelSize: 22; text: root.details }
+            height: header.height + 28; radius: 20
+            color: "#26ffffff"; border.color: "white"; border.width: 2
+            Text {
+                id: infoHint
+                anchors.right: parent.right; anchors.rightMargin: 24; anchors.verticalCenter: parent.verticalCenter
+                text: "OK · Infos"; color: "white"; font.pixelSize: 21; font.bold: true
+            }
+        }
         Row {
             id: header
             // Vidéo : juste au-dessus de la barre ; pendant les sauts, glisse vers le haut pour laisser la place à l'aperçu

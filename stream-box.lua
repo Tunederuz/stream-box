@@ -687,9 +687,10 @@ local function draw_bar()
 end
 
 local ctrl_focus = nil   -- rangée de boutons sous la barre (vidéo, appli Qt) : bouton choisi, nil hors de la rangée
+local title_focus = false   -- titre de la vidéo choisi (↑ depuis les boutons ou la barre) : OK ouvre le panneau Infos
 local function hide_bar()
-    if ctrl_focus then   -- la rangée de boutons part avec la barre
-        ctrl_focus = nil
+    if ctrl_focus or title_focus then   -- la rangée de boutons et le titre choisi partent avec la barre
+        ctrl_focus, title_focus = nil, false
         mp.set_property_native("user-data/streambox/controls", { items = {}, focus = -1 })
     end
     bar_visible = false
@@ -961,7 +962,7 @@ end)
 local function controls_list()
     local paused = mp.get_property_native("pause")
     local list = { { id = "back", label = "−10 s" }, { id = "play", label = paused and "Lecture" or "Pause" },
-                   { id = "fwd", label = "+10 s" }, { id = "tracks", label = "Sous-titres" }, { id = "info", label = "Infos" } }
+                   { id = "fwd", label = "+10 s" }, { id = "tracks", label = "Sous-titres" } }
     if #(mp.get_property_native("chapter-list") or {}) > 1 then list[#list + 1] = { id = "chapter", label = "Chapitre suivant" } end
     if next_up() then list[#list + 1] = { id = "next", label = "Épisode suivant" } end
     return list
@@ -969,7 +970,8 @@ end
 local function publish_controls()
     local list = controls_list()
     if ctrl_focus then ctrl_focus = math.max(1, math.min(#list, ctrl_focus)) end
-    mp.set_property_native("user-data/streambox/controls", { items = list, focus = ctrl_focus and ctrl_focus - 1 or -1 })
+    mp.set_property_native("user-data/streambox/controls", { items = list, focus = ctrl_focus and ctrl_focus - 1 or -1,
+                                                             title = title_focus })
 end
 mp.observe_property("pause", "bool", function() if mode == "media" then publish_controls() end end)
 mp.register_event("file-loaded", function() ctrl_focus = nil publish_controls() end)
@@ -977,19 +979,15 @@ local function controls_key(key)
     local list = controls_list()
     if key == "left" then ctrl_focus = math.max(1, ctrl_focus - 1)
     elseif key == "right" then ctrl_focus = math.min(#list, ctrl_focus + 1)
-    elseif key == "up" or key == "back" then ctrl_focus = nil
+    elseif key == "up" then ctrl_focus, title_focus = nil, true   -- ↑ : le titre (OK : panneau Infos)
+    elseif key == "back" then ctrl_focus = nil
     elseif key == "ok" then
         local id = (list[ctrl_focus] or {}).id
         if id == "back" or id == "fwd" then media_seek(id == "fwd" and 1 or -1)
         elseif id == "play" then mp.commandv("cycle", "pause")
         elseif id == "tracks" then open_tracks()
         elseif id == "chapter" then mp.commandv("add", "chapter", "1")
-        elseif id == "next" then play_next()
-        elseif id == "info" then
-            ctrl_focus = nil
-            publish_controls()
-            return open_info()
-        end
+        elseif id == "next" then play_next() end
     end
     show_bar()
     publish_controls()
@@ -1078,6 +1076,15 @@ local function on_key(key)
         controls_key(key)
         return
     end
+    if title_focus and mode == "media" and key ~= "home" and key ~= "menu" then
+        -- Titre choisi : OK ouvre le panneau Infos, ↓ redescend aux boutons, ↑ ou Retour le quittent (sans arrêter)
+        title_focus = false
+        if key == "ok" then publish_controls() return open_info() end
+        if key == "down" and qt_ui() then ctrl_focus = 2 end   -- sur Pause / Lecture
+        show_bar()
+        publish_controls()
+        return
+    end
     if key == "homescreen" then   -- écran d'accueil, depuis n'importe quel mode
         if menu_visible then hide_menu() end
         if mode ~= "home" then show_home() end
@@ -1137,7 +1144,10 @@ local function on_key(key)
             media_seek(key == "right" and 1 or -1)
             show_bar()
         elseif key == "up" then
-            if mp.get_property_native("pause") and qt_ui() then open_info()   -- en pause : le panneau Infos
+            if bar_visible and qt_ui() then   -- barre affichée : ↑ choisit le titre (OK : panneau Infos)
+                title_focus = true
+                show_bar()
+                publish_controls()
             elseif bar_visible then hide_bar() else show_bar() end
         elseif key == "down" then
             if qt_ui() then   -- barre et rangée de boutons, focus sur Pause / Lecture
