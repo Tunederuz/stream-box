@@ -29,9 +29,9 @@ DEFAULTS = {
     "KEY_MENU": "menu", "KEY_COMPOSE": "menu", "KEY_VIDEOPHONE": "menu", "KEY_VOICECOMMAND": "menu", "KEY_INFO": "menu",
     "KEY_WWW": "homescreen", "KEY_PLAYPAUSE": "corner", "KEY_PLAY": "corner", "KEY_POWER": "power",
     "KEY_VOLUMEUP": "volume_up", "KEY_VOLUMEDOWN": "volume_down", "KEY_MUTE": "mute",
-    # Clavier classique : Espace lecture / pause, M menu de la TV, O options, H écran d'accueil, + / − volume, touches
+    # Clavier classique : Espace lecture / pause, Windows ou M menu de la TV, O options, H écran d'accueil, + / − volume, touches
     # multimédia. Codes de Linux positionnels (QWERTY) : le M d'un clavier AZERTY envoie KEY_SEMICOLON
-    "KEY_SPACE": "corner", "KEY_M": "home", "KEY_SEMICOLON": "home", "KEY_O": "menu", "KEY_H": "homescreen",
+    "KEY_SPACE": "corner", "KEY_LEFTMETA": "home", "KEY_RIGHTMETA": "home", "KEY_M": "home", "KEY_SEMICOLON": "home", "KEY_O": "menu", "KEY_H": "homescreen",
     "KEY_KPPLUS": "volume_up", "KEY_KPMINUS": "volume_down", "KEY_EQUAL": "volume_up", "KEY_MINUS": "volume_down",
     "KEY_NEXTSONG": "right", "KEY_PREVIOUSSONG": "left", "KEY_STOPCD": "back",
     # Manettes

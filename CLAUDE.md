@@ -884,6 +884,6 @@ essai, jamais publiée : `/etc/ssh/stream-box-test-keys`). QEMU dans le conteneu
 
 ### Clavier classique
 Par défaut (input.py `DEFAULTS`, secours stream-box.lua `KEYS`) : flèches, Entrée = OK, Échap / Retour arrière =
-Retour, Début ou M = menu de la TV, O = options (≡), H = écran d'accueil, Espace = lecture / pause (action `corner`),
+Retour, Windows, Début ou M = menu de la TV, O = options (≡), H = écran d'accueil, Espace = lecture / pause (action `corner`),
 + / − (et pavé numérique) = volume, touches multimédia (suivante / précédente = → / ←, arrêt = Retour). Codes de Linux
 positionnels (QWERTY) : le M d'un AZERTY arrive en KEY_SEMICOLON, mappé aussi.
