@@ -17,7 +17,7 @@ Item {
         width: 600
         height: Math.min(list.contentHeight, 520) + 56
         x: parent.width - width - 96
-        y: parent.height - 540 - height   // au-dessus du titre de la barre de lecture
+        y: parent.height - 360 - height   // au-dessus du titre de la barre de lecture
         opacity: root.shown ? 1 : 0
         scale: root.shown ? 1 : 0.96
         transformOrigin: Item.BottomRight

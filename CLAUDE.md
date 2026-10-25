@@ -576,8 +576,9 @@ titre sur une image claire.
 - Avance rapide qui accélère (stream-box.lua `media_seek`) : appuis rapprochés (< 0,8 s) ou touche maintenue (au plus
   8 sauts/s) → 10 s ×3, puis 30 s, puis 1 min ; total publié dans `user-data/streambox/seekfx` {text, n}, bulle
   « +2 min 30 » au-dessus du curseur (InfoBar.qml). Marche aussi avec mpv seul (sans la bulle).
-- Rangée de boutons : ↓ y descend (focus sur Pause/Lecture), ← → et OK, ↑ ou Retour remontent ; −10 s, Pause/Lecture,
-  +10 s, Sous-titres, Chapitre suivant (s'il y a des chapitres), Épisode suivant (Jellyfin). `ctrl_focus`,
+- Rangée de boutons : ↓ y descend (focus sur Pause/Lecture), ← → et OK, ↑ choisit le titre, Retour remonte ;
+  Sous-titres, −10 s, Pause/Lecture, +10 s, Qualité (YouTube), Chapitre suivant (s'il y a des chapitres), Épisode
+  suivant (Jellyfin). Rangée centrée sur Pause/Lecture (InfoBar.qml `playIndex`). `ctrl_focus`,
   `user-data/streambox/controls` {items, focus} ; disparaît avec la barre. Boutons ronds centrés, icônes dessinées
   (`qml/PlayerIcon.qml`, QtQuick.Shapes : pas de caractères Unicode, dont le rendu dépend des polices), Lecture / Pause
   plus grand, nom du bouton choisi dessous.

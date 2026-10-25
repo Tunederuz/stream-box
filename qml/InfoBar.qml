@@ -279,7 +279,10 @@ Item {
             Behavior on opacity { NumberAnimation { duration: 160 } }
             Row {
                 id: buttons
-                anchors.horizontalCenter: parent.horizontalCenter
+                // Centrée sur Lecture / Pause (boutons de 72, Lecture / Pause de 92, espacés de 22), quels que soient les
+                // boutons de part et d'autre (Qualité, Épisode suivant…)
+                readonly property int playIndex: Math.max(0, (root.ctl.items || []).map(function (i) { return i.id }).indexOf("play"))
+                x: parent.width / 2 - playIndex * (72 + spacing) - 46
                 spacing: 22
                 Repeater {
                     model: (root.ctl.items || []).length

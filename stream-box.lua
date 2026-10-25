@@ -1041,8 +1041,9 @@ end)
 -- Rangée de boutons sous la barre (appli Qt) : ↓ y descend, ← → choisissent, OK, ↑ ou Retour remontent
 local function controls_list()
     local paused = mp.get_property_native("pause")
-    local list = { { id = "back", label = "−10 s" }, { id = "play", label = paused and "Lecture" or "Pause" },
-                   { id = "fwd", label = "+10 s" }, { id = "tracks", label = "Sous-titres" } }
+    -- Sous-titres à gauche : Lecture / Pause au centre de la rangée (InfoBar.qml la centre sur ce bouton)
+    local list = { { id = "tracks", label = "Sous-titres" }, { id = "back", label = "−10 s" },
+                   { id = "play", label = paused and "Lecture" or "Pause" }, { id = "fwd", label = "+10 s" } }
     -- Qualité : YouTube seulement, quand plusieurs résolutions sont proposées (Jellyfin : fichier d'origine)
     if #quality.list() > 1 then list[#list + 1] = { id = "quality", label = "Qualité" } end
     if #(mp.get_property_native("chapter-list") or {}) > 1 then list[#list + 1] = { id = "chapter", label = "Chapitre suivant" } end
@@ -1165,7 +1166,7 @@ local function on_key(key)
         title_focus = false
         if key == "ok" then publish_controls() return open_info() end
         if key == "up" then publish_controls() return hide_bar() end
-        if key == "down" and qt_ui() then ctrl_focus = 2 end   -- sur Pause / Lecture
+        if key == "down" and qt_ui() then ctrl_focus = 3 end   -- sur Pause / Lecture
         show_bar()
         publish_controls()
         return
@@ -1236,7 +1237,7 @@ local function on_key(key)
             elseif bar_visible then hide_bar() else show_bar() end
         elseif key == "down" then
             if qt_ui() then   -- barre et rangée de boutons, focus sur Pause / Lecture
-                ctrl_focus = 2
+                ctrl_focus = 3
                 show_bar()
                 publish_controls()
             elseif not mp.get_property_native("pause") then
