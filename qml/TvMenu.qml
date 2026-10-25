@@ -40,6 +40,7 @@ Item {
     property var audioOut: null
     // Bluetooth (menu Système) : /api/bluetooth, et étape en cours de la fenêtre (« », scan, pair)
     property var bt: null
+    property var install: null               // /api/install : box démarrée sur sa clé USB, disques internes, progression
     property string btPhase: ""              // /api/audio : sorties son, choix (« auto » ou une sortie), sortie actuelle                  // /api/wifi, idem (ligne « Wi-Fi » : mode configuration)
     // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
     property var yt: null
@@ -598,6 +599,10 @@ Item {
             { label: "Configurer les touches", hint: "Apprendre les touches d'une télécommande ou d'une manette, une par une",
               ok: function () { act("keymap", { action: "wizard" }); close() } },
             { label: "Touches par défaut", ok: function () { act("keymap", { action: "reset" }) } },
+            { label: "Installer sur ce PC", visible: !!(install && install.available),
+              value: install && install.progress && install.progress.state === "running" ? install.progress.percent + " %" : "",
+              hint: "La box tourne sur sa clé USB : la copier, réglages compris, sur le disque interne",
+              ok: function () { installMenu() } },
             { label: "Sauvegarde et restauration", hint: "Sur une clé USB, ou en fichier depuis la page du téléphone",
               ok: function () { backupMenu() } },
             { label: "Mettre à jour maintenant",
@@ -814,10 +819,43 @@ Item {
         })
     }
     Timer { interval: 2000; repeat: true; running: !!menu.modal && menu.modal.kind === "backup"; onTriggered: menu.backupMenu(true) }
+    // Fenêtre « Installer sur ce PC » : disques internes (OK : confirmation, tout est effacé), puis progression relue
+    // toutes les 2 s, et à la fin « retire la clé, redémarre »
+    function installMenu(again) {
+        call("GET", "/api/install", undefined, function (d) {
+            if (!d || (again && !(modal && modal.kind === "install"))) return
+            install = d
+            var p = d.progress, title, items = []
+            if (p && p.state === "running") {
+                title = "Installation… " + p.percent + " %  ·  " + p.step
+                items.push({ label: "Masquer (l'installation continue)", ok: function () {} })
+            } else if (p && p.state === "done") {
+                title = "Installée ! Retire la clé USB, puis redémarre"
+                items.push({ label: "↻  Redémarrer", ok: function () { act("reboot"); close() } })
+                items.push({ label: "Plus tard", ok: function () {} })
+            } else {
+                title = p && p.state === "error" ? "Échec : " + p.error : d.disks.length ? "Installer sur quel disque ?" : "Aucun disque interne de 16 Go ou plus"
+                d.disks.forEach(function (k) {
+                    items.push({ label: k.label + (k.data ? "  ·  contient : " + k.data : ""), ok: function () {
+                        openModal("Tout effacer sur " + k.label + " et y installer la box ?", [
+                            { label: "Oui, effacer et installer", danger: true, ok: function () {
+                                call("POST", "/api/install", { disk: k.name }, function () { installMenu() }) } },
+                            { label: "Annuler", ok: function () { installMenu() } }])
+                    } })
+                })
+                items.push({ label: "Fermer", ok: function () {} })
+            }
+            var same = modal && modal.kind === "install"
+            var sel = modalSel
+            modal = { title: title, items: items, kind: "install" }
+            modalSel = same ? Math.min(sel, items.length - 1) : 0
+        })
+    }
+    Timer { interval: 2000; repeat: true; running: !!menu.modal && menu.modal.kind === "install"; onTriggered: menu.installMenu(true) }
     function loadAudio() { call("GET", "/api/audio", undefined, function (d) { if (d && d.outputs) audioOut = d }) }
     function loadTab(id) {
         if (id === "settings") loadAudio()
-        if (id === "system") { loadBt(); loadYtAccount() }
+        if (id === "system") { loadBt(); loadYtAccount(); call("GET", "/api/install", undefined, function (d) { if (d) install = d }) }
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
         if (id === "youtube") loadYoutube()   // rangées précédentes affichées en attendant

@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Stream Box : installe la box qui tourne depuis une clé USB sur un disque interne, réglages compris.
+#
+#   install-to-disk <disque>      (nvme0n1, sda… ; lancé par stream-box-install@<disque>.service, voir installer.py)
+#
+# Le disque est entièrement effacé : table GPT, ESP de 512 Mo (systemd-boot et noyau, copiés depuis l'ESP de la clé),
+# partition système btrfs compressée sur le reste, où le système en marche est copié tel quel (/home/media compris :
+# comptes, favoris, historique, réglages faits sur la clé). Au démarrage, systemd retrouve la partition système par
+# son type (pas de root= à écrire). État et progression : /run/stream-box-install.json, lu par remote.py.
+set -euo pipefail
+
+DISK=${1:-}
+STATUS=/run/stream-box-install.json
+WORK=/run/stream-box-install
+MIN_SIZE=$((16 * 1000 * 1000 * 1000))
+
+status() {   # état, étape, pourcentage, erreur
+  local tmp
+  tmp=$(mktemp "$STATUS.XXXX")
+  python3 -c 'import json,sys; print(json.dumps({"state": sys.argv[1], "step": sys.argv[2], "percent": int(sys.argv[3]),
+              "disk": sys.argv[4], "error": sys.argv[5] or None}))' "$1" "$2" "$3" "$DISK" "${4:-}" > "$tmp"
+  chmod 644 "$tmp" && mv "$tmp" "$STATUS"
+}
+fail() { status error "${STEP:-}" 0 "$1"; exit 1; }
+cleanup() {
+  [ -n "${COPY_PID:-}" ] && kill "$COPY_PID" 2> /dev/null
+  umount -R "$WORK/esp" "$WORK/root" 2> /dev/null || true
+}
+trap 'cleanup; [ "$(python3 -c "import json; print(json.load(open(\"$STATUS\"))[\"state\"])" 2> /dev/null)" = done ] || fail "${ERR:-erreur pendant : ${STEP:-préparation}}"' EXIT
+
+STEP="Vérification du disque"
+status running "$STEP" 0
+[[ "$DISK" =~ ^[a-z0-9]+$ ]] && [ -b "/dev/$DISK" ] || { ERR="disque inconnu"; exit 1; }
+DEV=/dev/$DISK
+root_disk=$(lsblk -no PKNAME "$(findmnt -no SOURCE / | sed 's/\[.*//')" | head -1)
+[ "$DISK" != "$root_disk" ] || { ERR="c'est le disque de la box en marche"; exit 1; }
+read -r type rm tran size < <(lsblk -dnbo TYPE,RM,TRAN,SIZE "$DEV" | awk '{ if (NF == 3) print $1, $2, "-", $3; else print }')
+[ "$type" = disk ] && [ "$rm" = 0 ] && [ "$tran" != usb ] || { ERR="ce n'est pas un disque interne"; exit 1; }
+[ "$size" -ge "$MIN_SIZE" ] || { ERR="disque trop petit (16 Go au moins)"; exit 1; }
+
+STEP="Préparation du disque"
+status running "$STEP" 2
+for part in $(lsblk -lnpo NAME "$DEV" | tail -n +2); do
+  swapoff "$part" 2> /dev/null || true
+  umount -R "$part" 2> /dev/null || true
+done
+wipefs -aq "$DEV"
+sfdisk -q --wipe always "$DEV" << 'PARTS'
+label: gpt
+size=512MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="esp"
+type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="root-x86-64"
+PARTS
+udevadm settle
+mapfile -t parts < <(lsblk -lnpo NAME "$DEV" | tail -n +2)
+[ "${#parts[@]}" -eq 2 ] || { ERR="partitions introuvables après le partitionnement"; exit 1; }
+mkfs.vfat -F 32 -n ESP "${parts[0]}" > /dev/null
+mkfs.btrfs -q -f -L root "${parts[1]}"
+mkdir -p "$WORK/root" "$WORK/esp"
+mount -o compress=zstd "${parts[1]}" "$WORK/root"
+mount "${parts[0]}" "$WORK/esp"
+
+STEP="Copie du système"
+status running "$STEP" 5
+# Le système en marche, sans les autres systèmes de fichiers (/proc, /sys, /run, /tmp, ESP…) ; progression d'après la
+# place occupée sur la clé
+used=$(df -B1 --output=used / | tail -1)
+cp -a --one-file-system / "$WORK/root/" &
+COPY_PID=$!
+while kill -0 "$COPY_PID" 2> /dev/null; do
+  pct=$((5 + 85 * $(df -B1 --output=used "$WORK/root" | tail -1) / (used > 0 ? used : 1)))
+  status running "$STEP" $((pct > 90 ? 90 : pct))
+  sleep 2
+done
+wait "$COPY_PID" || { COPY_PID=; ERR="copie du système interrompue"; exit 1; }
+COPY_PID=
+# Points de montage et sous-volumes laissés de côté par --one-file-system
+for d in proc sys dev run tmp efi boot var/tmp var/log var/lib/machines var/lib/portables; do mkdir -p "$WORK/root/$d"; done
+chmod 1777 "$WORK/root/tmp" "$WORK/root/var/tmp"
+
+STEP="Démarrage"
+status running "$STEP" 92
+esp=$(bootctl --print-esp-path 2> /dev/null || findmnt -nro TARGET -t vfat | head -1)
+[ -n "$esp" ] && [ -d "$esp/EFI" ] || { ERR="ESP de la clé introuvable"; exit 1; }
+cp -r "$esp"/. "$WORK/esp/"
+# Entrée de démarrage du disque dans le micrologiciel (sinon il garde son chemin de secours EFI/BOOT/BOOTX64.EFI)
+bootctl install --esp-path="$WORK/esp" --graceful > /dev/null 2>&1 || true
+
+STEP="Finalisation"
+status running "$STEP" 97
+sync
+umount -R "$WORK/esp" "$WORK/root"
+status done "Installée" 100

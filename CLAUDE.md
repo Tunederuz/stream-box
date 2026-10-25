@@ -801,3 +801,16 @@ vidéo, le menu n'a que son voile (plus de lueurs). Shaders dans `qml/shaders/*.
 par `qml/shaders/build.sh` (Docker, PySide6 de la même version que la box : Essentials n'a pas qsb), rendus à
 mi-résolution (`layer.textureSize`, composant `ShaderLayer`). Coût mesuré : ~25 % d'un cœur pour ui.py quel que soit
 le fond, menu compris.
+
+### Installateur (installer.py, image)
+L'image démarre sur une clé USB (live, tout marche, réglages compris) ; menu Système → « Installer sur ce PC »
+(QML `installMenu`, visible si `/api/install` dit `available` : disque de `/` en USB / amovible, et image avec
+l'installateur) → disques internes de 16 Go ou plus (modèle, taille, ce qu'ils contiennent) → confirmation → progression
+→ « Retire la clé USB, puis redémarre ». `POST /api/install {disk}` → `systemctl start --no-block
+stream-box-install@<disque>.service` (règle polkit `53-stream-box-install.rules` : media ne peut démarrer que ce
+service) → `/usr/local/lib/stream-box/install-to-disk` (root) : revérifie le disque (pas celui de la box, interne,
+16 Go), GPT (ESP 512 Mo + partition « root-x86-64 » btrfs zstd sur le reste), `cp -a --one-file-system /` (système en
+marche tel quel, `/home/media` compris : comptes, favoris, historique), points de montage recréés, copie de l'ESP de la
+clé, `bootctl install` (entrée du micrologiciel ; sinon chemin de secours EFI/BOOT/BOOTX64.EFI). Pas de root= : systemd
+retrouve la partition système par son type sur le disque d'où il a démarré. État : `/run/stream-box-install.json`
+(state running|done|error, step, percent, error). Testé dans QEMU (clé usb-storage + NVMe vierge, puis NVMe seul).

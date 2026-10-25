@@ -15,6 +15,7 @@ import netsetup  # netsetup.py : point d'accès Wi-Fi de configuration
 import audio     # audio.py : sortie son (HDMI branché, USB, Bluetooth, choix manuel)
 import btsetup   # btsetup.py : télécommandes et manettes Bluetooth (appairage, dissociation)
 import backup    # backup.py : sauvegarde et restauration des réglages (clé USB, fichier de la page)
+import installer  # installer.py : installation sur un disque interne depuis la clé USB
 
 PORT = 8080
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
@@ -2558,6 +2559,9 @@ def action(name, body):
             btsetup.remove(mac)
         else:
             raise ValueError("action inconnue")
+    elif name == "install":
+        # Menu Système de la TV : {"disk": "nvme0n1"} ; le disque est entièrement effacé
+        installer.start(str(body.get("disk", ""))[:32])
     elif name == "backup":
         # Menu Système de la TV : {"action": "save_usb", "path"}, {"action": "restore_usb", "path", "name"}
         what, path = str(body.get("action", "")), str(body.get("path", ""))[:100]
@@ -2702,6 +2706,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(400, {"error": str(e)})
             elif self.path == "/api/bluetooth":
                 self.send(200, btsetup.status())
+            elif self.path == "/api/install":
+                self.send(200, installer.status())
             elif self.path == "/api/backup":
                 self.send(200, backup.status())
             elif self.path.startswith("/api/backup/download"):

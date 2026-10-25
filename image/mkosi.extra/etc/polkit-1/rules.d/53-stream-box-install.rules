@@ -1,0 +1,7 @@
+// Stream Box : media lance l'installation sur un disque interne (stream-box-install@<disque>.service, rien d'autre)
+polkit.addRule(function (action, subject) {
+    if (subject.user == "media" && action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("verb") == "start" && /^stream-box-install@[a-z0-9]+\.service$/.test(action.lookup("unit"))) {
+        return polkit.Result.YES;
+    }
+});

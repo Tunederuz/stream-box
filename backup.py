@@ -164,15 +164,15 @@ def flag(v):
 
 def usb_partitions():
     """Partitions lisibles des clés et disques USB (pas le disque de la box) : [{path, uuid, name, mountpoint}]"""
-    r = subprocess.run(["lsblk", "-J", "-b", "-o", "NAME,PATH,RM,HOTPLUG,TRAN,TYPE,FSTYPE,UUID,MOUNTPOINT,LABEL,SIZE,MODEL"],
+    r = subprocess.run(["lsblk", "-J", "-b", "-o", "NAME,PATH,RM,HOTPLUG,TRAN,TYPE,FSTYPE,UUID,MOUNTPOINT,MOUNTPOINTS,LABEL,SIZE,MODEL"],
                        capture_output=True, text=True, timeout=10)
     try:
         disks = json.loads(r.stdout or "{}").get("blockdevices") or []
     except ValueError:
         return []
 
-    def mounts(d):
-        return [d.get("mountpoint")] + [m for c in d.get("children") or [] for m in mounts(c)]
+    def mounts(d):   # tous les points de montage (un btrfs en sous-volumes en a plusieurs)
+        return (d.get("mountpoints") or []) + [m for c in d.get("children") or [] for m in mounts(c)]
     out = []
     for d in disks:
         if d.get("type") != "disk" or not (d.get("tran") == "usb" or flag(d.get("rm")) or flag(d.get("hotplug"))):

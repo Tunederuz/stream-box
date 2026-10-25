@@ -1,0 +1,7 @@
+# Stream Box : installation sur un disque interne depuis la clé USB (menu Système de la TV → installer.py)
+[Unit]
+Description=Stream Box : installation sur /dev/%i
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/stream-box/install-to-disk %i
