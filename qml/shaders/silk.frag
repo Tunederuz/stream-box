@@ -36,12 +36,13 @@ float vignette(vec2 uv) {
     vec2 d = uv - 0.5;
     return clamp(1.0 - dot(d, d) * 1.3, 0.0, 1.0);
 }
-// Soie : faisceau de fils lumineux qui ondulent ensemble, comme un tissu qui flotte
+// Calque soie : faisceau de fils lumineux qui ondulent ensemble, comme un tissu qui flotte ; ajouté à la lumière du
+// fond (alpha 0 : mélange additif avec l'alpha prémultiplié de Qt)
 void main() {
     vec2 uv = qt_TexCoord0;
     float x = uv.x * ratio;
     float t = time * 0.12;
-    vec3 col = bg.rgb;
+    vec3 col = vec3(0.0);
     for (int i = 0; i < 18; i++) {
         float fi = float(i) / 18.0;
         float y = 0.5 + 0.22 * sin(x * 1.1 + t + fi * 2.2) * sin(x * 0.7 - t * 0.6 + fi * 1.4)
@@ -50,8 +51,7 @@ void main() {
         vec3 c = mix(c1.rgb, fi < 0.5 ? c2.rgb : c3.rgb, abs(fi - 0.5) * 2.0);
         col += c * (0.0016 / (d + 0.0025)) * 0.55;
     }
-    // Halo doux autour du faisceau
     float yc = 0.5 + 0.22 * sin(x * 1.1 + t + 1.1) * sin(x * 0.7 - t * 0.6 + 0.7);
     col += c1.rgb * exp(-pow((uv.y - yc) * 5.0, 2.0)) * 0.18;
-    fragColor = vec4(min(col, vec3(1.0)) * vignette(uv), 1.0) * qt_Opacity;
+    fragColor = vec4(min(col, vec3(1.0)) * vignette(uv), 0.0) * qt_Opacity;
 }

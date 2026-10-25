@@ -7,7 +7,7 @@ Les changements de streamer et de chat passent par les script-messages de stream
 Compte Twitch : le jeton du site (cookie auth-token) est rangé dans la config Twitch de streamlink, que
 streamlink lit tout seul. Twitch ne retire les pubs des abonnements qu'avec ce jeton-là.
 """
-import calendar, datetime, hashlib, json, os, uuid, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
+import calendar, datetime, hashlib, json, os, random, uuid, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import display   # display.py, même dossier
@@ -700,18 +700,55 @@ def set_player(mode):
     mpv(["quit"])
 
 
-# Fond animé de l'écran d'accueil et du menu sans vidéo (qml/Backdrop.qml), choisi dans les Réglages de la TV
+# Fond animé de l'écran d'accueil et du menu sans vidéo (qml/Backdrop.qml), choisi dans les Réglages de la TV : un
+# fond, un calque par-dessus, et une rotation automatique (combinaison tirée au hasard toutes les N minutes, la même
+# pour tous les écrans pendant ce temps). ~/.config/stream-box/backdrop : {"base", "overlay", "rotate"}
 BACKDROP_FILE = os.path.expanduser("~/.config/stream-box/backdrop")
-BACKDROPS = ("aurora", "fluid", "borealis", "silk", "bubbles")
+BACKDROP_BASES = ("aurora", "fluid", "borealis")
+BACKDROP_OVERLAYS = ("none", "silk", "bubbles", "stars")
+BACKDROP_ROTATE = (0, 10, 30, 60)   # minutes, 0 : pas de rotation
+
+
+def backdrop_choice():
+    b = {"base": "aurora", "overlay": "none", "rotate": 0}
+    try:
+        with open(BACKDROP_FILE) as f:
+            raw = f.read().strip()
+        saved = json.loads(raw) if raw.startswith("{") else {"base": raw}
+        if saved.get("base") in ("silk", "bubbles"):   # anciens styles devenus des calques
+            saved = {"base": "aurora", "overlay": saved["base"]}
+        b.update({k: v for k, v in saved.items() if k in b})
+    except (OSError, ValueError, AttributeError):
+        pass
+    if b["base"] not in BACKDROP_BASES:
+        b["base"] = "aurora"
+    if b["overlay"] not in BACKDROP_OVERLAYS:
+        b["overlay"] = "none"
+    if b["rotate"] not in BACKDROP_ROTATE:
+        b["rotate"] = 0
+    return b
 
 
 def backdrop():
-    try:
-        with open(BACKDROP_FILE) as f:
-            b = f.read().strip()
-        return b if b in BACKDROPS else BACKDROPS[0]
-    except OSError:
-        return BACKDROPS[0]
+    """Fond affiché : le choix, ou en rotation la combinaison de la période en cours (jamais deux fois la même de suite)"""
+    b = backdrop_choice()
+    if b["rotate"]:
+        combos = [(x, y) for x in BACKDROP_BASES for y in BACKDROP_OVERLAYS]
+        period = int(time.time() // (b["rotate"] * 60))
+        prev = random.Random(period - 1).choice(combos)
+        b["base"], b["overlay"] = random.Random(period).choice([c for c in combos if c != prev])
+    return b
+
+
+def set_backdrop(body):
+    b = backdrop_choice()
+    for key, allowed in (("base", BACKDROP_BASES), ("overlay", BACKDROP_OVERLAYS), ("rotate", BACKDROP_ROTATE)):
+        if key in body:
+            if body[key] not in allowed:
+                raise ValueError("fond inconnu")
+            b[key] = body[key]
+    with open(BACKDROP_FILE, "w") as f:
+        json.dump(b, f)
 
 
 def state():
@@ -2442,10 +2479,8 @@ def action(name, body):
     elif name == "auto_switch":
         mpv(["script-message", "streambox-auto-switch", "yes" if body.get("enabled") else "no"])
     elif name == "backdrop":
-        if body.get("style") not in BACKDROPS:
-            raise ValueError("fond inconnu")
-        with open(BACKDROP_FILE, "w") as f:
-            f.write(body["style"] + "\n")
+        # {"base", "overlay", "rotate"} (un ou plusieurs) ; choisir un fond ou un calque arrête la rotation
+        set_backdrop(body)
     elif name == "flag":
         # Réglages oui / non de stream-box.lua : mode nuit (son compressé), encart des sondages et prédictions
         if body.get("key") not in ("night", "events"):

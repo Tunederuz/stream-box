@@ -53,15 +53,15 @@ Item {
     readonly property string theme: tabId === "youtube" || tabId === "jellyfin" ? tabId
         : ["live", "follows", "replays"].indexOf(tabId) >= 0 ? "twitch" : "neutral"
     readonly property var pal: theme === "youtube"
-        ? { accent: "#ff0033", veil: "#180407", rail: "#1a0709", glow: 0.42, glowLow: 0.30, sheet: "#261216", key: "#3a1f24",
+        ? { accent: "#ff0033", veil: "#180407", rail: "#1a0709", sheet: "#261216", key: "#3a1f24",
             surface: "#33171c", surfaceFocus: "#4a2027", label: "#c9a3aa" }
         : theme === "jellyfin"
-        ? { accent: "#1565c0", veil: "#030f17", rail: "#06131c", glow: 0.40, glowLow: 0.28, sheet: "#0f202c", key: "#173244",
+        ? { accent: "#1565c0", veil: "#030f17", rail: "#06131c", sheet: "#0f202c", key: "#173244",
             surface: "#12293a", surfaceFocus: "#1b3c54", label: "#9cc3d8" }
         : theme === "twitch"
-        ? { accent: "#9146ff", veil: "#0a0612", rail: "#100b17", glow: 0.32, glowLow: 0.20, sheet: "#21182c", key: "#33283f",
+        ? { accent: "#9146ff", veil: "#0a0612", rail: "#100b17", sheet: "#21182c", key: "#33283f",
             surface: "#2a2034", surfaceFocus: "#3a2c4e", label: "#a99fc0" }
-        : { accent: "#e8e8ee", veil: "#0b0b0d", rail: "#121214", glow: 0.10, glowLow: 0.06, sheet: "#1e1e22", key: "#2f2f35",
+        : { accent: "#e8e8ee", veil: "#0b0b0d", rail: "#121214", sheet: "#1e1e22", key: "#2f2f35",
             surface: "#232327", surfaceFocus: "#35353c", label: "#a3a3ad" }
     readonly property bool ytTheme: theme === "youtube"
     readonly property color accent: pal.accent
@@ -534,13 +534,11 @@ Item {
             { label: "Volume", value: s.mute ? "muet" : (s.volume || 0) + " %", step: function (d) { act("volume", { delta: 5 * d }) } },
             { header: "Affichage" },
             { label: "Fond animé", hint: "Écran d'accueil et menu sans vidéo derrière",
-              value: backdropNames[s.backdrop || "aurora"] || "",
-              step: function (d) {
-                  var ids = Object.keys(backdropNames)
-                  var next = ids[(Math.max(0, ids.indexOf(s.backdrop || "aurora")) + d + ids.length) % ids.length]
-                  st = Object.assign({}, st, { backdrop: next })   // tout de suite à l'écran, sans attendre l'état
-                  act("backdrop", { style: next })
-              } },
+              value: backdropNames.base[bd.base] || "", step: function (d) { stepBackdrop("base", d) } },
+            { label: "Par-dessus", hint: "Un calque ajouté au fond",
+              value: backdropNames.overlay[bd.overlay] || "", step: function (d) { stepBackdrop("overlay", d) } },
+            { label: "Rotation automatique", hint: bd.rotate ? "Une combinaison au hasard, changée toute seule" : "Garder le fond choisi",
+              value: backdropNames.rotate[bd.rotate] || "", step: function (d) { stepBackdrop("rotate", d) } },
             { label: "Résolution de la TV",
               value: !display ? "…" : cur === "auto" ? "Auto (" + prettyMode(display.auto) + ")" : prettyMode(cur),
               hint: pendingDisplay && display && pendingDisplay !== display.setting ? "OK pour appliquer" : undefined,
@@ -673,8 +671,22 @@ Item {
             { label: "⏻  Éteindre", danger: true, ok: function () { act("poweroff", { mode: "full" }); close() } },
             { label: "Annuler", ok: function () { close() } }])
     }
-    readonly property var backdropNames: ({ aurora: "Taches floues", fluid: "Fluide", borealis: "Aurore boréale",
-                                            silk: "Soie", bubbles: "Bulles" })
+    readonly property var backdropNames: ({
+        base: { aurora: "Taches floues", fluid: "Fluide", borealis: "Aurore boréale" },
+        overlay: { none: "Rien", silk: "Soie", bubbles: "Bulles", stars: "Étoiles" },
+        rotate: { 0: "Non", 10: "10 minutes", 30: "30 minutes", 60: "1 heure" } })
+    readonly property var bd: st.backdrop || ({ base: "aurora", overlay: "none", rotate: 0 })
+    // Réglages « Fond animé », « Par-dessus » (arrêtent la rotation : on choisit soi-même), « Rotation automatique »
+    function stepBackdrop(key, d) {
+        var ids = Object.keys(backdropNames[key])
+        var cur = String(bd[key])
+        var next = ids[(Math.max(0, ids.indexOf(cur)) + d + ids.length) % ids.length]
+        var change = {}
+        change[key] = key === "rotate" ? +next : next
+        if (key !== "rotate") change.rotate = 0
+        st = Object.assign({}, st, { backdrop: Object.assign({}, bd, change) })   // tout de suite à l'écran
+        call("POST", "/api/backdrop", change, function () { refreshSoon.restart() })
+    }
     // Couleur voisine sur le cercle des teintes (fond animé aux couleurs de l'onglet) ; gris pour les onglets neutres
     function hueShift(c, dh, light) {
         if (c.hslHue < 0) return Qt.darker(c, 2.5)
@@ -1008,38 +1020,15 @@ Item {
         opacity: box.videoActive ? 0 : 1
         Behavior on opacity { NumberAnimation { duration: 500 } }
         running: menu.isOpen && !box.videoActive
-        style: menu.st.backdrop || "aurora"
+        base: menu.bd.base
+        overlay: menu.bd.overlay
+        overlayOpacity: 0.6
         bg: menu.pal.veil
         c1: menu.accent
         c2: menu.hueShift(menu.accent, 0.10, 0.8)
         c3: menu.hueShift(menu.accent, -0.12, 0.9)
     }
     Rectangle { anchors.fill: parent; color: menu.pal.veil; opacity: box.videoActive ? 0 : 0.30 }
-    // Lueurs floues de la couleur de l'onglet, qui dérivent lentement
-    Repeater {
-        model: [{ x0: 1380, y0: -320, w: 820, h: 640, dx: -420, dy: 260, d: 38000, o: 1 },
-                { x0: 600, y0: 860, w: 900, h: 420, dx: 380, dy: -240, d: 46000, o: 0 }]
-        RectangularShadow {
-            width: modelData.w; height: modelData.h; radius: Math.min(width, height) / 2
-            blur: 240; spread: 0
-            color: menu.accent
-            opacity: (modelData.o ? menu.pal.glow : menu.pal.glowLow) * (box.videoActive ? 1 : 0.5)
-            x: modelData.x0; y: modelData.y0
-            Behavior on color { ColorAnimation { duration: 400 } }
-            Behavior on opacity { NumberAnimation { duration: 600 } }
-            SequentialAnimation on x {
-                loops: Animation.Infinite; running: menu.isOpen
-                NumberAnimation { to: modelData.x0 + modelData.dx; duration: modelData.d; easing.type: Easing.InOutSine }
-                NumberAnimation { to: modelData.x0; duration: modelData.d; easing.type: Easing.InOutSine }
-            }
-            SequentialAnimation on y {
-                loops: Animation.Infinite; running: menu.isOpen
-                NumberAnimation { to: modelData.y0 + modelData.dy; duration: modelData.d * 0.8; easing.type: Easing.InOutSine }
-                NumberAnimation { to: modelData.y0; duration: modelData.d * 0.8; easing.type: Easing.InOutSine }
-            }
-        }
-    }
-
     // Rail des onglets
     Rectangle { width: 400; height: parent.height; color: menu.pal.rail; opacity: 0.55
                 Behavior on color { ColorAnimation { duration: 400 } } }

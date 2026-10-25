@@ -15,7 +15,11 @@ Item {
     // Mode configuration (netsetup.py) : point d'accès Wi-Fi de la box, ou connexion en cours à un réseau
     readonly property var setup: ambient.setup || null
     property var st: ({})                     // /api/state : photos, streamers en live
-    property string backdrop: ""              // fond animé choisi, d'après l'état relu par le menu (ui.qml)
+    // Fond animé : d'après le dernier état lu, ici (toutes les 20 s) ou par le menu ouvert (ui.qml, plus frais)
+    property var backdrop: null
+    property var bd: ({})
+    onBackdropChanged: if (backdrop) bd = backdrop
+    onStChanged: if (st.backdrop) bd = st.backdrop
     property date now: new Date()
     property bool qrShown: true
     // QR code affiché (réglage : toujours, 30 secondes à chaque arrivée, jamais)
@@ -52,7 +56,7 @@ Item {
     }
 
     // Fond animé, au choix dans les Réglages (Backdrop.qml)
-    Backdrop { anchors.fill: parent; style: root.backdrop || root.st.backdrop || "aurora"; running: root.visible }
+    Backdrop { anchors.fill: parent; base: root.bd.base || "aurora"; overlay: root.bd.overlay || "none"; running: root.visible }
 
     // Contenu, qui dérive de quelques dizaines de pixels sur plusieurs minutes (écran de TV : pas d'image fixe)
     Item {

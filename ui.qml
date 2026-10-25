@@ -76,7 +76,7 @@ Item {
         height: 1080
         scale: Math.min(parent.width / 1920, parent.height / 1080)
         transformOrigin: Item.TopLeft
-        AmbientScreen { backdrop: tvMenu.st.backdrop || "" }   // fond changé dans le menu : tout de suite ici aussi
+        AmbientScreen { backdrop: tvMenu.st.backdrop || null }   // fond changé dans le menu : tout de suite ici aussi
         ChatOverlay {}
         PollsOverlay {}
         LoadingOverlay {}

@@ -1,27 +1,50 @@
-// Fond animé de l'écran d'accueil et du menu sans vidéo derrière, au choix (Réglages → « Fond animé », /api/state
-// backdrop) : taches floues qui dérivent, nappes de couleur fluides, aurore boréale, fils de soie (shaders compilés
-// dans shaders/, voir build.sh), bulles lumineuses. Les shaders sont calculés en basse résolution (layer.textureSize)
-// puis agrandis : le flou ne se voit pas, la puce graphique travaille quatre fois moins. Rien de fixe : pas de marquage
-// de la TV. Coordonnées en 1920x1080.
+// Fond animé de l'écran d'accueil et du menu sans vidéo derrière : un fond (taches floues, nappes de couleur fluides,
+// aurore boréale) et un calque par-dessus (fils de soie, bulles lumineuses, étoiles), au choix dans les Réglages ou
+// en rotation automatique (/api/state backdrop). Shaders compilés dans shaders/ (voir build.sh), calculés à
+// mi-résolution (layer.textureSize) puis agrandis : le flou ne se voit pas, la puce graphique travaille quatre fois
+// moins. Les calques ajoutent leur lumière au fond (alpha 0 : mélange additif). Fondu enchaîné à chaque changement.
+// Rien de fixe : pas de marquage de la TV. Coordonnées en 1920x1080.
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Particles
 
 Item {
     id: root
-    property string style: "aurora"
+    property string base: "aurora"
+    property string overlay: "none"
+    property real overlayOpacity: 1     // menu : calque adouci, pour garder les cartes lisibles
     property color c1: "#9146ff"
     property color c2: "#2b4bdc"
     property color c3: "#b03a7a"
     property color bg: "#0b0710"
     property bool running: visible
-    readonly property var shaders: ({ fluid: true, borealis: true, silk: true })
+    // Combinaison affichée : suit base / overlay après un fondu au noir
+    property string shownBase: base
+    property string shownOverlay: overlay
+    readonly property string wanted: base + "/" + overlay
+    onWantedChanged: if (wanted !== shownBase + "/" + shownOverlay) swap.restart()
 
     Rectangle { anchors.fill: parent; color: root.bg }
 
-    Loader {
+    Item {
+        id: layers
         anchors.fill: parent
-        sourceComponent: root.shaders[root.style] ? shaderBg : root.style === "bubbles" ? bubblesBg : blobsBg
+        Loader {
+            anchors.fill: parent
+            sourceComponent: root.shownBase === "aurora" ? blobsBg : baseShader
+        }
+        Loader {
+            anchors.fill: parent
+            opacity: root.overlayOpacity
+            active: root.shownOverlay !== "none"
+            sourceComponent: root.shownOverlay === "bubbles" ? bubblesBg : overlayShader
+        }
+    }
+    SequentialAnimation {
+        id: swap
+        NumberAnimation { target: layers; property: "opacity"; to: 0; duration: 600; easing.type: Easing.InOutQuad }
+        ScriptAction { script: { root.shownBase = root.base; root.shownOverlay = root.overlay } }
+        NumberAnimation { target: layers; property: "opacity"; to: 1; duration: 900; easing.type: Easing.InOutQuad }
     }
 
     // Taches de couleur très floues qui dérivent lentement (ombres rectangulaires arrondies en disque)
@@ -53,39 +76,38 @@ Item {
         }
     }
 
-    // Shader plein écran, rendu au quart de la résolution puis agrandi en douceur
-    Component {
-        id: shaderBg
-        Item {
-            layer.enabled: true
-            layer.smooth: true
-            layer.textureSize: Qt.size(width / 2, height / 2)
-            ShaderEffect {
-                anchors.fill: parent
-                property real time: 0
-                property real ratio: width / Math.max(1, height)
-                property color c1: root.c1
-                property color c2: root.c2
-                property color c3: root.c3
-                property color bg: root.bg
-                fragmentShader: "shaders/" + root.style + ".frag.qsb"
-                NumberAnimation on time {
-                    from: 0; to: 100000; duration: 100000000; loops: Animation.Infinite; running: root.running
-                }
+    Component { id: baseShader; ShaderLayer { shader: root.shownBase } }
+    Component { id: overlayShader; ShaderLayer { shader: root.shownOverlay } }
+    // Shader plein écran (fond ou calque), rendu à mi-résolution puis agrandi en douceur
+    component ShaderLayer: Item {
+        property string shader
+        layer.enabled: true
+        layer.smooth: true
+        layer.textureSize: Qt.size(width / 2, height / 2)
+        ShaderEffect {
+            anchors.fill: parent
+            property real time: 0
+            property real ratio: width / Math.max(1, height)
+            property color c1: root.c1
+            property color c2: root.c2
+            property color c3: root.c3
+            property color bg: root.bg
+            fragmentShader: "shaders/" + parent.shader + ".frag.qsb"
+            NumberAnimation on time {
+                from: 0; to: 100000; duration: 100000000; loops: Animation.Infinite; running: root.running
             }
         }
     }
 
-    // Bulles lumineuses qui montent doucement, par-dessus deux taches floues
+    // Bulles lumineuses qui montent doucement
     Component {
         id: bubblesBg
         Item {
-            Loader { anchors.fill: parent; sourceComponent: blobsBg; opacity: 0.6 }
             ParticleSystem { id: ps; running: root.running }
             Emitter {
                 system: ps
                 width: parent.width; height: 200; y: parent.height - 50
-                emitRate: 3; lifeSpan: 22000; startTime: 22000; lifeSpanVariation: 6000
+                emitRate: 3; lifeSpan: 22000; lifeSpanVariation: 6000; startTime: 22000
                 size: 70; sizeVariation: 60; endSize: 120
                 velocity: AngleDirection { angle: -90; angleVariation: 25; magnitude: 55; magnitudeVariation: 30 }
                 acceleration: AngleDirection { angle: 0; angleVariation: 180; magnitude: 4 }

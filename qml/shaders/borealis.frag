@@ -36,7 +36,7 @@ float vignette(vec2 uv) {
     vec2 d = uv - 0.5;
     return clamp(1.0 - dot(d, d) * 1.3, 0.0, 1.0);
 }
-// Aurore boréale : rideaux de lumière qui ondulent, stries verticales, quelques étoiles qui scintillent
+// Aurore boréale : rideaux de lumière qui ondulent, stries verticales
 void main() {
     vec2 uv = qt_TexCoord0;
     float t = time * 0.06;
@@ -52,15 +52,6 @@ void main() {
         float rays = 0.45 + 0.55 * noise(vec2(x * 38.0 + fi * 17.0, t * 1.5 + fi));
         vec3 c = i == 0 ? c1.rgb : (i == 1 ? c2.rgb : c3.rgb);
         col += c * curtain * rays * (0.55 - fi * 0.1);
-    }
-    // Étoiles : une par case au plus, qui scintillent
-    vec2 g = qt_TexCoord0 * vec2(ratio, 1.0) * 90.0;
-    vec2 id = floor(g);
-    float h = hash(id);
-    if (h > 0.985) {
-        vec2 p = fract(g) - 0.5 - (vec2(hash(id + 3.1), hash(id + 7.7)) - 0.5) * 0.6;
-        float tw = 0.5 + 0.5 * sin(time * (0.6 + h * 2.0) + h * 40.0);
-        col += vec3(0.9, 0.9, 1.0) * smoothstep(0.08, 0.0, length(p)) * tw * (1.0 - uv.y) * 0.8;
     }
     fragColor = vec4(col * vignette(qt_TexCoord0), 1.0) * qt_Opacity;
 }
