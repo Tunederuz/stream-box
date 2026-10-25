@@ -2,7 +2,9 @@
 # Stream Box : services système activés et démarrage en mode graphique. Ici et pas dans mkosi.postinst.chroot :
 # mkosi lance « systemctl preset-all » entre les deux, qui remettrait tout aux réglages par défaut d'Arch.
 set -euo pipefail
-systemctl enable greetd.service NetworkManager.service bluetooth.service sshd.service systemd-timesyncd.service
+systemctl enable greetd.service NetworkManager.service bluetooth.service systemd-timesyncd.service
+# SSH coupé par défaut : il s'active depuis le menu Système (« Accès SSH », « Mode développeur »), mot de passe affiché
+systemctl disable sshd.service 2> /dev/null || true
 systemctl set-default graphical.target   # greetd (display-manager) n'est lancé que par graphical.target
 
 # Allègement, sans toucher à la compatibilité : en-têtes, documentation, traductions autres que français et anglais,
