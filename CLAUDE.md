@@ -583,7 +583,7 @@ titre sur une image claire.
   plus grand, nom du bouton choisi dessous.
 - Disposition (InfoBar.qml) : titre et ligne d'infos juste au-dessus de la barre ; l'aperçu YouTube (planche de
   miniatures) et la bulle de saut n'apparaissent que pendant qu'on avance ou recule (`seeking`, 1,5 s après le dernier
-  saut), au-dessus du titre.
+  saut), au plus près de la barre ; le titre s'efface pendant ce temps.
 - Infos : `user-data/streambox/meta` publié par remote.py (YouTube : chaîne, date, vues, description, depuis le
   `yt-dlp -J` de l'aperçu ; Jellyfin : série, épisode, année, note, résumé) ; chapitres (`chapter-list`, `chapter`)
   relevés par ui.py avec la position : repères sur la barre, chapitre en cours dans la ligne d'infos. Temps restant
