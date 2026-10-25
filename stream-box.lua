@@ -954,6 +954,11 @@ end
 
 local function on_key(key)
     if key == "power" then return power_key() end
+    if key == "power_menu" then   -- power maintenu : fenêtre « veille, redémarrer, éteindre » (menu QML ou tv_menu.lua)
+        if menu_visible then hide_menu() end
+        hide_bar()
+        return mp.commandv("script-message", "streambox-power-menu")
+    end
     if key == "volume_up" or key == "volume_down" then
         mp.commandv("add", "volume", key == "volume_up" and "5" or "-5")
         mp.osd_message(("Volume %d %%"):format(mp.get_property_number("volume", 0)), 1.5)
@@ -1081,7 +1086,24 @@ local function bind_keys()
     for name, key in pairs(KEYS) do map[name] = key end
     for name, key in pairs(read_keymap()) do map[name] = key end
     for name, key in pairs(map) do
-        if not name:match("^KEY_") and not name:match("^BTN_") and not name:match("^HAT_") then   -- noms de Linux : input.py
+        if key == "power" and not name:match("^KEY_") then
+            -- Secours : power court au relâchement, maintenu 3 s → fenêtre (ui.py envoie keydown / keyup pour ces touches)
+            local timer = nil
+            mp.add_forced_key_binding(name, "streambox-key-" .. name, function(t)
+                if input_service() then return end
+                if learn_key then if t.event ~= "up" then learn_key(name) end return end
+                if t.event == "down" then
+                    if timer then timer:kill() end
+                    timer = mp.add_timeout(3, function() timer = nil; on_key("power_menu") end)
+                elseif t.event == "up" and timer then
+                    timer:kill(); timer = nil
+                    on_key("power")
+                elseif t.event == "press" then
+                    on_key("power")
+                end
+            end, { complex = true })
+            bound[name] = true
+        elseif not name:match("^KEY_") and not name:match("^BTN_") and not name:match("^HAT_") then   -- noms de Linux : input.py
             mp.add_forced_key_binding(name, "streambox-key-" .. name, function()
                 if input_service() then return end
                 if learn_key then learn_key(name) else on_key(key) end

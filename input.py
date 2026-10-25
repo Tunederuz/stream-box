@@ -19,6 +19,7 @@ EVENT = struct.Struct("llHHi")   # input_event : temps (2 longs), type, code, va
 EV_KEY, EV_ABS = 1, 3
 ABS_HAT0X, ABS_HAT0Y = 16, 17
 REPEATABLE = {"up", "down", "left", "right", "volume_up", "volume_down"}
+LONG_PRESS = 3   # secondes : power maintenu → fenêtre « veille, redémarrer, éteindre » (power_menu) au lieu de power
 DEFAULTS = {
     # Télécommandes (dont Xiaomi : OK = KEY_SELECT, ≡ = KEY_VIDEOPHONE, assistant = KEY_VOICECOMMAND), claviers
     "KEY_UP": "up", "KEY_DOWN": "down", "KEY_LEFT": "left", "KEY_RIGHT": "right",
@@ -100,6 +101,7 @@ def main():
     mpv, keymap = Mpv(), Keymap()
     devices = {}            # chemin -> fichier ouvert
     hat = {}                # (chemin, axe) -> dernière valeur du pavé des manettes
+    held = {}               # (chemin, code) -> [heure d'appui, nom, fenêtre déjà ouverte] pour les touches power
     last_scan = last_beat = 0
     allowed = None
     while True:
@@ -128,7 +130,11 @@ def main():
         if now - last_beat > 5:   # « ce service tourne » (stream-box.lua et ui.py ignorent alors leurs touches)
             last_beat = now
             mpv.send("set_property", "user-data/streambox/input", f"evdev:{int(now)}")
-        ready, _, _ = select.select(list(devices.values()), [], [], 1)
+        for k, h in held.items():   # power maintenu assez longtemps : fenêtre de la box, sans attendre le relâchement
+            if not h[2] and time.time() - h[0] >= LONG_PRESS:
+                h[2] = True
+                mpv.send("script-message", "streambox-input", h[1], "power_menu")
+        ready, _, _ = select.select(list(devices.values()), [], [], 0.2 if held else 1)
         for f in ready:
             path = next(p for p, d in devices.items() if d is f)
             try:
@@ -138,7 +144,15 @@ def main():
                 continue
             for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
                 _, _, etype, code, value = EVENT.unpack_from(data, i)
-                if etype == EV_KEY and value in (1, 2):   # appui, ou répétition d'une touche maintenue
+                if etype == EV_KEY and keymap.get(key_name(code)) == "power":
+                    # power : action au relâchement (appui court), ou fenêtre après LONG_PRESS (voir plus haut)
+                    if value == 1:
+                        held[(path, code)] = [time.time(), key_name(code), False]
+                    elif value == 0:
+                        h = held.pop((path, code), None)
+                        if h and not h[2]:
+                            mpv.send("script-message", "streambox-input", h[1], "power")
+                elif etype == EV_KEY and value in (1, 2):   # appui, ou répétition d'une touche maintenue
                     name = key_name(code)
                     action = keymap.get(name)
                     if value == 2 and action not in REPEATABLE:

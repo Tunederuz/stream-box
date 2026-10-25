@@ -356,6 +356,7 @@ Item {
     Connections {
         target: box
         function onOpenRequested() { menu.open() }
+        function onPowerMenuRequested() { menu.open(); menu.powerMenu() }
         function onKeyPressed(k) { menu.key(k) }
         // Texte tapé sur le téléphone pendant que le clavier de recherche est ouvert
         function onTextInput(text, submit) {
@@ -571,6 +572,14 @@ Item {
              p.size ? p.size.replace("x", " × ") + " · " + Math.round(p.fps || 0) + " im/s · " + (p.dropped || 0) + " perdues" : "rien en lecture",
              p.size && (!p.hwdec || p.hwdec === "no") ? "warn" : ""],
         ]
+    }
+    // Power maintenu 3 s : veille, redémarrage, extinction (sans deuxième confirmation : le geste est volontaire)
+    function powerMenu() {
+        openModal("Box", [
+            { label: "☾  Mettre en veille", ok: function () { act("poweroff", { mode: "suspend" }); close() } },
+            { label: "↻  Redémarrer", ok: function () { act("reboot"); close() } },
+            { label: "⏻  Éteindre", danger: true, ok: function () { act("poweroff", { mode: "full" }); close() } },
+            { label: "Annuler", ok: function () { close() } }])
     }
     function openModal(title, items) { modal = { title: title, items: items }; modalSel = 0 }
     function chooseVideo(item) {

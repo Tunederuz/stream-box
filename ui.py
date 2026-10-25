@@ -142,7 +142,8 @@ class Box(QObject):
     """Ce que voit le QML (« box ») : ouverture du menu, touches, données de mpv utiles au menu"""
     openRequested = Signal()
     keyPressed = Signal(str)
-    textInput = Signal(str, bool)    # texte tapé sur le téléphone pour le clavier du menu (texte, lancer la recherche)
+    textInput = Signal(str, bool)
+    powerMenuRequested = Signal()   # power maintenu (stream-box.lua) : fenêtre « veille, redémarrer, éteindre »    # texte tapé sur le téléphone pour le clavier du menu (texte, lancer la recherche)
     ambientChanged = Signal()
     videoActiveChanged = Signal()
     homeChanged = Signal()
@@ -516,12 +517,24 @@ class View(QQuickView):
         name = key_name(event)
         if not name:
             return
+        if (learned_keys().get(name) or MENU_KEYS.get(name)) == "power" or name in ("POWER", "0x21ff2a"):
+            # power : appui et relâchement séparés, pour l'appui long (stream-box.lua : fenêtre après 3 s)
+            if not event.isAutoRepeat():
+                to_mpv(player.command, "keydown", name)
+            return
         menu_key = learned_keys().get(name) or MENU_KEYS.get(name)
         if box.menu_open and menu_key and menu_key != "power":   # menu QML ouvert : la touche est pour lui
             box.keyPressed.emit(menu_key)
             return
         # Répétition : un keypress par événement, comme mpv le fait pour une touche maintenue
         to_mpv(player.command, "keypress", name)
+
+    def keyReleaseEvent(self, event):
+        if time.time() - input_service["beat"] < 15 or event.isAutoRepeat():
+            return
+        name = key_name(event)
+        if name and ((learned_keys().get(name) or MENU_KEYS.get(name)) == "power" or name in ("POWER", "0x21ff2a")):
+            to_mpv(player.command, "keyup", name)
 
     def mouse_pos(self, event):
         ratio = self.devicePixelRatio()
@@ -607,6 +620,7 @@ def main():
         "streambox-pip", lambda action=b"", name=b"", layout=b"", *_: pip._request.emit(dec(action), dec(name), dec(layout)))
     if qml_menu:
         player.register_message_handler("streambox-tvmenu-open", lambda *_: box.openRequested.emit())
+        player.register_message_handler("streambox-power-menu", lambda *_: box.powerMenuRequested.emit())
         # Touches envoyées par l'IPC (keypress → stream-box.lua → streambox-tvmenu-key) : tests, Home Assistant
         player.register_message_handler(
             "streambox-tvmenu-key", lambda k, *_: box.keyPressed.emit(k.decode() if isinstance(k, bytes) else k))

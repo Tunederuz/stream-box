@@ -1454,6 +1454,17 @@ local function on_key(key)
 end
 
 mp.register_script_message("streambox-tvmenu-open", open_menu)
+-- Power maintenu 3 s (stream-box.lua) : veille, redémarrage, extinction
+mp.register_script_message("streambox-power-menu", function()
+    open_menu()
+    open_modal("Box", {
+        { label = "☾  Mettre en veille", ok = function() act("poweroff", { mode = "suspend" }) close_menu() end },
+        { label = "↻  Redémarrer", ok = function() act("reboot") close_menu() end },
+        { label = "⏻  Éteindre", danger = true, ok = function() act("poweroff", { mode = "full" }) close_menu() end },
+        { label = "Annuler", ok = function() close_menu() end },
+    })
+    draw()
+end)
 mp.register_script_message("streambox-tvmenu-close", close_menu)
 mp.register_script_message("streambox-tvmenu-key", on_key)
 mp.observe_property("osd-dimensions", "native", function() if is_open then draw() end end)
