@@ -776,6 +776,26 @@ def set_ssh(on):
         raise ValueError(f"SSH : {(r.stderr or r.stdout).strip() or r.returncode}")
 
 
+# Mode développeur : sudo sans mot de passe pour media, et SSH (stream-box-dev@enable|disable.service, script dev-mode,
+# règle polkit 55-stream-box-dev.rules). Sans lui, la box installée depuis l'image n'a aucun accès root
+DEV_UNIT = ("/usr/lib/systemd/system/stream-box-dev@.service", "/etc/systemd/system/stream-box-dev@.service")
+DEV_MARK = "/var/lib/stream-box/dev-mode"
+LOCAL_ONLY = ("ssh", "dev")   # réglages d'accès : depuis la TV seulement (le menu passe par 127.0.0.1)
+
+
+def dev_status():
+    return {"available": any(os.path.exists(p) for p in DEV_UNIT), "enabled": os.path.exists(DEV_MARK)}
+
+
+def set_dev(on):
+    if not dev_status()["available"]:
+        raise ValueError("Mode développeur absent de cette installation (relancer install.sh).")
+    r = subprocess.run(["systemctl", "start", f"stream-box-dev@{'enable' if on else 'disable'}.service"],
+                       capture_output=True, text=True, timeout=60)
+    if r.returncode != 0:
+        raise ValueError(f"Mode développeur : {(r.stderr or r.stdout).strip() or r.returncode}")
+
+
 def state():
     user, volume, mute, pause, video, title, position, duration, tracks, cache, vo, path = mpv(
         ["get_property", "user-data/streambox"], ["get_property", "volume"], ["get_property", "mute"],
@@ -2596,6 +2616,8 @@ def action(name, body):
             raise ValueError("action inconnue")
     elif name == "ssh":
         set_ssh(bool(body.get("enabled")))
+    elif name == "dev":
+        set_dev(bool(body.get("enabled")))
     elif name == "install":
         # Menu Système de la TV : {"disk": "nvme0n1"} ; le disque est entièrement effacé
         installer.start(str(body.get("disk", ""))[:32])
@@ -2743,6 +2765,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(400, {"error": str(e)})
             elif self.path == "/api/bluetooth":
                 self.send(200, btsetup.status())
+            elif self.path == "/api/dev":
+                self.send(200, dev_status())
             elif self.path == "/api/ssh":
                 self.send(200, ssh_status(local=self.client_address[0] == "127.0.0.1"))
             elif self.path == "/api/install":
@@ -2803,6 +2827,8 @@ class Handler(BaseHTTPRequestHandler):
                 backup.restore_upload(self.rfile.read(length))
                 return self.send(200, {"ok": True})
             body = json.loads(self.rfile.read(length) or b"{}") if length else {}
+            if self.path[len("/api/"):] in LOCAL_ONLY and self.client_address[0] != "127.0.0.1":
+                return self.send(403, {"error": "Réglage d'accès : seulement depuis le menu de la TV."})
             action(self.path[len("/api/"):], body)
             self.send(200, {"ok": True})
         except ValueError as e:

@@ -825,3 +825,12 @@ et le garde dans `/var/lib/stream-box/ssh-password` (root:media 640) ; le menu a
 de passe (`/api/ssh` ne le donne qu'aux requêtes de 127.0.0.1). Couper : sshd désactivé, mot de passe et autorisation
 retirés (les clés restent). Script, unité et règle dans `image/mkosi.extra`, copiés aussi par install.sh. Couper SSH ne ferme pas les
 sessions ouvertes (elles sont dans leur scope de session, pas dans sshd.service).
+
+### Mode développeur (menu Système)
+L'image n'a pas de mot de passe root, media n'a pas sudo, le noyau (UKI) a une ligne de commande figée : sans ce mode,
+une box installée n'offre aucun accès root. « Mode développeur » (interrupteur, confirmation à l'activation) :
+`POST /api/dev {enabled}` → `stream-box-dev@enable|disable.service` → `/usr/local/lib/stream-box/dev-mode` (root) :
+`/etc/sudoers.d/90-stream-box-dev` (`media ALL=(ALL:ALL) NOPASSWD: ALL`, vérifié par visudo) + `ssh-access enable`
+(mot de passe affiché sur la TV) ; marque lisible par media `/var/lib/stream-box/dev-mode` (`GET /api/dev`). Couper
+retire sudo, SSH garde son réglage. `POST /api/ssh` et `/api/dev` : 403 hors de 127.0.0.1 (seulement depuis le menu
+de la TV, pas depuis le réseau). Règle polkit `55-stream-box-dev.rules`.

@@ -41,6 +41,7 @@ Item {
     // Bluetooth (menu Système) : /api/bluetooth, et étape en cours de la fenêtre (« », scan, pair)
     property var bt: null
     property var ssh: null                   // /api/ssh : accès SSH (maintenance) activé ou coupé
+    property var dev: null                   // /api/dev : mode développeur (sudo pour media, SSH)
     property var install: null               // /api/install : box démarrée sur sa clé USB, disques internes, progression
     property string btPhase: ""              // /api/audio : sorties son, choix (« auto » ou une sortie), sortie actuelle                  // /api/wifi, idem (ligne « Wi-Fi » : mode configuration)
     // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
@@ -609,6 +610,16 @@ Item {
                   ssh = Object.assign({}, ssh, { enabled: on })   // tout de suite à l'écran
                   call("POST", "/api/ssh", { enabled: on }, function () { loadSsh() })
               } },
+            { label: "Mode développeur", visible: !!(dev && dev.available), toggle: !!(dev && dev.enabled),
+              hint: dev && dev.enabled ? "sudo sans mot de passe pour media, par SSH (mot de passe ci-dessus)"
+                                       : "Accès root pour développer et tester la box",
+              ok: function () {
+                  if (dev.enabled) { call("POST", "/api/dev", { enabled: false }, function () { loadSsh() }); dev = Object.assign({}, dev, { enabled: false }); return }
+                  openModal("Activer le mode développeur ? media aura sudo sans mot de passe, et SSH s'active", [
+                      { label: "Activer", danger: true, ok: function () {
+                          call("POST", "/api/dev", { enabled: true }, function () { loadSsh() }) } },
+                      { label: "Annuler", ok: function () {} }])
+              } },
             { label: "Installer sur ce PC", visible: !!(install && install.available),
               value: install && install.progress && install.progress.state === "running" ? install.progress.percent + " %" : "",
               hint: "La box tourne sur sa clé USB : la copier, réglages compris, sur le disque interne",
@@ -862,7 +873,10 @@ Item {
         })
     }
     Timer { interval: 2000; repeat: true; running: !!menu.modal && menu.modal.kind === "install"; onTriggered: menu.installMenu(true) }
-    function loadSsh() { call("GET", "/api/ssh", undefined, function (d) { if (d) ssh = d }) }
+    function loadSsh() {
+        call("GET", "/api/ssh", undefined, function (d) { if (d) ssh = d })
+        call("GET", "/api/dev", undefined, function (d) { if (d) dev = d })
+    }
     function loadAudio() { call("GET", "/api/audio", undefined, function (d) { if (d && d.outputs) audioOut = d }) }
     function loadTab(id) {
         if (id === "settings") loadAudio()
