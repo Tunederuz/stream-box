@@ -868,13 +868,15 @@ confiance, et tous pendant une recherche ou un appairage du menu (btsetup.py tou
   `raid_mode`) et le dit.
 
 ### Écran de démarrage (Plymouth, image)
-Thème `stream-box` (créé par mkosi.postinst.chroot à partir de « spinner » : logo arrondi + « Stream Box » rendu par
-ffmpeg, roue, fond de l'écran d'accueil 0x0b0710), `/etc/plymouth/plymouthd.conf`, ligne de commande `splash
+Thème `stream-box` (fichiers du dépôt : `mkosi.extra/usr/share/plymouth/themes/stream-box/stream-box.plymouth`, logo
+`themes/spinner/watermark.png` (icône arrondie + « Stream Box »), images de la roue du thème « spinner » de Plymouth,
+fond 0x0b0710). Plymouth démarre dès l'initrd (`InitrdProfiles=plymouth`, thème et `/etc/plymouth` copiés par
+`mkosi.initrd.conf/`, i915 dans l'initrd : un seul changement de mode au début ; dans le système seul, il démarrait
+à 3,7 s et i915 le coupait à 4,8 s), `/etc/plymouth/plymouthd.conf`, ligne de commande `splash
 plymouth.ignore-serial-consoles vt.global_cursor_default=0` (en VM, systemd ajoute une console série : sans
 ignore-serial-consoles, Plymouth passe en texte). `plymouth-quit.service.d/10-retain-splash.conf` : `plymouth quit
 --retain-splash`, l'image reste jusqu'à ce que cage prenne l'écran. Ne pas masquer plymouth-quit : greetd attend
-plymouth-quit-wait (démarrage bloqué « Hold until boot process finishes up »). Pas de Plymouth dans l'initrd : l'écran
-apparaît après le passage sur la partition système. Sur clé USB, le chargeur (~20 s) et Mesa (~11 s) sont lents ; sur
+plymouth-quit-wait (démarrage bloqué « Hold until boot process finishes up »). Sur clé USB, le chargeur (~20 s) et Mesa (~11 s) sont lents ; sur
 le SSD, bien plus courts.
 
 ### Essais en VM (image de test)
