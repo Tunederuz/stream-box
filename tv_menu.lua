@@ -37,6 +37,7 @@ local pending_display = nil                         -- résolution choisie aux f
 local pending_player = nil                          -- lecteur choisi aux flèches, appliqué par OK (il redémarre)
 local poweroff_until = 0
 local reboot_until = 0
+local power_only = false                            -- fenêtre « Box » seule, sans le menu derrière (power maintenu)
 local idle_timer, refresh_timer
 local images, shown = {}, {}                        -- cache des images préparées ; overlays posés (id → signature)
 local replays, rp_login = {}, nil                   -- rediffusions par streamer (/api/replays) ; streamer affiché
@@ -1118,6 +1119,14 @@ function draw()
     marquee_active = false
     -- Voile sur la vidéo ; opaque sans vidéo, pour cacher l'écran d'ambiance (horloge, QR code)
     local out = { rrect(0, 0, W, H, 0, "12060A", mp.get_property_native("video-params") and "1C" or "00") }
+    if power_only and modal then   -- fenêtre « Box » seule (power maintenu) : pas de menu derrière
+        out = {}
+        draw_modal(out)
+        osd.data = table.concat(out, "\n")
+        osd:update()
+        place_images({})
+        return
+    end
     out[#out + 1] = "{\\an7\\pos(0,0)\\bord0\\shad0\\1c&HFF4691&\\1a&HD8&\\blur120\\p1}m 1400 -200 l 2200 -200 2200 500 1400 500{\\p0}"
     local imgs = {}
     draw_rail(out)
@@ -1195,6 +1204,7 @@ function close_menu()
 end
 
 local function open_menu()
+    power_only = false
     if is_open then return end
     is_open = true
     -- Onglet du média en cours (recalé quand l'état arrive), rangée et carte gardées pour YouTube et Jellyfin
@@ -1262,6 +1272,7 @@ local function on_key(key)
             it.ok()
         elseif key == "back" or key == "left" then
             modal = nil
+            if power_only then return close_menu() end
         end
         if is_open then draw() end
         return
@@ -1457,6 +1468,7 @@ mp.register_script_message("streambox-tvmenu-open", open_menu)
 -- Power maintenu 3 s (stream-box.lua) : veille, redémarrage, extinction
 mp.register_script_message("streambox-power-menu", function()
     open_menu()
+    power_only = true
     open_modal("Box", {
         { label = "☾  Mettre en veille", ok = function() act("poweroff", { mode = "suspend" }) close_menu() end },
         { label = "↻  Redémarrer", ok = function() act("reboot") close_menu() end },

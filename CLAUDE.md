@@ -700,4 +700,5 @@ Power maintenu 3 s → fenêtre « Box » (veille, redémarrer, éteindre, annul
 `streambox-power-menu`) au lieu de l'action du réglage « Bouton d'arrêt », qui part désormais au relâchement d'un
 appui court. input.py mesure l'appui (valeurs 1 / 0 de evdev, action `power_menu` envoyée à 3 s) ; en secours,
 stream-box.lua lie power en « complex » (down / up de mpv) et ui.py envoie keydown / keyup pour ces touches.
+La fenêtre s'affiche seule sur la vidéo, sans le menu derrière (`powerOnly` / `power_only`) ; Retour ferme tout.
 

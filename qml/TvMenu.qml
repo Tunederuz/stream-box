@@ -108,6 +108,7 @@ Item {
     property string pendingPlayer: ""        // lecteur choisi aux flèches, appliqué par OK (le lecteur redémarre)
     property real poweroffUntil: 0
     property real rebootUntil: 0             // « Redémarrer la box » : deuxième OK dans les 4 s
+    property bool powerOnly: false           // fenêtre « Box » seule, sans le menu derrière (power maintenu)
     property var modal: null                 // { title, items: [{ label, danger, ok }] }
     property int modalSel: 0
     property date now: new Date()
@@ -325,6 +326,7 @@ Item {
         return { youtube: "youtube", jellyfin: "jellyfin", "twitch-vod": "replays", "twitch-clip": "replays" }[d.media_kind] || "history"
     }
     function open() {
+        powerOnly = false
         if (isOpen) return
         // Onglet du média en cours (mediaTab, recalé quand l'état arrive) ; YouTube et Jellyfin gardent leur rangée et
         // leur carte ; les données sont relues
@@ -575,6 +577,7 @@ Item {
     }
     // Power maintenu 3 s : veille, redémarrage, extinction (sans deuxième confirmation : le geste est volontaire)
     function powerMenu() {
+        powerOnly = true
         openModal("Box", [
             { label: "☾  Mettre en veille", ok: function () { act("poweroff", { mode: "suspend" }); close() } },
             { label: "↻  Redémarrer", ok: function () { act("reboot"); close() } },
@@ -710,7 +713,7 @@ Item {
         if (modal) {
             if (k === "up" || k === "down") modalSel = Math.max(0, Math.min(modal.items.length - 1, modalSel + (k === "down" ? 1 : -1)))
             else if (k === "ok") { var it = modal.items[modalSel]; modal = null; it.ok() }
-            else if (k === "back" || k === "left") modal = null
+            else if (k === "back" || k === "left") { modal = null; if (powerOnly) close() }
             return
         }
         if (area === "rail") {
@@ -860,6 +863,9 @@ Item {
 
     // Dessin
 
+    Item {   // tout le menu ; caché quand seule la fenêtre « Box » (power maintenu) est montrée
+        anchors.fill: parent
+        visible: !menu.powerOnly
     Rectangle {   // voile sur la vidéo ; opaque sans vidéo, pour cacher l'écran d'ambiance
         anchors.fill: parent
         color: menu.pal.veil
@@ -1410,6 +1416,7 @@ Item {
         }
     }
 
+    }
     // Clavier à l'écran (recherche YouTube)
     Item {
         anchors.fill: parent
