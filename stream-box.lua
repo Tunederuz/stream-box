@@ -15,7 +15,7 @@ local CORNER_LABELS = { tl = "↖ haut gauche", tr = "↗ haut droite", br = "�
 local MENU_TIMEOUT = 4    -- secondes sans bouger la souris avant de masquer le menu
 local MENU_TIMEOUT_KEYS = 10   -- idem quand on le pilote avec la télécommande
 local RETRY = 15          -- secondes entre deux essais quand la chaîne n'est pas en live
-local BACK_TO_TWITCH = 3  -- secondes à vide après une vidéo avant de revenir au stream (laisse Jellyfin enchaîner)
+local BACK_TO_MENU = 3    -- secondes à vide après une vidéo avant de revenir au menu (laisse Jellyfin enchaîner)
 local AUTO_SWITCH = 60    -- secondes hors ligne (après un changement de chaîne) avant de passer à un streamer en live
 local FROZEN = 20         -- secondes d'image figée, sans pause, avant de relancer le direct
 local LIVE_BACK = "400MiB" -- direct gardé en mémoire pour revenir en arrière (≈ 7-8 min en 1080p60)
@@ -149,9 +149,6 @@ local function start_server(name)
 end
 
 local function set_mode(m)
-    -- Fin d'un stream (ou début, voir start_channel) : heure gardée pour Retour ×2 sur l'écran d'accueil, qui reprend
-    -- le plus récent du dernier stream et de la dernière vidéo (remote.py, resume_last)
-    if mode == "twitch" or m == "twitch" then write_state("channel_at", tostring(os.time())) end
     mode = m
     mp.set_property_native("user-data/streambox/mode", m)
     if back_timer then
@@ -231,6 +228,13 @@ local function show_home()
     mp.commandv("stop")
 end
 
+-- Le grand menu est la page principale : au démarrage, à la fin d'une vidéo et sur Retour, plus rien en lecture et le
+-- menu par-dessus l'écran d'accueil (fond animé)
+local function home_menu()
+    if mode ~= "home" then show_home() end
+    mp.commandv("script-message", "streambox-tvmenu-open")
+end
+
 mp.register_event("start-file", function()
     if mp.get_property("path") == stream_url() then return end
     if mode == "twitch" or mode == "home" then
@@ -289,9 +293,9 @@ mp.register_event("end-file", function(e)
     if mode == "media" then
         if e.reason == "error" then mp.osd_message("Impossible de lire cette vidéo", 5) end
         if back_timer then back_timer:kill() end
-        back_timer = mp.add_timeout(BACK_TO_TWITCH, function()
+        back_timer = mp.add_timeout(BACK_TO_MENU, function()
             back_timer = nil
-            if mode == "media" and mp.get_property_native("idle-active") then start_channel(channel) end
+            if mode == "media" and mp.get_property_native("idle-active") then home_menu() end
         end)
         return
     end
@@ -913,7 +917,6 @@ local function controls_key(key)
     publish_controls()
 end
 
-local back_pressed = 0
 -- Grand menu façon Android TV (tv_menu.lua) : ouvert par le bouton Menu (touche Accueil) ; tant qu'il est ouvert,
 -- toutes les touches lui sont transmises
 local tvmenu_open = false
@@ -953,20 +956,6 @@ local function power_key()
     mp.command_native_async({ name = "subprocess", playback_only = false, capture_stdout = true,
         args = { "curl", "-s", "-m", "10", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}",
                  "http://127.0.0.1:8080/api/poweroff" } }, function() end)
-end
-
--- Retour deux fois pendant un stream : dernière vidéo de l'historique, reprise là où elle en était (remote.py) ;
--- sur l'écran d'accueil : le plus récent du dernier stream et de la dernière vidéo
-local function resume_last()
-    mp.command_native_async({ name = "subprocess", playback_only = false, capture_stdout = true,
-        args = { "curl", "-s", "-m", "20", "-X", "POST", "-H", "Content-Type: application/json",
-                 "-d", mode == "home" and '{"or_stream":true}' or "{}",
-                 "http://127.0.0.1:8080/api/resume_last" } }, function(_, r)
-        local out = r and r.stdout or ""
-        if not out:find('"ok"') then
-            mp.osd_message(out:match('"error": "([^"]*)"') or "Pas de vidéo à reprendre", 3)
-        end
-    end)
 end
 
 local function on_key(key)
@@ -1033,27 +1022,21 @@ local function on_key(key)
         else
             hide_menu()
         end
-    elseif mode == "twitch" or mode == "home" then
+    elseif mode == "home" then   -- écran d'accueil : toute touche ouvre le menu, la page principale
+        open_tvmenu()
+    elseif mode == "twitch" then
         if key == "up" or key == "down" then
             zap(key == "down" and 1 or -1)
-        elseif key == "ok" and mode == "twitch" then
+        elseif key == "ok" then
             -- Bandeau d'infos : streamer, titre du live, « EN DIRECT » ou retard ; le menu s'ouvre par Accueil
             if bar_visible then hide_bar() else show_bar() end
-        elseif key == "ok" or key == "home" then
+        elseif key == "home" then
             open_tvmenu()
         elseif key == "left" or key == "right" then
             live_seek(key == "right" and 10 or -10)
-        elseif key == "back" then
-            -- Une fois : retour au direct ; deux fois en 2 s : dernière vidéo de l'historique
-            if mp.get_time() - back_pressed < 2 then
-                back_pressed = 0
-                resume_last()
-            else
-                back_pressed = mp.get_time()
-                live_seek("live")
-                mp.osd_message(mode == "home" and "Retour encore une fois pour reprendre"
-                    or "Retour encore une fois pour reprendre la dernière vidéo", 2)
-            end
+        elseif key == "back" then   -- arrêt du stream, retour au menu
+            show_home()
+            open_tvmenu()
         elseif key == "menu" then
             toggle_chat()
             mp.osd_message(chat_visible and "Chat affiché" or "Chat masqué", 2)
@@ -1079,14 +1062,9 @@ local function on_key(key)
             open_tvmenu()
         elseif key == "menu" then
             if qt_ui() then open_tracks() show_bar() else mp.commandv("cycle", "sub") end
-        elseif key == "back" then
-            if mp.get_time() - back_pressed < 2 then
-                back_pressed = 0
-                start_channel(channel)
-            else
-                back_pressed = mp.get_time()
-                mp.osd_message("Retour encore une fois pour revenir au stream", 2)
-            end
+        elseif key == "back" then   -- arrêt de la vidéo (position gardée par l'historique), retour au menu
+            show_home()
+            open_tvmenu()
         end
     end
 end
@@ -1622,16 +1600,13 @@ mp.set_property_native("user-data/streambox/chat_visible", chat_visible)
 for key, spec in pairs(NUMBERS) do
     set_number(key, read_state(key) or spec[1])
 end
--- Reprend le dernier streamer regardé, s'il est encore dans la liste
+-- Démarrage sur le menu, rien en lecture ; le dernier streamer regardé reste la chaîne courante (Retour au stream,
+-- Home Assistant, zapping), s'il est encore dans la liste. Petit délai : le menu (appli Qt ou tv_menu.lua) se charge.
 local last = read_state("channel")
 for _, name in ipairs(streamers) do
-    if name == last then
-        start_channel(last)
-        return
-    end
+    if name == last then channel = last end
 end
-if streamers[1] then
-    start_channel(streamers[1])
-else
-    set_status("Aucun streamer : ajoute-en un dans la télécommande web (onglet Réglages)")
-end
+channel = channel or streamers[1]
+if channel then mp.set_property_native("user-data/streambox/channel", channel) end
+set_mode("home")
+mp.add_timeout(3, home_menu)

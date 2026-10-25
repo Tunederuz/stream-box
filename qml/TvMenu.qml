@@ -831,7 +831,7 @@ Item {
         if (area === "rail") {
             if (k === "up" || k === "down") tab = Math.max(0, Math.min(tabs.length - 1, tab + (k === "down" ? 1 : -1)))
             else if (k === "right" || k === "ok") enterContent()
-            else if (k === "back") close()
+            else if (k === "back" && st.mode !== "home") close()   // rien en lecture : le menu reste la page principale
             return
         }
         if (k === "back") { area = "rail"; pendingDisplay = ""; pendingPlayer = ""; return }
@@ -986,21 +986,33 @@ Item {
         opacity: box.videoActive ? 0.89 : 1
         Behavior on color { ColorAnimation { duration: 400 } }
     }
-    RectangularShadow {   // lueur floue en haut à droite, de la couleur de l'onglet
-        x: 1380; y: -320; width: 820; height: 640; radius: 320
-        blur: 240; spread: 0
-        color: menu.accent
-        opacity: menu.pal.glow
-        Behavior on color { ColorAnimation { duration: 400 } }
-        Behavior on opacity { NumberAnimation { duration: 400 } }
-    }
-    RectangularShadow {   // seconde lueur floue, en bas, plus discrète
-        x: 600; y: 860; width: 900; height: 420; radius: 210
-        blur: 220; spread: 0
-        color: menu.accent
-        opacity: menu.pal.glowLow
-        Behavior on color { ColorAnimation { duration: 400 } }
-        Behavior on opacity { NumberAnimation { duration: 400 } }
+    // Lueurs floues de la couleur de l'onglet, qui dérivent lentement ; sans vidéo derrière (le menu est alors la page
+    // principale), deux de plus et plus vives : fond animé façon écran d'accueil, pas d'image fixe
+    Repeater {
+        model: [{ x0: 1380, y0: -320, w: 820, h: 640, dx: -420, dy: 260, d: 38000, o: 1, idle: 0 },
+                { x0: 600, y0: 860, w: 900, h: 420, dx: 380, dy: -240, d: 46000, o: 0, idle: 0 },
+                { x0: 120, y0: 80, w: 700, h: 700, dx: 520, dy: 300, d: 52000, o: -1, idle: 0.30 },
+                { x0: 1100, y0: 520, w: 640, h: 640, dx: -460, dy: -260, d: 61000, o: -1, idle: 0.24 }]
+        RectangularShadow {
+            width: modelData.w; height: modelData.h; radius: Math.min(width, height) / 2
+            blur: 240; spread: 0
+            color: menu.accent
+            opacity: modelData.o < 0 ? (box.videoActive ? 0 : modelData.idle)
+                   : (modelData.o ? menu.pal.glow : menu.pal.glowLow) * (box.videoActive ? 1 : 1.4)
+            x: modelData.x0; y: modelData.y0
+            Behavior on color { ColorAnimation { duration: 400 } }
+            Behavior on opacity { NumberAnimation { duration: 600 } }
+            SequentialAnimation on x {
+                loops: Animation.Infinite; running: menu.isOpen
+                NumberAnimation { to: modelData.x0 + modelData.dx; duration: modelData.d; easing.type: Easing.InOutSine }
+                NumberAnimation { to: modelData.x0; duration: modelData.d; easing.type: Easing.InOutSine }
+            }
+            SequentialAnimation on y {
+                loops: Animation.Infinite; running: menu.isOpen
+                NumberAnimation { to: modelData.y0 + modelData.dy; duration: modelData.d * 0.8; easing.type: Easing.InOutSine }
+                NumberAnimation { to: modelData.y0; duration: modelData.d * 0.8; easing.type: Easing.InOutSine }
+            }
+        }
     }
 
     // Rail des onglets

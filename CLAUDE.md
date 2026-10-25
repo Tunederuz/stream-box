@@ -3,7 +3,7 @@
 > Les valeurs entre chevrons (`<ip-box>`…) et les domaines `example.com` sont propres à chaque installation. Les
 > détails d'une installation donnée (réseau, matériel, comptes) vont dans `CLAUDE.local.md`, non versionné.
 
-Mini PC Linux branché sur la TV. Au démarrage, il lance en plein écran le dernier stream Twitch regardé, avec le chat
+Mini PC Linux branché sur la TV. Au démarrage, il affiche le grand menu (page principale, fond animé, rien en lecture) ; un stream Twitch se regarde avec le chat
 en overlay. Quand la souris bouge (ou avec une télécommande Bluetooth), un menu permet de changer de streamer et de
 régler le chat. Une télécommande web (installable comme appli) fait la même chose depuis un téléphone, et plus encore.
 Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des réglages : menu Système de la TV et page web (`backup.py`), ou `backup.sh`.
@@ -80,7 +80,7 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   `~media/.local/state/stream-box/display_mode`, appliqué par `start.sh` avant mpv et en direct depuis la page.
 - **Mode Média** (stream-box.lua, `user-data/streambox/mode` = `twitch` | `media`) : tout fichier qui n'est pas le flux
   streamlink (lien envoyé, Jellyfin) arrête streamlink et passe en `media` ; le chat est masqué. Fin de fichier puis
-  mpv vide pendant `BACK_TO_TWITCH` (3 s) → retour au stream (le délai laisse Jellyfin enchaîner l'épisode suivant).
+  mpv vide pendant `BACK_TO_MENU` (3 s) → plus rien en lecture, grand menu (le délai laisse Jellyfin enchaîner l'épisode suivant).
   Script-messages `streambox-play <url>`, `streambox-twitch`. Un crochet `on_load` (avant l'ouverture de chaque fichier,
   y compris ceux de Jellyfin) règle `demuxer-max-bytes` (750 KiB pour le direct, 150 MiB pour les vidéos) et remet
   `hwdec=auto-safe` : le shim impose sa propre valeur de `hwdec` en s'accrochant (défaut `"no"`, réglé à `auto-safe`
@@ -127,8 +127,7 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
 - **Retour en arrière dans le direct** : `on_load` garde `LIVE_BACK` (400 MiB ≈ 7-8 min en 1080p60) avec
   `demuxer-seekable-cache=yes`. `live_window()` lit `demuxer-cache-state.seekable-ranges`. En différé ou en pause,
   `set_live_buffer` passe le tampon avant à 150 MiB (sinon mpv cesse de lire le flux et le retard fond) ; retour au
-  direct → 750 KiB. Télécommande Bluetooth : ←/→ ±10 s, Retour = direct, Retour ×2 (2 s) = dernière vidéo de l'historique reprise à sa position (`POST /api/resume_last`) ; sur l'écran d'accueil,
-  le plus récent du dernier stream (`~/.local/state/stream-box/channel_at`, écrit au début et à la fin d'un stream) et de cette vidéo (`updated`). Page : −30 s / +30 s / Direct
+  direct → 750 KiB. Télécommande Bluetooth : ←/→ ±10 s. Page : −30 s / +30 s / Direct
   (`POST /api/live_seek {delta|"live"}` → script-message `streambox-live-seek`), retard dans `/api/state` (`delay`).
   La barre de lecture affiche « −0:42 » ou « ● EN DIRECT ».
 - **Notification de live** : `remote.py` repère les streamers qui viennent de passer en live (pas au premier relevé)
@@ -208,7 +207,7 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
   le grand menu (OK aussi sur l'écran d'accueil ; le petit menu ne sert plus qu'à la souris), Menu ≡ affiche/masque le chat. Dans tous les modes : WWW (le bouton
   « navigateur ») affiche l'écran d'accueil, Play (`PLAY`/`PLAYPAUSE`, lié exprès : sinon mpv met en pause, ce qui
   figeait le direct) fait changer le chat de coin. En vidéo : OK pause, ←/→ ±10 s,
-  ↑ affiche/retire la barre de lecture (↓ la retire), Menu ≡ change de sous-titres, Retour ×2 revient au dernier stream lancé (et pendant un stream : à la dernière vidéo de l'historique). Menu ouvert : flèches = sélection (le bouton
+  ↑ affiche/retire la barre de lecture (↓ la retire), Menu ≡ change de sous-titres. Menu ouvert : flèches = sélection (le bouton
   le plus proche dans la direction), OK valide, Retour/Accueil ferment. Power éteint la box (logind).
   Appairage : mettre la télécommande en mode appairage (Xiaomi : Accueil + Retour jusqu'au clignotement), puis
   `bluetoothctl` → `scan on`, `pair`, `trust`. Les appairages sont dans la sauvegarde de `backup.sh`.
@@ -224,7 +223,7 @@ Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des r�
 - `streamers.txt` : un pseudo par ligne, `#` pour les commentaires. Relu à chaque ouverture du menu, pas besoin de redémarrer.
 
 ## État conservé (`~media/.local/state/stream-box/`)
-- `channel` : dernier streamer regardé, repris au démarrage s'il est encore dans `streamers.txt` (sinon le premier).
+- `channel` : dernier streamer regardé, chaîne courante au démarrage (« Reprendre … » du menu, Retour au stream) s'il est encore dans `streamers.txt` (sinon le premier).
 - `chat_corner` : `tl` / `tr` / `br` / `bl`.
 - `chat_visible` : `yes` / `no`.
 - `chat_bg`, `chat_size` : nombres. `display_mode` : `auto` ou `LxH@Hz`.
@@ -781,3 +780,13 @@ Clés : `lsblk` (USB / amovible, jamais le disque de la box), montées par `udis
 démontées (retirables tout de suite) ; fichiers `stream-box-backup-AAAA-MM-JJ-HHMM.tar.gz` à la racine. Liste lue une
 fois par clé branchée. Image : udisks2, exfatprogs, dosfstools et règle polkit `52-stream-box-usb.rules` (montage pour
 media même hors de la session de la TV ; install.sh l'ajoute aussi).
+
+### Menu comme page principale (bouton Retour)
+Le grand menu est la page principale : au démarrage (`home_menu()` 3 s après le chargement de stream-box.lua, le temps
+que le menu se charge), à la fin d'une vidéo (`BACK_TO_MENU`) et sur Retour pendant un stream ou une vidéo, la lecture
+s'arrête (`show_home`, mode `home`) et le menu s'ouvre par-dessus l'écran d'accueil. Plus de Retour ×2 (ni
+`/api/resume_last`) : « Reprendre <streamer> » dans En direct et l'Historique font ce travail. En mode `home` (menu
+fermé par Menu ou au bout de 90 s : écran d'accueil animé), toute touche rouvre le menu. Menu ouvert sans rien en
+lecture : Retour sur les onglets ne le ferme pas (QML `st.mode`, Lua `state.mode`). Fond du menu : lueurs de la
+couleur de l'onglet qui dérivent, deux de plus sans vidéo derrière (le voile y est opaque, pour cacher l'écran
+d'accueil).

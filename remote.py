@@ -2401,24 +2401,6 @@ def action(name, body):
         mpv(["script-message", "streambox-toggle-chat"])
     elif name == "corner":
         mpv(["script-message", "streambox-cycle-corner"])
-    elif name == "resume_last":
-        # Retour deux fois (stream-box.lua) : pendant un stream, dernière vidéo de l'historique, à sa position ; sur
-        # l'écran d'accueil (or_stream), le plus récent du dernier stream et de cette vidéo
-        entries = read_history()
-        state = os.path.expanduser("~/.local/state/stream-box/")
-        try:
-            with open(state + "channel") as f:
-                last_channel = f.read().strip()
-            with open(state + "channel_at") as f:
-                channel_at = float(f.read().strip() or 0)
-        except (OSError, ValueError):
-            last_channel, channel_at = "", 0
-        if body.get("or_stream") and last_channel and (not entries or channel_at > entries[0].get("updated", 0)):
-            mpv(["script-message", "streambox-channel", last_channel])
-        elif entries:
-            play(entries[0]["url"], title=entries[0].get("title"), thumb=entries[0].get("thumb"))
-        else:
-            raise ValueError("Pas encore de vidéo dans l'historique")
     elif name == "play":
         play(find_url(str(body.get("url", ""))), bool(body.get("from_start")),
              str(body.get("title") or "")[:200] or None, str(body.get("thumb") or "")[:500] or None,

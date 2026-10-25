@@ -1333,7 +1333,7 @@ local function on_key(key)
                 rp_row = 1
                 for i, name in ipairs(state.streamers or {}) do if name == rp_login then rp_sel.chips = i end end
             end
-        elseif key == "back" then
+        elseif key == "back" and state.mode ~= "home" then   -- rien en lecture : le menu reste la page principale
             return close_menu()
         end
         return draw()

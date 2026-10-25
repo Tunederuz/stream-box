@@ -7,8 +7,8 @@ télécommande web installable sur téléphone (PWA).
 
 ## Ce qu'elle fait
 
-- **Stream Twitch en plein écran** (streamlink + mpv, faible latence, pubs sautées), reprise du dernier streamer
-  regardé au démarrage, bascule automatique vers un streamer en live si le sien est hors ligne, relance d'un direct
+- **Stream Twitch en plein écran** (streamlink + mpv, faible latence, pubs sautées), démarrage sur le menu
+  (Retour y revient, rien en lecture derrière), bascule automatique vers un streamer en live si le sien est hors ligne, relance d'un direct
   figé.
 - **Chat Twitch en overlay** (lecture anonyme), dans le coin de son choix, avec fond et taille réglables, et les
   émotes Twitch, 7TV, BTTV et FFZ (animées) avec l'appli Qt.
