@@ -40,6 +40,7 @@ Item {
     property var audioOut: null
     // Bluetooth (menu Système) : /api/bluetooth, et étape en cours de la fenêtre (« », scan, pair)
     property var bt: null
+    property var ssh: null                   // /api/ssh : accès SSH (maintenance) activé ou coupé
     property var install: null               // /api/install : box démarrée sur sa clé USB, disques internes, progression
     property string btPhase: ""              // /api/audio : sorties son, choix (« auto » ou une sortie), sortie actuelle                  // /api/wifi, idem (ligne « Wi-Fi » : mode configuration)
     // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
@@ -599,6 +600,14 @@ Item {
             { label: "Configurer les touches", hint: "Apprendre les touches d'une télécommande ou d'une manette, une par une",
               ok: function () { act("keymap", { action: "wizard" }); close() } },
             { label: "Touches par défaut", ok: function () { act("keymap", { action: "reset" }) } },
+            { label: "Accès SSH", visible: !!(ssh && ssh.available), toggle: !!(ssh && ssh.enabled),
+              hint: ssh && ssh.enabled ? "Connexion à distance en ligne de commande, pour la maintenance"
+                                       : "Coupé : plus de connexion à distance en ligne de commande",
+              ok: function () {
+                  var on = !ssh.enabled
+                  ssh = Object.assign({}, ssh, { enabled: on })   // tout de suite à l'écran
+                  call("POST", "/api/ssh", { enabled: on }, function () { loadSsh() })
+              } },
             { label: "Installer sur ce PC", visible: !!(install && install.available),
               value: install && install.progress && install.progress.state === "running" ? install.progress.percent + " %" : "",
               hint: "La box tourne sur sa clé USB : la copier, réglages compris, sur le disque interne",
@@ -852,10 +861,11 @@ Item {
         })
     }
     Timer { interval: 2000; repeat: true; running: !!menu.modal && menu.modal.kind === "install"; onTriggered: menu.installMenu(true) }
+    function loadSsh() { call("GET", "/api/ssh", undefined, function (d) { if (d) ssh = d }) }
     function loadAudio() { call("GET", "/api/audio", undefined, function (d) { if (d && d.outputs) audioOut = d }) }
     function loadTab(id) {
         if (id === "settings") loadAudio()
-        if (id === "system") { loadBt(); loadYtAccount(); call("GET", "/api/install", undefined, function (d) { if (d) install = d }) }
+        if (id === "system") { loadBt(); loadYtAccount(); loadSsh(); call("GET", "/api/install", undefined, function (d) { if (d) install = d }) }
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
         if (id === "youtube") loadYoutube()   // rangées précédentes affichées en attendant

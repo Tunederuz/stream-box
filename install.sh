@@ -300,6 +300,10 @@ polkit.addRule(function (action, subject) {
 });
 RULES
   chmod 644 /etc/polkit-1/rules.d/52-stream-box-usb.rules
+  # Accès SSH activé ou coupé depuis le menu Système de la TV (mêmes fichiers que l'image)
+  install -m 644 "$BOX_DIR/image/mkosi.extra/usr/lib/systemd/system/stream-box-ssh@.service" /etc/systemd/system/
+  install -m 644 "$BOX_DIR/image/mkosi.extra/etc/polkit-1/rules.d/54-stream-box-ssh.rules" /etc/polkit-1/rules.d/
+  systemctl daemon-reload
 
   step "Bluetooth et réseau"
   systemctl enable --now bluetooth.service 2> /dev/null || echo "(pas de Bluetooth sur cette machine)"

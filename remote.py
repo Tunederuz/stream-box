@@ -741,6 +741,27 @@ def set_backdrop(body):
         json.dump(b, f)
 
 
+# Accès SSH (maintenance), activé ou coupé depuis le menu Système : stream-box-ssh@enable|disable.service (root, règle
+# polkit 54-stream-box-ssh.rules), installé par l'image et install.sh
+SSH_UNIT = ("/usr/lib/systemd/system/stream-box-ssh@.service", "/etc/systemd/system/stream-box-ssh@.service")
+
+
+def ssh_status():
+    def systemctl(*args):
+        return subprocess.run(["systemctl", *args, "sshd.service"], capture_output=True, text=True, timeout=10).stdout.strip()
+    return {"available": any(os.path.exists(p) for p in SSH_UNIT),
+            "enabled": systemctl("is-enabled") == "enabled", "active": systemctl("is-active") == "active"}
+
+
+def set_ssh(on):
+    if not ssh_status()["available"]:
+        raise ValueError("Réglage SSH absent de cette installation (relancer install.sh).")
+    r = subprocess.run(["systemctl", "start", f"stream-box-ssh@{'enable' if on else 'disable'}.service"],
+                       capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        raise ValueError(f"SSH : {(r.stderr or r.stdout).strip() or r.returncode}")
+
+
 def state():
     user, volume, mute, pause, video, title, position, duration, tracks, cache, vo, path = mpv(
         ["get_property", "user-data/streambox"], ["get_property", "volume"], ["get_property", "mute"],
@@ -2559,6 +2580,8 @@ def action(name, body):
             btsetup.remove(mac)
         else:
             raise ValueError("action inconnue")
+    elif name == "ssh":
+        set_ssh(bool(body.get("enabled")))
     elif name == "install":
         # Menu Système de la TV : {"disk": "nvme0n1"} ; le disque est entièrement effacé
         installer.start(str(body.get("disk", ""))[:32])
@@ -2706,6 +2729,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(400, {"error": str(e)})
             elif self.path == "/api/bluetooth":
                 self.send(200, btsetup.status())
+            elif self.path == "/api/ssh":
+                self.send(200, ssh_status())
             elif self.path == "/api/install":
                 self.send(200, installer.status())
             elif self.path == "/api/backup":

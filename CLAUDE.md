@@ -814,3 +814,10 @@ marche tel quel, `/home/media` compris : comptes, favoris, historique), points d
 clé, `bootctl install` (entrée du micrologiciel ; sinon chemin de secours EFI/BOOT/BOOTX64.EFI). Pas de root= : systemd
 retrouve la partition système par son type sur le disque d'où il a démarré. État : `/run/stream-box-install.json`
 (state running|done|error, step, percent, error). Testé dans QEMU (clé usb-storage + NVMe vierge, puis NVMe seul).
+
+### Accès SSH (menu Système)
+Ligne « Accès SSH » (interrupteur, QML `loadSsh`, visible si l'unité existe) : `GET /api/ssh` (`available`, `enabled`,
+`active` de sshd.service), `POST /api/ssh {enabled}` → `systemctl start stream-box-ssh@enable|disable.service`
+(root : `systemctl enable|disable --now sshd.service` ; règle polkit `54-stream-box-ssh.rules`, media ne peut lancer que
+ces deux-là). Unité et règle dans `image/mkosi.extra`, copiées aussi par install.sh. Couper SSH ne ferme pas les
+sessions ouvertes (elles sont dans leur scope de session, pas dans sshd.service).
