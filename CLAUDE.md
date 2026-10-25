@@ -938,6 +938,6 @@ l'assistant des touches. Pas pour les relances automatiques du direct (bascule, 
 `qml/InfoPanel.qml` : glisse depuis la droite, miniature (YouTube) ou image de l'épisode (Jellyfin), titre, chaîne ou
 série, date, vues ou note, puis la description complète (`user-data/streambox/meta` : `overview` jusqu'à 3000
 caractères, `thumb`). Ouvert depuis le titre : ↑ depuis les boutons ou la barre le choisit (`title_focus`, publié dans `controls.title`,
-cadre « OK · Infos » autour du titre dans InfoBar.qml), OK ouvre le panneau, ↓ redescend aux boutons, ↑ / Retour le
-quittent sans arrêter la vidéo ; stream-box.lua `info_open` / `info_scroll` → `user-data/streambox/info` {open, scroll} ; ↑ ↓ défilent par 4 lignes (borné à la
+cadre « OK · Infos » autour du titre dans InfoBar.qml), OK ouvre le panneau, ↓ redescend aux boutons, ↑ ferme la
+barre, Retour quitte le titre sans arrêter la vidéo ; stream-box.lua `info_open` / `info_scroll` → `user-data/streambox/info` {open, scroll} ; ↑ ↓ défilent par 4 lignes (borné à la
 longueur du texte), Retour / OK / ≡ ferment ; refermé à la fin du fichier.

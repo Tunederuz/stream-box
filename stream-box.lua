@@ -1077,9 +1077,11 @@ local function on_key(key)
         return
     end
     if title_focus and mode == "media" and key ~= "home" and key ~= "menu" then
-        -- Titre choisi : OK ouvre le panneau Infos, ↓ redescend aux boutons, ↑ ou Retour le quittent (sans arrêter)
+        -- Titre choisi : OK ouvre le panneau Infos, ↓ redescend aux boutons, ↑ ferme la barre, Retour quitte le titre
+        -- (sans arrêter la vidéo)
         title_focus = false
         if key == "ok" then publish_controls() return open_info() end
+        if key == "up" then publish_controls() return hide_bar() end
         if key == "down" and qt_ui() then ctrl_focus = 2 end   -- sur Pause / Lecture
         show_bar()
         publish_controls()
