@@ -588,8 +588,7 @@ titre sur une image claire.
   `yt-dlp -J` de l'aperçu ; Jellyfin : série, épisode, année, note, résumé) ; chapitres (`chapter-list`, `chapter`)
   relevés par ui.py avec la position : repères sur la barre, chapitre en cours dans la ligne d'infos. Temps restant
   et heure de fin (« −21:26 · fin à 02:30 »).
-- Écran de pause (`qml/PauseScreen.qml`) : image assombrie, icône pause au centre, résumé (3 lignes au plus) juste
-  au-dessus du titre ; YouTube : seulement le texte avant le premier lien de la description, sans adresses ni hashtags.
+- Écran de pause (`qml/PauseScreen.qml`) : image assombrie, icône pause au centre de l'écran (plus de résumé ici).
 - Épisode suivant (Jellyfin) : remote.py publie `user-data/streambox/next_up` {id, of, title, episode, thumb}
   (`Shows/{série}/Episodes?AdjacentTo=`) ; dans les 20 dernières secondes, stream-box.lua publie `next_card`
   {seconds, …} → `qml/NextUp.qml` (OK : lancer, Retour : rester) ; à la fin du fichier, l'épisode suivant part
