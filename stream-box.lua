@@ -230,9 +230,20 @@ end
 
 -- Le grand menu est la page principale : au démarrage, à la fin d'une vidéo et sur Retour, plus rien en lecture et le
 -- menu par-dessus l'écran d'accueil (fond animé)
+-- Première configuration pas encore faite depuis le téléphone (remote.py : setup-done, ou une box qui a déjà servi) :
+-- la TV reste sur l'écran d'accueil, QR code en grand, et le menu ne s'ouvre pas
+local function setup_pending()
+    local home = os.getenv("HOME") or ""
+    for _, path in ipairs({ home .. "/.config/stream-box/setup-done", STATE_DIR .. "/history.json" }) do
+        local f = io.open(path)
+        if f then f:close() return false end
+    end
+    return true
+end
+
 local function home_menu()
     if mode ~= "home" then show_home() end
-    mp.commandv("script-message", "streambox-tvmenu-open")
+    if not setup_pending() then mp.commandv("script-message", "streambox-tvmenu-open") end
 end
 
 mp.register_event("start-file", function()
@@ -922,6 +933,9 @@ end
 local tvmenu_open = false
 mp.observe_property("user-data/streambox/tvmenu", "native", function(_, v) tvmenu_open = v == true end)
 local function open_tvmenu()
+    if setup_pending() then
+        return mp.osd_message("Continue la configuration sur ton téléphone : scanne le QR code", 4)
+    end
     if menu_visible then hide_menu() end
     hide_bar()
     mp.commandv("script-message", "streambox-tvmenu-open")
@@ -1132,9 +1146,9 @@ local function learn_publish(phase, key)
     mp.set_property_native("user-data/streambox/learn", { phase = phase, step = learn.step, total = #LEARN,
         label = item and item[2] or "", key = key or "", seconds = LEARN_WAIT })
     if not qt_ui() then
-        mp.osd_message(phase == "done" and "Touches enregistrées"
+        mp.osd_message(phase == "done" and "Touches enregistrées" or phase == "cancel" and "Assistant annulé : touches inchangées"
             or ("Touches %d/%d : appuie sur la touche pour « %s »%s"):format(learn.step, #LEARN, item[2],
-                phase == "taken" and " (déjà prise)" or ""), phase == "done" and 3 or LEARN_WAIT)
+                phase == "taken" and " (déjà prise)" or ""), (phase == "done" or phase == "cancel") and 3 or LEARN_WAIT)
     end
 end
 
@@ -1149,6 +1163,15 @@ local function learn_finish()
     learn_key, learn = nil, nil
     mp.remove_key_binding("streambox-learn-unmapped")
     bind_keys()
+    mp.add_timeout(3, function() if not learn then mp.set_property_native("user-data/streambox/learn", {}) end end)
+end
+
+-- Retour sur la télécommande virtuelle de la page : on quitte sans rien enregistrer
+local function learn_cancel()
+    if learn.timer then learn.timer:kill() end
+    learn_publish("cancel")
+    learn_key, learn = nil, nil
+    mp.remove_key_binding("streambox-learn-unmapped")
     mp.add_timeout(3, function() if not learn then mp.set_property_native("user-data/streambox/learn", {}) end end)
 end
 
@@ -1191,7 +1214,8 @@ end)
 -- Touches lues à la source par input.py : nom de Linux (KEY_SELECT…) et action ; l'assistant apprend le nom
 mp.register_script_message("streambox-input", function(name, action)
     if learn_key then
-        if name ~= "VIRTUAL" then learn_key(name) end   -- la télécommande virtuelle de la page n'est pas apprise
+        -- La télécommande virtuelle de la page n'est pas apprise ; son Retour quitte l'assistant
+        if name ~= "VIRTUAL" then learn_key(name) elseif action == "back" then learn_cancel() end
         return
     end
     if action and action ~= "" then on_key(action) end
@@ -1215,6 +1239,7 @@ mp.register_script_message("streambox-toggle-chat", from_remote(toggle_chat))
 mp.register_script_message("streambox-cycle-corner", from_remote(toggle_corner))
 mp.register_script_message("streambox-play", play_media)
 mp.register_script_message("streambox-home", from_remote(show_home))
+mp.register_script_message("streambox-setup-done", home_menu)   -- « Terminer » sur la page du téléphone
 mp.register_script_message("streambox-twitch", from_remote(function() start_channel(channel) end))
 -- Réveil après une mise en veille (remote.py, resume_loop) : flux coupés, on relance la lecture en cours
 mp.register_script_message("streambox-resume", function()

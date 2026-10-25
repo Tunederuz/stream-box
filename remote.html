@@ -264,6 +264,28 @@
     </button>
   </header>
 
+  <!-- Première configuration (box neuve, /api/state first_run) : à la place des onglets ; la TV attend sur l'écran
+       d'accueil (QR code en grand) jusqu'à « Terminer » ou une restauration -->
+  <div id="setup" hidden>
+  <section>
+    <h2>Bienvenue sur ta Stream Box</h2>
+    <p style="margin-bottom: 0">Quelques réglages ici, puis la TV passe au menu. Tout se change ensuite dans les
+      Réglages.</p>
+  </section>
+  <section>
+    <h2>Déjà une sauvegarde ?</h2>
+    <p>Elle remet tout : comptes, favoris, historique, réglages. La box redémarre ensuite, prête.</p>
+    <button id="setup-restore" style="width: 100%">Restaurer une sauvegarde…</button>
+    <div class="status" id="setup-restore-status"></div>
+  </section>
+  <div id="setup-slot"></div>
+  <section>
+    <h2>C'est tout</h2>
+    <p>Comptes Twitch, YouTube et Jellyfin, Home Assistant, son, chat : dans les Réglages, quand tu veux.</p>
+    <button id="setup-done" class="current" style="width: 100%">Terminer</button>
+  </section>
+  </div>
+
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="remote">Télécommande</button>
     <button role="tab" data-tab="settings">Réglages</button>
@@ -422,7 +444,7 @@
     <div class="status" id="wifi-status"></div>
   </section>
 
-  <section>
+  <section id="streamers-section">
     <h2>Liste des streamers</h2>
     <p>L'ordre compte : c'est celui du menu de la TV, du zapping (haut / bas) et de la bascule automatique vers
       un streamer en live.</p>
@@ -649,7 +671,9 @@ function renderNow(s) {
 
 function render(s) {
   lastState = s;
-  if (!$("tab-settings").hidden) renderManage();
+  if (s.first_run && !setupMode) enterSetup();
+  else if (!s.first_run && setupMode) location.reload();   // configuration terminée (ici ou sur un autre téléphone)
+  if (!$("tab-settings").hidden || setupMode) renderManage();
   const media = s.mode === "media";
   $("dot").className = `dot${s.playing && !media ? " on" : ""}`;
   $("tv-state").textContent = media ? "Vidéo en cours sur la TV" : s.mode === "home" ? "Écran d'accueil"
@@ -810,6 +834,24 @@ async function editStreamers(action, login, delta = 0) {
   await refresh();
   renderManage();
 }
+
+// Première configuration : écran à part, avec les sections Wi-Fi et streamers des Réglages déplacées dedans
+var setupMode = false;   // var : lu par render(), qui peut tourner avant cette ligne
+function enterSetup() {
+  setupMode = true;
+  $("setup").hidden = false;
+  document.querySelector(".tabs").hidden = true;
+  $("tab-remote").hidden = $("tab-settings").hidden = true;
+  $("setup-slot").append($("wifi"), $("streamers-section"));
+  if (typeof refreshWifi === "function") { refreshWifi(); setInterval(refreshWifi, 5000); }
+  renderManage();
+}
+$("setup-restore").onclick = () => $("backup-file").click();
+$("setup-done").onclick = async () => {
+  $("setup-done").disabled = true;
+  await send("setup");
+  location.reload();
+};
 
 var settingsLoaders = [];   // sections des Réglages chargées seulement quand l'onglet s'affiche (enregistrées plus bas)
 function showTab(name) {
@@ -1020,7 +1062,7 @@ $("backup-file").onchange = async () => {
   const file = $("backup-file").files[0];
   $("backup-file").value = "";
   if (!file || !confirm(`Remplacer les réglages de la box par ceux de « ${file.name} » ? Elle redémarre ensuite.`)) return;
-  const st = $("backup-status");
+  const st = setupMode ? $("setup-restore-status") : $("backup-status");
   st.className = "status";
   st.textContent = "Restauration…";
   try {

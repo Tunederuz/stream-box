@@ -2,6 +2,9 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 # streamlink est installé dans un venv, lien dans ~/.local/bin (pas forcément dans le PATH de l'autostart)
 export PATH="$HOME/.local/bin:$PATH"
+# Curseur invisible pour cage seul (cursors/blank, voir la session) : sinon son pointeur apparaît pendant les
+# transitions, quand aucune fenêtre ne couvre l'écran. Les applis reprennent le thème normal (souris qui bouge)
+unset XCURSOR_THEME XCURSOR_PATH
 # Réseau : on l'attend 20 s au plus. Sans réseau, la box démarre quand même : écran d'accueil, et mode configuration
 # Wi-Fi (point d'accès de la box, voir netsetup.py) s'il y a une carte Wi-Fi
 for _ in $(seq 10); do getent hosts www.twitch.tv > /dev/null && break; sleep 2; done

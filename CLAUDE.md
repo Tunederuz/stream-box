@@ -834,3 +834,21 @@ une box installée n'offre aucun accès root. « Mode développeur » (interrupt
 (mot de passe affiché sur la TV) ; marque lisible par media `/var/lib/stream-box/dev-mode` (`GET /api/dev`). Couper
 retire sudo, SSH garde son réglage. `POST /api/ssh` et `/api/dev` : 403 hors de 127.0.0.1 (seulement depuis le menu
 de la TV, pas depuis le réseau). Règle polkit `55-stream-box-dev.rules`.
+
+### Première configuration (box neuve)
+Tant que `~/.config/stream-box/setup-done` manque (et sans historique : une box qui a déjà servi compte comme
+configurée, la marque est alors posée), `/api/state` et l'état de l'écran d'accueil ont `first_run`. TV : l'écran
+d'accueil montre « Bienvenue · Continue sur ton téléphone » et le QR code de la page en grand (330 px), sans lives ni
+plannings ; stream-box.lua (`setup_pending`, même règle, lue dans les fichiers) n'ouvre pas le menu, ni au démarrage
+ni par une touche (message « Continue la configuration sur ton téléphone »). Page : écran `#setup` à la place des
+onglets (restaurer une sauvegarde ; sections Wi-Fi et streamers des Réglages déplacées dedans ; « Terminer » →
+`POST /api/setup` → marque + script-message `streambox-setup-done` → la TV ouvre le menu). Une restauration
+(`backup.restore`) pose aussi la marque.
+
+### Curseur
+cage a un thème de curseur invisible (`cursors/blank`, `XCURSOR_PATH` / `XCURSOR_THEME` donnés par la session : image
+et install.sh) : son pointeur n'apparaît plus pendant les transitions sans fenêtre. start.sh retire ces variables pour
+les applis (une vraie souris garde son pointeur, masqué au bout de 4 s).
+
+Assistant des touches : Retour sur la télécommande virtuelle de la page l'annule sans rien enregistrer (`learn_cancel`,
+phase `cancel` de KeyWizard.qml).

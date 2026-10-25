@@ -229,7 +229,7 @@ else
 [Desktop Entry]
 Name=Stream Box
 Comment=Stream Twitch en plein écran (cage + mpv), sans bureau
-Exec=cage -s -- $BOX_DIR/start.sh
+Exec=env XCURSOR_PATH=$BOX_DIR/cursors XCURSOR_THEME=blank cage -s -- $BOX_DIR/start.sh
 Type=Application
 DesktopNames=StreamBox
 DESKTOP

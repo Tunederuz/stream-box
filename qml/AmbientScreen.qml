@@ -14,6 +14,8 @@ Item {
     readonly property var schedule: setup ? [] : (ambient.schedule || [])
     // Mode configuration (netsetup.py) : point d'accès Wi-Fi de la box, ou connexion en cours à un réseau
     readonly property var setup: ambient.setup || null
+    // Première configuration pas encore faite (remote.py, setup-done) : QR code de la page en grand, rien d'autre
+    readonly property bool firstRun: !!ambient.first_run && !setup
     property var st: ({})                     // /api/state : photos, streamers en live
     // Fond animé : d'après le dernier état lu, ici (toutes les 20 s) ou par le menu ouvert (ui.qml, plus frais)
     property var backdrop: null
@@ -136,7 +138,7 @@ Item {
 
         // En live maintenant (streamers de la liste qu'on ne regarde pas)
         Column {
-            visible: root.liveOthers.length > 0 && !root.setup
+            visible: root.liveOthers.length > 0 && !root.setup && !root.firstRun
             anchors.horizontalCenter: parent.horizontalCenter
             y: 625
             spacing: 14
@@ -168,7 +170,7 @@ Item {
 
         // Prochains lives : cartes de verre
         Column {
-            visible: root.schedule.length > 0
+            visible: root.schedule.length > 0 && !root.firstRun
             anchors.horizontalCenter: parent.horizontalCenter
             y: root.liveOthers.length > 0 ? 770 : 660
             spacing: 18
@@ -264,9 +266,30 @@ Item {
             }
         }
 
+        // Première configuration : la suite se passe sur le téléphone
+        Row {
+            visible: root.firstRun && !!(root.ambient.qr && root.ambient.qr.rows)
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 560
+            spacing: 60
+            QrCode { size: 330; rows: root.ambient.qr ? root.ambient.qr.rows : [] }
+            Column {
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 16
+                Text { text: "BIENVENUE"; color: "#c9b8ff"; font.pixelSize: 24; font.bold: true; font.letterSpacing: 4 }
+                Text { text: "Continue sur ton téléphone"; color: "white"; font.pixelSize: 54; font.bold: true }
+                Text { text: "Scanne ce code pour configurer la box :"; color: "#d0c8e0"; font.pixelSize: 30 }
+                Text { text: "streamers, comptes, ou restauration d'une sauvegarde"; color: "#d0c8e0"; font.pixelSize: 30 }
+                Text {
+                    text: root.ambient.qr ? String(root.ambient.qr.url).replace(/^https?:\/\//, "").replace(/\/$/, "") : ""
+                    color: "#8a85a0"; font.pixelSize: 26
+                }
+            }
+        }
+
         // QR code de la télécommande, selon le réglage (toujours, 30 secondes à chaque arrivée, jamais)
         Column {
-            visible: opacity > 0 && !!(root.ambient.qr && root.ambient.qr.rows) && !root.setup
+            visible: opacity > 0 && !!(root.ambient.qr && root.ambient.qr.rows) && !root.setup && !root.firstRun
             opacity: root.qrWanted ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 500 } }
             x: 1920 - 56 - width; y: 1080 - 44 - height

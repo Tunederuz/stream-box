@@ -24,7 +24,8 @@ SKIP = re.compile(r"(^|/)(fonts|scripts|offline)(/|$)|\.lock|\.bak$|(^|/)update\
 MANIFEST = "stream-box-backup.json"
 WIFI = "stream-box-wifi.json"
 NAME = re.compile(r"stream-box-backup-[\w.-]{1,60}\.tar\.gz")
-SAFETY = os.path.join(HOME, ".local/state/stream-box/before-restore.tar.gz")   # réglages d'avant la dernière restauration
+SAFETY = os.path.join(HOME, ".local/state/stream-box/before-restore.tar.gz")
+SETUP_DONE = os.path.join(HOME, ".config/stream-box/setup-done")   # restaurée : plus de première configuration   # réglages d'avant la dernière restauration
 MAX_SIZE = 64 << 20
 SHOWN = 4   # sauvegardes proposées par clé, les plus récentes
 
@@ -116,6 +117,7 @@ def restore(data):
         for m in members:   # dossiers : le filtre « data » ne garde pas leurs droits (700 pour ceux des secrets)
             if m.isdir():
                 os.chmod("/" + m.name, m.mode & 0o755)
+    open(SETUP_DONE, "a").close()
     restore_wifi(wifi)
     return len(members)
 

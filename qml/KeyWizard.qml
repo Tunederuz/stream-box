@@ -26,17 +26,18 @@ Item {
             spacing: 22
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.last.phase === "done" ? "TOUCHES DE LA TÉLÉCOMMANDE"
+                text: root.last.phase === "done" || root.last.phase === "cancel" ? "TOUCHES DE LA TÉLÉCOMMANDE"
                       : "TOUCHES DE LA TÉLÉCOMMANDE · " + (root.last.step || 0) + " / " + (root.last.total || 0)
                 color: "#a3a3ad"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 3
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.last.phase === "done" ? "Touches enregistrées" : "Appuie sur la touche pour"
-                color: "white"; font.pixelSize: root.last.phase === "done" ? 46 : 30
+                text: root.last.phase === "done" ? "Touches enregistrées" : root.last.phase === "cancel" ? "Assistant annulé"
+                      : "Appuie sur la touche pour"
+                color: "white"; font.pixelSize: root.last.phase === "done" || root.last.phase === "cancel" ? 46 : 30
             }
             Text {
-                visible: root.last.phase !== "done"
+                visible: root.last.phase !== "done" && root.last.phase !== "cancel"
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.last.label || ""
                 color: "white"; font.pixelSize: 58; font.bold: true
@@ -45,7 +46,8 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.last.phase === "ok" ? "✓ " + root.last.key
                       : root.last.phase === "taken" ? root.last.key + " : déjà prise pour une autre action"
-                      : root.last.phase === "done" ? "" : "Sans touche, elle garde l'actuelle"
+                      : root.last.phase === "done" ? "" : root.last.phase === "cancel" ? "Touches inchangées"
+                      : "Sans touche, elle garde l'actuelle  ·  Retour sur le téléphone pour quitter"
                 color: root.last.phase === "ok" ? "#7ee0a0" : root.last.phase === "taken" ? "#ffb44a" : "#8a8a95"
                 font.pixelSize: 24
             }

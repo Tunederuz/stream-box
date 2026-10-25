@@ -468,6 +468,28 @@ def qr_rows(text):
     return qr_cache[text]
 
 
+# Première configuration (box neuve) : tant qu'elle n'est pas faite depuis la page du téléphone (écran « setup »), la
+# TV reste sur l'écran d'accueil avec le QR code en grand. Faite : ~/.config/stream-box/setup-done (aussi posé par une
+# restauration). Une box qui a déjà servi (historique) compte comme configurée ; stream-box.lua suit la même règle
+SETUP_DONE = os.path.expanduser("~/.config/stream-box/setup-done")
+
+
+def setup_done():
+    if os.path.exists(SETUP_DONE):
+        return True
+    if os.path.exists(HISTORY_FILE):
+        finish_setup(notify=False)
+        return True
+    return False
+
+
+def finish_setup(notify=True):
+    os.makedirs(os.path.dirname(SETUP_DONE), exist_ok=True)
+    open(SETUP_DONE, "a").close()
+    if notify:
+        mpv(["script-message", "streambox-setup-done"])   # la TV passe au menu
+
+
 def remote_qr():
     url = remote_url()
     rows = qr_rows(url)
@@ -487,6 +509,7 @@ def ambient_loop():
         except (OSError, subprocess.SubprocessError):
             w = {}
         h = w.get("hotspot")
+        data["first_run"] = not setup_done()
         data["setup"] = {"ssid": h["ssid"], "password": h["password"], "url": h["url"],
                          "wifi_rows": qr_rows(f"WIFI:T:WPA;S:{h['ssid']};P:{h['password']};;"),
                          "url_rows": qr_rows(h["url"]), "error": w.get("error")} if h else (
@@ -815,7 +838,7 @@ def state():
         "auto_switch": user.get("auto_switch", True), "night": user.get("night", False),
         "events": user.get("events", True), "qr": user.get("qr", "always"),
         # Lecteur choisi, et celui qui tourne vraiment (mpv seul après plusieurs plantages de l'appli Qt)
-        "backdrop": backdrop(),
+        "backdrop": backdrop(), "first_run": not setup_done(),
         "player": player_choice(), "player_running": "qt" if vo == "libmpv" else "mpv", "power_action": power_action(),
         "remote_url": custom_remote_url(),
         # Clavier de recherche du menu de la TV ouvert (oublié au bout de 10 min, menu fermé entre-temps)
@@ -2614,6 +2637,9 @@ def action(name, body):
             btsetup.remove(mac)
         else:
             raise ValueError("action inconnue")
+    elif name == "setup":
+        # Page du téléphone : « Terminer » de la première configuration
+        finish_setup()
     elif name == "ssh":
         set_ssh(bool(body.get("enabled")))
     elif name == "dev":
