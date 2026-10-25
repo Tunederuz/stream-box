@@ -928,7 +928,16 @@ local KEYS = {
     WWW = "homescreen",
     PLAY = "corner", PLAYPAUSE = "corner",   -- sans ce lien, mpv les traduit en pause, ce qui figeait le direct
     POWER = "power", ["0x21ff2a"] = "power",  -- bouton power (télécommande, boîtier) : mpv seul, appli Qt
+    VOLUME_UP = "volume_up", VOLUME_DOWN = "volume_down", MUTE = "mute",
 }
+-- Ces noms (mpv, ou keysyms bricolés comme 0x21ffa0) ne servent qu'en secours : normalement, input.py lit les touches
+-- à la source avec les noms de Linux et envoie les actions (streambox-input) ; tant qu'il tourne, les touches reçues
+-- ici sont ignorées (sinon chacune compterait deux fois)
+local input_beat = 0
+mp.observe_property("user-data/streambox/input", "string", function(_, v)
+    input_beat = tonumber((v or ""):match("^evdev:(%d+)")) or 0
+end)
+local function input_service() return os.time() - input_beat < 15 end
 local DIRECTIONS = { up = { 0, -1 }, down = { 0, 1 }, left = { -1, 0 }, right = { 1, 0 } }
 
 -- Bouton power (télécommande Bluetooth, bouton du boîtier) : même action que le bouton d'arrêt de la page et de Home
@@ -945,6 +954,15 @@ end
 
 local function on_key(key)
     if key == "power" then return power_key() end
+    if key == "volume_up" or key == "volume_down" then
+        mp.commandv("add", "volume", key == "volume_up" and "5" or "-5")
+        mp.osd_message(("Volume %d %%"):format(mp.get_property_number("volume", 0)), 1.5)
+        return
+    elseif key == "mute" then
+        mp.commandv("cycle", "mute")
+        mp.osd_message(mp.get_property_native("mute") and "Son coupé" or "Son remis", 1.5)
+        return
+    end
     if tvmenu_open then
         mp.commandv("script-message", "streambox-tvmenu-key", key)
         return
@@ -1041,10 +1059,122 @@ local function on_key(key)
     end
 end
 
-for name, key in pairs(KEYS) do
-    mp.add_forced_key_binding(name, "streambox-key-" .. name, function() on_key(key) end,
-                              { repeatable = DIRECTIONS[key] ~= nil })
+-- Touches apprises (assistant « Configurer les touches » du menu Système) : ~/.config/stream-box/keymap.json,
+-- {"nom de touche mpv": "action"}, par-dessus KEYS (une touche apprise peut aussi remplacer celle d'une autre action)
+local utils = require "mp.utils"
+local KEYMAP_FILE = (os.getenv("HOME") or "") .. "/.config/stream-box/keymap.json"
+local bound = {}   -- noms liés, pour pouvoir tout délier et relier
+local learn_key    -- assistant en cours : reçoit le nom de chaque touche à la place de on_key
+
+local function read_keymap()
+    local f = io.open(KEYMAP_FILE)
+    if not f then return {} end
+    local data = utils.parse_json(f:read("*a") or "") or {}
+    f:close()
+    return data
 end
+
+local function bind_keys()
+    for name in pairs(bound) do mp.remove_key_binding("streambox-key-" .. name) end
+    bound = {}
+    local map = {}
+    for name, key in pairs(KEYS) do map[name] = key end
+    for name, key in pairs(read_keymap()) do map[name] = key end
+    for name, key in pairs(map) do
+        if not name:match("^KEY_") and not name:match("^BTN_") and not name:match("^HAT_") then   -- noms de Linux : input.py
+            mp.add_forced_key_binding(name, "streambox-key-" .. name, function()
+                if input_service() then return end
+                if learn_key then learn_key(name) else on_key(key) end
+            end, { repeatable = DIRECTIONS[key] ~= nil or key == "volume_up" or key == "volume_down" })
+            bound[name] = true
+        end
+    end
+end
+bind_keys()
+
+-- Assistant : les actions une par une ; une touche dans les 8 s l'apprend, sinon l'action garde sa touche. État dans
+-- user-data/streambox/learn (dessiné par qml/KeyWizard.qml), et en message à l'écran avec mpv seul
+local LEARN = { { "up", "Haut" }, { "down", "Bas" }, { "left", "Gauche" }, { "right", "Droite" }, { "ok", "OK" },
+                { "back", "Retour" }, { "home", "Menu de la TV" }, { "menu", "Options (≡)" },
+                { "homescreen", "Écran d'accueil" }, { "corner", "Lecture / coin du chat" }, { "power", "Power" } }
+local LEARN_WAIT = 8
+local learn = nil   -- { step, learned = { nom = action }, timer, last }
+
+local function learn_publish(phase, key)
+    local item = LEARN[learn.step]
+    mp.set_property_native("user-data/streambox/learn", { phase = phase, step = learn.step, total = #LEARN,
+        label = item and item[2] or "", key = key or "", seconds = LEARN_WAIT })
+    if not qt_ui() then
+        mp.osd_message(phase == "done" and "Touches enregistrées"
+            or ("Touches %d/%d : appuie sur la touche pour « %s »%s"):format(learn.step, #LEARN, item[2],
+                phase == "taken" and " (déjà prise)" or ""), phase == "done" and 3 or LEARN_WAIT)
+    end
+end
+
+local learn_step
+local function learn_finish()
+    local map = read_keymap()
+    for name, action in pairs(learn.learned) do map[name] = action end
+    local f = io.open(KEYMAP_FILE, "w")
+    if f then f:write(utils.format_json(map)) f:close() end
+    learn.step = #LEARN
+    learn_publish("done")
+    learn_key, learn = nil, nil
+    mp.remove_key_binding("streambox-learn-unmapped")
+    bind_keys()
+    mp.add_timeout(3, function() if not learn then mp.set_property_native("user-data/streambox/learn", {}) end end)
+end
+
+learn_step = function()
+    if learn.timer then learn.timer:kill() end
+    if learn.step > #LEARN then return learn_finish() end
+    learn_publish("wait")
+    learn.timer = mp.add_timeout(LEARN_WAIT, function() learn.step = learn.step + 1; learn_step() end)
+end
+
+local function learn_press(name)
+    if not learn or not name or name:match("^MOUSE") or name:match("^MBTN") or name:match("^WHEEL") then return end
+    local now = mp.get_time()
+    if now - (learn.last or 0) < 0.6 then return end   -- touche maintenue, ou rebond
+    learn.last = now
+    if learn.learned[name] then learn_publish("taken", name) return end   -- déjà donnée à une action précédente
+    learn.learned[name] = LEARN[learn.step][1]
+    learn_publish("ok", name)
+    if learn.timer then learn.timer:kill() end
+    learn.timer = mp.add_timeout(0.7, function() learn.step = learn.step + 1; learn_step() end)
+end
+
+mp.register_script_message("streambox-keymap-wizard", function()
+    if learn then return end
+    mp.commandv("script-message", "streambox-tvmenu-close")
+    learn = { step = 1, learned = {} }
+    learn_publish("wait")
+    -- La touche OK qui a lancé l'assistant ne doit pas être prise pour « Haut »
+    mp.add_timeout(0.8, function()
+        learn_key = learn_press
+        if not input_service() then   -- secours : touches inconnues de mpv (sinon input.py envoie tout)
+            mp.add_forced_key_binding("UNMAPPED", "streambox-learn-unmapped", function(t)
+                if t.event == "down" or t.event == "press" then learn_press(t.key_name) end
+            end, { complex = true })
+        end
+        learn_step()
+    end)
+end)
+
+-- Touches lues à la source par input.py : nom de Linux (KEY_SELECT…) et action ; l'assistant apprend le nom
+mp.register_script_message("streambox-input", function(name, action)
+    if learn_key then
+        if name ~= "VIRTUAL" then learn_key(name) end   -- la télécommande virtuelle de la page n'est pas apprise
+        return
+    end
+    if action and action ~= "" then on_key(action) end
+end)
+
+mp.register_script_message("streambox-keymap-reset", function()
+    os.remove(KEYMAP_FILE)
+    bind_keys()
+    mp.osd_message("Touches de la télécommande par défaut", 3)
+end)
 
 -- Télécommande web (remote.py) : mêmes actions que le menu
 local function from_remote(fn)

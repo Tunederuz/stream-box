@@ -14,6 +14,9 @@ python3 "$DIR/display.py" apply
 # Sortie son (voir audio.py) : la TV branchée en HDMI / DisplayPort, ou un appareil USB / Bluetooth, ou le choix fait
 # dans les réglages ; suivie en continu (branchements, débranchements)
 python3 "$DIR/audio.py" watch &
+# Touches lues à la source (télécommandes, manettes, claviers : voir input.py) ; sans droits sur /dev/input, il
+# s'arrête et les touches restent à l'appli Qt et à mpv
+python3 "$DIR/input.py" &
 
 # Lecteur permanent (mpv, ou l'appli Qt qui l'embarque) : voir player.sh
 exec "$DIR/player.sh"

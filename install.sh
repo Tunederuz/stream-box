@@ -76,6 +76,8 @@ step "Utilisateur $BOX_USER"
 id "$BOX_USER" > /dev/null 2>&1 || useradd -m -s /bin/bash "$BOX_USER"
 # Pas de mot de passe utilisable (« * » et non « ! », pour que la connexion SSH par clé reste possible)
 usermod -p '*' "$BOX_USER"
+# Groupe input : input.py lit les télécommandes, manettes et claviers à la source (/dev/input)
+usermod -aG input "$BOX_USER"
 ADMIN_HOME=$( [ -n "${SUDO_USER:-}" ] && getent passwd "$SUDO_USER" | cut -d: -f6 || true)
 if [ -n "$ADMIN_HOME" ] && [ -f "$ADMIN_HOME/.ssh/authorized_keys" ] && [ ! -f "$BOX_HOME/.ssh/authorized_keys" ]; then
   # Même clé SSH que le compte d'admin, pour la maintenance : ssh media@<box>

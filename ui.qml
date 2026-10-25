@@ -85,6 +85,7 @@ Item {
         NextUp {}
         Toast {}
         TracksPanel {}
+        KeyWizard {}
         TvMenu {
             objectName: "tvMenu"
         }

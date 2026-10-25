@@ -58,6 +58,26 @@ MENU_KEYS = {"UP": "up", "DOWN": "down", "LEFT": "left", "RIGHT": "right", "ENTE
              "WWW": "homescreen", "PLAY": "corner", "PLAYPAUSE": "corner"}
 
 
+# Touches apprises (assistant du menu Système, écrites par stream-box.lua) : relues quand le fichier change
+KEYMAP_FILE = os.path.expanduser("~/.config/stream-box/keymap.json")
+input_service = {"beat": 0}   # dernier « je tourne » d'input.py (user-data/streambox/input)
+keymap_cache = {"mtime": None, "map": {}}
+
+
+def learned_keys():
+    try:
+        mtime = os.path.getmtime(KEYMAP_FILE)
+    except OSError:
+        return {}
+    if mtime != keymap_cache["mtime"]:
+        try:
+            with open(KEYMAP_FILE, encoding="utf-8") as f:
+                keymap_cache.update(mtime=mtime, map=json.load(f))
+        except (OSError, ValueError):
+            keymap_cache.update(mtime=mtime, map={})
+    return keymap_cache["map"]
+
+
 def key_name(event):
     """Nom mpv de la touche, ou None pour l'ignorer."""
     name = KEYS.get(event.key())
@@ -430,7 +450,7 @@ class Osd(QObject):
 
     def __init__(self):
         super().__init__()
-        self.data = {"bar": False, "toast": {}, "polls": {}, "storyboard": {}, "playback": {}, "live": {}, "tracks": {}, "loading": {}, "meta": {}, "controls": {}, "seekfx": {},
+        self.data = {"bar": False, "toast": {}, "polls": {}, "storyboard": {}, "playback": {}, "live": {}, "tracks": {}, "loading": {}, "learn": {}, "meta": {}, "controls": {}, "seekfx": {},
                      "next_card": {},
                      "mode": "", "channel": "", "events": True}
         self._in.connect(self._set, Qt.QueuedConnection)
@@ -467,6 +487,7 @@ class Osd(QObject):
     storyboard = Property(str, lambda self: json.dumps(self.data["storyboard"] or {}), notify=changed)
     tracks = Property(str, lambda self: json.dumps(self.data["tracks"] or {}), notify=changed)   # TracksPanel.qml
     loading = Property(str, lambda self: json.dumps(self.data["loading"] or {}), notify=changed)   # LoadingOverlay.qml
+    learn = Property(str, lambda self: json.dumps(self.data["learn"] or {}), notify=changed)   # KeyWizard.qml
     # Barre de lecture : infos de la vidéo, rangée de boutons, saut affiché ; carte « Épisode suivant » (NextUp.qml)
     meta = Property(str, lambda self: json.dumps(self.data["meta"] or {}), notify=changed)
     controls = Property(str, lambda self: json.dumps(self.data["controls"] or {}), notify=changed)
@@ -490,11 +511,14 @@ class View(QQuickView):
         self.setCursor(QCursor(Qt.BlankCursor))
 
     def keyPressEvent(self, event):
+        if time.time() - input_service["beat"] < 15:   # input.py lit les touches à la source : rien à faire ici
+            return
         name = key_name(event)
         if not name:
             return
-        if box.menu_open and name in MENU_KEYS:   # menu QML ouvert : la touche est pour lui (le volume reste à mpv)
-            box.keyPressed.emit(MENU_KEYS[name])
+        menu_key = learned_keys().get(name) or MENU_KEYS.get(name)
+        if box.menu_open and menu_key and menu_key != "power":   # menu QML ouvert : la touche est pour lui
+            box.keyPressed.emit(menu_key)
             return
         # Répétition : un keypress par événement, comme mpv le fait pour une touche maintenue
         to_mpv(player.command, "keypress", name)
@@ -567,7 +591,12 @@ def main():
         player.observe_property(f"user-data/streambox/{key}",
                                 lambda _n, v, key=key: v is not None and chat._settings_in.emit(json.dumps({key: v})))
 
-    for key in ("bar", "toast", "polls", "storyboard", "live", "mode", "channel", "events", "tracks", "loading", "meta", "controls", "seekfx",
+    def input_beat(_n, v):
+        m = re.match(r"evdev:(\d+)", v or "")
+        input_service["beat"] = int(m.group(1)) if m else 0
+    player.observe_property("user-data/streambox/input", input_beat)
+
+    for key in ("bar", "toast", "polls", "storyboard", "live", "mode", "channel", "events", "tracks", "loading", "learn", "meta", "controls", "seekfx",
                 "next_card"):
         player.observe_property(f"user-data/streambox/{key}", osd.receive(key))
     threading.Thread(target=osd.poll_loop, daemon=True).start()

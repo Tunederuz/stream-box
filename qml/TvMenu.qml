@@ -38,7 +38,10 @@ Item {
     property var followsQr: null
     property var health: null                // /api/health, relu toutes les 5 s sur l'onglet Système
     property var wifi: null
-    property var audioOut: null              // /api/audio : sorties son, choix (« auto » ou une sortie), sortie actuelle                  // /api/wifi, idem (ligne « Wi-Fi » : mode configuration)
+    property var audioOut: null
+    // Bluetooth (menu Système) : /api/bluetooth, et étape en cours de la fenêtre (« », scan, pair)
+    property var bt: null
+    property string btPhase: ""              // /api/audio : sorties son, choix (« auto » ou une sortie), sortie actuelle                  // /api/wifi, idem (ligne « Wi-Fi » : mode configuration)
     // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
     property var yt: null
     // Couleurs selon l'onglet : violet pour Twitch (direct, suivis, rediffusions), rouge pour YouTube, neutre
@@ -502,12 +505,17 @@ Item {
                   + ", puis " + String(wifi.hotspot.url).replace(/^http:\/\//, "").replace(/\/$/, "")
                   : "OK : mode configuration, pour choisir un autre réseau depuis le téléphone",
               ok: function () { if (wifi && wifi.mode !== "hotspot") act("wifi", { action: "hotspot" }) } },
+            { label: "Télécommandes et manettes", value: bt ? (bt.paired.length + (bt.paired.length > 1 ? " appairées" : " appairée")) : "",
+              hint: "Appairer, dissocier", ok: function () { btMenu() } },
+            { label: "Configurer les touches", hint: "Apprendre les touches d'une télécommande ou d'une manette, une par une",
+              ok: function () { act("keymap", { action: "wizard" }); close() } },
+            { label: "Touches par défaut", ok: function () { act("keymap", { action: "reset" }) } },
             { label: "Mettre à jour maintenant",
               hint: health && health.update ? (health.update.running ? "Mise à jour en cours…"
                     : (health.update.last ? (health.update.last.ok ? "Dernière : " : "Échec : ") + frDate(health.update.last.date) : "Jamais")
                       + (health.update.next ? "  ·  prochaine : " + frDate(health.update.next) : "")) : undefined,
               ok: function () { if (!(health && health.update && health.update.running)) act("update") } },
-            { label: "Bouton d'arrêt (téléphone, Home Assistant)",
+            { label: "Bouton d'arrêt", hint: "Télécommande, téléphone et Home Assistant",
               value: st.power_action === "suspend" ? "Mise en veille" : "Arrêt complet",
               step: function (d) { act("power_action", { mode: st.power_action === "suspend" ? "poweroff" : "suspend" }) } },
             { label: "Mettre en veille", hint: "Réveil par la télécommande, Home Assistant ou le bouton power",
@@ -603,9 +611,58 @@ Item {
         tabEnter.restart()
         loadTab(tabs[tab].id)   // tabs[tab] et pas tabId : la liaison de tabId n'est pas encore recalculée ici
     }
+    function loadBt(cb) { call("GET", "/api/bluetooth", undefined, function (d) { if (d) { bt = d; if (cb) cb(d) } }) }
+    // Fenêtre « Télécommandes et manettes » : appareils appairés (OK : dissocier), « Appairer un appareil »
+    function btMenu() {
+        btPhase = ""
+        loadBt(function (d) {
+            var items = d.paired.map(function (p) {
+                return { label: p.name + (p.connected ? "  ·  connectée" : ""), ok: function () {
+                    openModal("Dissocier " + p.name + " ?", [
+                        { label: "✕  Dissocier", danger: true, ok: function () {
+                            call("POST", "/api/bluetooth", { action: "remove", mac: p.mac }, function () { btMenu() }) } },
+                        { label: "Annuler", ok: function () { btMenu() } }])
+                } }
+            })
+            items.push({ label: "+  Appairer un appareil", ok: btScan })
+            openModal(d.paired.length ? "Télécommandes et manettes" : "Aucun appareil appairé", items)
+            if (d.message) modal = Object.assign({}, modal, { title: d.message })
+        })
+    }
+    // Recherche : la fenêtre se remplit pendant 20 s (télécommandes et manettes d'abord) ; OK sur un appareil l'appaire
+    function btScan() {
+        btPhase = "scan"
+        call("POST", "/api/bluetooth", { action: "scan" })
+        openModal("Recherche… mets la télécommande en mode appairage", [{ label: "Annuler", ok: function () { btPhase = "" } }])
+    }
+    function btRefresh() {
+        loadBt(function (d) {
+            if (btPhase === "scan") {
+                var items = d.found.map(function (f) {
+                    return { label: f.name, ok: function () {
+                        btPhase = "pair"
+                        call("POST", "/api/bluetooth", { action: "pair", mac: f.mac })
+                        openModal("Appairage de " + f.name + "…", [{ label: "Fermer", ok: function () { btPhase = "" } }])
+                    } }
+                })
+                if (!d.scanning) items.push({ label: "↻  Chercher à nouveau", ok: btScan })
+                items.push({ label: "Annuler", ok: function () { btPhase = "" } })
+                var title = d.scanning ? "Recherche… mets la télécommande en mode appairage"
+                          : d.found.length ? "Appareils trouvés" : "Aucun appareil trouvé"
+                var sel = modalSel
+                modal = { title: title, items: items }
+                modalSel = Math.min(sel, items.length - 1)
+            } else if (btPhase === "pair" && !d.busy) {
+                btPhase = ""
+                openModal(d.message || "Appairage terminé", [{ label: "OK", ok: btMenu }])
+            }
+        })
+    }
+    Timer { interval: 2000; repeat: true; running: menu.btPhase !== "" && !!menu.modal; onTriggered: menu.btRefresh() }
     function loadAudio() { call("GET", "/api/audio", undefined, function (d) { if (d && d.outputs) audioOut = d }) }
     function loadTab(id) {
         if (id === "settings") loadAudio()
+        if (id === "system") loadBt()
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
         if (id === "youtube" && yt === null) loadYoutube()

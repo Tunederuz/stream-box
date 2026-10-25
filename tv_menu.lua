@@ -454,7 +454,7 @@ local function system_rows()
               or ((u.last and ((u.last.ok and "Dernière : " or "Échec : ") .. fr_date(u.last.date)) or "Jamais")
                   .. (u.next and ("  ·  prochaine : " .. fr_date(u.next)) or ""))) or nil,
           ok = function() if not (u and u.running) then act("update") end end },
-        { label = "Bouton d'arrêt (téléphone, Home Assistant)",
+        { label = "Bouton d'arrêt", hint = "Télécommande, téléphone et Home Assistant",
           value = s.power_action == "suspend" and "Mise en veille" or "Arrêt complet",
           step = function()
               s.power_action = s.power_action == "suspend" and "poweroff" or "suspend"
@@ -465,6 +465,12 @@ local function system_rows()
               act("poweroff", { mode = "suspend" })
               close_menu()
           end },
+        { label = "Configurer les touches", hint = "Apprendre les touches d'une télécommande, une par une",
+          ok = function()
+              act("keymap", { action = "wizard" })
+              close_menu()
+          end },
+        { label = "Touches par défaut", ok = function() act("keymap", { action = "reset" }) end },
         { label = "Éteindre la box",
           hint = mp.get_time() < poweroff_until and "Appuie encore sur OK pour éteindre" or nil,
           danger = true, ok = function()

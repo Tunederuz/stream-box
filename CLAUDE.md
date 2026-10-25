@@ -677,3 +677,21 @@ profil de carte, sortie par défaut, lectures en cours déplacées. `GET /api/au
 `POST /api/audio {output}` ; ligne « Sortie son » dans Réglages de la TV (QML et Lua) et de la page. Descriptions lues
 dans le listing texte de pactl (le JSON perd les accents). no-hdmi-audio (ancien) vaut « analogique ».
 
+### Touches lues à la source (input.py), appairage et apprentissage depuis le menu
+
+`input.py` (lancé par start.sh) lit /dev/input/event* (groupe input : install.sh l'ajoute, l'image le donne) avec les
+noms de Linux (table de linux/input-event-codes.h embarquée ; KEY_SELECT = OK Xiaomi, KEY_VIDEOPHONE = ≡ Xiaomi,
+BTN_* et pavé ABS_HAT des manettes), traduit en actions (DEFAULTS, puis keymap.json) et envoie
+`script-message streambox-input <nom> <action>` ; il annonce `user-data/streambox/input` = « evdev:<heure> » toutes les
+5 s, et tant que c'est frais (15 s) stream-box.lua et ui.py ignorent les touches reçues par mpv / Qt (sinon doublées).
+Sans droits sur /dev/input, il s'arrête : ancien chemin (noms mpv et keysyms 0x21…, KEYS de stream-box.lua) en
+secours. Actions : up down left right ok back home menu homescreen corner power volume_up volume_down mute. La
+télécommande virtuelle de la page envoie aussi des actions (`streambox-input VIRTUAL <action>`, jamais apprise).
+Assistant « Configurer les touches » (menu Système, QML et Lua ; `POST /api/keymap {action: wizard|reset}`) : dans
+stream-box.lua, les actions une par une (8 s chacune, sans touche elle garde la sienne ; une touche déjà prise est
+refusée), touches apprises ajoutées à `~/.config/stream-box/keymap.json` ({nom: action}, noms Linux via input.py ou
+noms mpv en secours), état dans `user-data/streambox/learn` → `qml/KeyWizard.qml` (message à l'écran avec mpv seul).
+ui.py applique aussi keymap.json au menu QML ouvert. Bluetooth (btsetup.py, `GET/POST /api/bluetooth`) : liste des
+appareils appairés, recherche de 20 s, appairage sans code (agent NoInputNoOutput) + trust + connect, dissociation ;
+fenêtre « Télécommandes et manettes » du menu Système (QML : `btMenu`, `btScan`, relue toutes les 2 s).
+

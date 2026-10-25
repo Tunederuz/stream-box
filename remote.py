@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import display   # display.py, même dossier
 import netsetup  # netsetup.py : point d'accès Wi-Fi de configuration
 import audio     # audio.py : sortie son (HDMI branché, USB, Bluetooth, choix manuel)
+import btsetup   # btsetup.py : télécommandes et manettes Bluetooth (appairage, dissociation)
 
 PORT = 8080
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
@@ -1983,15 +1984,31 @@ def action(name, body):
     elif name == "key":
         # Télécommande virtuelle de la page : mêmes touches que la télécommande Bluetooth (stream-box.lua, KEYS)
         # (la touche lecture de la télécommande Xiaomi change le coin du chat : ici, « Lecture » met en pause ou relance)
-        keys = {"up": "UP", "down": "DOWN", "left": "LEFT", "right": "RIGHT", "ok": "ENTER", "back": "GO_BACK",
-                "home": "HOMEPAGE", "menu": "0x2111a0", "homescreen": "WWW"}
-        if body.get("key") == "playpause":
+        # Action envoyée telle quelle à stream-box.lua (comme les touches lues par input.py)
+        key = str(body.get("key", ""))
+        if key == "playpause":
             mpv(["cycle", "pause"])
             return
-        key = keys.get(str(body.get("key", "")))
-        if not key:
+        if key not in ("up", "down", "left", "right", "ok", "back", "home", "menu", "homescreen"):
             raise ValueError("touche inconnue")
-        mpv(["keypress", key])
+        mpv(["script-message", "streambox-input", "VIRTUAL", key])
+    elif name == "bluetooth":
+        # Menu Système de la TV : {"action": "scan"}, {"action": "pair" | "remove", "mac"}
+        what, mac = str(body.get("action", "")), str(body.get("mac", "")).upper()
+        if what == "scan":
+            btsetup.scan()
+        elif what == "pair":
+            btsetup.pair(mac)
+        elif what == "remove":
+            btsetup.remove(mac)
+        else:
+            raise ValueError("action inconnue")
+    elif name == "keymap":
+        # Touches de la télécommande : assistant d'apprentissage (stream-box.lua), ou retour aux touches par défaut
+        what = str(body.get("action", ""))
+        if what not in ("wizard", "reset"):
+            raise ValueError("action inconnue")
+        mpv(["script-message", "streambox-keymap-" + what])
     elif name == "audio":
         # Sortie son : « auto » ou l'identifiant d'une sortie de GET /api/audio
         audio.set_choice(str(body.get("output", "auto"))[:200])
@@ -2114,6 +2131,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, yt_channel_videos(q))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
+            elif self.path == "/api/bluetooth":
+                self.send(200, btsetup.status())
             elif self.path == "/api/audio":
                 outs = audio.outputs()
                 self.send(200, {"choice": audio.choice(), "current": audio.current(outs),
