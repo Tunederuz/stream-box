@@ -942,3 +942,10 @@ caractères, `thumb`). Ouvert depuis le titre : ↑ depuis les boutons ou la bar
 cadre « OK · Infos » autour du titre dans InfoBar.qml), OK ouvre le panneau, ↓ redescend aux boutons, ↑ ferme la
 barre, Retour quitte le titre sans arrêter la vidéo ; stream-box.lua `info_open` / `info_scroll` → `user-data/streambox/info` {open, scroll} ; ↑ ↓ défilent par 4 lignes (borné à la
 longueur du texte), Retour / OK / ≡ ferment ; refermé à la fin du fichier.
+
+### Serveur de jetons YouTube (stream-box-pot)
+`systemd/stream-box-pot.service` lance `node build/main.js` (bgutil-ytdlp-pot-provider, port 4416) avec le Node du venv
+(install.sh, nodejs-wheel) ou, à défaut, celui du système (image, paquet nodejs) : `env PATH=…/media-venv/bin:/usr/bin`.
+Sans ce serveur, yt-dlp n'a pas de PO token GVS et YouTube ne propose que le format 18 (360p) : vérifier
+`curl 127.0.0.1:4416/ping` quand une vidéo YouTube est floue (les box installées depuis l'image étaient touchées
+jusqu'au 2026-10-25).
