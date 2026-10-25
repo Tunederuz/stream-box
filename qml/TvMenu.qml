@@ -537,8 +537,6 @@ Item {
               value: backdropNames.base[bd.base] || "", step: function (d) { stepBackdrop("base", d) } },
             { label: "Par-dessus", hint: "Un calque ajouté au fond",
               value: backdropNames.overlay[bd.overlay] || "", step: function (d) { stepBackdrop("overlay", d) } },
-            { label: "Rotation automatique", hint: bd.rotate ? "Une combinaison au hasard, changée toute seule" : "Garder le fond choisi",
-              value: backdropNames.rotate[bd.rotate] || "", step: function (d) { stepBackdrop("rotate", d) } },
             { label: "Couleurs de l'accueil", hint: "Le menu, lui, prend la couleur de chaque onglet",
               value: backdropNames.color[bd.color || "violet"] || "", step: function (d) { stepBackdrop("color", d) } },
             { label: "Résolution de la TV",
@@ -676,18 +674,15 @@ Item {
     readonly property var backdropNames: ({
         base: { none: "Rien", aurora: "Taches floues", fluid: "Fluide", borealis: "Aurore boréale" },
         overlay: { none: "Rien", silk: "Soie", stars: "Étoiles" },
-        color: { violet: "Violet", blue: "Bleu", green: "Vert", sunset: "Coucher de soleil", pink: "Rose", ice: "Glacier" },
-        rotate: { 0: "Non", 10: "10 minutes", 30: "30 minutes", 60: "1 heure" } })
-    readonly property var bd: st.backdrop || ({ base: "aurora", overlay: "none", rotate: 0 })
-    // Réglages « Fond animé », « Par-dessus » (arrêtent la rotation : on choisit soi-même), « Rotation automatique »,
-    // « Couleurs de l'accueil »
+        color: { violet: "Violet", blue: "Bleu", green: "Vert", sunset: "Coucher de soleil", pink: "Rose", ice: "Glacier" }
+    })
+    readonly property var bd: st.backdrop || ({ base: "aurora", overlay: "none", color: "violet" })
+    // Réglages « Fond animé », « Par-dessus », « Couleurs de l'accueil »
     function stepBackdrop(key, d) {
         var ids = Object.keys(backdropNames[key])
-        var cur = String(bd[key])
-        var next = ids[(Math.max(0, ids.indexOf(cur)) + d + ids.length) % ids.length]
+        var next = ids[(Math.max(0, ids.indexOf(bd[key])) + d + ids.length) % ids.length]
         var change = {}
-        change[key] = key === "rotate" ? +next : next
-        if (key === "base" || key === "overlay") change.rotate = 0
+        change[key] = next
         st = Object.assign({}, st, { backdrop: Object.assign({}, bd, change) })   // tout de suite à l'écran
         call("POST", "/api/backdrop", change, function () { refreshSoon.restart() })
     }

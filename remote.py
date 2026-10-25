@@ -7,7 +7,7 @@ Les changements de streamer et de chat passent par les script-messages de stream
 Compte Twitch : le jeton du site (cookie auth-token) est rangé dans la config Twitch de streamlink, que
 streamlink lit tout seul. Twitch ne retire les pubs des abonnements qu'avec ce jeton-là.
 """
-import calendar, datetime, hashlib, json, os, random, uuid, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
+import calendar, datetime, hashlib, json, os, uuid, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import display   # display.py, même dossier
@@ -701,18 +701,16 @@ def set_player(mode):
 
 
 # Fond animé de l'écran d'accueil et du menu sans vidéo (qml/Backdrop.qml), choisi dans les Réglages de la TV : un
-# fond, un calque par-dessus, et une rotation automatique (combinaison tirée au hasard toutes les N minutes, la même
-# pour tous les écrans pendant ce temps), couleurs de l'écran d'accueil. ~/.config/stream-box/backdrop :
-# {"base", "overlay", "rotate", "color"}
+# fond, un calque par-dessus, les couleurs de l'écran d'accueil. ~/.config/stream-box/backdrop :
+# {"base", "overlay", "color"}
 BACKDROP_FILE = os.path.expanduser("~/.config/stream-box/backdrop")
 BACKDROP_BASES = ("none", "aurora", "fluid", "borealis")
 BACKDROP_OVERLAYS = ("none", "silk", "stars")
 BACKDROP_COLORS = ("violet", "blue", "green", "sunset", "pink", "ice")   # écran d'accueil (le menu suit ses onglets)
-BACKDROP_ROTATE = (0, 10, 30, 60)   # minutes, 0 : pas de rotation
 
 
-def backdrop_choice():
-    b = {"base": "aurora", "overlay": "none", "rotate": 0, "color": "violet"}
+def backdrop():
+    b = {"base": "aurora", "overlay": "none", "color": "violet"}
     try:
         with open(BACKDROP_FILE) as f:
             raw = f.read().strip()
@@ -726,28 +724,14 @@ def backdrop_choice():
         b["base"] = "aurora"
     if b["overlay"] not in BACKDROP_OVERLAYS:
         b["overlay"] = "none"
-    if b["rotate"] not in BACKDROP_ROTATE:
-        b["rotate"] = 0
     if b["color"] not in BACKDROP_COLORS:
         b["color"] = "violet"
     return b
 
 
-def backdrop():
-    """Fond affiché : le choix, ou en rotation la combinaison de la période en cours (jamais deux fois la même de suite)"""
-    b = backdrop_choice()
-    if b["rotate"]:
-        combos = [(x, y) for x in BACKDROP_BASES for y in BACKDROP_OVERLAYS if (x, y) != ("none", "none")]
-        period = int(time.time() // (b["rotate"] * 60))
-        prev = random.Random(period - 1).choice(combos)
-        b["base"], b["overlay"] = random.Random(period).choice([c for c in combos if c != prev])
-    return b
-
-
 def set_backdrop(body):
-    b = backdrop_choice()
-    for key, allowed in (("base", BACKDROP_BASES), ("overlay", BACKDROP_OVERLAYS), ("rotate", BACKDROP_ROTATE),
-                         ("color", BACKDROP_COLORS)):
+    b = backdrop()
+    for key, allowed in (("base", BACKDROP_BASES), ("overlay", BACKDROP_OVERLAYS), ("color", BACKDROP_COLORS)):
         if key in body:
             if body[key] not in allowed:
                 raise ValueError("fond inconnu")
@@ -2484,7 +2468,7 @@ def action(name, body):
     elif name == "auto_switch":
         mpv(["script-message", "streambox-auto-switch", "yes" if body.get("enabled") else "no"])
     elif name == "backdrop":
-        # {"base", "overlay", "rotate", "color"} (un ou plusieurs) ; choisir un fond ou un calque arrête la rotation
+        # {"base", "overlay", "color"} (un ou plusieurs)
         set_backdrop(body)
     elif name == "flag":
         # Réglages oui / non de stream-box.lua : mode nuit (son compressé), encart des sondages et prédictions

@@ -796,11 +796,9 @@ d'accueil).
 60 %) partagent `Backdrop.qml` : un **fond** (`none` couleur unie, `aurora` taches floues, `fluid` bruit replié, `borealis` rideaux
 d'aurore boréale) + un **calque** (`none`, `silk` fils lumineux, `stars` étoiles sur deux plans).
 Les calques shader rendent `vec4(lumière, 0)` : mélange additif avec l'alpha prémultiplié de Qt. Fondu enchaîné à
-chaque changement (`shownBase` / `shownOverlay`). Réglages → Affichage : « Fond animé », « Par-dessus » (arrêtent la
-rotation), « Couleurs de l'accueil » (`color` : violet, blue, green, sunset, pink, ice ; palettes
-dans AmbientScreen, le menu garde la couleur de ses onglets), « Rotation automatique » (non, 10, 30, 60 min : combinaison tirée par `random.Random(période)` dans
-remote.py, la même partout, jamais deux fois la même de suite, jamais rien + rien). `POST /api/backdrop {base?, overlay?, rotate?, color?}`,
-`~/.config/stream-box/backdrop` (JSON ; ancienne valeur seule acceptée), `backdrop` (combinaison affichée) dans
+chaque changement (`shownBase` / `shownOverlay`). Réglages → Affichage : « Fond animé », « Par-dessus », « Couleurs de l'accueil » (`color` : violet, blue, green, sunset, pink, ice ; palettes
+dans AmbientScreen, le menu garde la couleur de ses onglets). `POST /api/backdrop {base?, overlay?, color?}`,
+`~/.config/stream-box/backdrop` (JSON ; ancienne valeur seule acceptée), `backdrop` (le choix) dans
 `/api/state` ; l'accueil prend le plus récent de son état (20 s) et de celui du menu ouvert (ui.qml). Au-dessus d'une
 vidéo, le menu n'a que son voile (plus de lueurs). Shaders dans `qml/shaders/*.frag`, compilés en `.qsb` versionnés
 par `qml/shaders/build.sh` (Docker, PySide6 de la même version que la box : Essentials n'a pas qsb), rendus à
