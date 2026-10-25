@@ -58,3 +58,13 @@ if [ -n "$want" ] && [ "$want" != "$have" ]; then
     rm -rf "$POT_DIR.new"; echo "serveur de jetons : ÉCHEC de la compilation, ancienne version conservée"
   fi
 fi
+
+# Récepteur YouTube Cast (cast/) : modules réinstallés si cast/package-lock.json a changé (mise à jour du dépôt)
+CAST_DIR="$(dirname "$(readlink -f "$0")")/cast"
+if [ -f "$CAST_DIR/package-lock.json" ] && [ "$CAST_DIR/package-lock.json" -nt "$CAST_DIR/node_modules/.package-lock.json" ]; then
+  if (export PATH="$HOME/.local/share/media-venv/bin:$PATH"; cd "$CAST_DIR" && npm ci --omit=dev --no-audit --no-fund --loglevel=error); then
+    echo "récepteur cast : modules à jour (relancé au prochain démarrage de la session)"
+  else
+    echo "récepteur cast : ÉCHEC de npm ci"
+  fi
+fi

@@ -21,7 +21,7 @@ rm -rf "$BOX_HOME/stream-box"
 git -c safe.directory='*' clone -q /work/src/stream-box "$BOX_HOME/stream-box"
 git -C "$BOX_HOME/stream-box" remote set-url origin https://github.com/Tunederuz/stream-box.git
 # Modifications pas encore validées (git clone ne prend que le dernier commit) : copie de l'arbre de travail
-tar -C /work/src/stream-box --exclude=.git --exclude=image -cf - . | tar -C "$BOX_HOME/stream-box" -xf -
+tar -C /work/src/stream-box --exclude=.git --exclude=image --exclude=node_modules -cf - . | tar -C "$BOX_HOME/stream-box" -xf -
 cp "$BOX_HOME/stream-box/streamers.example.txt" "$BOX_HOME/stream-box/streamers.txt"
 chown -R "$BOX_USER:$BOX_USER" "$BOX_HOME"
 
@@ -46,5 +46,6 @@ as_box '
   git clone -q --depth 1 --branch "$want" '"$POT_REPO"' "$dir"
   (cd "$dir/server" && npm ci --no-audit --no-fund --loglevel=error && npx tsc \
      && npm prune --omit=dev --no-audit --no-fund --loglevel=error)   # outils de compilation retirés une fois compilé
+  (cd ~/stream-box/cast && npm ci --omit=dev --no-audit --no-fund --loglevel=error)   # récepteur YouTube Cast
   rm -rf ~/.npm
 '

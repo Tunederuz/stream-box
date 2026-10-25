@@ -156,6 +156,14 @@ as_box '
   fi
 '
 
+step "Récepteur YouTube Cast"
+# cast/cast.js : la box dans le bouton Caster de l'appli YouTube (versions figées par cast/package-lock.json)
+as_box '
+  set -e
+  export PATH="$HOME/.local/share/media-venv/bin:$PATH"
+  cd ~/stream-box/cast && npm ci --omit=dev --no-audit --no-fund --loglevel=error
+'
+
 step "Configuration de $BOX_USER"
 as_box 'install -d -m 700 ~/.config/stream-box ~/.config/jellyfin-mpv-shim'
 if [ ! -f "$BOX_HOME/.config/jellyfin-mpv-shim/conf.json" ]; then

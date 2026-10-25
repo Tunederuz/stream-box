@@ -972,6 +972,24 @@ def yt_feed(channel_id):
     return videos
 
 
+def yt_title(video_id):
+    """Titre d'une vidéo pour l'écran de chargement : API Google si le compte est connecté (1 unité), sinon oEmbed"""
+    try:
+        token = yt_token()
+        if token:
+            items = yt_api("videos", token, part="snippet", id=video_id).get("items") or []
+            if items:
+                return items[0]["snippet"]["title"]
+    except (OSError, ValueError, KeyError):
+        pass
+    try:
+        url = "https://www.youtube.com/oembed?format=json&url=" + urllib.parse.quote(f"https://www.youtube.com/watch?v={video_id}")
+        with urllib.request.urlopen(url, timeout=3) as r:
+            return json.load(r).get("title")
+    except (OSError, ValueError):
+        return None
+
+
 def with_progress(videos):
     """Position et « vu » d'après l'historique de la box"""
     known = {e["key"]: e for e in read_history()}
@@ -1329,6 +1347,8 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
     video = {"key": key, "url": url, "kind": kind, "ident": ident, "title": entry.get("title") or title,
              "thumb": entry.get("thumb") or thumb or (f"https://i.ytimg.com/vi/{ident}/mqdefault.jpg" if kind == "youtube" else None)}
     position, updated, duration = entry.get("position", 0), entry.get("updated", 0), entry.get("duration", 0)
+    if kind == "youtube" and not video["title"]:   # vidéo castée depuis l'appli YouTube : seul son identifiant est connu
+        video["title"] = yt_title(ident)
     try:   # Twitch : titre, vignette, durée et position enregistrée sur le compte
         if kind == "twitch-vod":
             v = twitch_gql("query($id:ID!){video(id:$id){title lengthSeconds previewThumbnailURL(width:320,height:180) "

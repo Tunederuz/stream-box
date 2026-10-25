@@ -723,12 +723,15 @@ stream-box.lua lie power en « complex » (down / up de mpv) et ui.py envoie key
 La fenêtre s'affiche seule sur la vidéo, sans le menu derrière (`powerOnly` / `power_only`) ; Retour ferme tout.
 
 
-### YouTube Cast (prototype)
+### YouTube Cast
 
 `cast/cast.js` (Node, `yt-cast-receiver` 2.1.0, protocole non officiel) : la box apparaît comme « Stream Box » dans le
 bouton Caster de l'appli YouTube (découverte DIAL / SSDP sur le réseau local, port TCP 3000, UDP 1900 ; pare-feu à
 ouvrir s'il y en a un). Vidéo castée → `POST /api/play` {url, start} (position imposée par l'appli, `play(at=)`) ;
 pause, reprise, avance, volume → IPC mpv ; état changé à la télécommande renvoyé à l'appli (`notifyExternalStateChange`),
 fin de vidéo → suivante de la file ; « Arrêter la diffusion » → retour au stream (`/api/twitch`). Appairages dans
-`~/.config/stream-box/cast-receiver.json`. Lancé par start.sh si `cast/node_modules` existe (`npm install --omit=dev`
-dans `cast/`, avec le node de media-venv ou du système).
+`~/.config/stream-box/cast-receiver.json`. Lancé par start.sh si `cast/node_modules` existe ; modules installés par
+`npm ci --omit=dev` dans `cast/` (versions de `cast/package-lock.json`, ~40 Mo) par install.sh, l'image
+(mkosi.prepare.chroot) et update.sh (si le fichier de versions a changé). Titre de l'écran de chargement : l'appli ne
+donne que l'identifiant, `yt_title` le demande à l'API Google (compte connecté, 1 unité) ou à l'oEmbed public.
+Testé : découverte, lecture, pause, avance, volume, file d'attente, pause à la télécommande, arrêt.
