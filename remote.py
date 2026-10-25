@@ -702,20 +702,22 @@ def set_player(mode):
 
 # Fond animé de l'écran d'accueil et du menu sans vidéo (qml/Backdrop.qml), choisi dans les Réglages de la TV : un
 # fond, un calque par-dessus, et une rotation automatique (combinaison tirée au hasard toutes les N minutes, la même
-# pour tous les écrans pendant ce temps). ~/.config/stream-box/backdrop : {"base", "overlay", "rotate"}
+# pour tous les écrans pendant ce temps), couleurs de l'écran d'accueil. ~/.config/stream-box/backdrop :
+# {"base", "overlay", "rotate", "color"}
 BACKDROP_FILE = os.path.expanduser("~/.config/stream-box/backdrop")
 BACKDROP_BASES = ("none", "aurora", "fluid", "borealis")
-BACKDROP_OVERLAYS = ("none", "silk", "bubbles", "stars")
+BACKDROP_OVERLAYS = ("none", "silk", "stars")
+BACKDROP_COLORS = ("violet", "blue", "green", "sunset", "pink", "ice")   # écran d'accueil (le menu suit ses onglets)
 BACKDROP_ROTATE = (0, 10, 30, 60)   # minutes, 0 : pas de rotation
 
 
 def backdrop_choice():
-    b = {"base": "aurora", "overlay": "none", "rotate": 0}
+    b = {"base": "aurora", "overlay": "none", "rotate": 0, "color": "violet"}
     try:
         with open(BACKDROP_FILE) as f:
             raw = f.read().strip()
         saved = json.loads(raw) if raw.startswith("{") else {"base": raw}
-        if saved.get("base") in ("silk", "bubbles"):   # anciens styles devenus des calques
+        if saved.get("base") == "silk":   # ancien style devenu un calque
             saved = {"base": "aurora", "overlay": saved["base"]}
         b.update({k: v for k, v in saved.items() if k in b})
     except (OSError, ValueError, AttributeError):
@@ -726,6 +728,8 @@ def backdrop_choice():
         b["overlay"] = "none"
     if b["rotate"] not in BACKDROP_ROTATE:
         b["rotate"] = 0
+    if b["color"] not in BACKDROP_COLORS:
+        b["color"] = "violet"
     return b
 
 
@@ -742,7 +746,8 @@ def backdrop():
 
 def set_backdrop(body):
     b = backdrop_choice()
-    for key, allowed in (("base", BACKDROP_BASES), ("overlay", BACKDROP_OVERLAYS), ("rotate", BACKDROP_ROTATE)):
+    for key, allowed in (("base", BACKDROP_BASES), ("overlay", BACKDROP_OVERLAYS), ("rotate", BACKDROP_ROTATE),
+                         ("color", BACKDROP_COLORS)):
         if key in body:
             if body[key] not in allowed:
                 raise ValueError("fond inconnu")
@@ -2479,7 +2484,7 @@ def action(name, body):
     elif name == "auto_switch":
         mpv(["script-message", "streambox-auto-switch", "yes" if body.get("enabled") else "no"])
     elif name == "backdrop":
-        # {"base", "overlay", "rotate"} (un ou plusieurs) ; choisir un fond ou un calque arrête la rotation
+        # {"base", "overlay", "rotate", "color"} (un ou plusieurs) ; choisir un fond ou un calque arrête la rotation
         set_backdrop(body)
     elif name == "flag":
         # Réglages oui / non de stream-box.lua : mode nuit (son compressé), encart des sondages et prédictions

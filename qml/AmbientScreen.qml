@@ -56,7 +56,20 @@ Item {
     }
 
     // Fond animé, au choix dans les Réglages (Backdrop.qml)
-    Backdrop { anchors.fill: parent; base: root.bd.base || "aurora"; overlay: root.bd.overlay || "none"; running: root.visible }
+    // Couleurs au choix (Réglages → « Couleurs de l'accueil ») : trois teintes et le fond presque noir
+    readonly property var palettes: ({
+        violet: ["#9146ff", "#2b4bdc", "#b03a7a", "#0b0710"], blue: ["#2f7bff", "#1fb5c9", "#4b3cdc", "#050a14"],
+        green: ["#1ed68a", "#1a9fb0", "#6fcf3a", "#04100b"], sunset: ["#ff7a2f", "#ff3d6e", "#ffc23d", "#120806"],
+        pink: ["#ff4fa3", "#9b4dff", "#ff7b6b", "#12060d"], ice: ["#cfd8ff", "#7fa8ff", "#b9a6ff", "#08090f"] })
+    readonly property var pal: palettes[bd.color] || palettes.violet
+    Backdrop {
+        anchors.fill: parent; base: root.bd.base || "aurora"; overlay: root.bd.overlay || "none"; running: root.visible
+        c1: root.pal[0]; c2: root.pal[1]; c3: root.pal[2]; bg: root.pal[3]
+        Behavior on c1 { ColorAnimation { duration: 800 } }
+        Behavior on c2 { ColorAnimation { duration: 800 } }
+        Behavior on c3 { ColorAnimation { duration: 800 } }
+        Behavior on bg { ColorAnimation { duration: 800 } }
+    }
 
     // Contenu, qui dérive de quelques dizaines de pixels sur plusieurs minutes (écran de TV : pas d'image fixe)
     Item {

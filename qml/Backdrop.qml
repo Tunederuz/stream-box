@@ -1,12 +1,11 @@
 // Fond animé de l'écran d'accueil et du menu sans vidéo derrière : un fond (rien, taches floues, nappes de couleur fluides,
-// aurore boréale) et un calque par-dessus (fils de soie, bulles lumineuses, étoiles), au choix dans les Réglages ou
+// aurore boréale) et un calque par-dessus (fils de soie, étoiles), au choix dans les Réglages ou
 // en rotation automatique (/api/state backdrop). Shaders compilés dans shaders/ (voir build.sh), calculés à
 // mi-résolution (layer.textureSize) puis agrandis : le flou ne se voit pas, la puce graphique travaille quatre fois
 // moins. Les calques ajoutent leur lumière au fond (alpha 0 : mélange additif). Fondu enchaîné à chaque changement.
 // Rien de fixe : pas de marquage de la TV. Coordonnées en 1920x1080.
 import QtQuick
 import QtQuick.Effects
-import QtQuick.Particles
 
 Item {
     id: root
@@ -38,7 +37,7 @@ Item {
             anchors.fill: parent
             opacity: root.overlayOpacity
             active: root.shownOverlay !== "none"
-            sourceComponent: root.shownOverlay === "bubbles" ? bubblesBg : overlayShader
+            sourceComponent: overlayShader
         }
     }
     SequentialAnimation {
@@ -96,31 +95,6 @@ Item {
             fragmentShader: "shaders/" + parent.shader + ".frag.qsb"
             NumberAnimation on time {
                 from: 0; to: 100000; duration: 100000000; loops: Animation.Infinite; running: root.running
-            }
-        }
-    }
-
-    // Bulles lumineuses qui montent doucement
-    Component {
-        id: bubblesBg
-        Item {
-            ParticleSystem { id: ps; running: root.running }
-            Emitter {
-                system: ps
-                width: parent.width; height: 200; y: parent.height - 50
-                emitRate: 3; lifeSpan: 22000; lifeSpanVariation: 6000; startTime: 22000
-                size: 70; sizeVariation: 60; endSize: 120
-                velocity: AngleDirection { angle: -90; angleVariation: 25; magnitude: 55; magnitudeVariation: 30 }
-                acceleration: AngleDirection { angle: 0; angleVariation: 180; magnitude: 4 }
-            }
-            Wander { system: ps; xVariance: 60; pace: 30 }
-            ImageParticle {
-                system: ps
-                source: "qrc:///particleresources/glowdot.png"
-                color: root.c1; colorVariation: 0.1
-                redVariation: 0.2; blueVariation: 0.3
-                alpha: 0.3; alphaVariation: 0.2
-                entryEffect: ImageParticle.Fade
             }
         }
     }
