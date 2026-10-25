@@ -1,0 +1,13 @@
+# Stream Box : trousseau de clés de pacman, créé au premier démarrage (comme pacman-init de l'ISO d'Arch) : chaque box
+# a sa propre clé locale, au lieu d'une clé commune figée dans l'image
+[Unit]
+Description=Stream Box : trousseau de clés de pacman
+ConditionPathExists=!/etc/pacman.d/gnupg/trustdb.gpg
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/pacman-key --init
+ExecStart=/usr/bin/pacman-key --populate archlinux
+
+[Install]
+WantedBy=multi-user.target

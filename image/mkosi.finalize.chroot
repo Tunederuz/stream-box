@@ -2,7 +2,7 @@
 # Stream Box : services système activés et démarrage en mode graphique. Ici et pas dans mkosi.postinst.chroot :
 # mkosi lance « systemctl preset-all » entre les deux, qui remettrait tout aux réglages par défaut d'Arch.
 set -euo pipefail
-systemctl enable greetd.service NetworkManager.service bluetooth.service systemd-timesyncd.service
+systemctl enable greetd.service NetworkManager.service bluetooth.service systemd-timesyncd.service stream-box-pacman-init.service
 # SSH coupé par défaut : il s'active depuis le menu Système (« Accès SSH », « Mode développeur »), mot de passe affiché
 if [ -f /etc/ssh/stream-box-test-keys ]; then   # image de test : SSH par la clé de test, pour les essais en VM
   systemctl enable sshd.service
