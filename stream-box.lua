@@ -829,6 +829,38 @@ local function track_label(t)
     return label
 end
 
+-- Qualité d'une vidéo YouTube (panneau Sous-titres / audio) : les hauteurs proposées par YouTube, lues dans la réponse
+-- de yt-dlp gardée par ytdl_hook (user-data/mpv/ytdl/json-subprocess-result, pas de nouvelle requête). Un choix recharge
+-- la vidéo à la même seconde avec un ytdl-format plafonné ; il vaut pour cette vidéo, la suivante repart en Auto
+local quality = { default = mp.get_property("ytdl-format"), max = nil, path = nil }   -- une seule locale (limite de 200)
+function quality.list()
+    local res = mp.get_property_native("user-data/mpv/ytdl/json-subprocess-result")
+    local info = res and res.stdout and require("mp.utils").parse_json(res.stdout)
+    local heights, list = {}, {}
+    for _, f in ipairs(info and info.formats or {}) do
+        local v = f.vcodec or ""
+        if v ~= "" and v ~= "none" and not v:match("^av01") and tonumber(f.height) then
+            local h = math.floor(tonumber(f.height))
+            heights[h] = math.max(heights[h] or 0, tonumber(f.fps) or 0)
+        end
+    end
+    for h, fps in pairs(heights) do list[#list + 1] = { h = h, fps = fps } end
+    table.sort(list, function(a, b) return a.h > b.h end)
+    return list
+end
+function quality.set(h)
+    quality.max, quality.path = h, mp.get_property("path")
+    mp.set_property("ytdl-format", h and ("bestvideo[height<=?%d][vcodec!^=av01]+bestaudio/best"):format(h) or quality.default)
+    local pos = mp.get_property_number("time-pos") or 0
+    mp.commandv("loadfile", quality.path, "replace", "-1", ("start=%d"):format(math.floor(pos)))
+end
+mp.register_event("start-file", function()   -- autre vidéo : retour à la qualité automatique
+    if quality.max and mp.get_property("path") ~= quality.path then
+        quality.max, quality.path = nil, nil
+        mp.set_property("ytdl-format", quality.default)
+    end
+end)
+
 local function build_tracks()
     local subs, audio, sub_on = {}, {}, false
     for _, t in ipairs(mp.get_property_native("track-list") or {}) do
@@ -844,6 +876,17 @@ local function build_tracks()
     if #audio > 1 then   -- une seule piste audio : rien à choisir
         items[#items + 1] = { header = "Audio" }
         for _, it in ipairs(audio) do items[#items + 1] = it end
+    end
+    local q = quality.list()
+    if #q > 1 then   -- YouTube seulement (Jellyfin : fichier d'origine, pas de choix)
+        local cur = (mp.get_property_native("video-params") or {}).h
+        items[#items + 1] = { header = "Qualité" }
+        items[#items + 1] = { kind = "quality", id = false, selected = not quality.max,
+                              label = "Auto (la meilleure)" .. (cur and not quality.max and ("  ·  " .. cur .. "p") or "") }
+        for _, it in ipairs(q) do
+            items[#items + 1] = { kind = "quality", id = it.h, selected = quality.max == it.h,
+                                  label = it.h .. "p" .. (it.fps > 30 and math.floor(it.fps + 0.5) or "") }
+        end
     end
     tracks_items = items
 end
@@ -880,7 +923,9 @@ local function tracks_key(key)
         publish_tracks()
     elseif key == "ok" then
         local it = tracks_items[tracks_sel]
-        if it then mp.set_property(it.kind == "sub" and "sid" or "aid", it.id and tostring(it.id) or "no") end
+        if it and it.kind == "quality" then
+            if (it.id or nil) ~= quality.max then quality.set(it.id or nil) end
+        elseif it then mp.set_property(it.kind == "sub" and "sid" or "aid", it.id and tostring(it.id) or "no") end
         -- Choix retenu pour cette vidéo (apply_sub_pref à la reprise) : la langue, ou désactivés
         if it and it.kind == "sub" then
             if not it.id then save_sub_pref("no") elseif it.lang and it.lang ~= "" then save_sub_pref(it.lang) end
@@ -992,7 +1037,7 @@ end)
 local function controls_list()
     local paused = mp.get_property_native("pause")
     local list = { { id = "back", label = "−10 s" }, { id = "play", label = paused and "Lecture" or "Pause" },
-                   { id = "fwd", label = "+10 s" }, { id = "tracks", label = "Sous-titres" } }
+                   { id = "fwd", label = "+10 s" }, { id = "tracks", label = "Sous-titres et qualité" } }
     if #(mp.get_property_native("chapter-list") or {}) > 1 then list[#list + 1] = { id = "chapter", label = "Chapitre suivant" } end
     if next_up() then list[#list + 1] = { id = "next", label = "Épisode suivant" } end
     return list
