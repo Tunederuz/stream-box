@@ -282,14 +282,44 @@ local function fix_auto_subs()
     end
 end
 
--- Sous-titres retenus d'une vidéo à l'autre : dernier choix du panneau Sous-titres / audio (langue, ou « no » pour
--- désactivés), dans l'état « sub_lang » ; appliqué à chaque vidéo qui a une piste dans cette langue
+-- Sous-titres retenus par vidéo : le choix fait dans le panneau Sous-titres / audio (langue, ou « no » pour désactivés)
+-- est gardé pour cette vidéo (~/.local/state/stream-box/sub_prefs.json, clé : identifiant YouTube ou Jellyfin, sinon
+-- le lien ; 300 vidéos au plus) et remis quand on la reprend. Une vidéo sans choix garde celui de mpv
+local SUB_PREFS = STATE_DIR .. "/sub_prefs.json"
+local json = require "mp.utils"   -- (utils est déclaré plus bas dans ce fichier)
 local function same_lang(a, b)
     a, b = (a or ""):lower(), (b or ""):lower()
     return a ~= "" and b ~= "" and (a == b or a:sub(1, 2) == b:sub(1, 2))
 end
+local function video_key()
+    local path = mp.get_property("path") or ""
+    return path:match("[?&]v=([%w_-]+)") or path:match("youtu%.be/([%w_-]+)") or path:match("/[Vv]ideos/(%x+)/")
+        or (path ~= "" and path or nil)
+end
+local function read_sub_prefs()
+    local f = io.open(SUB_PREFS)
+    if not f then return {} end
+    local data = json.parse_json(f:read("*a") or "") or {}
+    f:close()
+    return type(data) == "table" and data or {}
+end
+local function save_sub_pref(lang)
+    local key = video_key()
+    if not key then return end
+    local prefs = read_sub_prefs()
+    prefs[key] = { lang = lang, t = os.time() }
+    local keys = {}
+    for k in pairs(prefs) do keys[#keys + 1] = k end
+    if #keys > 300 then   -- les plus anciennes partent
+        table.sort(keys, function(a, b) return (prefs[a].t or 0) < (prefs[b].t or 0) end)
+        for n = 1, #keys - 300 do prefs[keys[n]] = nil end
+    end
+    local f = io.open(SUB_PREFS, "w")
+    if f then f:write(json.format_json(prefs)) f:close() end
+end
 local function apply_sub_pref()
-    local pref = read_state("sub_lang")
+    local key = video_key()
+    local pref = key and (read_sub_prefs()[key] or {}).lang
     if not pref or pref == "" then return end
     local current = mp.get_property("sid")
     if pref == "no" then
@@ -851,9 +881,9 @@ local function tracks_key(key)
     elseif key == "ok" then
         local it = tracks_items[tracks_sel]
         if it then mp.set_property(it.kind == "sub" and "sid" or "aid", it.id and tostring(it.id) or "no") end
-        -- Choix retenu pour les vidéos suivantes (apply_sub_pref) : la langue, ou désactivés
+        -- Choix retenu pour cette vidéo (apply_sub_pref à la reprise) : la langue, ou désactivés
         if it and it.kind == "sub" then
-            if not it.id then write_state("sub_lang", "no") elseif it.lang and it.lang ~= "" then write_state("sub_lang", it.lang) end
+            if not it.id then save_sub_pref("no") elseif it.lang and it.lang ~= "" then save_sub_pref(it.lang) end
         end
         close_tracks()
     else   -- Retour, ≡, Accueil…

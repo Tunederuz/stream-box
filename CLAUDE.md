@@ -921,12 +921,13 @@ demande se perd, systemd attend 90 s puis le tue (logo du PC figé, initrd à 1 
 complet sur le Dell : 13,6 s. Pour essayer une option de démarrage sans reconstruire le noyau : add-on systemd-stub
 (`ukify build --cmdline "…" --output x.addon.efi`, dans `EFI/Linux/<uki>.efi.extra.d/`, Secure Boot désactivé).
 
-### Sous-titres retenus
-Le choix du panneau Sous-titres / audio (appli Qt) est gardé dans `~/.local/state/stream-box/sub_lang` (langue de la
-piste, ou `no` pour désactivés) et appliqué à chaque vidéo qui a une piste dans cette langue (stream-box.lua
-`apply_sub_pref`, après `fix_auto_subs`, sur `file-loaded` en mode média, puis à chaque changement de `track-list`
-pendant 20 s : les sous-titres externes de Jellyfin arrivent après l'ouverture ; même langue sur les deux premières lettres,
-pistes « forcées » en dernier). Une vidéo sans cette langue garde le choix de mpv.
+### Sous-titres retenus (par vidéo)
+Le choix du panneau Sous-titres / audio (appli Qt) est gardé pour la vidéo en cours dans
+`~/.local/state/stream-box/sub_prefs.json` (clé : identifiant YouTube `v=`, identifiant Jellyfin de `/Videos/<id>/`,
+sinon le lien ; {lang, t}, 300 vidéos au plus, les plus anciennes partent ; `no` pour désactivés) et remis quand on
+la reprend (stream-box.lua `apply_sub_pref`, sur `file-loaded` en mode média, puis à chaque changement de
+`track-list` pendant 20 s : les sous-titres externes de Jellyfin arrivent après l'ouverture ; même langue sur les deux
+premières lettres, pistes « forcées » en dernier). Une vidéo sans choix garde celui de mpv.
 
 ### Menu refermé par une lecture lancée d'ailleurs
 `streambox-tvmenu-close` (script-message) : écouté par tv_menu.lua et par ui.py (→ `box.closeRequested` → TvMenu
