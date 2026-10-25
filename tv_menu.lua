@@ -47,6 +47,7 @@ local follows, follows_loading, follows_qr = nil, false, nil   -- /api/follows ;
 local follows_timer = nil
 -- YouTube et Jellyfin (/api/youtube, /api/jellyfin) : rangées de cartes, rangée et choix par onglet. Pas de recherche
 -- ici (pas de clavier à l'écran avec mpv seul) : elle se fait depuis la télécommande web
+local audio_out = nil                              -- /api/audio : sorties son, choix, sortie actuelle
 local health, health_timer = nil, nil              -- /api/health, relu toutes les 5 s sur l'onglet Système
 local media = { youtube = { row = 1, sel = {}, first = {} }, jellyfin = { row = 1, sel = {}, first = {} } }
 local draw, close_menu
@@ -360,6 +361,24 @@ local function settings_rows()
             s.sub_bg = math.max(0, math.min(100, (s.sub_bg or 0) + 10 * d))
             act("set", { key = "sub_bg", value = s.sub_bg })
         end },
+        { header = "Son" },
+        { label = "Sortie son",
+          value = not audio_out and "…" or audio_out.choice == "auto" and "Automatique" or (function()
+              for _, o in ipairs(audio_out.outputs) do if o.id == audio_out.choice then return o.label end end
+              return "absente"
+          end)(),
+          hint = audio_out and audio_out.choice == "auto" and "USB ou Bluetooth branché, sinon la TV" or nil,
+          step = function(d)
+              if not audio_out then return end
+              local ids = { "auto" }
+              for _, o in ipairs(audio_out.outputs) do ids[#ids + 1] = o.id end
+              local i = 1
+              for k, id in ipairs(ids) do if id == audio_out.choice then i = k end end
+              audio_out.choice = ids[(i - 1 + d) % #ids + 1]
+              api("POST", "/api/audio", { output = audio_out.choice }, function()
+                  api("GET", "/api/audio", nil, function(a) if a and a.outputs then audio_out = a end if is_open then draw() end end)
+              end)
+          end },
         { header = "Lecture" },
         { label = "Bascule automatique", hint = "Passer sur un streamer en live si le sien est hors ligne",
           toggle = s.auto_switch, ok = function()
@@ -1104,6 +1123,10 @@ function draw()
         end
         draw_history(out, imgs)
     elseif id == "settings" then
+        if audio_out == nil then
+            audio_out = false   -- une seule demande à la fois
+            api("GET", "/api/audio", nil, function(a) audio_out = a and a.outputs and a or nil if is_open then draw() end end)
+        end
         draw_rows(out, settings_rows(), "Réglages", "◀ ▶ pour changer une valeur")
     else
         draw_rows(out, system_rows(), "Système", nil, 820)
@@ -1159,7 +1182,7 @@ local function open_menu()
     -- Onglet du média en cours (recalé quand l'état arrive), rangée et carte gardées pour YouTube et Jellyfin
     for i, t in ipairs(TABS) do if t.id == media_tab(state) then tab = i end end
     area, index, shortcut, start_focus = "content", 1, nil, true
-    media.youtube.data, media.jellyfin.data = nil, nil
+    media.youtube.data, media.jellyfin.data, audio_out = nil, nil, nil
     -- Relus à chaque ouverture : l'historique change, remote.py garde les rediffusions 5 min en cache
     history, history_loading, replays, rp_login, rp_row, rp_sel, rp_first = nil, false, {}, nil, 1, {}, {}
     follows = nil

@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import display   # display.py, même dossier
 import netsetup  # netsetup.py : point d'accès Wi-Fi de configuration
+import audio     # audio.py : sortie son (HDMI branché, USB, Bluetooth, choix manuel)
 
 PORT = 8080
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
@@ -1983,6 +1984,9 @@ def action(name, body):
         if not key:
             raise ValueError("touche inconnue")
         mpv(["keypress", key])
+    elif name == "audio":
+        # Sortie son : « auto » ou l'identifiant d'une sortie de GET /api/audio
+        audio.set_choice(str(body.get("output", "auto"))[:200])
     elif name == "keyboard":
         # Menu de la TV : clavier de recherche ouvert ou fermé (la page propose alors un champ de texte)
         keyboard.update(open=bool(body.get("open")), text=str(body.get("text", ""))[:80],
@@ -2102,6 +2106,10 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, yt_channel_videos(q))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
+            elif self.path == "/api/audio":
+                outs = audio.outputs()
+                self.send(200, {"choice": audio.choice(), "current": audio.current(outs),
+                                "outputs": [{"id": o["id"], "label": o["label"], "kind": o["kind"]} for o in outs]})
             elif self.path == "/api/wifi":
                 self.send(200, netsetup.status())
             elif self.path == "/api/health":

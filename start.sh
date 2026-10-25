@@ -11,8 +11,9 @@ python3 "$DIR/remote.py" &   # télécommande web, port 8080
 
 # Résolution enregistrée depuis la télécommande (« auto » par défaut : jamais de 4K à 30 Hz)
 python3 "$DIR/display.py" apply
-# Son sur l'HDMI de la TV, si rien d'autre n'a été choisi (voir audio.py)
-python3 "$DIR/audio.py"
+# Sortie son (voir audio.py) : la TV branchée en HDMI / DisplayPort, ou un appareil USB / Bluetooth, ou le choix fait
+# dans les réglages ; suivie en continu (branchements, débranchements)
+python3 "$DIR/audio.py" watch &
 
 # Lecteur permanent (mpv, ou l'appli Qt qui l'embarque) : voir player.sh
 exec "$DIR/player.sh"

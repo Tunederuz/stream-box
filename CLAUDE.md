@@ -665,3 +665,14 @@ installée par install.sh garde deno) ; serveur de jetons sans ses dépendances 
 développement Qt du venv. Firmwares, LLVM, polices Noto et Qt gardés (compatibilité). Testé dans QEMU sur une clé de
 16 Go : partition agrandie à 16 Go, vidéo YouTube lue.
 
+### Sortie son (audio.py)
+
+`audio.py watch` (lancé par start.sh, en continu) : sorties = prises HDMI / DisplayPort marquées « available » par
+PipeWire (écran ou TV qui sait jouer le son branché ; nom d'après l'EDID, `device.product.name`), appareils USB et
+Bluetooth (sinks `device.bus` usb / bluez5), sortie analogique de la carte. Choix dans `~/.config/stream-box/audio-output` :
+« auto » (Bluetooth > USB > HDMI branché ; rien de tout ça : on ne touche à rien) ou l'identifiant d'une sortie (absente
+→ automatique en attendant). Nouveau choix 1,5 s après chaque évènement sink/card de `pactl subscribe` ; changement de
+profil de carte, sortie par défaut, lectures en cours déplacées. `GET /api/audio` (sorties, choix, actuelle),
+`POST /api/audio {output}` ; ligne « Sortie son » dans Réglages de la TV (QML et Lua) et de la page. Descriptions lues
+dans le listing texte de pactl (le JSON perd les accents). no-hdmi-audio (ancien) vaut « analogique ».
+

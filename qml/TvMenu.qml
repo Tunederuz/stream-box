@@ -37,7 +37,8 @@ Item {
     property var account: null
     property var followsQr: null
     property var health: null                // /api/health, relu toutes les 5 s sur l'onglet Système
-    property var wifi: null                  // /api/wifi, idem (ligne « Wi-Fi » : mode configuration)
+    property var wifi: null
+    property var audioOut: null              // /api/audio : sorties son, choix (« auto » ou une sortie), sortie actuelle                  // /api/wifi, idem (ligne « Wi-Fi » : mode configuration)
     // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
     property var yt: null
     // Couleurs selon l'onglet : violet pour Twitch (direct, suivis, rediffusions), rouge pour YouTube, neutre
@@ -428,6 +429,20 @@ Item {
               value: s.sub_bg ? s.sub_bg + " %" : "Aucun", step: function (d) {
                 act("set", { key: "sub_bg", value: Math.max(0, Math.min(100, (s.sub_bg || 0) + 10 * d)) })
             } },
+            { header: "Son" },
+            { label: "Sortie son",
+              // automatique : appareil USB ou Bluetooth branché, sinon la TV (audio.py)
+              hint: audioOut && audioCurrentLabel() ? "En ce moment : " + audioCurrentLabel() : undefined,
+              value: !audioOut ? "…" : audioOut.choice === "auto" ? "Automatique"
+                   : (audioOut.outputs.filter(function (o) { return o.id === audioOut.choice })[0] || { label: "absente" }).label,
+              step: function (d) {
+                  if (!audioOut) return
+                  var ids = ["auto"].concat(audioOut.outputs.map(function (o) { return o.id }))
+                  var i = Math.max(0, ids.indexOf(audioOut.choice))
+                  var next = ids[(i + d + ids.length) % ids.length]
+                  audioOut = Object.assign({}, audioOut, { choice: next })
+                  call("POST", "/api/audio", { output: next }, function () { loadAudio() })
+              } },
             { header: "Lecture" },
             { label: "Bascule automatique", hint: "Passer sur un streamer en live si le sien est hors ligne",
               toggle: !!s.auto_switch, ok: function () { act("auto_switch", { enabled: !s.auto_switch }) } },
@@ -457,6 +472,10 @@ Item {
         ]
     }
     Timer { id: displayReload; interval: 3000; onTriggered: menu.call("GET", "/api/display", undefined, function (d) { if (d && d.modes) menu.display = d }) }
+    function audioCurrentLabel() {
+        var o = audioOut && audioOut.outputs.filter(function (x) { return x.id === audioOut.current })[0]
+        return o ? o.label : ""
+    }
     function selectable(rows) {
         var out = []
         for (var i = 0; i < rows.length; i++) if (!rows[i].header) out.push(i)
@@ -584,7 +603,9 @@ Item {
         tabEnter.restart()
         loadTab(tabs[tab].id)   // tabs[tab] et pas tabId : la liaison de tabId n'est pas encore recalculée ici
     }
+    function loadAudio() { call("GET", "/api/audio", undefined, function (d) { if (d && d.outputs) audioOut = d }) }
     function loadTab(id) {
+        if (id === "settings") loadAudio()
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
         if (id === "youtube" && yt === null) loadYoutube()

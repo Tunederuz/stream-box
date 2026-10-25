@@ -504,6 +504,13 @@
   </section>
 
   <section>
+    <h2>Sortie son</h2>
+    <select id="audio-out" aria-label="Sortie son"><option>Chargement…</option></select>
+    <p id="audio-hint">Automatique : un casque ou une enceinte USB ou Bluetooth passe en premier, sinon la TV branchée en
+      HDMI / DisplayPort.</p>
+  </section>
+
+  <section>
     <h2>Adresse de la télécommande</h2>
     <label class="setting" for="remote-url" style="margin-top: 0">Adresse montrée en QR code sur la TV</label>
     <div class="field">
@@ -812,7 +819,7 @@ function showTab(name) {
   $("tab-remote").hidden = name !== "remote";
   $("tab-settings").hidden = name !== "settings";
   try { localStorage.setItem("tab", name); } catch (e) { /* stockage indisponible : on oublie l'onglet */ }
-  if (name === "settings") { renderManage(); if (typeof refreshHealth === "function") refreshHealth(); if (typeof loadYoutube === "function") loadYoutube(); }
+  if (name === "settings") { renderManage(); if (typeof refreshAudio === "function") refreshAudio(); if (typeof refreshHealth === "function") refreshHealth(); if (typeof loadYoutube === "function") loadYoutube(); }
   if (typeof previewTick === "function") previewTick();
 }
 document.querySelectorAll(".tabs button").forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
@@ -1119,6 +1126,24 @@ async function editYoutube(action, channel, delta = 0) {
 }
 $("add-yt").onclick = () => { if ($("new-yt").value.trim()) editYoutube("add", $("new-yt").value); };
 $("new-yt").onkeydown = (e) => { if (e.key === "Enter") $("add-yt").click(); };
+
+// Sortie son : automatique ou une sortie précise (audio.py) ; relue à l'ouverture des Réglages
+async function refreshAudio() {
+  let a;
+  try { a = await (await fetch("/api/audio")).json(); } catch (e) { return; }
+  if (!a.outputs) return;
+  const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
+  const now = a.outputs.find((o) => o.id === a.current);
+  const opts = [option("auto", "Automatique" + (a.choice === "auto" && now ? ` (en ce moment : ${now.label})` : "")),
+                ...a.outputs.map((o) => option(o.id, o.label))];
+  if (a.choice !== "auto" && !a.outputs.some((o) => o.id === a.choice)) opts.push(option(a.choice, "Sortie choisie (absente pour l'instant)"));
+  $("audio-out").replaceChildren(...opts);
+  $("audio-out").value = a.choice;
+}
+$("audio-out").onchange = async () => {
+  await send("audio", { output: $("audio-out").value });
+  setTimeout(refreshAudio, 1500);
+};
 
 // Wi-Fi : affiché si la box a une carte Wi-Fi. Sur le point d'accès de configuration (10.42.0.1), la page s'ouvre
 // sur cette section : après la connexion, le téléphone perd la box (elle quitte son point d'accès)
