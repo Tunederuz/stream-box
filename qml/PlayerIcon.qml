@@ -1,5 +1,6 @@
 // Icônes de la barre de lecture, dessinées (pas de caractères Unicode, dont le rendu dépend des polices : emoji…) :
-// back (−10 s), fwd (+10 s), play, pause, tracks (sous-titres), chapter (chapitre suivant), next (épisode suivant).
+// back (−10 s), fwd (+10 s), play, pause, tracks (sous-titres), quality (qualité), chapter (chapitre suivant),
+// next (épisode suivant).
 import QtQuick
 import QtQuick.Shapes
 
@@ -69,6 +70,14 @@ Item {
             Row { spacing: 3; Rectangle { width: 6; height: 3; color: root.color } Rectangle { width: 10; height: 3; color: root.color } }
             Row { spacing: 3; Rectangle { width: 10; height: 3; color: root.color } Rectangle { width: 6; height: 3; color: root.color } }
         }
+    }
+    // Qualité : « HD » dans un cadre arrondi
+    Rectangle {
+        visible: root.name === "quality"
+        anchors.centerIn: parent
+        width: 32; height: 22; radius: 5
+        color: "transparent"; border.color: root.color; border.width: 3
+        Text { anchors.centerIn: parent; text: "HD"; color: root.color; font.pixelSize: 12; font.bold: true }
     }
     // Chapitre suivant / épisode suivant : triangle et barre (épisode : deux triangles)
     Shape {

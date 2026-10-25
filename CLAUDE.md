@@ -951,9 +951,10 @@ Sans ce serveur, yt-dlp n'a pas de PO token GVS et YouTube ne propose que le for
 jusqu'au 2026-10-25).
 
 ### Sélecteur de qualité (YouTube)
-Panneau Sous-titres / audio (bouton « Sous-titres et qualité ») : section « Qualité » si YouTube propose plusieurs
-hauteurs, lues dans la réponse de yt-dlp gardée par ytdl_hook (`user-data/mpv/ytdl/json-subprocess-result` : pas de
+Bouton « Qualité » (icône HD) à part, présent si YouTube propose plusieurs hauteurs : même panneau que les
+sous-titres en mode `quality` (`open_tracks("quality")`, `tracks_mode`) ; hauteurs lues dans la réponse de yt-dlp gardée par ytdl_hook (`user-data/mpv/ytdl/json-subprocess-result` : pas de
 nouvelle requête ; AV1 exclu, la puce ne le décode pas). « Auto (la meilleure) · 1440p » ou une hauteur (« 720p60 ») :
 `ytdl-format` plafonné (`bestvideo[height<=?H][vcodec!^=av01]+bestaudio/best`) et rechargement à la même seconde
-(stream-box.lua, table `quality` : une seule locale, le bloc principal est à la limite des 200 de Lua). Vaut pour la
+(stream-box.lua, table `quality` : une seule locale, le bloc principal est à la limite des 200 de Lua ; liste gardée
+une fois par vidéo, la rangée de boutons la redemande souvent). Vaut pour la
 vidéo en cours ; une autre vidéo repart sur le format par défaut. Jellyfin : pas de choix (fichier d'origine).

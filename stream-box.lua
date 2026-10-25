@@ -834,6 +834,8 @@ end
 -- la vidéo à la même seconde avec un ytdl-format plafonné ; il vaut pour cette vidéo, la suivante repart en Auto
 local quality = { default = mp.get_property("ytdl-format"), max = nil, path = nil }   -- une seule locale (limite de 200)
 function quality.list()
+    local path = mp.get_property("path")
+    if quality.cache and quality.cache_path == path then return quality.cache end   -- lue une fois par vidéo
     local res = mp.get_property_native("user-data/mpv/ytdl/json-subprocess-result")
     local info = res and res.stdout and require("mp.utils").parse_json(res.stdout)
     local heights, list = {}, {}
@@ -846,6 +848,7 @@ function quality.list()
     end
     for h, fps in pairs(heights) do list[#list + 1] = { h = h, fps = fps } end
     table.sort(list, function(a, b) return a.h > b.h end)
+    if info then quality.cache, quality.cache_path = list, path end
     return list
 end
 function quality.set(h)
@@ -861,7 +864,19 @@ mp.register_event("start-file", function()   -- autre vidéo : retour à la qual
     end
 end)
 
+local tracks_mode = "subs"   -- panneau ouvert par le bouton Sous-titres (sous-titres, audio) ou Qualité
 local function build_tracks()
+    if tracks_mode == "quality" then
+        local items, cur = { { header = "Qualité" } }, (mp.get_property_native("video-params") or {}).h
+        items[#items + 1] = { kind = "quality", id = false, selected = not quality.max,
+                              label = "Auto (la meilleure)" .. (cur and not quality.max and ("  ·  " .. cur .. "p") or "") }
+        for _, it in ipairs(quality.list()) do
+            items[#items + 1] = { kind = "quality", id = it.h, selected = quality.max == it.h,
+                                  label = it.h .. "p" .. (it.fps > 30 and math.floor(it.fps + 0.5) or "") }
+        end
+        tracks_items = items
+        return
+    end
     local subs, audio, sub_on = {}, {}, false
     for _, t in ipairs(mp.get_property_native("track-list") or {}) do
         if t.type == "sub" then
@@ -877,17 +892,6 @@ local function build_tracks()
         items[#items + 1] = { header = "Audio" }
         for _, it in ipairs(audio) do items[#items + 1] = it end
     end
-    local q = quality.list()
-    if #q > 1 then   -- YouTube seulement (Jellyfin : fichier d'origine, pas de choix)
-        local cur = (mp.get_property_native("video-params") or {}).h
-        items[#items + 1] = { header = "Qualité" }
-        items[#items + 1] = { kind = "quality", id = false, selected = not quality.max,
-                              label = "Auto (la meilleure)" .. (cur and not quality.max and ("  ·  " .. cur .. "p") or "") }
-        for _, it in ipairs(q) do
-            items[#items + 1] = { kind = "quality", id = it.h, selected = quality.max == it.h,
-                                  label = it.h .. "p" .. (it.fps > 30 and math.floor(it.fps + 0.5) or "") }
-        end
-    end
     tracks_items = items
 end
 
@@ -899,12 +903,13 @@ local function publish_tracks()
     mp.set_property_native("user-data/streambox/tracks", { open = true, items = tracks_items, sel = tracks_sel - 1 })
 end
 
-local function open_tracks()
+local function open_tracks(mode)
+    tracks_mode = mode or "subs"
     build_tracks()
     tracks_open = true
     tracks_sel = 2
     for i, it in ipairs(tracks_items) do   -- focus sur le choix en cours
-        if it.kind == "sub" and it.selected then tracks_sel = i break end
+        if (it.kind == "sub" or it.kind == "quality") and it.selected then tracks_sel = i break end
     end
     publish_tracks()
 end
@@ -1037,7 +1042,9 @@ end)
 local function controls_list()
     local paused = mp.get_property_native("pause")
     local list = { { id = "back", label = "−10 s" }, { id = "play", label = paused and "Lecture" or "Pause" },
-                   { id = "fwd", label = "+10 s" }, { id = "tracks", label = "Sous-titres et qualité" } }
+                   { id = "fwd", label = "+10 s" }, { id = "tracks", label = "Sous-titres" } }
+    -- Qualité : YouTube seulement, quand plusieurs résolutions sont proposées (Jellyfin : fichier d'origine)
+    if #quality.list() > 1 then list[#list + 1] = { id = "quality", label = "Qualité" } end
     if #(mp.get_property_native("chapter-list") or {}) > 1 then list[#list + 1] = { id = "chapter", label = "Chapitre suivant" } end
     if next_up() then list[#list + 1] = { id = "next", label = "Épisode suivant" } end
     return list
@@ -1061,6 +1068,7 @@ local function controls_key(key)
         if id == "back" or id == "fwd" then media_seek(id == "fwd" and 1 or -1)
         elseif id == "play" then mp.commandv("cycle", "pause")
         elseif id == "tracks" then open_tracks()
+        elseif id == "quality" then open_tracks("quality")
         elseif id == "chapter" then mp.commandv("add", "chapter", "1")
         elseif id == "next" then play_next() end
     end
