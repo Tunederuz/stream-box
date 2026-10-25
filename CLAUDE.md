@@ -888,8 +888,8 @@ Retour, Windows, Début ou M = menu de la TV, O = options (≡), H = écran d'ac
 + / − (et pavé numérique) = volume, touches multimédia (suivante / précédente = → / ←, arrêt = Retour). Codes de Linux
 positionnels (QWERTY) : le M d'un AZERTY arrive en KEY_SEMICOLON, mappé aussi.
 
-### pacman dans l'image
-mkosi n'y laisse ni miroir ni trousseau : `mkosi.extra/etc/pacman.d/mirrorlist` (geo.mirror.pkgbuild.com) et
-`stream-box-pacman-init.service` (premier démarrage : `pacman-key --init` + `--populate archlinux`, une clé par box).
-Sur une box installée sans eux : écrire le miroir, puis `sudo pacman-key --init && sudo pacman-key --populate archlinux`.
-Attention aux mises à jour partielles (`pacman -Sy paquet` seul) : préférer `pacman -Syu`.
+### pacman (mode développeur)
+L'image officielle n'a ni miroir ni trousseau pacman (mkosi n'en laisse pas, et c'est voulu : pas de paquets
+installés à la main sur une box normale). En mode développeur, par SSH : `bash ~/stream-box/dev-pacman.sh` (miroir
+geo.mirror.pkgbuild.com, `pacman-key --init` + `--populate archlinux`). Préférer `pacman -Syu` aux mises à jour
+partielles (`pacman -Sy paquet` seul).
