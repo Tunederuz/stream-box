@@ -820,7 +820,7 @@ Ligne « Accès SSH » (interrupteur, QML `loadSsh`, visible si l'unité existe)
 `active` de sshd.service), `POST /api/ssh {enabled}` → `systemctl start stream-box-ssh@enable|disable.service`
 (root, `/usr/local/lib/stream-box/ssh-access` ; règle polkit `54-stream-box-ssh.rules`, media ne peut lancer que ces
 deux-là). L'image n'autorise SSH que par clé et media n'a pas de mot de passe : activer tire un mot de passe lisible
-(3 × 4 caractères), le donne à media, ajoute `sshd_config.d/60-stream-box-password.conf` (PasswordAuthentication yes)
+(3 × 4 caractères), le donne à media, ajoute `sshd_config.d/10-stream-box-password.conf` (PasswordAuthentication yes)
 et le garde dans `/var/lib/stream-box/ssh-password` (root:media 640) ; le menu affiche `ssh media@<adresse>` et ce mot
 de passe (`/api/ssh` ne le donne qu'aux requêtes de 127.0.0.1). Couper : sshd désactivé, mot de passe et autorisation
 retirés (les clés restent). Image : SSH coupé par défaut (mkosi.finalize.chroot). Script, unité et règle dans `image/mkosi.extra`, copiés aussi par install.sh. Couper SSH ne ferme pas les
