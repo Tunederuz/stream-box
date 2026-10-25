@@ -949,6 +949,9 @@ local KEYS = {
     PLAY = "corner", PLAYPAUSE = "corner",   -- sans ce lien, mpv les traduit en pause, ce qui figeait le direct
     POWER = "power", ["0x21ff2a"] = "power",  -- bouton power (télécommande, boîtier) : mpv seul, appli Qt
     VOLUME_UP = "volume_up", VOLUME_DOWN = "volume_down", MUTE = "mute",
+    -- Clavier classique (mêmes actions qu'input.py ; ici, noms selon la disposition du clavier)
+    SPACE = "corner", m = "home", o = "menu", h = "homescreen", ["+"] = "volume_up", ["-"] = "volume_down",
+    KP_ADD = "volume_up", KP_SUBTRACT = "volume_down", NEXT = "right", PREV = "left", STOP = "back",
 }
 -- Ces noms (mpv, ou keysyms bricolés comme 0x21ffa0) ne servent qu'en secours : normalement, input.py lit les touches
 -- à la source avec les noms de Linux et envoie les actions (streambox-input) ; tant qu'il tourne, les touches reçues
