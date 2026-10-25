@@ -895,8 +895,9 @@ geo.mirror.pkgbuild.com, `pacman-key --init` + `--populate archlinux`). Préfér
 partielles (`pacman -Sy paquet` seul).
 
 
-### Bandeau « appareil connecté »
+### Bandeau « appareil connecté / déconnecté »
 input.py, à chaque nouvel appareil d'entrée après le premier relevé (pas ceux déjà là au démarrage) : script-message
-`streambox-notice "Appareil connecté · <nom>"`, une fois par appareil en 10 s (nom sans « Keyboard », « Consumer
+`streambox-notice "Appareil connecté · <nom>"` (et « déconnecté » quand sa dernière entrée disparaît), une fois par
+appareil et par sens en 10 s (nom sans « Keyboard », « Consumer
 Control »… : une télécommande Xiaomi apparaît en deux entrées). stream-box.lua → `user-data/streambox/notice`
 → qml/Notice.qml (bandeau en haut, 4 s, par-dessus le menu) ; mpv seul : message à l'écran.

@@ -110,7 +110,23 @@ def main():
     last_scan = last_beat = 0
     allowed = None
     first_scan = True       # appareils déjà là au démarrage : pas de notification
-    noticed = {}            # nom de base -> heure de la dernière notification (un appareil = souvent plusieurs entrées)
+    noticed = {}            # (nom de base, connecté ?) -> heure de la dernière notification (un appareil = souvent
+                            # plusieurs entrées)
+    names = {}              # chemin -> nom de l'appareil, pour annoncer sa déconnexion
+
+    def notice(name, connected):
+        """Bandeau sur la TV (Notice.qml), une fois par appareil et par sens en 10 s : « Xiaomi RC Keyboard » et
+        « Xiaomi RC Consumer Control » sont la même télécommande, « Xiaomi RC »"""
+        base = re.sub(r"\s+(Keyboard|Consumer Control|System Control|Mouse|Touchpad)$", "", name).strip()
+        if time.time() - noticed.get((base, connected), 0) > 10:
+            noticed[(base, connected)] = time.time()
+            mpv.send("script-message", "streambox-notice", f"Appareil {'connecté' if connected else 'déconnecté'} · {base}")
+
+    def drop(path):
+        devices.pop(path).close()
+        name = names.pop(path, "")
+        if name and name not in names.values():   # plus aucune entrée de cet appareil
+            notice(name, False)
     while True:
         now = time.time()
         if now - last_scan > 2:   # branchements et reconnexions Bluetooth
@@ -118,19 +134,16 @@ def main():
             present = keyboards()
             for path in list(devices):
                 if path not in present:
-                    devices.pop(path).close()
+                    drop(path)
             for path, name in present.items():
                 if path not in devices:
                     try:
                         devices[path] = open(path, "rb", buffering=0)
                         allowed = True
                         print(f"input.py : {name} ({path})", flush=True)
-                        # Télécommande, manette ou clavier qui se connecte : bandeau sur la TV (Notice.qml), une fois
-                        # par appareil (« Xiaomi RC Keyboard » et « Xiaomi RC Consumer Control » : « Xiaomi RC »)
-                        base = re.sub(r"\s+(Keyboard|Consumer Control|System Control|Mouse|Touchpad)$", "", name).strip()
-                        if not first_scan and now - noticed.get(base, 0) > 10:
-                            noticed[base] = now
-                            mpv.send("script-message", "streambox-notice", f"Appareil connecté · {base}")
+                        names[path] = name
+                        if not first_scan:   # télécommande, manette ou clavier qui se connecte
+                            notice(name, True)
                     except PermissionError:
                         if allowed is None:
                             allowed = False
@@ -154,7 +167,7 @@ def main():
             try:
                 data = f.read(EVENT.size * 64)
             except OSError:   # appareil parti
-                devices.pop(path).close()
+                drop(path)
                 continue
             for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
                 _, _, etype, code, value = EVENT.unpack_from(data, i)
