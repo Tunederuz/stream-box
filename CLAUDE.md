@@ -868,16 +868,19 @@ confiance, et tous pendant une recherche ou un appairage du menu (btsetup.py tou
   `raid_mode`) et le dit.
 
 ### Écran de démarrage (Plymouth, image)
-Thème `stream-box` (fichiers du dépôt : `mkosi.extra/usr/share/plymouth/themes/stream-box/stream-box.plymouth`, logo
-`themes/spinner/watermark.png` (icône arrondie + « Stream Box »), images de la roue du thème « spinner » de Plymouth,
-fond 0x0b0710). Plymouth démarre dès l'initrd (`InitrdProfiles=plymouth`, thème et `/etc/plymouth` copiés par
-`mkosi.initrd.conf/`, i915 dans l'initrd : un seul changement de mode au début ; dans le système seul, il démarrait
-à 3,7 s et i915 le coupait à 4,8 s), `/etc/plymouth/plymouthd.conf`, ligne de commande `splash
+Thème `stream-box` de type script (fichiers du dépôt, `mkosi.extra/usr/share/plymouth/themes/stream-box/` : logo
+`watermark.png` (icône arrondie + « Stream Box »), roue `spinner.png` qui tourne, `stream-box.script`) : tout est mis à
+l'échelle de la hauteur de l'écran (dessiné pour 1080 lignes), même rendu en 1080p, en 4K ou en 1366 × 768 sans imposer
+de mode (pas de `video=` : un écran qui ne le prend pas resterait noir). Plymouth démarre dès l'initrd
+(`InitrdProfiles=plymouth`, thème et `/etc/plymouth` copiés par `mkosi.initrd.conf/`), i915 dans l'initrd et chargé
+d'emblée (`rd.modules-load=i915`) : animation d'un seul tenant dès ~1,7 s sur le Dell (sans `plymouth.use-simpledrm`,
+qui affiche plus tôt mais clignote au passage à i915). Cartes AMD / NVIDIA : pilotes pas dans l'initrd (firmwares trop
+lourds), l'animation y apparaît après le passage sur la partition système. Ligne de commande : `splash
 plymouth.ignore-serial-consoles vt.global_cursor_default=0` (en VM, systemd ajoute une console série : sans
 ignore-serial-consoles, Plymouth passe en texte). `plymouth-quit.service.d/10-retain-splash.conf` : `plymouth quit
---retain-splash`, l'image reste jusqu'à ce que cage prenne l'écran. Ne pas masquer plymouth-quit : greetd attend
-plymouth-quit-wait (démarrage bloqué « Hold until boot process finishes up »). Sur clé USB, le chargeur (~20 s) et Mesa (~11 s) sont lents ; sur
-le SSD, bien plus courts.
+--retain-splash`. Ne pas masquer plymouth-quit : greetd attend plymouth-quit-wait (démarrage bloqué « Hold until boot
+process finishes up »). Ensuite, start.sh affiche `boot-splash.png` avec mpv (même fond et même logo) pendant le
+lancement de la session, retirée par ui.py à sa première image (player.sh pour mpv seul, 30 s au plus).
 
 ### Essais en VM (image de test)
 `bash image/build.sh test` : image `stream-box-test.raw` avec SSH activé par la clé `image/test-key` (créée au premier

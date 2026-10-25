@@ -1,0 +1,27 @@
+# Stream Box : écran de démarrage. Logo et roue mis à l'échelle de la hauteur de l'écran (dessinés pour 1080 lignes) :
+# même rendu en 1080p, en 4K ou en 1366 × 768, sans imposer de mode d'affichage. Fond de l'écran d'accueil (0b0710).
+Window.SetBackgroundTopColor(0.043, 0.027, 0.063);
+Window.SetBackgroundBottomColor(0.043, 0.027, 0.063);
+
+scale = Window.GetHeight() / 1080;
+
+logo = Image("watermark.png");
+logo = logo.Scale(logo.GetWidth() * scale, logo.GetHeight() * scale);
+logo_sprite = Sprite(logo);
+logo_sprite.SetX(Window.GetX() + (Window.GetWidth() - logo.GetWidth()) / 2);
+logo_sprite.SetY(Window.GetY() + (Window.GetHeight() - logo.GetHeight()) * 0.42);
+
+spinner = Image("spinner.png");
+spinner = spinner.Scale(48 * scale, 48 * scale);
+spinner_sprite = Sprite();
+spinner_sprite.SetOpacity(0.85);
+angle = 0;
+
+fun refresh_callback() {
+    angle = angle + 0.1;
+    turned = spinner.Rotate(angle);
+    spinner_sprite.SetImage(turned);
+    spinner_sprite.SetX(Window.GetX() + (Window.GetWidth() - turned.GetWidth()) / 2);
+    spinner_sprite.SetY(Window.GetY() + Window.GetHeight() * 0.72 - turned.GetHeight() / 2);
+}
+Plymouth.SetRefreshFunction(refresh_callback);
