@@ -30,7 +30,8 @@ Item {
         Rectangle { width: 8; height: 26; radius: 2; color: root.color }
         Rectangle { width: 8; height: 26; radius: 2; color: root.color }
     }
-    // −10 s / +10 s : flèche en arc et « 10 »
+    // −10 s / +10 s : cercle ouvert en haut (centre 17,17, rayon 12), pointe de flèche au bout, « 10 » au centre ;
+    // +10 s est le miroir de −10 s
     Item {
         visible: root.name === "back" || root.name === "fwd"
         anchors.fill: parent
@@ -39,22 +40,21 @@ Item {
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
             ShapePath {
-                fillColor: "transparent"; strokeColor: root.color; strokeWidth: 3; capStyle: ShapePath.RoundCap
-                startX: 8; startY: 9
-                PathArc { x: 17; y: 31; radiusX: 13; radiusY: 13; useLargeArc: true; direction: PathArc.Counterclockwise }
+                fillColor: "transparent"; strokeColor: root.color; strokeWidth: 2.6; capStyle: ShapePath.RoundCap
+                PathAngleArc { centerX: 17; centerY: 17; radiusX: 12; radiusY: 12; startAngle: -62; sweepAngle: 296 }
             }
-            ShapePath {   // pointe de la flèche
+            ShapePath {   // pointe au bout supérieur de l'arc, dans l'axe de l'arc (vers la gauche : recul)
                 fillColor: root.color; strokeColor: "transparent"
-                startX: 3; startY: 3
-                PathLine { x: 13; y: 6 }
-                PathLine { x: 5; y: 13 }
-                PathLine { x: 3; y: 3 }
+                startX: 15.6; startY: 4.0
+                PathLine { x: 24.7; y: 1.9 }
+                PathLine { x: 21.8; y: 10.5 }
+                PathLine { x: 15.6; y: 4.0 }
             }
         }
     }
     Text {
         visible: root.name === "back" || root.name === "fwd"
-        anchors.centerIn: parent; anchors.verticalCenterOffset: 2
+        anchors.centerIn: parent; anchors.verticalCenterOffset: 1
         text: "10"; color: root.color; font.pixelSize: 11; font.bold: true
     }
     // Sous-titres : cadre arrondi et deux lignes de texte

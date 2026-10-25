@@ -578,12 +578,18 @@ titre sur une image claire.
   « +2 min 30 » au-dessus du curseur (InfoBar.qml). Marche aussi avec mpv seul (sans la bulle).
 - Rangée de boutons : ↓ y descend (focus sur Pause/Lecture), ← → et OK, ↑ ou Retour remontent ; −10 s, Pause/Lecture,
   +10 s, Sous-titres, Chapitre suivant (s'il y a des chapitres), Épisode suivant (Jellyfin). `ctrl_focus`,
-  `user-data/streambox/controls` {items, focus} ; disparaît avec la barre.
+  `user-data/streambox/controls` {items, focus} ; disparaît avec la barre. Boutons ronds centrés, icônes dessinées
+  (`qml/PlayerIcon.qml`, QtQuick.Shapes : pas de caractères Unicode, dont le rendu dépend des polices), Lecture / Pause
+  plus grand, nom du bouton choisi dessous.
+- Disposition (InfoBar.qml) : titre et ligne d'infos juste au-dessus de la barre ; l'aperçu YouTube (planche de
+  miniatures) et la bulle de saut n'apparaissent que pendant qu'on avance ou recule (`seeking`, 1,5 s après le dernier
+  saut), au-dessus du titre.
 - Infos : `user-data/streambox/meta` publié par remote.py (YouTube : chaîne, date, vues, description, depuis le
   `yt-dlp -J` de l'aperçu ; Jellyfin : série, épisode, année, note, résumé) ; chapitres (`chapter-list`, `chapter`)
   relevés par ui.py avec la position : repères sur la barre, chapitre en cours dans la ligne d'infos. Temps restant
   et heure de fin (« −21:26 · fin à 02:30 »).
-- Écran de pause (`qml/PauseScreen.qml`) : image assombrie, grande icône pause, résumé au-dessus du bandeau.
+- Écran de pause (`qml/PauseScreen.qml`) : image assombrie, icône pause en haut, résumé (3 lignes au plus) juste
+  au-dessus du titre ; YouTube : seulement le texte avant le premier lien de la description, sans adresses ni hashtags.
 - Épisode suivant (Jellyfin) : remote.py publie `user-data/streambox/next_up` {id, of, title, episode, thumb}
   (`Shows/{série}/Episodes?AdjacentTo=`) ; dans les 20 dernières secondes, stream-box.lua publie `next_card`
   {seconds, …} → `qml/NextUp.qml` (OK : lancer, Retour : rester) ; à la fin du fichier, l'épisode suivant part
