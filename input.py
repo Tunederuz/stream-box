@@ -114,10 +114,12 @@ def main():
                             # plusieurs entrées)
     names = {}              # chemin -> nom de l'appareil, pour annoncer sa déconnexion
 
+    def base_name(name):   # « Xiaomi RC Keyboard » et « Xiaomi RC Consumer Control » : la même télécommande
+        return re.sub(r"\s+(Keyboard|Consumer Control|System Control|Mouse|Touchpad)$", "", name).strip()
+
     def notice(name, connected):
-        """Bandeau sur la TV (Notice.qml), une fois par appareil et par sens en 10 s : « Xiaomi RC Keyboard » et
-        « Xiaomi RC Consumer Control » sont la même télécommande, « Xiaomi RC »"""
-        base = re.sub(r"\s+(Keyboard|Consumer Control|System Control|Mouse|Touchpad)$", "", name).strip()
+        """Bandeau sur la TV (Notice.qml), une fois par appareil et par sens en 10 s"""
+        base = base_name(name)
         if time.time() - noticed.get((base, connected), 0) > 10:
             noticed[(base, connected)] = time.time()
             mpv.send("script-message", "streambox-notice", f"Appareil {'connecté' if connected else 'déconnecté'} · {base}")
@@ -125,7 +127,7 @@ def main():
     def drop(path):
         devices.pop(path).close()
         name = names.pop(path, "")
-        if name and name not in names.values():   # plus aucune entrée de cet appareil
+        if name and base_name(name) not in map(base_name, names.values()):   # plus aucune entrée de cet appareil
             notice(name, False)
     while True:
         now = time.time()
