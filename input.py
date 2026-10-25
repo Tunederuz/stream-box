@@ -109,6 +109,8 @@ def main():
     held = {}               # (chemin, code) -> [heure d'appui, nom, fenêtre déjà ouverte] pour les touches power
     last_scan = last_beat = 0
     allowed = None
+    first_scan = True       # appareils déjà là au démarrage : pas de notification
+    noticed = {}            # nom de base -> heure de la dernière notification (un appareil = souvent plusieurs entrées)
     while True:
         now = time.time()
         if now - last_scan > 2:   # branchements et reconnexions Bluetooth
@@ -123,11 +125,18 @@ def main():
                         devices[path] = open(path, "rb", buffering=0)
                         allowed = True
                         print(f"input.py : {name} ({path})", flush=True)
+                        # Télécommande, manette ou clavier qui se connecte : bandeau sur la TV (Notice.qml), une fois
+                        # par appareil (« Xiaomi RC Keyboard » et « Xiaomi RC Consumer Control » : « Xiaomi RC »)
+                        base = re.sub(r"\s+(Keyboard|Consumer Control|System Control|Mouse|Touchpad)$", "", name).strip()
+                        if not first_scan and now - noticed.get(base, 0) > 10:
+                            noticed[base] = now
+                            mpv.send("script-message", "streambox-notice", f"Appareil connecté · {base}")
                     except PermissionError:
                         if allowed is None:
                             allowed = False
                     except OSError:
                         pass
+            first_scan = False
             if allowed is False and not devices:
                 # Pas dans le groupe input : on laisse les touches à l'appli Qt et à mpv
                 mpv.send("set_property", "user-data/streambox/input", "")

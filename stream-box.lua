@@ -1242,7 +1242,15 @@ mp.register_script_message("streambox-toggle-chat", from_remote(toggle_chat))
 mp.register_script_message("streambox-cycle-corner", from_remote(toggle_corner))
 mp.register_script_message("streambox-play", play_media)
 mp.register_script_message("streambox-home", from_remote(show_home))
-mp.register_script_message("streambox-setup-done", home_menu)   -- « Terminer » sur la page du téléphone
+mp.register_script_message("streambox-setup-done", home_menu)
+-- Petit bandeau en haut (télécommande connectée…, envoyé par input.py) : qml/Notice.qml, ou message de mpv seul
+mp.register_script_message("streambox-notice", function(text)
+    if qt_ui() then
+        mp.set_property_native("user-data/streambox/notice", { text = text, id = mp.get_time() })
+    else
+        mp.osd_message(text, 4)
+    end
+end)   -- « Terminer » sur la page du téléphone
 mp.register_script_message("streambox-twitch", from_remote(function() start_channel(channel) end))
 -- Réveil après une mise en veille (remote.py, resume_loop) : flux coupés, on relance la lecture en cours
 mp.register_script_message("streambox-resume", function()

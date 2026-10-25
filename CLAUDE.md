@@ -893,3 +893,10 @@ L'image officielle n'a ni miroir ni trousseau pacman (mkosi n'en laisse pas, et 
 installés à la main sur une box normale). En mode développeur, par SSH : `bash ~/stream-box/dev-pacman.sh` (miroir
 geo.mirror.pkgbuild.com, `pacman-key --init` + `--populate archlinux`). Préférer `pacman -Syu` aux mises à jour
 partielles (`pacman -Sy paquet` seul).
+
+
+### Bandeau « appareil connecté »
+input.py, à chaque nouvel appareil d'entrée après le premier relevé (pas ceux déjà là au démarrage) : script-message
+`streambox-notice "Appareil connecté · <nom>"`, une fois par appareil en 10 s (nom sans « Keyboard », « Consumer
+Control »… : une télécommande Xiaomi apparaît en deux entrées). stream-box.lua → `user-data/streambox/notice`
+→ qml/Notice.qml (bandeau en haut, 4 s, par-dessus le menu) ; mpv seul : message à l'écran.

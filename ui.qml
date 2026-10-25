@@ -90,5 +90,6 @@ Item {
             id: tvMenu
             objectName: "tvMenu"
         }
+        Notice {}
     }
 }
