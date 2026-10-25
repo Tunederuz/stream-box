@@ -518,7 +518,7 @@ class View(QQuickView):
         if not name:
             return
         if (learned_keys().get(name) or MENU_KEYS.get(name)) == "power" or name in ("POWER", "0x21ff2a"):
-            # power : appui et relâchement séparés, pour l'appui long (stream-box.lua : fenêtre après 3 s)
+            # power : appui et relâchement séparés, pour l'appui long (stream-box.lua : fenêtre après 2 s)
             if not event.isAutoRepeat():
                 to_mpv(player.command, "keydown", name)
             return

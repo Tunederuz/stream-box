@@ -1087,14 +1087,14 @@ local function bind_keys()
     for name, key in pairs(read_keymap()) do map[name] = key end
     for name, key in pairs(map) do
         if key == "power" and not name:match("^KEY_") then
-            -- Secours : power court au relâchement, maintenu 3 s → fenêtre (ui.py envoie keydown / keyup pour ces touches)
+            -- Secours : power court au relâchement, maintenu 2 s → fenêtre (ui.py envoie keydown / keyup pour ces touches)
             local timer = nil
             mp.add_forced_key_binding(name, "streambox-key-" .. name, function(t)
                 if input_service() then return end
                 if learn_key then if t.event ~= "up" then learn_key(name) end return end
                 if t.event == "down" then
                     if timer then timer:kill() end
-                    timer = mp.add_timeout(3, function() timer = nil; on_key("power_menu") end)
+                    timer = mp.add_timeout(2, function() timer = nil; on_key("power_menu") end)
                 elseif t.event == "up" and timer then
                     timer:kill(); timer = nil
                     on_key("power")

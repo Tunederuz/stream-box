@@ -575,7 +575,7 @@ Item {
              p.size && (!p.hwdec || p.hwdec === "no") ? "warn" : ""],
         ]
     }
-    // Power maintenu 3 s : veille, redémarrage, extinction (sans deuxième confirmation : le geste est volontaire)
+    // Power maintenu 2 s : veille, redémarrage, extinction (sans deuxième confirmation : le geste est volontaire)
     function powerMenu() {
         powerOnly = true
         openModal("Box", [

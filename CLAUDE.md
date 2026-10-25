@@ -696,9 +696,9 @@ appareils appairés, recherche de 20 s, appairage sans code (agent NoInputNoOutp
 fenêtre « Télécommandes et manettes » du menu Système (QML : `btMenu`, `btScan`, relue toutes les 2 s).
 Redémarrage : `POST /api/reboot` (`systemctl reboot`, polkit login1.reboot* ajouté), « Redémarrer la box » dans le menu Système
 (QML et Lua, deuxième OK dans les 4 s), bouton dans Réglages → Système de la page, bouton « Redémarrer » dans Home Assistant.
-Power maintenu 3 s → fenêtre « Box » (veille, redémarrer, éteindre, annuler ; menu QML `powerMenu`, tv_menu.lua
+Power maintenu 2 s → fenêtre « Box » (veille, redémarrer, éteindre, annuler ; menu QML `powerMenu`, tv_menu.lua
 `streambox-power-menu`) au lieu de l'action du réglage « Bouton d'arrêt », qui part désormais au relâchement d'un
-appui court. input.py mesure l'appui (valeurs 1 / 0 de evdev, action `power_menu` envoyée à 3 s) ; en secours,
+appui court. input.py mesure l'appui (valeurs 1 / 0 de evdev, action `power_menu` envoyée à 2 s) ; en secours,
 stream-box.lua lie power en « complex » (down / up de mpv) et ui.py envoie keydown / keyup pour ces touches.
 La fenêtre s'affiche seule sur la vidéo, sans le menu derrière (`powerOnly` / `power_only`) ; Retour ferme tout.
 

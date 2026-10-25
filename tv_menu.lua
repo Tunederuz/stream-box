@@ -1465,7 +1465,7 @@ local function on_key(key)
 end
 
 mp.register_script_message("streambox-tvmenu-open", open_menu)
--- Power maintenu 3 s (stream-box.lua) : veille, redémarrage, extinction
+-- Power maintenu 2 s (stream-box.lua) : veille, redémarrage, extinction
 mp.register_script_message("streambox-power-menu", function()
     open_menu()
     power_only = true
