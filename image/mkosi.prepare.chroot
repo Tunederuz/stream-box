@@ -9,7 +9,7 @@ BOX_USER=media
 BOX_HOME=/home/$BOX_USER
 # Pas de deno ni de nodejs-wheel (300 Mo) : yt-dlp résout ses défis JavaScript avec le Node du système (player.sh,
 # remote.py : --js-runtimes node quand deno est absent)
-MEDIA_VENV_PACKAGES="yt-dlp[default] bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt segno"
+MEDIA_VENV_PACKAGES="yt-dlp[default] bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt segno dbus-fast"
 POT_REPO=https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git
 as_box() { (cd "$BOX_HOME" && runuser -u "$BOX_USER" -- env HOME="$BOX_HOME" bash -c "$1"); }
 

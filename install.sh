@@ -24,7 +24,7 @@ BOX_USER=media
 BOX_HOME=/home/$BOX_USER
 BOX_DIR=$BOX_HOME/stream-box
 SRC=$(cd "$(dirname "$0")" && pwd)
-MEDIA_VENV_PACKAGES="yt-dlp[default] deno nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt segno"
+MEDIA_VENV_PACKAGES="yt-dlp[default] deno nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt segno dbus-fast"
 POT_REPO=https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git
 
 CITY="" REMOTE_URL="" STREAMERS="" SKIP_SYSTEM=0 RESTORE="" ALLOW_FROM="" STATIC_IP="" GATEWAY="" DNS="" WOL=0

@@ -855,7 +855,9 @@ Item {
                 items.push({ label: "↻  Redémarrer", ok: function () { act("reboot"); close() } })
                 items.push({ label: "Plus tard", ok: function () {} })
             } else {
-                title = p && p.state === "error" ? "Échec : " + p.error : d.disks.length ? "Installer sur quel disque ?" : "Aucun disque interne de 16 Go ou plus"
+                title = p && p.state === "error" ? "Échec : " + p.error : d.disks.length ? "Installer sur quel disque ?"
+                      : d.raid_mode ? "Disque caché par le mode RAID du BIOS : passe « SATA Operation » en AHCI, puis réessaie"
+                      : "Aucun disque interne de 16 Go ou plus"
                 d.disks.forEach(function (k) {
                     items.push({ label: k.label + (k.data ? "  ·  contient : " + k.data : ""), ok: function () {
                         openModal("Tout effacer sur " + k.label + " et y installer la box ?", [

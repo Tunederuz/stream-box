@@ -852,3 +852,17 @@ les applis (une vraie souris garde son pointeur, masqué au bout de 4 s).
 
 Assistant des touches : Retour sur la télécommande virtuelle de la page l'annule sans rien enregistrer (`learn_cancel`,
 phase `cancel` de KeyWizard.qml).
+
+### Agent Bluetooth (btagent.py)
+Les télécommandes Xiaomi lancent elles-mêmes l'appairage (et le refont à la reconnexion) : sans agent, BlueZ refuse
+(« No agent available »), la télécommande se reconnecte en boucle toutes les 10 s sans marcher. btagent.py (lancé par
+start.sh avec le Python de media-venv, dbus-fast) est l'agent par défaut (NoInputNoOutput) : accepte les appareils de
+confiance, et tous pendant une recherche ou un appairage du menu (btsetup.py touche
+`$XDG_RUNTIME_DIR/stream-box-bt-pairing`, fenêtre de 120 s), refuse le reste ; se réenregistre si bluetoothd redémarre.
+
+### Pièges de la box installée
+- Relancer la session : `sudo rm -f /run/greetd.run && sudo systemctl restart greetd` (sans retirer ce fichier, greetd
+  ne relance pas `initial_session` et tombe sur l'invite de connexion texte de tty1).
+- Dell OptiPlex en « RAID On » (Intel RST) : le SSD NVMe est caché au noyau d'Arch (« remapped NVMe », seul le noyau
+  de CachyOS a un correctif) ; BIOS → SATA Operation → AHCI. L'installateur le détecte (contrôleur de classe 0x010400,
+  `raid_mode`) et le dit.

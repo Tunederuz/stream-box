@@ -4,9 +4,11 @@ Utilisé par remote.py (GET / POST /api/bluetooth), lui-même piloté par le men
 sans code (agent NoInputNoOutput : télécommandes, manettes, claviers « Just Works »), puis l'appareil est marqué de
 confiance (il se reconnecte seul) et connecté.
 """
-import re, subprocess, threading
+import os, re, subprocess, threading
 
 SCAN_SECONDS = 20
+# Recherche ou appairage en cours : btagent.py (agent permanent) accepte alors aussi les appareils inconnus
+PAIRING_FLAG = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "stream-box-bt-pairing")
 state = {"scanning": False, "busy": None, "message": None, "found": {}}   # found : adresse -> nom vu à la recherche
 lock = threading.Lock()
 
@@ -52,10 +54,16 @@ def status():
             "message": state["message"]}
 
 
+def open_pairing():
+    with open(PAIRING_FLAG, "w"):
+        pass
+
+
 def scan():
     """Recherche de SCAN_SECONDS secondes en arrière-plan ; les appareils vus s'ajoutent à found"""
     if state["scanning"]:
         return
+    open_pairing()
     state.update(scanning=True, message=None, found={})
     ctl("power", "on")
 
@@ -74,6 +82,8 @@ def scan():
 def pair(mac):
     if not re.fullmatch(r"[0-9A-F:]{17}", mac):
         raise ValueError("adresse invalide")
+
+    open_pairing()
 
     def run():
         with lock:

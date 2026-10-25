@@ -20,6 +20,9 @@ python3 "$DIR/audio.py" watch &
 # Touches lues à la source (télécommandes, manettes, claviers : voir input.py) ; sans droits sur /dev/input, il
 # s'arrête et les touches restent à l'appli Qt et à mpv
 python3 "$DIR/input.py" &
+# Agent Bluetooth permanent (btagent.py : les télécommandes qui lancent elles-mêmes l'appairage), avec dbus-fast
+MEDIA_PY="$HOME/.local/share/media-venv/bin/python"
+"$MEDIA_PY" -c "import dbus_fast" 2> /dev/null && "$MEDIA_PY" "$DIR/btagent.py" &
 # Récepteur YouTube Cast (cast/cast.js : la box dans le bouton Caster de l'appli YouTube), si ses modules sont
 # installés (npm install dans cast/)
 if [ -d "$DIR/cast/node_modules" ]; then

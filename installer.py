@@ -33,8 +33,21 @@ def mounts(d):
     return (d.get("mountpoints") or []) + [m for c in d.get("children") or [] for m in mounts(c)]
 
 
+def raid_mode():
+    """Contrôleur de disques Intel en mode RAID (RST) : un SSD NVMe y est caché au noyau d'Arch (« remapped NVMe »),
+    il faut passer le BIOS en AHCI (Dell : SATA Operation → AHCI)"""
+    try:
+        for dev in os.listdir("/sys/bus/pci/devices"):
+            with open(f"/sys/bus/pci/devices/{dev}/class") as f:
+                if f.read().strip() == "0x010400":
+                    return True
+    except OSError:
+        pass
+    return False
+
+
 def status():
-    """{available, live, disks: [{name, label, size, data}], progress}"""
+    """{available, live, disks: [{name, label, size, data}], raid_mode, progress}"""
     all_disks = disks()
     root = next((d for d in all_disks if "/" in mounts(d)), None)
     live = bool(root and (root.get("tran") == "usb" or flag(root.get("rm")) or flag(root.get("hotplug"))))
@@ -55,7 +68,8 @@ def status():
             progress = json.load(f)
     except (OSError, ValueError):
         progress = None
-    return {"available": live and os.path.exists(SCRIPT), "live": live, "disks": found, "progress": progress}
+    return {"available": live and os.path.exists(SCRIPT), "live": live, "disks": found,
+            "raid_mode": not found and raid_mode(), "progress": progress}
 
 
 def start(name):
