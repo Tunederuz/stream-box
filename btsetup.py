@@ -90,8 +90,10 @@ def pair(mac):
             name = info(mac)["name"]
             state.update(busy=mac, message=f"Appairage de {name}…")
             try:
-                out, code = ctl("--agent", "NoInputNoOutput", "--timeout", "40", "pair", mac, timeout=50)
-                if code != 0 and "AlreadyExists" not in out and not info(mac)["paired"]:
+                ctl("--agent", "NoInputNoOutput", "--timeout", "40", "pair", mac, timeout=50)
+                # Seul l'état de BlueZ fait foi : bluetoothctl peut finir sans erreur sans que l'appairage ait abouti
+                # (télécommande sortie du mode appairage, récepteur USB qui se réinitialise en route…)
+                if not info(mac)["paired"]:
                     state["message"] = f"Appairage de {name} impossible : remets-le en mode appairage et réessaie."
                     return
                 ctl("trust", mac)
