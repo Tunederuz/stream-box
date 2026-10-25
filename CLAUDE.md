@@ -901,3 +901,12 @@ input.py, à chaque nouvel appareil d'entrée après le premier relevé (pas ceu
 appareil et par sens en 10 s (nom sans « Keyboard », « Consumer
 Control »… : une télécommande Xiaomi apparaît en deux entrées). stream-box.lua → `user-data/streambox/notice`
 → qml/Notice.qml (bandeau en haut, 4 s, par-dessus le menu) ; mpv seul : message à l'écran.
+
+### Initrd allégé et course de D-Bus
+`KernelInitrdModules=default` + contrôleurs (mkosi.conf) : noyau unifié de 111 Mo au lieu de 491 (chargeur : ~3 s au lieu
+de ~11 sur le Dell). Effet de bord trouvé sur la vraie box (pas en VM) : l'initrd, devenu rapide, démarre D-Bus juste
+avant le passage sur la partition système et demande son arrêt une milliseconde avant qu'il annonce « Ready » ; la
+demande se perd, systemd attend 90 s puis le tue (logo du PC figé, initrd à 1 min 31). Correctif :
+`rd.systemd.mask=dbus.socket rd.systemd.mask=dbus-broker.service` (rien ne se sert de D-Bus dans l'initrd). Démarrage
+complet sur le Dell : 13,6 s. Pour essayer une option de démarrage sans reconstruire le noyau : add-on systemd-stub
+(`ukify build --cmdline "…" --output x.addon.efi`, dans `EFI/Linux/<uki>.efi.extra.d/`, Secure Boot désactivé).
