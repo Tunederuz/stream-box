@@ -4,4 +4,4 @@ Description=Stream Box : SSH (%i)
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/systemctl %i --now sshd.service
+ExecStart=/usr/local/lib/stream-box/ssh-access %i

@@ -8,6 +8,7 @@ as_box() { (cd "$BOX_HOME" && runuser -u "$BOX_USER" -- env HOME="$BOX_HOME" bas
 # SSH : clés seulement (services activés par mkosi.finalize.chroot, après le « preset-all » de mkosi qui les annulerait)
 install -d /etc/ssh/sshd_config.d
 printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\n' > /etc/ssh/sshd_config.d/50-stream-box.conf
+# (« Accès SSH » du menu Système : mot de passe affiché sur la TV, 60-stream-box-password.conf ; voir ssh-access)
 
 # Services utilisateur de media : mises à jour, jetons YouTube, pont MQTT (sans config MQTT, celui-ci ne démarre pas)
 as_box '

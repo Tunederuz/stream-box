@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Stream Box : accès SSH activé ou coupé depuis le menu Système de la TV (stream-box-ssh@enable|disable.service).
+#   enable  : mot de passe tiré au hasard pour media (gardé tant que SSH reste activé, lisible par media seulement dans
+#             /var/lib/stream-box/ssh-password, affiché sur la TV), connexion par mot de passe autorisée, sshd démarré
+#   disable : sshd arrêté et désactivé, mot de passe effacé, connexion par mot de passe retirée (les clés restent)
+set -euo pipefail
+PASS_FILE=/var/lib/stream-box/ssh-password
+CONF=/etc/ssh/sshd_config.d/60-stream-box-password.conf
+case "${1:-}" in
+  enable)
+    install -d -m 750 -o root -g media "$(dirname "$PASS_FILE")"
+    if [ ! -s "$PASS_FILE" ]; then
+      # Facile à taper sur un téléphone : trois groupes de quatre (minuscules et chiffres, sans l / 1 / o / 0)
+      pass=$(tr -dc 'abcdefghijkmnpqrstuvwxyz23456789' < /dev/urandom | head -c 12 | sed 's/.\{4\}/&-/g; s/-$//')
+      echo "media:$pass" | chpasswd
+      ( umask 027; echo "$pass" > "$PASS_FILE" )
+      chgrp media "$PASS_FILE"
+    fi
+    install -d /etc/ssh/sshd_config.d
+    printf 'PasswordAuthentication yes\nKbdInteractiveAuthentication no\n' > "$CONF"
+    systemctl enable sshd.service
+    systemctl restart sshd.service
+    ;;
+  disable)
+    systemctl disable --now sshd.service
+    usermod -p '*' media
+    rm -f "$PASS_FILE" "$CONF"
+    ;;
+  *) echo "usage : $0 enable|disable" >&2; exit 2 ;;
+esac

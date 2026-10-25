@@ -301,6 +301,8 @@ polkit.addRule(function (action, subject) {
 RULES
   chmod 644 /etc/polkit-1/rules.d/52-stream-box-usb.rules
   # Accès SSH activé ou coupé depuis le menu Système de la TV (mêmes fichiers que l'image)
+  install -d /usr/local/lib/stream-box
+  install -m 755 "$BOX_DIR/image/mkosi.extra/usr/local/lib/stream-box/ssh-access" /usr/local/lib/stream-box/
   install -m 644 "$BOX_DIR/image/mkosi.extra/usr/lib/systemd/system/stream-box-ssh@.service" /etc/systemd/system/
   install -m 644 "$BOX_DIR/image/mkosi.extra/etc/polkit-1/rules.d/54-stream-box-ssh.rules" /etc/polkit-1/rules.d/
   systemctl daemon-reload

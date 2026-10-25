@@ -742,15 +742,25 @@ def set_backdrop(body):
 
 
 # Accès SSH (maintenance), activé ou coupé depuis le menu Système : stream-box-ssh@enable|disable.service (root, règle
-# polkit 54-stream-box-ssh.rules), installé par l'image et install.sh
+# polkit 54-stream-box-ssh.rules, script ssh-access), installé par l'image et install.sh. Activé : mot de passe tiré par
+# ssh-access, montré sur la TV seulement (pas aux autres appareils du réseau)
+SSH_PASS_FILE = "/var/lib/stream-box/ssh-password"
 SSH_UNIT = ("/usr/lib/systemd/system/stream-box-ssh@.service", "/etc/systemd/system/stream-box-ssh@.service")
 
 
-def ssh_status():
+def ssh_status(local=False):
     def systemctl(*args):
         return subprocess.run(["systemctl", *args, "sshd.service"], capture_output=True, text=True, timeout=10).stdout.strip()
-    return {"available": any(os.path.exists(p) for p in SSH_UNIT),
-            "enabled": systemctl("is-enabled") == "enabled", "active": systemctl("is-active") == "active"}
+    s = {"available": any(os.path.exists(p) for p in SSH_UNIT),
+         "enabled": systemctl("is-enabled") == "enabled", "active": systemctl("is-active") == "active",
+         "address": "media@" + urllib.parse.urlsplit(remote_url()).hostname if not custom_remote_url() else None}
+    if local:
+        try:
+            with open(SSH_PASS_FILE) as f:
+                s["password"] = f.read().strip()
+        except OSError:
+            s["password"] = None
+    return s
 
 
 def set_ssh(on):
@@ -2730,7 +2740,7 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/api/bluetooth":
                 self.send(200, btsetup.status())
             elif self.path == "/api/ssh":
-                self.send(200, ssh_status())
+                self.send(200, ssh_status(local=self.client_address[0] == "127.0.0.1"))
             elif self.path == "/api/install":
                 self.send(200, installer.status())
             elif self.path == "/api/backup":

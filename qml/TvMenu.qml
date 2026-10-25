@@ -601,8 +601,9 @@ Item {
               ok: function () { act("keymap", { action: "wizard" }); close() } },
             { label: "Touches par défaut", ok: function () { act("keymap", { action: "reset" }) } },
             { label: "Accès SSH", visible: !!(ssh && ssh.available), toggle: !!(ssh && ssh.enabled),
-              hint: ssh && ssh.enabled ? "Connexion à distance en ligne de commande, pour la maintenance"
-                                       : "Coupé : plus de connexion à distance en ligne de commande",
+              hint: !(ssh && ssh.enabled) ? "Coupé : plus de connexion à distance en ligne de commande"
+                  : "ssh " + (ssh.address || "media@<adresse de la box>")
+                    + (ssh.password ? "  ·  mot de passe : " + ssh.password : "  ·  par clé"),
               ok: function () {
                   var on = !ssh.enabled
                   ssh = Object.assign({}, ssh, { enabled: on })   // tout de suite à l'écran
