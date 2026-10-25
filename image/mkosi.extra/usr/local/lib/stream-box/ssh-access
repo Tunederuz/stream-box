@@ -10,8 +10,10 @@ case "${1:-}" in
   enable)
     install -d -m 750 -o root -g media "$(dirname "$PASS_FILE")"
     if [ ! -s "$PASS_FILE" ]; then
-      # Facile à taper sur un téléphone : trois groupes de quatre (minuscules et chiffres, sans l / 1 / o / 0)
-      pass=$(tr -dc 'abcdefghijkmnpqrstuvwxyz23456789' < /dev/urandom | head -c 12 | sed 's/.\{4\}/&-/g; s/-$//')
+      # Facile à taper sur un téléphone : trois groupes de quatre (minuscules et chiffres, sans l / 1 / o / 0). Pas de
+      # « tr < /dev/urandom | head » : tr finit sur SIGPIPE, ce que pipefail prend pour une erreur
+      pass=$(python3 -c 'import secrets; a = "abcdefghijkmnpqrstuvwxyz23456789"
+print("-".join("".join(secrets.choice(a) for _ in range(4)) for _ in range(3)))')
       echo "media:$pass" | chpasswd
       ( umask 027; echo "$pass" > "$PASS_FILE" )
       chgrp media "$PASS_FILE"
