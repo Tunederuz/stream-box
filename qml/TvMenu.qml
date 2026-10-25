@@ -165,7 +165,7 @@ Item {
         })
     }
     function loadYoutube() {
-        call("GET", "/api/youtube", undefined, function (d) { yt = d && d.channels ? d : { channels: [] } })
+        call("GET", "/api/youtube", undefined, function (d) { if (d && d.channels) yt = d; else if (!yt) yt = { channels: [] } })
     }
     function ytSearch(q) {
         q = q.trim()
@@ -407,7 +407,7 @@ Item {
         area = "content"
         shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0; rebootUntil = 0
         follows = null; replays = ({}); history = null; rpLogin = ""; rpRow = 0; rpSel = [0, 0, 0]
-        yt = null; jf = null; kbOpen = false   // les résultats de recherche restent d'une ouverture à l'autre
+        jf = null; kbOpen = false   // les résultats de recherche restent d'une ouverture à l'autre ; yt aussi (relu en fond)
         var list = st.streamers || []
         liveSel = Math.max(0, list.indexOf(st.channel))
         startFocus = true
@@ -765,7 +765,7 @@ Item {
         if (id === "system") { loadBt(); loadYtAccount() }
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
-        if (id === "youtube" && yt === null) loadYoutube()
+        if (id === "youtube") loadYoutube()   // rangées précédentes affichées en attendant
         if (id === "jellyfin" && jf === null) loadJellyfin()
         if (id === "replays") {
             if (!rpLogin) rpLogin = st.channel || (st.streamers || [])[0] || ""
@@ -1303,6 +1303,8 @@ Item {
                             y: index * ytPage.rowH - ytPage.scrollY
                             Behavior on y { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
                             opacity: index >= Math.max(0, menu.mRow - 1) && index < Math.max(0, menu.mRow - 1) + 2 ? 1 : 0   // rangées visées
+                            // Cartes créées (et miniatures chargées) seulement pour les rangées visées et leurs voisines
+                            readonly property bool near: index >= Math.max(0, menu.mRow - 1) - 1 && index < Math.max(0, menu.mRow - 1) + 3
                             Behavior on opacity { NumberAnimation { duration: 180 } }
                             width: 1460; height: ytPage.rowH
                             Row {
@@ -1323,7 +1325,7 @@ Item {
                                     y: 40; x: -12; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
                                     orientation: ListView.Horizontal; spacing: 30; interactive: false; clip: false
                                     leftMargin: 40
-                                    model: visible ? row.items.length : 0
+                                    model: visible && near ? row.items.length : 0
                                     currentIndex: visible ? (menu.mSel["chans"] || 0) : 0
                                     // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
                                     // qui laissait des cartes coupées au bord du rail ou de l'écran)
@@ -1373,7 +1375,7 @@ Item {
                                     y: 40; x: -12; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
                                     orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
                                     leftMargin: 40
-                                    model: visible ? row.items.length : 0
+                                    model: visible && near ? row.items.length : 0
                                     currentIndex: visible ? (menu.mSel[row.key] || 0) : 0
                                     // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
                                     // qui laissait des cartes coupées au bord du rail ou de l'écran)

@@ -1192,7 +1192,7 @@ refreshYtAccount();
 let ytHome = null;
 async function loadYoutube() {   // liste des chaînes, pour les Réglages
   try {
-    ytHome = await (await fetch("/api/youtube")).json();
+    ytHome = await (await fetch("/api/youtube_channels")).json();   // la liste seule, sans les vidéos
   } catch (e) { return; }
   renderYoutubeManage();
 }

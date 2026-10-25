@@ -881,6 +881,7 @@ def media_key(url):
 
 YT_FILE = os.path.join(COOKIES_DIR, "youtube.json")
 YT_FEED_CACHE = 1200
+YT_FEED_RETRY = 600   # flux en échec (adresse limitée par YouTube…) : nouvel essai 10 min plus tard
 YT_SEARCH_CACHE = 600
 yt_feeds, yt_searches = {}, {}   # id de chaîne → (heure, vidéos) ; requête → (heure, résultats)
 yt_lock = threading.Lock()
@@ -929,6 +930,9 @@ def edit_yt_channels(action, raw="", delta=0):
             c = next((dict(x) for x in read_json_file(YT_SUBS_FILE).get("channels") or [] if x["id"] == raw), None) \
                 or yt_resolve(raw)
             c.setdefault("handle", "")
+            cache = read_json_file(YT_FEED_FILE)
+            if (cache.get("channels") or {}).get(c["id"], {}).pop("checked", None) is not None:
+                write_private_json(YT_FEED_FILE, cache)   # abonnement devenu favori : 15 vidéos au prochain tour
             if any(x["id"] == c["id"] for x in chans):
                 raise ValueError(f"{c['name']} est déjà dans la liste.")
             chans.append(c)
@@ -949,8 +953,18 @@ def edit_yt_channels(action, raw="", delta=0):
 
 def yt_feed(channel_id):
     cached = yt_feeds.get(channel_id)
-    if cached and time.time() - cached[0] < YT_FEED_CACHE:
+    if cached and time.time() - cached[0] < (YT_FEED_CACHE if cached[1] is not None else YT_FEED_RETRY):
+        if cached[1] is None:
+            raise OSError("flux injoignable (nouvel essai plus tard)")
         return cached[1]
+    try:
+        return yt_fetch_feed(channel_id)
+    except (OSError, ValueError):
+        yt_feeds[channel_id] = (time.time(), None)   # échec gardé : pas de nouvel essai à chaque ouverture du menu
+        raise
+
+
+def yt_fetch_feed(channel_id):
     import xml.etree.ElementTree as ET
     ns = {"a": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015",
           "m": "http://search.yahoo.com/mrss/"}
@@ -990,10 +1004,10 @@ def yt_meta(video_id):
         return None, None
 
 
-def with_progress(videos):
+def with_progress(videos, known=None):
     """Position et « vu » d'après l'historique de la box ; vidéo vue ailleurs : pourcentage du compte YouTube (percent,
     indicatif : YouTube le met à jour avec retard)"""
-    known = {e["key"]: e for e in read_history()}
+    known = known if known is not None else {e["key"]: e for e in read_history()}
     remote = yt_tv_progress()
     out = []
     for v in videos:
@@ -1037,14 +1051,34 @@ def yt_tv_report(video_id, position, final=False):
                      daemon=True).start()
 
 
+def yt_fav_videos(cache, channel_id):
+    """Vidéos d'un favori d'après le relevé des abonnements (API Google), ou None s'il n'y est pas"""
+    entry = (cache.get("channels") or {}).get(channel_id) or {}
+    if "checked" not in entry or not read_json_file(YT_TOKEN_FILE).get("refresh_token"):
+        return None
+    details, out = cache.get("details") or {}, []
+    for v in entry.get("videos") or []:
+        det = details.get(v["id"]) or {}
+        if det.get("gone") or det.get("upcoming"):
+            continue
+        out.append({"id": v["id"], "title": v["title"], "date": v["date"][:10], "thumb": v["thumb"], "url": v["url"],
+                    "seconds": det.get("seconds"), "views": det.get("views")})
+    return out
+
+
 def youtube_home():
-    out = []
-    for c in yt_channels():
-        try:
-            videos = with_progress(yt_feed(c["id"]))
-        except (OSError, ValueError):
-            videos = None   # flux injoignable : la chaîne reste affichée, sans vidéos
-        out.append({**c, "videos": videos})
+    """Favoris (une rangée par chaîne) et abonnements. Favoris abonnés : relevé des abonnements, sans requête à
+    youtube.com ; les autres : flux RSS, lus en parallèle (yt_feed garde aussi les échecs)"""
+    from concurrent.futures import ThreadPoolExecutor
+    cache, chans = read_json_file(YT_FEED_FILE), yt_channels()
+    videos = {c["id"]: yt_fav_videos(cache, c["id"]) for c in chans}
+    rss = [c["id"] for c in chans if videos[c["id"]] is None]
+    if rss:
+        with ThreadPoolExecutor(8) as pool:
+            videos.update(zip(rss, pool.map(lambda cid: yt_safe(yt_feed, cid), rss)))
+    known = {e["key"]: e for e in read_history()}
+    out = [{**c, "videos": with_progress(videos[c["id"]], known) if videos[c["id"]] is not None else None}
+           for c in chans]   # flux injoignable : la chaîne reste affichée, sans vidéos
     try:
         subs = yt_subscriptions()
     except (OSError, ValueError, KeyError) as e:   # compte YouTube en panne : les chaînes de la liste restent
@@ -1746,6 +1780,7 @@ YT_CHANNEL_RHYTHM = ((2 * 86400, 3600), (7 * 86400, 3 * 3600), (30 * 86400, 12 *
 YT_DAILY_BUDGET = 7000   # sur les 10 000 du quota : marge pour « Relire mes abonnements » et les essais
 YT_SUBFEED_PER_CHANNEL = 4
 YT_SUBFEED_MAX = 60
+YT_FAV_VIDEOS = 15
 yt_account_lock = threading.Lock()
 yt_pending = {}                # autorisation en cours : user_code, verification_uri, expires_at, error
 yt_subfeed = {"at": 0.0, "videos": None, "refreshing": False}
@@ -1878,10 +1913,10 @@ def iso_seconds(text):
     return ((d * 24 + h) * 60 + mi) * 60 + s
 
 
-def yt_channel_uploads(channel, token):
+def yt_channel_uploads(channel, token, count=YT_SUBFEED_PER_CHANNEL):
     for prefix in ("UULF", "UU"):   # UULF : vidéos longues seulement (sans Shorts ni directs) ; UU : tout, en secours
         try:
-            d = yt_api("playlistItems", token, part="snippet,contentDetails", maxResults=YT_SUBFEED_PER_CHANNEL,
+            d = yt_api("playlistItems", token, part="snippet,contentDetails", maxResults=count,
                        playlistId=prefix + channel["id"][2:])
         except urllib.error.HTTPError as e:
             if e.code == 404:
@@ -1930,12 +1965,14 @@ def yt_channel_every(entry):
 
 
 def yt_build_feed(cache, token):
-    """60 vidéos les plus récentes d'après les chaînes relues ; durées et vues relues au plus toutes les heures"""
+    """60 vidéos les plus récentes d'après les chaînes relues ; durées et vues relues au plus toutes les heures (aussi
+    pour les vidéos des favoris, servies par yt_fav_videos)"""
     details = cache.setdefault("details", {})
-    candidates = sorted((v for e in cache["channels"].values() for v in e.get("videos") or []),
+    candidates = sorted((v for e in cache["channels"].values() for v in (e.get("videos") or [])[:YT_SUBFEED_PER_CHANNEL]),
                         key=lambda v: v["date"], reverse=True)[:YT_SUBFEED_MAX + 20]   # marge : directs à venir écartés
+    favs = [v for c in yt_channels() for v in (cache["channels"].get(c["id"]) or {}).get("videos") or []]
     if token:
-        stale = [v["id"] for v in candidates if time.time() - (details.get(v["id"]) or {}).get("at", 0) > 3600]
+        stale = [v["id"] for v in candidates + favs if time.time() - (details.get(v["id"]) or {}).get("at", 0) > 3600]
         for i in range(0, len(stale), 50):
             ids = stale[i:i + 50]
             d = yt_api("videos", token, part="snippet,contentDetails,statistics", id=",".join(ids), maxResults=50)
@@ -1947,7 +1984,7 @@ def yt_build_feed(cache, token):
                                 "upcoming": ((it or {}).get("snippet") or {}).get("liveBroadcastContent") == "upcoming",
                                 "seconds": iso_seconds(((it or {}).get("contentDetails") or {}).get("duration")),
                                 "views": int(views) if views else None}
-    keep = {v["id"] for v in candidates}
+    keep = {v["id"] for v in candidates + favs}
     cache["details"] = {k: v for k, v in details.items() if k in keep}
     out = []
     for v in candidates:
@@ -1976,16 +2013,20 @@ def yt_refresh_subfeed():
         if subs is None or time.time() - listed.get("at", 0) > YT_SUBS_EVERY:
             subs = yt_fetch_subs(token)
         cache["channels"] = {c["id"]: cache["channels"].get(c["id"], {}) for c in subs}   # désabonnements oubliés
-        due = [c for c in subs if time.time() - cache["channels"][c["id"]].get("checked", 0) >= yt_channel_every(cache["channels"][c["id"]])]
+        favs = {c["id"] for c in yt_channels()}   # favoris : 15 vidéos pour leur rangée (même coût)
+        due = [c for c in subs if time.time() - cache["channels"][c["id"]].get("checked", 0) >= yt_channel_every(cache["channels"][c["id"]])
+               or (c["id"] in favs and cache["channels"][c["id"]].get("count", 0) < YT_FAV_VIDEOS)]
         with yt_account_lock:
             left = YT_DAILY_BUDGET - (yt_units["used"] if yt_units["day"] == yt_quota_day() else 0)
         due = due[:max(0, left - 10)]   # quota du jour presque épuisé : la suite attend demain
         if due:
             with ThreadPoolExecutor(16) as pool:
-                lists = list(pool.map(lambda c: yt_safe(yt_channel_uploads, c, token), due))
+                lists = list(pool.map(lambda c: yt_safe(yt_channel_uploads, c, token,
+                                                        YT_FAV_VIDEOS if c["id"] in favs else YT_SUBFEED_PER_CHANNEL), due))
             for c, videos in zip(due, lists):
                 entry = cache["channels"][c["id"]]
                 entry["checked"] = time.time()
+                entry["count"] = YT_FAV_VIDEOS if c["id"] in favs else YT_SUBFEED_PER_CHANNEL
                 if videos is not None:   # injoignable : l'ancien relevé reste, nouvel essai au prochain tour
                     entry["videos"] = videos
         if due or yt_subfeed["videos"] is None or time.time() - yt_subfeed["at"] > 3600:
@@ -2643,6 +2684,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, events_for_page())
                 except (OSError, ValueError, KeyError) as e:
                     self.send(503, {"error": f"Twitch injoignable : {e}"})
+            elif self.path == "/api/youtube_channels":
+                self.send(200, {"channels": yt_channels()})
             elif self.path == "/api/youtube_account":
                 self.send(200, yt_account_status())
             elif self.path == "/api/follows":
