@@ -1,4 +1,4 @@
-// Fond animé de l'écran d'accueil et du menu sans vidéo derrière : un fond (taches floues, nappes de couleur fluides,
+// Fond animé de l'écran d'accueil et du menu sans vidéo derrière : un fond (rien, taches floues, nappes de couleur fluides,
 // aurore boréale) et un calque par-dessus (fils de soie, bulles lumineuses, étoiles), au choix dans les Réglages ou
 // en rotation automatique (/api/state backdrop). Shaders compilés dans shaders/ (voir build.sh), calculés à
 // mi-résolution (layer.textureSize) puis agrandis : le flou ne se voit pas, la puce graphique travaille quatre fois
@@ -31,6 +31,7 @@ Item {
         anchors.fill: parent
         Loader {
             anchors.fill: parent
+            active: root.shownBase !== "none"
             sourceComponent: root.shownBase === "aurora" ? blobsBg : baseShader
         }
         Loader {

@@ -793,12 +793,12 @@ d'accueil).
 
 ### Fonds animés (qml/Backdrop.qml)
 Écran d'accueil (AmbientScreen) et menu sans vidéo derrière (TvMenu, aux couleurs de l'onglet : `hueShift`, calque à
-60 %) partagent `Backdrop.qml` : un **fond** (`aurora` taches floues, `fluid` bruit replié, `borealis` rideaux
+60 %) partagent `Backdrop.qml` : un **fond** (`none` couleur unie, `aurora` taches floues, `fluid` bruit replié, `borealis` rideaux
 d'aurore boréale) + un **calque** (`none`, `silk` fils lumineux, `bubbles` particules, `stars` étoiles sur deux plans).
 Les calques shader rendent `vec4(lumière, 0)` : mélange additif avec l'alpha prémultiplié de Qt. Fondu enchaîné à
 chaque changement (`shownBase` / `shownOverlay`). Réglages → Affichage : « Fond animé », « Par-dessus » (arrêtent la
 rotation), « Rotation automatique » (non, 10, 30, 60 min : combinaison tirée par `random.Random(période)` dans
-remote.py, la même partout, jamais deux fois la même de suite). `POST /api/backdrop {base?, overlay?, rotate?}`,
+remote.py, la même partout, jamais deux fois la même de suite, jamais rien + rien). `POST /api/backdrop {base?, overlay?, rotate?}`,
 `~/.config/stream-box/backdrop` (JSON ; ancienne valeur seule acceptée), `backdrop` (combinaison affichée) dans
 `/api/state` ; l'accueil prend le plus récent de son état (20 s) et de celui du menu ouvert (ui.qml). Au-dessus d'une
 vidéo, le menu n'a que son voile (plus de lueurs). Shaders dans `qml/shaders/*.frag`, compilés en `.qsb` versionnés

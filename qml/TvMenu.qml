@@ -672,7 +672,7 @@ Item {
             { label: "Annuler", ok: function () { close() } }])
     }
     readonly property var backdropNames: ({
-        base: { aurora: "Taches floues", fluid: "Fluide", borealis: "Aurore boréale" },
+        base: { none: "Rien", aurora: "Taches floues", fluid: "Fluide", borealis: "Aurore boréale" },
         overlay: { none: "Rien", silk: "Soie", bubbles: "Bulles", stars: "Étoiles" },
         rotate: { 0: "Non", 10: "10 minutes", 30: "30 minutes", 60: "1 heure" } })
     readonly property var bd: st.backdrop || ({ base: "aurora", overlay: "none", rotate: 0 })

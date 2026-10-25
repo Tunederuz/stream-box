@@ -704,7 +704,7 @@ def set_player(mode):
 # fond, un calque par-dessus, et une rotation automatique (combinaison tirée au hasard toutes les N minutes, la même
 # pour tous les écrans pendant ce temps). ~/.config/stream-box/backdrop : {"base", "overlay", "rotate"}
 BACKDROP_FILE = os.path.expanduser("~/.config/stream-box/backdrop")
-BACKDROP_BASES = ("aurora", "fluid", "borealis")
+BACKDROP_BASES = ("none", "aurora", "fluid", "borealis")
 BACKDROP_OVERLAYS = ("none", "silk", "bubbles", "stars")
 BACKDROP_ROTATE = (0, 10, 30, 60)   # minutes, 0 : pas de rotation
 
@@ -733,7 +733,7 @@ def backdrop():
     """Fond affiché : le choix, ou en rotation la combinaison de la période en cours (jamais deux fois la même de suite)"""
     b = backdrop_choice()
     if b["rotate"]:
-        combos = [(x, y) for x in BACKDROP_BASES for y in BACKDROP_OVERLAYS]
+        combos = [(x, y) for x in BACKDROP_BASES for y in BACKDROP_OVERLAYS if (x, y) != ("none", "none")]
         period = int(time.time() // (b["rotate"] * 60))
         prev = random.Random(period - 1).choice(combos)
         b["base"], b["overlay"] = random.Random(period).choice([c for c in combos if c != prev])
