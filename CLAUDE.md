@@ -10,17 +10,17 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
 
 ## Languages
 - Code, comments and docs are in English. User-facing texts are written in English in the code and wrapped with
-  `tr()`: Python `i18n.py`; QML `qml/i18n.js` + the `i18n.dict` context property set by `ui.py`; Lua `tr()` in
-  `stream-box.lua` / `tv_menu.lua`; companion app `tr()` and translation of static texts in `remote.html`.
+  `tr()`: Python `i18n.py`; QML `qml/i18n.js` + the `i18n.dict` context property set by `ui.py`; Lua `tr()` of
+  `lua/streambox/i18n.lua` (used by `stream-box.lua` and its modules); companion app `tr()` and translation of static texts in `remote.html`.
 - Translations: `locales/<lang>.json`, keyed by the English text (placeholders `{name}`).
 - Language stored in `~/.config/stream-box/language` (default `en`), changed by `POST /api/language`, which sends the
   script-message `streambox-language` to the TV.
 - `GET /api/state` carries `lang` (current code) and `languages` (`{code: name in its own language}`, from
   `i18n.LANGUAGES`). Pickers: companion app section `#language-section` of Settings (moved to the top of the
   `#setup` screen in setup mode, so the language is chosen first); TV: "Interface language" row (header "Language")
-  in `settingsRows()` (QML) and `settings_rows()` (Lua).
+  in `settingsRows()` (QML).
 - Adding a language: add its code to `LANGUAGES` in `i18n.py` and create `locales/<code>.json`. Decimal separator:
-  `qml/fmt.js` (translatable `{int}.{dec}` keys), `I18N.dec` in `stream-box.lua` / `tv_menu.lua`, and the
+  `qml/fmt.js` (translatable `{int}.{dec}` keys), `I18N.dec` in `lua/streambox/i18n.lua`, and the
   `LANG === "fr"` checks in `remote.html` (currently only `fr` uses a comma); QML dates pick the Qt locale from
   `i18n.lang` in `qml/TvMenu.qml` (`fr_FR` or `en_US`).
 
@@ -57,7 +57,11 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
 - `start.sh`: waits for the network (`getent hosts www.twitch.tv`), starts `chat_overlay.py` and `remote.py` in the
   background, then loops on a **permanent** mpv (`--idle --force-window --fs --osc=no`, IPC `/tmp/stream-box-mpv.sock`,
   script `stream-box.lua`). The loop restarts mpv if it is closed, and first kills any orphaned streamlink.
-- `stream-box.lua` (mpv script):
+- `stream-box.lua` (mpv script; it keeps the state and the orchestration, its self-contained parts are modules in
+  `lua/streambox/`, loaded with `require "streambox.…"` through `package.path`: `i18n` (interface language), `ass` (OSD
+  drawing helpers, QR code), `fmt` (clock, shorten, amounts), `ambient` (home screen with mpv alone), `polls` (polls
+  and predictions with mpv alone), `keys` (fallback key names, learned keys, "Set up keys" wizard, streambox-input).
+  Lua allows 200 locals in a chunk: new self-contained parts go into a module):
   - starts streamlink in local HTTP server mode (`--player-external-http`, 127.0.0.1, port 34501–34550, which changes
     with each channel) with `--twitch-low-latency --retry-streams 30`, then `loadfile http://127.0.0.1:<port>/`;
   - if the channel is not live: black screen with "{channel} is not live, retrying in {seconds} s", new attempt every 15 s;
@@ -73,10 +77,21 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   `osd-overlay` (`ass-events`, resolution 1920x1080). Semi-transparent black background (opacity `chat_bg`, margin `BG_PADDING`): the text
   is first rendered hidden with `compute_bounds` to measure its size, then the background (overlay 2, z=0) is drawn
   under the text (overlay 1, z=1). It handles `CLEARMSG` / `CLEARCHAT`. Standard library only.
-- `remote.py`: companion app server on port 8080 (standard library, `ThreadingHTTPServer`). Serves `remote.html`
-  and the PWA files (`manifest.webmanifest`, `sw.js`, `icon-*.png`). API: `GET /api/state`,
-  `POST /api/{channel,chat,corner,set,display,volume,mute,pause,poweroff}`, `GET /api/display`. It opens one IPC connection per request. The volume is
-  mpv's, not the system's.
+- `remote.py`: companion app server on port 8080 (standard library, `ThreadingHTTPServer`): the entry point (same
+  command line), which starts the background loops and serves `api.Handler`. Serves `remote.html` and the PWA files
+  (`manifest.webmanifest`, `sw.js`, `icon-*.png`). It opens one IPC connection per request. The volume is mpv's, not
+  the system's. Its modules (no import cycle; shared mutable state has one owner module and is always reached as
+  `module.attr`, never copied by `from … import`):
+  - `common.py`: port, mpv socket and `mpv()`, paths, `lan_ip`, JSON file helpers;
+  - `api.py`: static files, `state()`, GET routes (`JSON_ROUTES` for exact paths, then the others), POST dispatch;
+  - `actions.py`: `POST /api/<name>` handlers (`ACTIONS` dict), the TV menu `keyboard`;
+  - `twitch.py`: streamers.txt, who is live (`live_now`), polls and predictions, replays, GQL, followed channels,
+    Twitch account; `youtube.py`: channels, feeds, search, auto subtitles (`/subs`), storyboard, TV app progress,
+    Google account and subscriptions; `jellyfin.py`: server, home, search, series, play, subtitles, progress;
+  - `playback.py`: `play()`, `history_loop`; `history.py`: history.json, `media_key`, `now_playing`;
+  - `ambient.py`: weather, Twitch schedules, companion app URL and QR code, first setup, `ambient_loop`;
+  - `images.py`: TV preview; `settings.py`: player, power button action, backdrop; `system.py`: power, power key
+    lock, wake-up, SSH, developer mode, health, update.
 - Twitch account (section of the page, `POST /api/login|logout`, `GET /api/account`): the website's token (cookie
   `auth-token`) is written to `~media/.config/streamlink/config.twitch` (`twitch-api-header=Authorization=OAuth …`,
   mode 600), which streamlink reads on its own. It is the only token that removes ads on channels you are subscribed to
@@ -162,14 +177,14 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
 - **Ambient screen** (stream-box.lua, `draw_ambient`) when nothing is playing (channel offline, empty list, `home` mode): clock,
   date in the interface language, weather, upcoming scheduled streams, and the status message small at the bottom, on an "aurora" background (`AURORA`:
   three very blurry blobs that drift, redrawn every 2 s, ~2 % CPU). The text moves a little every
-  minute (TV). Data from `remote.py` (`ambient_loop`, every 10 min, republished every 10 s in
+  minute (TV). Data from `remote.py` (`ambient.ambient_loop`, every 10 min, republished every 10 s in
   `user-data/streambox/ambient`): Open-Meteo weather (location in `~/.config/stream-box/ambient.json`, `city`,
   `latitude`, `longitude`, `timezone`; without this file, no weather) and Twitch schedules (GQL `schedule.segments`,
   slots of the current week: a past slot is moved forward one week; cancelled slots (`isCancelled`)
   ignored; during a Twitch break (`schedule.interruption`, the streamer's vacation): "on a break until {date}"; beyond
   a week, the date is added to the day; testable computation in `next_streams`). mpv screenshots are empty when
   nothing is playing: check the screen on the TV.
-- **Companion app QR code** (guests): `remote.py` (`remote_qr`) computes it with segno (media venv, called as a
+- **Companion app QR code** (guests): `remote.py` (`ambient.remote_qr`) computes it with segno (media venv, called as a
   subprocess: `remote.py` runs with the system Python) for the address in `~/.config/stream-box/remote-url`
   (install.sh's `--remote-url` option; otherwise `http://<box IP>:8080`, which the firewall may block), and publishes it
   in `user-data/streambox/ambient` (`qr`: address + lines of "0"/"1"). The Lua's `qr_code()` draws it as a
@@ -178,7 +193,7 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   Adjustable display (Settings → Display, `POST /api/qr {mode}`, MQTT select, script-message `streambox-qr`, state
   file `qr`): `always`, `timed` (`QR_SECONDS` = 30 s each time the ambient screen appears and the menu opens),
   `never`; the check is done in `qr_code()`.
-- **Polls and predictions** (`remote.py`, `events_loop` / `fetch_events`): no more PubSub for a viewer, so
+- **Polls and predictions** (`twitch.events_loop` / `fetch_events`): no more PubSub for a viewer, so
   GQL polling every 10 s, only during a live stream from the list with the panel enabled: `user.viewablePoll`
   (current or ended poll; no end time, the result is shown for 60 s after it is seen ended),
   `channel.activePredictionEvents`, `lockedPredictionEvents`, and `resolvedPredictionEvents(first:1)` (result shown
@@ -191,7 +206,7 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   TV Settings → Playback, MQTT switch). `af` is a global mpv option: it stays from one file to
   the next, Jellyfin included. Yes/no settings: script-message `streambox-flag <key> yes|no`, `POST /api/flag {key,
   enabled}`, state in `user-data/streambox/<key>` and the state file of the same name.
-- **History and resume** (`remote.py`, `play` / `history_loop`) of videos started from the companion app (links,
+- **History and resume** (`playback.play` / `history_loop`, `history.py`) of videos started from the companion app (links,
   YouTube, Twitch replays and clips; Jellyfin handles its own progress). Stable key per video (`media_key`: YouTube
   id, VOD id, clip slug), history in `~media/.local/state/stream-box/history.json` (60 entries).
   Position recorded every 10 s; resume if > 30 s and not "watched" (less than 30 s from the end or beyond 95 %),
@@ -264,6 +279,16 @@ when Twitch changes something. Update: `~/.local/share/streamlink-venv/bin/pip i
 - Screenshots: `["screenshot-to-file","/tmp/x.png","window"]`. They come out empty as long as no video is playing.
 - Someone may click in front of the TV during a test: the state can change while you are testing.
 
+## Tests and checks
+- `tools/check.sh` runs locally, in Docker, what `.github/workflows/checks.yml` runs on each push: `python` (ruff with
+  the pyflakes rules of `ruff.toml`, compile, `python3 -m unittest discover -s tests -t .`), `lua` (`tests/test_lua.py`
+  in the same mpv as the box image: Lua modules under luajit, then `stream-box.lua` loaded in a real mpv **in French**
+  and driven through its IPC), `shell` (shellcheck). Tests needing mpv or luajit are skipped without them.
+- `tests/`: translations (`test_locales.py`: same placeholders, every literal `tr()` translated, no stale key: remove
+  the keys of texts you delete), `input.py` key repeat on a fake input device, `i18n.py`, `history.media_key`, the
+  remote.py API started for real (`test_api.py`: throwaway HOME, fake mpv socket; skipped on a running box).
+- A change visible on the TV still gets tested in the VM, with the box set to French before the session starts.
+
 ## Ideas
 - Emotes as images (`overlay-add` with raw BGRA bitmaps): much more complex.
 - Show in the menu who is live.
@@ -280,97 +305,42 @@ page-v1:remote.html > remote.html` to go back). To judge a change without a phon
 page with a `render(<state from /api/state>)` instead of `refresh()`, captured by `firefox --headless --screenshot`
 (it does not wait for the page's requests; do not scroll: sticky elements are drawn badly there).
 
-## Large TV menu (tv_menu.lua)
+## Large TV menu
 
-In the style of Android TV, opened by the remote's Menu button (Home key) in all modes: tabs on the left
-(Live, Following, Replays, History, Settings, System), content on the right, video dimmed behind, closed by Menu, Back from the
-tabs, or after 90 s without a key press. Separate script, loaded by `start.sh` (second `--script`). While it is
-open (`user-data/streambox/tvmenu`, which `chat_overlay.py` also follows to hide the chat, otherwise drawn
-on top), `stream-box.lua` passes it all keys (`streambox-tvmenu-key`);
-it reads the state and acts through the `remote.py` API (curl as a subprocess), like the companion app. Settings: ◀ ▶ change
-a value, OK toggles a switch; the resolution chosen with the arrows is only applied on OK. Live: shortcuts
-above the streamers ("▶  Resume {channel}" outside the stream, second stream; ▲ from the first row). "⌂  Home screen"
-is global: first entry of the rail, above the tabs (▲ from the first tab).
-System: account status, power off (OK twice), companion app QR code for whatever
-requires typing text. Pictures: raw images placed by `overlay-add` (above the ASS drawing, coordinates in
-screen pixels), prepared by `GET /api/tvimage?src=&w=&h=&round=` (ffmpeg: crop, disc with a soft edge,
-BGRA with premultiplied alpha, cache `/tmp/stream-box-images`, only the Twitch and YouTube image servers).
-Testing: `keypress HOMEPAGE`, `keypress DOWN`… through the IPC, then `/api/preview`. To reload the script without
-restarting the session: restart mpv then `load-script` only once (a second `load-script` would make two).
-Replays: streamer chips (scrolling to fit the width), then "Replays" and "Clips of the
-week" rows from `/api/replays` (4 cards visible, ◀ ▶ scroll). History: grid from `/api/history`, 2 rows
-visible. Video cards: thumbnail with rounded corners (`radius` of `/api/tvimage`), progress bar and texts
-below (nothing is drawn over a placed image). OK on a started video opens an actions popup (Resume at
-…, From the beginning, and Remove from history in the history); images are removed while it is open,
-otherwise they would show on top of it. The thumbnail of a live stream in progress (`vod-secure.twitch.tv`, "being
-processed" image) is not allowed: the card keeps its drawn ▶.
-Finishing touches: blurred purple glow around the selected item (`focus_ring`), texts that are too long scroll after a
-pause (`marquee`: width estimated at 0.52 em per character, `\clip` to the width, redraw at 15 fps only
-while a text is scrolling, restarted from the beginning at each key press; menu open ≈ +30 % of a core), "Now on the TV"
-at the bottom of the rail, ambient screen weather next to the time, card of the watched streamer tinted purple. Texts
-sized for a TV seen from the couch (video card titles 33 px, info 27 px, at 1920x1080).
+In the style of Android TV, opened by the remote's Menu button (Home key) in all modes: rail on the left ("⌂  Home
+screen", then the tabs Live, Following, Replays, YouTube, Jellyfin, History, Settings, System), content on the right,
+video dimmed behind; closed by Menu, by Back from the rail over a video, or after 90 s without a key press. While it
+is open (`user-data/streambox/tvmenu`, which `chat_overlay.py` also follows to hide the chat), `stream-box.lua`
+passes it all keys (`streambox-tvmenu-key`); it reads the state and acts through the remote.py API, like the
+companion app. Settings: ◀ ▶ change a value, OK toggles a switch; the resolution chosen with the arrows is only
+applied on OK. Live: shortcuts above the streamers ("▶  Resume {channel}" outside the stream, second stream; ▲ from
+the first row). System: account status, power off (OK twice), companion app QR code for whatever requires typing
+text. Testing: `keypress HOMEPAGE`, `keypress DOWN`… through the IPC, then `/api/preview`.
 
-## Followed channels (Following tab)
-
-Twitch refuses the followed channel list to the website's token: GQL `currentUser.follows` / `followedLiveUsers` →
-"service error" (probably reserved for the real browser, integrity check), Helix → "Missing scope:
-user:read:follows". Hence a Twitch app of your own (dev.twitch.tv/console/apps, redirect `http://localhost` never
-used, Public type without a secret or Confidential with a secret) and device code authorization (device code flow):
-`POST /api/follows_login` → code to type on twitch.tv/activate (shown on the TV with a QR code, and in the page),
-`follows_poll` waits for the approval, tokens in `~/.config/stream-box/twitch-follows-token.json` (600, renewed with
-the refresh token; removed if Twitch refuses them). App config: `twitch-app.json` (600), written by the page
-(`POST /api/follows_app {client_id, client_secret?}`, Settings → Followed channels). `GET /api/follows`: status and lists
-(Helix `streams/followed`, `channels/followed` up to 500, pictures through `users`), 60 s cache. `/api/channel` also
-accepts a followed channel. On the TV: grid like Live (live first), OK watches, or offers "Add to my
-list" if the channel is not in it. `GET /api/qr?text=`: generic QR code (segno).
-
-## Qt app embedding mpv (ui.py, player.sh)
-
-For a GPU-rendered menu (smooth animations) and, later, two videos at once, the window of the
-cage session is no longer necessarily mpv: `ui.py` is a Qt Quick app (PySide6, venv `~/.local/share/ui-venv`) that
-has libmpv draw the video (OpenGL render API, python-mpv) into a `QQuickFramebufferObject` (`MpvVideo`,
-scene `ui.qml`), so that QML can then be laid on top. `player.sh` (run by `start.sh`) is the player
-loop: Qt app if `~/.config/stream-box/player` contains `qt`, otherwise mpv alone; automatic fallback to mpv if the app
-stops three times in a row in less than 30 s (log `/tmp/stream-box-ui.log`). `ui.py` takes the same options as
-mpv's command line (`--x=y`, cumulative `--script=`, `--…-append=` through `change-list`): Lua scripts, IPC socket,
-chat, Jellyfin, Home Assistant work as before. Tricky points, checked:
-- hardware decoding: libmpv needs a Wayland connection (`wl_display`, here a separate connection opened by
-  `wl_display_connect`) to create its VADisplay; without it "Could not create a VA display" and CPU decoding.
-  With it: vaapi, 1080p60 without dropped frames, ~28 % of a core like mpv alone;
-- PySide would free the `QOpenGLFramebufferObject` returned to Qt (crash in `texture()`): reference kept;
-- no vertical flip (`setMirrorVertically`): the picture would be upside down;
-- `force-window` enabled only once the render context is created (`Bridge.ready`): passed at startup, mpv cannot
-  open its video output yet and disables it; without it, nothing is redrawn without video (ambient screen and
-  offline channel frozen on the last frame);
-- keys: Qt → mpv names (`KEYS`); unnamed XF86 keys (OK of the Xiaomi remote: keysym 0x1008ffa0)
-  take the name mpv gave them, "0x21" + last 4 digits of the keysym (`0x21ffa0`); mouse → `mouse`;
-- `jellyfin-mpv-shim` gives up if the socket does not exist yet (the app opens it later than mpv): `player.sh`
-  deletes the old socket and waits for the new one before starting the shim. Beware of the loop's
-  `pkill -f '[j]ellyfin-mpv-shim'`: they also kill an SSH command that would contain that word;
-- streamlink (`--player-external-http`) only serves one client at a time: to test a second window, a second
-  streamlink on another port.
-Switching players without rebooting the box: write the file then `quit` through the IPC (the loop restarts). A new
-`start.sh`/`player.sh` only applies at the next session start (bash keeps the script it read in memory).
+With mpv alone (player setting "mpv only", fallback after the Qt app failed, or QML menu that failed to load: ui.py
+then writes `user-data/streambox/menu = small`) there is no big menu: Menu opens and closes the small menu of
+stream-box.lua (streamers, home screen, chat, and "Animated menu (Qt app)", which calls `POST /api/player
+{mode: qt}`), and holding power does the power button's usual action. (The Lua copy of the big menu, tv_menu.lua,
+was dropped: it duplicated every feature and kept drifting from the QML one.)
 
 ### Large menu in QML (qml/TvMenu.qml)
 
 With the Qt app, the large menu is in QML (rendered by the GPU, animations: fade on opening, tab
 pill that slides, content that slides in, cards that grow with a blurred glow, smooth scrolling of
-grids and rows, animated switches, actions popup that bounces). `ui.py` then does not load `tv_menu.lua`
-(two menus would respond), which remains the fallback menu in mpv-alone mode or if the QML fails to load. Opening:
+grids and rows, animated switches, actions popup that bounces). Opening:
 stream-box.lua's `streambox-tvmenu-open` intercepted by python-mpv (`register_message_handler`). Keys: while the
 menu is open, `View.keyPressEvent` gives them to QML (`box.keyPressed`, roles from `MENU_KEYS`: up, ok, back, home…)
 instead of mpv (volume stays with mpv); a key sent through the IPC (`keypress` → stream-box.lua →
 `streambox-tvmenu-key`) arrives at the same place, which is useful for tests. `box.setMenuOpen` writes a real boolean to
 `user-data/streambox/tvmenu` (`MPV_FORMAT_FLAG`: python-mpv would write the string "yes") for the chat and the mouse.
 Data and actions: `XMLHttpRequest` to the remote.py API; pictures and thumbnails loaded directly from
-Twitch / YouTube by Qt and rounded by `MultiEffect` (no more need for `/api/tvimage`); weather and QR code through
+Twitch / YouTube by Qt and rounded by `MultiEffect`; weather and QR code through
 `box.ambient` (observed property), opaque veil without video (`box.videoActive`). Components: `RoundImage`,
 `Marquee` (text clipped at rest, two copies that scroll on focus), `FocusFrame`, `StreamerCard`, `VideoCard`,
 `SettingRow`, `QrCode`, `fmt.js`.
 Video cards (`VideoCard`: 456 px wide, 16:9 thumbnail, height from the width): 3 per row in Replays, YouTube,
 Jellyfin (step 482) and History (3 columns, 2 rows); the Replays and YouTube/Jellyfin rows scroll vertically (one full
-row, the top of the next one showing). tv_menu.lua keeps its 4 smaller cards.
+row, the top of the next one showing).
 Back: from the content to the rail, from the rail closes the menu only over a video (nothing playing: the menu stays the main page). A tab with
 nothing to focus (empty list, history…) keeps the focus on the rail (`canEnter`, `checkArea`). Pitfalls: font sizes ×0.78 compared to the ASS menu (Qt draws larger for
 the same value); in `onTabChanged`, read `tabs[tab].id` and not `tabId` (binding not recomputed yet); lists
@@ -425,7 +395,7 @@ draws them (Flow of Text and AnimatedImage: animated GIF and WebP, Qt's `libqweb
 background and size set, hidden in video, on the home screen and with the menu open. When the app runs, it writes
 `user-data/streambox/chat_ui = qml` and chat_overlay.py (text in mpv) goes silent; it starts from scratch with each new
 player (mpv alone: text chat). QML pitfall: `left`, `top` are reserved item properties (FINAL); an
-error loading ui.qml makes the app fall back to the Lua menu and the text chat, without crashing.
+error loading ui.qml makes the app fall back to the small menu of stream-box.lua and the text chat, without crashing.
 Shutdown: on mpv's `shutdown` event, `os._exit` right away from python-mpv's event thread (which
 otherwise destroys its connection and waits for the render context held by Qt: frozen app, no restart; 6/6 clean
 restarts after the fix).
@@ -510,7 +480,7 @@ units per day. `/api/youtube` serves the latest feed (the very first one, right 
 `POST /api/youtube_app|youtube_login|youtube_logout|youtube_sync`. TV: "Connect my account" card in the Subscriptions row
 as long as the box is not authorized → code popup and QR code (`ytAuth`, reread every 3 s); "YouTube
 account" row of the System menu (reread subscriptions, disconnect). Page: "YouTube account" section of Settings
-(app creation, code, status). tv_menu.lua shows the row, without connection.
+(app creation, code, status).
 Favorites: served by the subscription poll when the channel is part of it (`yt_fav_videos`, 15 videos per
 favorite instead of 4, durations and views, no request to youtube.com: `/api/youtube` in ~15 ms), otherwise RSS feeds
 read in parallel, failures kept for 10 min (`YT_FEED_RETRY`). The menu keeps `yt` from one opening to the next and
@@ -527,8 +497,7 @@ plays it (or offers to resume, `chooseVideo`). Page: channels found at the top o
 Results are kept from one menu opening to the next (not across a player restart). Colors per tab (`menu.theme`, `menu.pal`): purple for
 Twitch (live, following, replays), red for YouTube, neutral charcoal with a white glow for history, settings and
 system; background, glows, rail, focus glows (`FocusFrame.glow`), `VideoCard.accent`, `SettingRow.pal` (light switch with a
-dark knob in neutral), actions popup, keyboard. Blue is left free for Jellyfin. Logo (`qml/Logo.qml`, icons `icon-*.png`,
-tv_menu.lua): white tile, rounded charcoal triangle, neutral on a purple background as well as on red.
+dark knob in neutral), actions popup, keyboard. Blue is left free for Jellyfin. Logo (`qml/Logo.qml`, icons `icon-*.png`): white tile, rounded charcoal triangle, neutral on a purple background as well as on red.
 
 ### Jellyfin (QML menu tab and page)
 
@@ -574,11 +543,6 @@ readjusted when the state arrives as long as no key has been pressed; YouTube an
 `play_media` and `start_channel` remove it.
 Menu background: two blurred glows (RectangularShadow, no sharp shape) in the tab's color, at the top right
 (`pal.glow`) and at the bottom (`pal.glowLow`), on all themes; almost invisible in neutral.
-Lua menu (mpv alone, tv_menu.lua): YouTube and Jellyfin tabs (rows of cards, resume, episodes of a series;
-no search, for lack of a keyboard: it goes through the page), subtitle settings, tab kept on
-reopening. Text sizes ×1.2 (`FONT`) for the same look as the Qt app. `/api/tvimage` also accepts
-images from the Jellyfin server.
-System tab of the Lua menu: "Update now" row and status tiles (`draw_health`, /api/health every 5 s).
 
 ### Loading screen between two videos or channels
 
@@ -747,8 +711,8 @@ ui.py also applies keymap.json to the open QML menu. Bluetooth (btsetup.py, `GET
 paired devices, 20 s scan, pairing without a code (NoInputNoOutput agent) + trust + connect, unpairing;
 "Remotes and controllers" popup of the System menu (QML: `btMenu`, `btScan`, reread every 2 s).
 Reboot: `POST /api/reboot` (`systemctl reboot`, polkit login1.reboot* added), "Restart the box" in the System menu
-(QML and Lua, second OK within 4 s), button in Settings → System of the page, "Restart" button in Home Assistant.
-Power held for 1 s → "Box" popup ("☾  Sleep", "↻  Restart", "⏻  Shut down" (Lua: "⏻  Turn off"), "Cancel"; QML menu `powerMenu`, tv_menu.lua
+(second OK within 4 s), button in Settings → System of the page, "Restart" button in Home Assistant.
+Power held for 1 s → "Box" popup ("☾  Sleep", "↻  Restart", "⏻  Shut down", "Cancel"; QML menu `powerMenu`,
 `streambox-power-menu`) instead of the action of the "Power button" setting, which now fires on release of a
 short press. input.py measures the press (evdev values 1 / 0, action `power_menu` sent at 1 s); as fallback,
 stream-box.lua binds power as "complex" (mpv's down / up) and ui.py sends keydown / keyup for these keys.
@@ -959,7 +923,7 @@ for 20 s: Jellyfin's external subtitles arrive after opening; same language on t
 letters, "forced" tracks last). A video without a choice keeps mpv's.
 
 ### Menu closed by playback started from elsewhere
-`streambox-tvmenu-close` (script-message): listened to by tv_menu.lua and by ui.py (→ `box.closeRequested` → TvMenu
+`streambox-tvmenu-close` (script-message): listened to by ui.py (→ `box.closeRequested` → TvMenu
 `close()`). Sent by stream-box.lua when a video arrives through `streambox-play` (phone, Cast, Home Assistant,
 history…), when jellyfin-mpv-shim loads a file, when a channel arrives through `streambox-channel`, and by
 the key wizard. Not for automatic live restarts (switch, frozen live stream).
