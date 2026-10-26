@@ -952,13 +952,13 @@ Item {
                 if (k === "down") railHome = false
                 else if (k === "ok") { act("home"); close() }
                 else if (k === "right") { railHome = false; enterContent() }
-                else if (k === "back") close()
+                else if (k === "back" && st.mode !== "home") close()
                 return
             }
             if (k === "up" && tab === 0) railHome = true
             else if (k === "up" || k === "down") tab = Math.max(0, Math.min(tabs.length - 1, tab + (k === "down" ? 1 : -1)))
             else if (k === "right" || k === "ok") enterContent()
-            else if (k === "back") close()
+            else if (k === "back" && st.mode !== "home") close()   // nothing playing: the menu stays the main page
             return
         }
         if (k === "back") return toRail()   // Back: to the tabs, then (from the rail) closes the menu

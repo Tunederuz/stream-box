@@ -371,7 +371,7 @@ Twitch / YouTube by Qt and rounded by `MultiEffect` (no more need for `/api/tvim
 Video cards (`VideoCard`: 456 px wide, 16:9 thumbnail, height from the width): 3 per row in Replays, YouTube,
 Jellyfin (step 482) and History (3 columns, 2 rows); the Replays and YouTube/Jellyfin rows scroll vertically (one full
 row, the top of the next one showing). tv_menu.lua keeps its 4 smaller cards.
-Back: from the content to the rail, from the rail closes the menu (also with nothing playing: home screen). A tab with
+Back: from the content to the rail, from the rail closes the menu only over a video (nothing playing: the menu stays the main page). A tab with
 nothing to focus (empty list, history…) keeps the focus on the rail (`canEnter`, `checkArea`). Pitfalls: font sizes ×0.78 compared to the ASS menu (Qt draws larger for
 the same value); in `onTabChanged`, read `tabs[tab].id` and not `tabId` (binding not recomputed yet); lists
 with `clip`: margins (`leftMargin`, `topMargin`) so as not to cut the focus glow; models as an item count
@@ -811,8 +811,8 @@ The large menu is the main page: at boot (`home_menu()` 3 s after stream-box.lua
 for the menu to load), at the end of a video (`BACK_TO_MENU`) and on Back during a stream or a video, playback
 stops (`show_home`, `home` mode) and the menu opens over the home screen. No more Back ×2 (nor
 `/api/resume_last`): "▶  Resume {channel}" in Live and the History do this job. In `home` mode (menu
-closed after 90 s, by Menu, by "⌂  Home screen" or, in the QML menu, by Back from the rail: animated home screen), any key reopens the
-menu. Lua menu open with nothing playing: Back on the tabs does not close it (`state.mode`). Menu background: glows in the
+closed after 90 s, by Menu, by "⌂  Home screen": animated home screen), any key reopens the
+menu. Menu open with nothing playing: Back on the tabs does not close it (QML `st.mode`, Lua `state.mode`). Menu background: glows in the
 tab's color that drift, two more without video behind (the veil is opaque there, to hide the home
 screen).
 
