@@ -6,33 +6,17 @@
 -- mpv stays empty, we go back to the stream.
 local mp = require "mp"
 
--- Interface language (see i18n.py): texts written in English, translated from locales/<lang>.json next to this script;
--- the language is in ~/.config/stream-box/language ("en" when missing), reloaded on script-message streambox-language
-local I18N = { dict = {} }
-function I18N.load()
-    local home = os.getenv("HOME") or ""
-    local f, lang = io.open(home .. "/.config/stream-box/language"), "en"
-    if f then lang = (f:read("*l") or "en"):match("^%s*(%a+)") or "en" f:close() end
-    I18N.dict, I18N.lang = {}, lang
-    if lang == "en" then return end
-    local dir = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$") or "."   -- (mp.get_script_file is too recent)
-    local lf = io.open(dir .. "/locales/" .. lang .. ".json")
-    if lf then
-        I18N.dict = require("mp.utils").parse_json(lf:read("*a") or "") or {}
-        lf:close()
-    end
-end
--- tr("Connected: {login}", { login = name })
-local function tr(s, a)
-    local out = I18N.dict[s] or s
-    if a then for k, v in pairs(a) do out = out:gsub("{" .. k .. "}", (tostring(v):gsub("%%", "%%%%"))) end end
-    return out
-end
--- decimal separator of the interface language: "4.6 k" in English, "4,6 k" in French
-function I18N.dec(s) return I18N.lang == "fr" and (s:gsub("%.", ",")) or s end
-I18N.load()
+local DIR = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$") or "."   -- (mp.get_script_file is too recent)
+-- Modules of this script: lua/streambox/*.lua (require "streambox.…")
+package.path = DIR .. "/lua/?.lua;" .. package.path
+local I18N = require "streambox.i18n"   -- interface language (see i18n.py), reloaded on streambox-language
+local ass = require "streambox.ass"
+local fmt = require "streambox.fmt"
+local keys = require "streambox.keys"
+local tr, ass_escape, rect, text, clock = I18N.tr, ass.ass_escape, ass.rect, ass.text, fmt.clock
+local DIRECTIONS = keys.DIRECTIONS
+I18N.load(DIR)
 
-local DIR = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$")
 local STREAMERS_FILE = DIR .. "/streamers.txt"
 local STATE_DIR = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")) .. "/stream-box"
 
@@ -66,11 +50,6 @@ local menu_visible, hide_timer, items = false, nil, {}
 local sel, keyboard_nav = nil, false   -- button selected with the remote (index in items)
 local started = mp.get_time()
 
-
-local function ass_escape(s)
-    -- Same escaping as mpv's built-in scripts
-    return (s:gsub("\\", "\\\239\187\191"):gsub("{", "\\{"))
-end
 
 -- Qt app (ui.py): banner, playback bar, notifications, polls box and home screen are drawn in
 -- QML; this script keeps the logic (when, how long, keys) and publishes the state in user-data/streambox/*
@@ -310,7 +289,7 @@ end
 -- the link; 300 videos at most) and restored when it is resumed. A video without a choice keeps mpv's
 -- choice
 local SUB_PREFS = STATE_DIR .. "/sub_prefs.json"
-local json = require "mp.utils"   -- (utils is declared further down in this file)
+local json = require "mp.utils"
 local function video_key()
     local path = mp.get_property("path") or ""
     return path:match("[?&]v=([%w_-]+)") or path:match("youtu%.be/([%w_-]+)") or path:match("/[Vv]ideos/(%x+)/")
@@ -431,44 +410,12 @@ local function toggle_chat()
     mp.set_property_native("user-data/streambox/chat_visible", chat_visible)
 end
 
-local function rect(x, y, w, h, color, alpha)
-    w, h = math.floor(w), math.floor(h)
-    return ("{\\an7\\pos(%d,%d)\\bord0\\shad0\\1c&H%s&\\1a&H%s&\\p1}m 0 0 l %d 0 %d %d 0 %d{\\p0}")
-        :format(math.floor(x), math.floor(y), color, alpha, w, w, h, h)
-end
-
-local function text(x, y, size, color, s, suffix)   -- suffix: raw ASS added after the escaped text
-    return ("{\\an5\\pos(%d,%d)\\fs%d\\bord1.5\\shad0\\3c&H000000&\\1c&H%s&}%s%s")
-        :format(math.floor(x), math.floor(y), math.floor(size), color, ass_escape(s), suffix or "")
-end
-
--- Companion app QR code, for guests: light square (gray, easier on the screen than white) and
--- dark modules in a single path, one strip per run of modules. Returns the drawing and its side, or nil.
+-- Companion app QR code (or the box's Wi-Fi one in setup mode), unless hidden by the setting. Returns the drawing
+-- and its side, or nil.
 local function qr_code(x, y, size)
     local setup = (ambient_data or {}).setup
     if not (setup and setup.ssid) and (qr_mode == "never" or (qr_mode == "timed" and mp.get_time() > qr_until)) then return nil end
-    local rows = qr_data and qr_data.rows or {}
-    local n = #rows
-    local m = n > 0 and math.floor(size / (n + 4)) or 0   -- margin of 2 modules all around
-    if m < 2 then return nil end
-    local paths = {}
-    for r, row in ipairs(rows) do
-        local c = 1
-        while c <= n do
-            if row:sub(c, c) == "1" then
-                local s = c
-                while c <= n and row:sub(c, c) == "1" do c = c + 1 end
-                local x0, x1, y0, y1 = (s + 1) * m, (c + 1) * m, (r + 1) * m, (r + 2) * m
-                paths[#paths + 1] = ("m %d %d l %d %d %d %d %d %d"):format(x0, y0, x1, y0, x1, y1, x0, y1)
-            else
-                c = c + 1
-            end
-        end
-    end
-    local side = (n + 4) * m
-    return rect(x, y, side, side, "C8C8C8", "00") .. "\n" ..
-        ("{\\an7\\pos(%d,%d)\\bord0\\shad0\\1c&H101010&\\1a&H00&\\p1}%s{\\p0}")
-            :format(math.floor(x), math.floor(y), table.concat(paths, " ")), side
+    return ass.qr_code(x, y, size, qr_data and qr_data.rows)
 end
 
 local function qr_host()
@@ -654,15 +601,6 @@ local BAR_SECONDS = 2.5
 local bar = mp.create_osd_overlay("ass-events")
 local bar_visible, bar_until = false, 0
 
--- Disc of radius r centered at (cx, cy): four quarter circles as Bézier curves (k ≈ 0.5523 r)
-local function disc(cx, cy, r, color)
-    local k, d = r * 0.5523, 2 * r
-    return ("{\\an5\\pos(%d,%d)\\bord0\\shad0\\1c&H%s&\\1a&H00&\\p1}"
-        .. "m %d 0 b %d 0 %d %d %d %d b %d %d %d %d %d %d b %d %d %d %d 0 %d b 0 %d %d 0 %d 0{\\p0}")
-        :format(math.floor(cx), math.floor(cy), color,
-                r, r + k, d, r - k, d, r,  d, r + k, r + k, d, r, d,  r - k, d, 0, r + k, r,  r - k, r - k, r)
-end
-
 -- Live: part kept in memory (start, end = the live edge) and playback position
 local function live_window()
     local st = mp.get_property_native("demuxer-cache-state") or {}
@@ -676,12 +614,6 @@ end
 -- stop filling up and the delay would melt away. We enlarge it as long as we are not at the live edge.
 local function set_live_buffer(behind)
     mp.set_property("demuxer-max-bytes", behind and "150MiB" or "750KiB")
-end
-
-local function clock(t)
-    t = math.max(0, math.floor(t or 0))
-    local h, m, sec = math.floor(t / 3600), math.floor(t / 60) % 60, t % 60
-    return h > 0 and ("%d:%02d:%02d"):format(h, m, sec) or ("%d:%02d"):format(m, sec)
 end
 
 local function draw_bar()
@@ -727,7 +659,7 @@ local function draw_bar()
         local function px(t) return x0 + (x1 - x0) * math.max(0, math.min(1, t / dur)) end
         if cached and cached > pos then out[#out + 1] = rect(px(pos), by, px(cached) - px(pos), bh, "FFFFFF", "60") end
         out[#out + 1] = rect(x0, by, px(pos) - x0, bh, "FF4691", "00")
-        out[#out + 1] = disc(px(pos), by + bh / 2, math.floor(bh * 1.8), "FFFFFF")
+        out[#out + 1] = ass.disc(px(pos), by + bh / 2, math.floor(bh * 1.8), "FFFFFF")
     end
     out[#out + 1] = ("{\\an7\\pos(%d,%d)\\fs%d\\bord1.5\\shad0\\3c&H000000&\\1c&HFFFFFF&}%s")
         :format(x0, by + bh * 3, math.floor(fs * 0.8), left or clock(pos))
@@ -1116,27 +1048,6 @@ local function open_tvmenu()
     mp.commandv("script-message", "streambox-tvmenu-open")
 end
 
-local KEYS = {
-    UP = "up", DOWN = "down", LEFT = "left", RIGHT = "right",
-    ENTER = "ok", KP_ENTER = "ok", ["0x21ffa0"] = "ok",
-    HOMEPAGE = "home", GO_BACK = "back", ESC = "back", ["0x2111a0"] = "menu",
-    WWW = "homescreen",
-    PLAY = "corner", PLAYPAUSE = "corner",   -- without this binding, mpv turns them into pause, which froze the live stream
-    POWER = "power", ["0x21ff2a"] = "power",  -- power button (remote, box): mpv alone, Qt app
-    VOLUME_UP = "volume_up", VOLUME_DOWN = "volume_down", MUTE = "mute",
-    -- Regular keyboard (same actions as input.py; here, names depend on the keyboard layout)
-    SPACE = "corner", m = "home", o = "menu", h = "homescreen", ["+"] = "volume_up", ["-"] = "volume_down",
-    KP_ADD = "volume_up", KP_SUBTRACT = "volume_down", NEXT = "right", PREV = "left", STOP = "back",
-}
--- These names (mpv, or hacked keysyms like 0x21ffa0) are only a fallback: normally, input.py reads the keys
--- at the source with Linux names and sends the actions (streambox-input); while it runs, keys received
--- here are ignored (otherwise each one would count twice)
-local input_beat = 0
-mp.observe_property("user-data/streambox/input", "string", function(_, v)
-    input_beat = tonumber((v or ""):match("^evdev:(%d+)")) or 0
-end)
-local function input_service() return os.time() - input_beat < 15 end
-local DIRECTIONS = { up = { 0, -1 }, down = { 0, 1 }, left = { -1, 0 }, right = { 1, 0 } }
 
 -- Power button (Bluetooth remote, box button): same action as the off button of the page and of Home
 -- Assistant ("Off button" setting: sleep or full shutdown). logind no longer acts by itself: remote.py holds a
@@ -1281,151 +1192,8 @@ local function on_key(key)
     end
 end
 
--- Learned keys ("Configure keys" wizard of the System menu): ~/.config/stream-box/keymap.json,
--- {"mpv key name": "action"}, on top of KEYS (a learned key can also replace the one of another action)
-local utils = require "mp.utils"
-local KEYMAP_FILE = (os.getenv("HOME") or "") .. "/.config/stream-box/keymap.json"
-local bound = {}   -- bound names, to be able to unbind and rebind everything
-local learn_key    -- wizard running: receives the name of each key instead of on_key
-
-local function read_keymap()
-    local f = io.open(KEYMAP_FILE)
-    if not f then return {} end
-    local data = utils.parse_json(f:read("*a") or "") or {}
-    f:close()
-    return data
-end
-
-local function bind_keys()
-    for name in pairs(bound) do mp.remove_key_binding("streambox-key-" .. name) end
-    bound = {}
-    local map = {}
-    for name, key in pairs(KEYS) do map[name] = key end
-    for name, key in pairs(read_keymap()) do map[name] = key end
-    for name, key in pairs(map) do
-        if key == "power" and not name:match("^KEY_") then
-            -- Fallback: short power on release, held 1 s → window (ui.py sends keydown / keyup for these keys)
-            local timer = nil
-            mp.add_forced_key_binding(name, "streambox-key-" .. name, function(t)
-                if input_service() then return end
-                if learn_key then if t.event ~= "up" then learn_key(name) end return end
-                if t.event == "down" then
-                    if timer then timer:kill() end
-                    timer = mp.add_timeout(1, function() timer = nil; on_key("power_menu") end)
-                elseif t.event == "up" and timer then
-                    timer:kill(); timer = nil
-                    on_key("power")
-                elseif t.event == "press" then
-                    on_key("power")
-                end
-            end, { complex = true })
-            bound[name] = true
-        elseif not name:match("^KEY_") and not name:match("^BTN_") and not name:match("^HAT_") then   -- Linux names: input.py
-            mp.add_forced_key_binding(name, "streambox-key-" .. name, function()
-                if input_service() then return end
-                if learn_key then learn_key(name) else on_key(key) end
-            end, { repeatable = DIRECTIONS[key] ~= nil or key == "volume_up" or key == "volume_down" })
-            bound[name] = true
-        end
-    end
-end
-bind_keys()
-
--- Wizard: the actions one by one; a key within 8 s learns it, otherwise the action keeps its key. State in
--- user-data/streambox/learn (drawn by qml/KeyWizard.qml), and as an on-screen message with mpv alone
-local LEARN = { { "up", "Up" }, { "down", "Down" }, { "left", "Left" }, { "right", "Right" }, { "ok", "OK" },
-                { "back", "Back" }, { "home", "TV menu" }, { "menu", "Options (≡)" },
-                { "homescreen", "Home screen" }, { "corner", "Play / chat corner" }, { "power", "Power" } }
-local LEARN_WAIT = 8
-local learn = nil   -- { step, learned = { name = action }, timer, last }
-
-local function learn_publish(phase, key)
-    local item = LEARN[learn.step]
-    mp.set_property_native("user-data/streambox/learn", { phase = phase, step = learn.step, total = #LEARN,
-        label = item and tr(item[2]) or "", key = key or "", seconds = LEARN_WAIT })
-    if not qt_ui() then
-        mp.osd_message(phase == "done" and tr("Keys saved") or phase == "cancel" and tr("Wizard canceled: keys unchanged")
-            or tr(phase == "taken" and "Keys {step}/{total}: press the key for \"{action}\" (already taken)"
-                or "Keys {step}/{total}: press the key for \"{action}\"",
-                { step = learn.step, total = #LEARN, action = tr(item[2]) }),
-            (phase == "done" or phase == "cancel") and 3 or LEARN_WAIT)
-    end
-end
-
-local learn_step
-local function learn_finish()
-    local map = read_keymap()
-    for name, action in pairs(learn.learned) do map[name] = action end
-    local f = io.open(KEYMAP_FILE, "w")
-    if f then f:write(utils.format_json(map)) f:close() end
-    learn.step = #LEARN
-    learn_publish("done")
-    learn_key, learn = nil, nil
-    mp.remove_key_binding("streambox-learn-unmapped")
-    bind_keys()
-    mp.add_timeout(3, function() if not learn then mp.set_property_native("user-data/streambox/learn", {}) end end)
-end
-
--- Back on the page's virtual remote: quit without saving anything
-local function learn_cancel()
-    if learn.timer then learn.timer:kill() end
-    learn_publish("cancel")
-    learn_key, learn = nil, nil
-    mp.remove_key_binding("streambox-learn-unmapped")
-    mp.add_timeout(3, function() if not learn then mp.set_property_native("user-data/streambox/learn", {}) end end)
-end
-
-learn_step = function()
-    if learn.timer then learn.timer:kill() end
-    if learn.step > #LEARN then return learn_finish() end
-    learn_publish("wait")
-    learn.timer = mp.add_timeout(LEARN_WAIT, function() learn.step = learn.step + 1; learn_step() end)
-end
-
-local function learn_press(name)
-    if not learn or not name or name:match("^MOUSE") or name:match("^MBTN") or name:match("^WHEEL") then return end
-    local now = mp.get_time()
-    if now - (learn.last or 0) < 0.6 then return end   -- held key, or bounce
-    learn.last = now
-    if learn.learned[name] then learn_publish("taken", name) return end   -- already given to a previous action
-    learn.learned[name] = LEARN[learn.step][1]
-    learn_publish("ok", name)
-    if learn.timer then learn.timer:kill() end
-    learn.timer = mp.add_timeout(0.7, function() learn.step = learn.step + 1; learn_step() end)
-end
-
-mp.register_script_message("streambox-keymap-wizard", function()
-    if learn then return end
-    mp.commandv("script-message", "streambox-tvmenu-close")
-    learn = { step = 1, learned = {} }
-    learn_publish("wait")
-    -- The OK key that started the wizard must not be taken for "Up"
-    mp.add_timeout(0.8, function()
-        learn_key = learn_press
-        if not input_service() then   -- fallback: keys unknown to mpv (otherwise input.py sends everything)
-            mp.add_forced_key_binding("UNMAPPED", "streambox-learn-unmapped", function(t)
-                if t.event == "down" or t.event == "press" then learn_press(t.key_name) end
-            end, { complex = true })
-        end
-        learn_step()
-    end)
-end)
-
--- Keys read at the source by input.py: Linux name (KEY_SELECT…) and action; the wizard learns the name
-mp.register_script_message("streambox-input", function(name, action)
-    if learn_key then
-        -- The page's virtual remote is not learned; its Back quits the wizard
-        if name ~= "VIRTUAL" then learn_key(name) elseif action == "back" then learn_cancel() end
-        return
-    end
-    if action and action ~= "" then on_key(action) end
-end)
-
-mp.register_script_message("streambox-keymap-reset", function()
-    os.remove(KEYMAP_FILE)
-    bind_keys()
-    mp.osd_message(tr("Remote keys reset to default"), 3)
-end)
+-- Keys (fallback names, learned keys, "Set up keys" wizard, actions from input.py): lua/streambox/keys.lua
+keys.setup(on_key, qt_ui)
 
 -- Companion app (remote.py): same actions as the menu
 local function from_remote(fn)
@@ -1505,35 +1273,11 @@ end
 mp.register_script_message("streambox-auto-switch", set_auto_switch)
 
 -- Ambient screen: when nothing plays (channel offline, empty list), clock, date, weather and upcoming streams
--- (data from remote.py in user-data/streambox/ambient). The content moves a little every minute, so as not
--- to burn in the TV screen.
-local WEEKDAYS = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" }   -- os.date: 1 = Sunday
-local MONTHS = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
-                 "November", "December" }
+-- (data from remote.py in user-data/streambox/ambient), drawn by lua/streambox/ambient.lua with mpv alone
 local ambient = mp.create_osd_overlay("ass-events")
+local ambient_screen = require "streambox.ambient"
 ambient.z = -10   -- below the menu and the notifications
 local ambient_drawn = nil
-
--- "Aurora" background: three large, very blurry blobs drifting slowly over an almost black background.
--- { BGR color, ASS opacity (00 = opaque), speed, phase }
-local AURORA = { { "FF4691", "B0", 0.011, 0.0 },    -- Twitch purple
-                 { "6A2A12", "A0", 0.008, 2.1 },    -- midnight blue
-                 { "7A2A5E", "B8", 0.006, 4.2 } }   -- plum
-
-local function aurora(w, h)
-    local t, r = os.time(), math.floor(h * 0.42)
-    local out = { ("{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H0D0808&\\p1}m 0 0 l %d 0 %d %d 0 %d{\\p0}"):format(w, w, h, h) }
-    for _, a in ipairs(AURORA) do
-        local x = w / 2 + math.sin(t * a[3] + a[4]) * w * 0.32
-        local y = h / 2 + math.cos(t * a[3] * 1.3 + a[4]) * h * 0.25
-        local k, d = r * 0.5523, 2 * r
-        out[#out + 1] = ("{\\an5\\pos(%d,%d)\\bord0\\shad0\\blur%d\\1c&H%s&\\1a&H%s&\\p1}"
-            .. "m %d 0 b %d 0 %d %d %d %d b %d %d %d %d %d %d b %d %d %d %d 0 %d b 0 %d %d 0 %d 0{\\p0}")
-            :format(x, y, math.floor(h * 0.12), a[1], a[2],
-                    r, r + k, d, r - k, d, r, d, r + k, r + k, d, r, d, r - k, d, 0, r + k, r, r - k, r - k, r)
-    end
-    return table.concat(out, "\n")
-end
 
 local function ambient_wanted()
     return (mode == "home" or (mode == "twitch" and (offline or #streamers == 0)))
@@ -1548,70 +1292,8 @@ local function draw_ambient()
     end
     local w, h = mp.get_osd_size()
     if not w or w == 0 then return end
-    local t = os.date("*t")
-    local minute = math.floor(os.time() / 60)
-    local cx = w / 2 + math.sin(minute * 0.7) * w * 0.04
-    local cy = h * 0.40 + math.cos(minute * 0.5) * h * 0.04
-    local fs = math.floor(h / 26)
-    local function line(y, size, color, raw)
-        return ("{\\an8\\pos(%d,%d)\\fs%d\\bord0\\shad0\\1c&H%s&}%s"):format(cx, y, size, color, raw)
-    end
-    local out = {
-        aurora(w, h),
-        line(cy - h * 0.30, math.floor(h * 0.22), "FFFFFF", ("%02d:%02d"):format(t.hour, t.min)),
-        line(cy - h * 0.06, math.floor(fs * 1.2), "B0B0B0",
-             ass_escape(tr("{weekday}, {month} {day}",
-                           { weekday = tr(WEEKDAYS[t.wday]), day = t.day, month = tr(MONTHS[t.month]) }))),
-    }
-    local wx = ambient_data.weather
-    if wx then
-        local parts = { wx.city, ("%d°"):format(wx.temp), wx.text, ("%d° / %d°"):format(wx.min, wx.max) }
-        if (tonumber(wx.rain) or 0) >= 30 then parts[#parts + 1] = tr("rain {n}%", { n = ("%d"):format(wx.rain) }) end
-        local kept = {}
-        for _, part in ipairs(parts) do if part and part ~= "" then kept[#kept + 1] = part end end
-        out[#out + 1] = line(cy + h * 0.01, fs, "D0D0D0", ass_escape(table.concat(kept, "  ·  ")))
-    end
-    local schedule = ambient_data.schedule or {}
-    if #schedule > 0 then
-        local y = cy + h * 0.10
-        out[#out + 1] = line(y, math.floor(fs * 0.75), "808080", ass_escape(tr("UPCOMING STREAMS")))
-        for _, item in ipairs(schedule) do
-            y = y + fs * 1.35
-            local title = item.title or ""
-            if #title > 40 then title = title:sub(1, 37) .. "…" end
-            out[#out + 1] = line(y, math.floor(fs * 0.85), "FFFFFF",
-                "{\\b1}" .. ass_escape(item.login) .. "{\\b0\\1c&HB0B0B0&}  ·  " .. ass_escape(item.when)
-                .. (title ~= "" and ("  ·  " .. ass_escape(title)) or ""))
-        end
-    end
-    if status_text ~= "" then
-        out[#out + 1] = line(h * 0.93, math.floor(fs * 0.7), "707070", ass_escape(status_text))
-    end
-    -- Setup mode (mpv alone; the Qt app has its own screen): QR code of the box's Wi-Fi at the bottom right
-    local setup = ambient_data.setup
-    if setup and setup.ssid then
-        out[#out + 1] = line(h * 0.72, math.floor(fs * 0.9), "FFFFFF", "{\\b1}" .. ass_escape(tr("Setup")))
-        out[#out + 1] = line(h * 0.77, math.floor(fs * 0.75), "D0D0D0",
-            ass_escape(tr("1. Wi-Fi \"{ssid}\", password {password}", { ssid = setup.ssid, password = setup.password })))
-        out[#out + 1] = line(h * 0.81, math.floor(fs * 0.75), "D0D0D0",
-            ass_escape(tr("2. Open {url} and choose your home Wi-Fi",
-                          { url = (setup.url or ""):gsub("^http://", ""):gsub("/$", "") })))
-    elseif setup and setup.connecting then
-        out[#out + 1] = line(h * 0.77, math.floor(fs * 0.8), "FFFFFF",
-            ass_escape(tr("Connecting to Wi-Fi \"{ssid}\"…", { ssid = setup.connecting })))
-    end
-    -- Companion app QR code at the bottom right, which drifts a little too
-    local size = math.floor(h * 0.17)
-    local qx = w - size - w * 0.04 + math.sin(minute * 0.9) * w * 0.012
-    local qy = h - size - h * 0.11 + math.cos(minute * 0.6) * h * 0.015
-    local drawing, side = qr_code(qx, qy, size)
-    if drawing then
-        out[#out + 1] = drawing
-        out[#out + 1] = text(qx + side / 2, qy - fs * 0.7, fs * 0.8, "A0A0A0", tr("Companion app"))
-        out[#out + 1] = text(qx + side / 2, qy + side + fs * 0.7, fs * 0.65, "909090", qr_host())
-    end
     ambient.res_x, ambient.res_y = w, h
-    ambient.data = table.concat(out, "\n")
+    ambient.data = ambient_screen.draw(w, h, ambient_data, status_text, qr_code, qr_host())
     ambient:update()
 end
 
@@ -1673,21 +1355,8 @@ end)
 -- Polls and predictions of the watched channel (fetched by remote.py into user-data/streambox/polls): box at
 -- the top center, away from the corners where the chat goes, with the time left and the share of each choice
 local events = mp.create_osd_overlay("ass-events")
+local polls = require "streambox.polls"
 local events_data, events_on = {}, true
-local OUTCOME_COLORS = { BLUE = "FF7A38", PINK = "9B00F5" }   -- Twitch prediction colors, in BGR
-
-local function shorten(s, n)   -- cuts at n bytes without breaking a UTF-8 character
-    if #s <= n then return s end
-    local cut = n
-    while cut > 0 and (s:byte(cut + 1) or 0) >= 0x80 and (s:byte(cut + 1) or 0) < 0xC0 do cut = cut - 1 end
-    return s:sub(1, cut) .. "…"
-end
-
-local function amount(v)   -- 16617298 → "16,6 M"
-    v = tonumber(v) or 0
-    local s = v >= 1e6 and ("%.1f M"):format(v / 1e6) or v >= 1e3 and ("%.1f k"):format(v / 1e3) or tostring(v)
-    return I18N.dec(s)
-end
 
 local function draw_events()
     local poll, pred = events_data.poll, events_data.prediction
@@ -1697,73 +1366,8 @@ local function draw_events()
         events:remove()
         return
     end
-    local fs = math.floor(h / 40)
-    local bw = math.floor(w * 0.3)
-    local x, y = math.floor((w - bw) / 2), math.floor(h * 0.03)
-    local pad, row_h = fs * 0.7, fs * 1.5
-    local out = {}
-    -- rows: { label, share from 0 to 1, detail on the right, BGR color, winner }
-    local function block(kind, title, right, rows)
-        local bh = pad * 2 + fs * 2.5 + #rows * row_h
-        out[#out + 1] = rect(x, y, bw, bh, "000000", "40")
-        out[#out + 1] = ("{\\an7\\pos(%d,%d)\\fs%d\\bord0\\shad0\\1c&HFF4691&\\b1}%s")
-            :format(x + pad, y + pad, math.floor(fs * 0.7), kind)
-        out[#out + 1] = ("{\\an9\\pos(%d,%d)\\fs%d\\bord0\\shad0\\1c&HC0C0C0&}%s")
-            :format(x + bw - pad, y + pad, math.floor(fs * 0.7), ass_escape(right))
-        out[#out + 1] = ("{\\an7\\pos(%d,%d)\\fs%d\\bord0\\shad0\\1c&HFFFFFF&\\b1}%s")
-            :format(x + pad, y + pad + fs * 0.95, fs, ass_escape(shorten(title, 70)))
-        local ry = y + pad + fs * 2.5
-        for _, r in ipairs(rows) do
-            local inner = bw - pad * 2
-            out[#out + 1] = rect(x + pad, ry, inner, row_h - fs * 0.25, "FFFFFF", "E0")
-            if r[2] > 0 then
-                out[#out + 1] = rect(x + pad, ry, inner * math.min(1, r[2]), row_h - fs * 0.25, r[4], r[5] and "20" or "70")
-            end
-            local label = (r[5] and "▶ " or "") .. shorten(r[1], 40)
-            out[#out + 1] = ("{\\an4\\pos(%d,%d)\\fs%d\\bord1\\shad0\\3c&H000000&\\1c&HFFFFFF&}%s")
-                :format(x + pad * 1.6, ry + (row_h - fs * 0.25) / 2, math.floor(fs * 0.8), ass_escape(label))
-            out[#out + 1] = ("{\\an6\\pos(%d,%d)\\fs%d\\bord1\\shad0\\3c&H000000&\\1c&HFFFFFF&}%s")
-                :format(x + bw - pad * 1.6, ry + (row_h - fs * 0.25) / 2, math.floor(fs * 0.7), ass_escape(r[3]))
-            ry = ry + row_h
-        end
-        y = y + bh + fs * 0.5
-    end
-    local now = os.time()
-    if poll then
-        local total, best = 0, 0
-        for _, c in ipairs(poll.choices or {}) do
-            total = total + c.votes
-            best = math.max(best, c.votes)
-        end
-        local rows = {}
-        for i, c in ipairs(poll.choices or {}) do
-            if i > 5 then break end
-            local share = total > 0 and c.votes / total or 0
-            rows[#rows + 1] = { c.title, share, tr("{pct}%  ·  {votes}", { pct = math.floor(share * 100 + 0.5),
-                                votes = amount(c.votes) }), "FF4691", poll.ended and best > 0 and c.votes == best }
-        end
-        local left = (poll.ends_at or 0) - now
-        block(ass_escape(tr("POLL")), poll.title,
-              poll.ended and tr("Results") or left > 0 and clock(left) or tr("Counting…"), rows)
-    end
-    if pred then
-        local total = 0
-        for _, o in ipairs(pred.outcomes or {}) do total = total + o.points end
-        local rows = {}
-        for i, o in ipairs(pred.outcomes or {}) do
-            if i > 5 then break end
-            local share = total > 0 and o.points / total or 0
-            rows[#rows + 1] = { o.title, share, tr("{pct}%  ·  {points} points  ·  {users}", {
-                                    pct = math.floor(share * 100 + 0.5), points = amount(o.points), users = amount(o.users) }),
-                                OUTCOME_COLORS[o.color] or "FF4691", o.winner }
-        end
-        local left = (pred.ends_at or 0) - now
-        local right = pred.status == "RESOLVED" and tr("Result") or pred.status == "CANCELED" and tr("Canceled")
-            or pred.status == "ACTIVE" and left > 0 and tr("Bets: {time}", { time = clock(left) }) or tr("Bets closed")
-        block(ass_escape(tr("PREDICTION")), pred.title, right, rows)
-    end
     events.res_x, events.res_y = w, h
-    events.data = table.concat(out, "\n")
+    events.data = polls.draw(w, h, events_data)
     events:update()
 end
 
