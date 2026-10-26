@@ -22,11 +22,15 @@ def power(mode):
 def hold_power_key():
     """Power button (Bluetooth remote, case): logind would turn the box off by itself; this lock prevents it,
     and stream-box.lua applies the "Power button" setting (sleep or full shutdown). Allowed by default in the TV's
-    session (remote.py is started by start.sh); refused elsewhere, and logind then keeps its behavior."""
-    subprocess.run(["pkill", "-u", str(os.getuid()), "-f", "who=Stream Box bouton power"], capture_output=True)
-    subprocess.Popen(["systemd-inhibit", "--what=handle-power-key", "--mode=block", "--who=Stream Box bouton power",
-                      "--why=Power button: sleep or shutdown depending on the setting", "sleep", "infinity"],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    session (remote.py is started by start.sh); refused elsewhere, and logind then keeps its behavior. Without
+    pkill or systemd (tests, container), nothing to hold."""
+    try:
+        subprocess.run(["pkill", "-u", str(os.getuid()), "-f", "who=Stream Box bouton power"], capture_output=True)
+        subprocess.Popen(["systemd-inhibit", "--what=handle-power-key", "--mode=block", "--who=Stream Box bouton power",
+                          "--why=Power button: sleep or shutdown depending on the setting", "sleep", "infinity"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError as e:
+        print(f"remote.py: power button not held ({e})", flush=True)
 
 
 def resume_loop():
