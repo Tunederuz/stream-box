@@ -961,7 +961,7 @@ Item {
             else if (k === "back") close()
             return
         }
-        if (k === "back") return close()   // Back closes the menu, from the content too
+        if (k === "back") return toRail()   // Back: to the tabs, then (from the rail) closes the menu
         switch (tabId) {
         case "live": return keyLive(k)
         case "follows": return keyFollows(k)
@@ -1203,7 +1203,7 @@ Item {
     }
     Text {
         x: 56; y: menu.height - 75
-        text: menu.tr("▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back or Menu close")
+        text: menu.tr("▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back go back   ·   Menu close")
         color: "#8a85a0"; font.pixelSize: 19
     }
     // Header
