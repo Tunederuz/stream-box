@@ -1105,7 +1105,7 @@ Item {
             openModal(e.title, items)
             return
         }
-        var n = grid(histSel, list.length, 4, k)
+        var n = grid(histSel, list.length, 3, k)
         if (n < 0) area = "rail"; else histSel = n
     }
     function keyRows(k, rows) {
@@ -1370,6 +1370,7 @@ Item {
 
         // --- Replays
         Item {
+            id: rpPage
             anchors.fill: parent
             visible: menu.tabId === "replays"
             readonly property var rows: visible ? menu.replayRows() : []   // hidden tab: nothing to recompute
@@ -1400,17 +1401,21 @@ Item {
                     Text { id: chipText; x: 70; anchors.verticalCenter: parent.verticalCenter; text: login; color: "white"; font.pixelSize: 22; font.bold: parent.cur }
                 }
             }
+            Item {   // clip: the rows scroll between the chips and the help at the bottom
+                x: -40; y: 276; width: parent.width + 80; height: 995 - 276; clip: true
             Repeater {
-                model: Math.max(0, parent.rows.length - 1)
+                model: Math.max(0, rpPage.rows.length - 1)
                 Item {
                     readonly property int r: index + 1
-                    readonly property var row: parent.rows[r]
-                    y: 300 + index * 366; width: 1460; height: 350
+                    readonly property var row: rpPage.rows[r]
+                    // one full row, the next one showing its top; the focused row goes to the top
+                    x: 40; y: 24 + (index - Math.max(0, menu.rpRow - 1)) * 430; width: 1460; height: 420
+                    Behavior on y { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
                     Text { x: 2; text: row ? row.title.toUpperCase() : ""; color: "#a99fc0"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 2 }
                     Item {   // clip on the left, at the edge of the content: a scrolling card doesn't slide under the rail
-                        x: -28; y: 0; width: 1512; height: 302 + 80; clip: true
+                        x: -28; y: 0; width: 1512; height: 363 + 80; clip: true
                         ListView {
-                            y: 40; x: -12; width: 1460; height: 302   // 4 cards up to 40 px from the right edge
+                            y: 50; x: -12; width: 1460; height: 363   // 3 cards up to 40 px from the right edge
                             orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
                             leftMargin: 40
                             model: row ? row.items.length : 0
@@ -1418,13 +1423,13 @@ Item {
                             // Card-by-card scrolling, the row staying left-aligned (and not the minimal scroll,
                             // which left cards cut at the edge of the rail or the screen)
                             property int first: 0
-                            readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
+                            readonly property int fits: Math.floor((width - leftMargin + spacing) / 482)
                             onCurrentIndexChanged: {
                                 // -1 while the row reloads (empty list): ignored, otherwise the row stayed shifted by one card
                                 if (currentIndex < 0 || fits <= 0) return
                                 if (currentIndex < first) first = currentIndex
                                 else if (currentIndex >= first + fits) first = currentIndex - fits + 1
-                                contentX = -leftMargin + first * 356
+                                contentX = -leftMargin + first * 482
                             }
                             Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                             delegate: VideoCard {
@@ -1443,6 +1448,7 @@ Item {
                     }
                 }
             }
+            }
         }
 
         // --- YouTube and Jellyfin: search row, then horizontal rows of cards
@@ -1452,7 +1458,7 @@ Item {
             visible: menu.tabId === "youtube" || menu.tabId === "jellyfin"
             readonly property var rows: visible ? menu.mediaRows() : []
             // Fixed-height rows; vertical scrolling to keep the chosen row on screen
-            readonly property real rowH: 360   // two full rows above the help at the bottom
+            readonly property real rowH: 430   // one full row, the next one showing its top above the help at the bottom
             readonly property real scrollY: Math.max(0, (menu.mRow - 1) * rowH)
             Item {   // search row
                 y: 200; width: 760; height: 66
@@ -1506,7 +1512,7 @@ Item {
                                 x: -28; y: 10; width: 1512; height: 302 + 80; clip: true
                                 ListView {   // found channels: round picture, name, subscribers, "in your list"
                                     visible: !!row && row.kind === "chans"
-                                    y: 40; x: -12; width: 1460; height: 302   // 4 cards up to 40 px from the right edge
+                                    y: 40; x: -12; width: 1460; height: 302
                                     orientation: ListView.Horizontal; spacing: 30; interactive: false; clip: false
                                     leftMargin: 40
                                     model: visible && near ? row.items.length : 0
@@ -1554,10 +1560,10 @@ Item {
                                 }
                             }
                             Item {   // clip on the left, at the edge of the content: a scrolling card doesn't slide under the rail
-                                x: -28; y: 10; width: 1512; height: 302 + 80; clip: true
+                                x: -28; y: 10; width: 1512; height: 363 + 80; clip: true
                                 ListView {
                                     visible: !!row && row.kind !== "chans"
-                                    y: 40; x: -12; width: 1460; height: 302   // 4 cards up to 40 px from the right edge
+                                    y: 50; x: -12; width: 1460; height: 363   // 3 cards up to 40 px from the right edge
                                     orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
                                     leftMargin: 40
                                     model: visible && near ? row.items.length : 0
@@ -1565,13 +1571,13 @@ Item {
                                     // Card-by-card scrolling, the row staying left-aligned (and not the minimal scroll,
                                     // which left cards cut at the edge of the rail or the screen)
                                     property int first: 0
-                                    readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
+                                    readonly property int fits: Math.floor((width - leftMargin + spacing) / 482)
                                     onCurrentIndexChanged: {
                                         // -1 while the row reloads (empty list): ignored, otherwise the row stayed shifted by one card
                                         if (currentIndex < 0 || fits <= 0) return
                                         if (currentIndex < first) first = currentIndex
                                         else if (currentIndex >= first + fits) first = currentIndex - fits + 1
-                                        contentX = -leftMargin + first * 356
+                                        contentX = -leftMargin + first * 482
                                     }
                                     Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                                     delegate: VideoCard {
@@ -1596,20 +1602,20 @@ Item {
 
         // --- History
         Item {   // clip: what scrolls stops at the edge of the area (neither over the title nor over the help at the bottom)
-            x: -53; y: 161; width: 1540; height: 2 * 340 + 60 + 30; clip: true
+            x: -53; y: 161; width: 1540; height: 995 - 161; clip: true
             GridView {
                 visible: menu.tabId === "history"
-                y: 15; x: 40; width: 1460; height: 2 * 340 + 60
-                cellWidth: 356; cellHeight: 340
+                y: 15; x: 40; width: 1460; height: 2 * 400 + 27
+                cellWidth: 482; cellHeight: 400
                 interactive: false; clip: false; topMargin: 27
                 model: (menu.history || []).length
                 currentIndex: menu.histSel
                 onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
                 Behavior on contentY { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                 delegate: Item {
-                    width: 356; height: 340
+                    width: 482; height: 400
                     readonly property real rel: y - GridView.view.contentY
-                    opacity: rel > -170 && rel < GridView.view.height - 170 ? 1 : 0
+                    opacity: rel > -200 && rel < GridView.view.height - 200 ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 150 } }
                     readonly property var e: (menu.history || [])[index] || {}
                     VideoCard {

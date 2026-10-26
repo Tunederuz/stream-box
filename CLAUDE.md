@@ -368,6 +368,9 @@ Twitch / YouTube by Qt and rounded by `MultiEffect` (no more need for `/api/tvim
 `box.ambient` (observed property), opaque veil without video (`box.videoActive`). Components: `RoundImage`,
 `Marquee` (text clipped at rest, two copies that scroll on focus), `FocusFrame`, `StreamerCard`, `VideoCard`,
 `SettingRow`, `QrCode`, `fmt.js`.
+Video cards (`VideoCard`: 456 px wide, 16:9 thumbnail, height from the width): 3 per row in Replays, YouTube,
+Jellyfin (step 482) and History (3 columns, 2 rows); the Replays and YouTube/Jellyfin rows scroll vertically (one full
+row, the top of the next one showing). tv_menu.lua keeps its 4 smaller cards.
 Back closes the menu, from the content as from the rail (also with nothing playing: home screen). A tab with
 nothing to focus (empty list, history…) keeps the focus on the rail (`canEnter`, `checkArea`). Pitfalls: font sizes ×0.78 compared to the ASS menu (Qt draws larger for
 the same value); in `onTabChanged`, read `tabs[tab].id` and not `tabId` (binding not recomputed yet); lists

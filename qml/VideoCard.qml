@@ -10,14 +10,15 @@ Item {
     property bool focused: false
     property color accent: "#9146ff"   // glow and progress: red on the YouTube tab
     property string glyph: "▶"         // in the center, without a thumbnail ("+": action card, "Connect my account")
-    width: 330
-    height: 302
+    readonly property int picH: Math.round(width * 9 / 16)   // 16:9 thumbnail
+    width: 456   // 3 cards per row in the menu
+    height: picH + 106
     z: focused ? 2 : 1
 
     Item {
         id: picture
         width: root.width
-        height: 186
+        height: root.picH
         scale: root.focused ? 1.06 : 1
         transformOrigin: Item.Bottom
         Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
@@ -46,7 +47,7 @@ Item {
     }
     Rectangle {
         visible: root.progress > 0
-        y: 196
+        y: root.picH + 10
         width: root.width
         height: 6
         radius: 3
@@ -59,20 +60,20 @@ Item {
         }
     }
     Marquee {
-        y: 214
+        y: root.picH + 28
         width: root.width
         text: root.title
         color: root.focused ? "white" : "#e0daea"
-        pixelSize: 26
+        pixelSize: 28
         bold: root.focused
         running: root.focused
     }
     Text {
-        y: 258
+        y: root.picH + 74
         width: root.width
         text: root.meta
         color: "#a99fc0"
-        font.pixelSize: 21
+        font.pixelSize: 22
         elide: Text.ElideRight
     }
 }
