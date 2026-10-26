@@ -210,7 +210,7 @@ def shoot(qml_dir, out):
                 '    TvMenu { objectName: "tvMenu" }\n}\n')
 
     QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
-    app = QGuiApplication(sys.argv[:1])
+    app = QGuiApplication(sys.argv[:1])   # noqa: F841  (kept referenced: Qt needs the application object alive)
     box = Box()
     pip = Pip()
     i18n = I18n(json.load(open(os.path.join(REPO, "locales", "fr.json"), encoding="utf-8")))
