@@ -105,9 +105,9 @@ Item {
     property bool railHome: false            // rail: focus on "Home screen" (above the tabs)
     // Nothing playing: the menu is the main page, Menu shows the tab rail instead of closing
     readonly property bool idle: st.mode === "home"
-    // Content in full screen; the tab rail slides over it when it has the focus
+    // Content in full screen; the tab rail comes back when it has the focus, and pushes the content to the right
     readonly property bool railShown: area === "rail"
-    readonly property int contentX: 230
+    readonly property int pageX: railShown ? 460 : 230
     property int shortcut: -1                // Live: shortcut chosen above the grid, -1 = grid
     property int liveSel: 0
     property int followSel: 0
@@ -978,7 +978,7 @@ Item {
         }
     }
     function toRail() { area = "rail"; railHome = false; shortcut = -1; pendingDisplay = ""; pendingPlayer = "" }
-    // Menu button: closes the menu over a video; with nothing playing, shows the tab rail over the content (and
+    // Menu button: closes the menu over a video; with nothing playing, shows the tab rail (and
     // hides it again)
     function menuKey() {
         if (powerOnly || !idle) return close()
@@ -1161,8 +1161,10 @@ Item {
     }
     Rectangle { anchors.fill: parent; color: menu.pal.veil; opacity: box.videoActive ? 0 : 0.30 }
     // Header
-    Text { x: menu.contentX; y: 100 - height / 2; text: menu.tr(menu.tabs[menu.tab].label); color: "white"; font.pixelSize: 41; font.bold: true }
-    Text { x: menu.contentX; y: 158 - height / 2; text: menu.subtitle(); color: "#b4afc2"; font.pixelSize: 25 }
+    Text { x: menu.pageX; y: 100 - height / 2; text: menu.tr(menu.tabs[menu.tab].label); color: "white"; font.pixelSize: 41; font.bold: true
+           Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } } }
+    Text { x: menu.pageX; y: 158 - height / 2; text: menu.subtitle(); color: "#b4afc2"; font.pixelSize: 25
+           Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } } }
     Row {
         anchors.right: parent.right; anchors.rightMargin: 80; y: 100 - height / 2; spacing: 28
         Text {
@@ -1177,10 +1179,12 @@ Item {
     // Tab content: slides in on each change
     Item {
         id: content
-        x: menu.contentX; y: 0; width: 1460; height: parent.height
+        x: menu.pageX; y: 0; width: 1460; height: parent.height
+        Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+        transform: Translate { id: contentSlide }
         ParallelAnimation {
             id: tabEnter
-            NumberAnimation { target: content; property: "x"; from: menu.contentX + 40; to: menu.contentX; duration: 260; easing.type: Easing.OutCubic }
+            NumberAnimation { target: contentSlide; property: "x"; from: 40; to: 0; duration: 260; easing.type: Easing.OutCubic }
             NumberAnimation { target: content; property: "opacity"; from: 0; to: 1; duration: 220 }
         }
 
@@ -1640,29 +1644,15 @@ Item {
             }
         }
     }
-    // Content dimmed while the tab rail is over it
-    Rectangle {
-        anchors.fill: parent; color: "black"
-        opacity: menu.railShown ? 0.45 : 0
-        Behavior on opacity { NumberAnimation { duration: 220 } }
-    }
-    // Tab rail: slides over the content when it has the focus, hidden otherwise
+    // Tab rail: shown when it has the focus (the content moves aside), hidden otherwise
     Item {
         id: railPanel
-        width: 440; height: parent.height
+        width: 400; height: parent.height
         x: menu.railShown ? 0 : -width
         visible: x > -width
         Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-    Rectangle { width: 400; height: parent.height; color: menu.pal.rail; opacity: 0.96
+    Rectangle { width: 400; height: parent.height; color: menu.pal.rail; opacity: 0.55
                 Behavior on color { ColorAnimation { duration: 400 } } }
-    Rectangle {   // shadow on the content side
-        x: 400; width: 40; height: parent.height
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop { position: 0; color: "#66000000" }
-            GradientStop { position: 1; color: "#00000000" }
-        }
-    }
     Logo { x: 56; y: 62 }
     Text { x: 126; y: 88 - height / 2; text: "Stream Box"; color: "white"; font.pixelSize: 28; font.bold: true }
     Rectangle {   // pill: slides from one entry to the other

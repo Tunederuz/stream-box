@@ -368,10 +368,11 @@ Twitch / YouTube by Qt and rounded by `MultiEffect` (no more need for `/api/tvim
 `box.ambient` (observed property), opaque veil without video (`box.videoActive`). Components: `RoundImage`,
 `Marquee` (text clipped at rest, two copies that scroll on focus), `FocusFrame`, `StreamerCard`, `VideoCard`,
 `SettingRow`, `QrCode`, `fmt.js`.
-Dynamic rail (QML only; tv_menu.lua keeps its fixed rail): the content is full screen (`contentX`), the rail slides
-over it (dimmed) only while it has the focus (`railShown` = `area === "rail"`): OK or ▶ on a tab hides it, Back or ◀ at
-the left edge brings it back. Menu button: closes the menu over a video; with nothing playing (`idle`, `home` mode)
-it shows the rail over the content, and hides it again (`menuKey`). Pitfalls: font sizes ×0.78 compared to the ASS menu (Qt draws larger for
+Dynamic rail (QML only; tv_menu.lua keeps its fixed rail): the rail is shown only while it has the focus
+(`railShown` = `area === "rail"`) and then pushes the content to the right (`pageX` 460, never covered: the tabs can be
+scanned); OK or ▶ on a tab hides it and the content takes the full width (`pageX` 230). Back or ◀ at the left edge brings
+it back. Menu button: closes the menu over a video; with nothing playing (`idle`, `home` mode)
+it shows the rail, and hides it again (`menuKey`). Pitfalls: font sizes ×0.78 compared to the ASS menu (Qt draws larger for
 the same value); in `onTabChanged`, read `tabs[tab].id` and not `tabId` (binding not recomputed yet); lists
 with `clip`: margins (`leftMargin`, `topMargin`) so as not to cut the focus glow; models as an item count
 (the delegates read the arrays) so that the list does not reset on every state poll. Testing without
