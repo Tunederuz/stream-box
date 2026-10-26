@@ -957,16 +957,16 @@ Item {
                 if (k === "down") railHome = false
                 else if (k === "ok") { act("home"); close() }
                 else if (k === "right") { railHome = false; enterContent() }
-                else if (k === "back" && !idle) close()
+                else if (k === "back") close()
                 return
             }
             if (k === "up" && tab === 0) railHome = true
             else if (k === "up" || k === "down") tab = Math.max(0, Math.min(tabs.length - 1, tab + (k === "down" ? 1 : -1)))
             else if (k === "right" || k === "ok") enterContent()
-            else if (k === "back" && !idle) close()   // nothing playing: the menu stays the main page
+            else if (k === "back") close()
             return
         }
-        if (k === "back") return toRail()
+        if (k === "back") return close()   // Back closes the menu, from the content too (the rail: ◀ at the edge, or Menu)
         switch (tabId) {
         case "live": return keyLive(k)
         case "follows": return keyFollows(k)
@@ -1705,8 +1705,8 @@ Item {
     }
     Text {
         anchors.right: parent.right; anchors.rightMargin: 80; y: menu.height - 75
-        text: menu.tr(menu.idle ? "▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back go back   ·   Menu tabs"
-                                : "▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back go back   ·   Menu close")
+        text: menu.tr(menu.idle ? "▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back close   ·   Menu tabs"
+                                : "▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back or Menu close")
         color: "#8a85a0"; font.pixelSize: 19
     }
 
