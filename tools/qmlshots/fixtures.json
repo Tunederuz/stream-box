@@ -1,0 +1,1425 @@
+{
+ "/api/state": {
+  "streamers": [
+   "alpha",
+   "bravo",
+   "charlie",
+   "delta",
+   "echo",
+   "foxtrot",
+   "golf",
+   "hotel",
+   "india",
+   "juliet",
+   "kilo",
+   "lima",
+   "mike",
+   "november",
+   "oscar",
+   "papa",
+   "quebec",
+   "romeo"
+  ],
+  "channel": "bravo",
+  "mode": "twitch",
+  "live": {
+   "alpha": {
+    "viewers": 1234,
+    "game": "Game 0",
+    "title": "Stream of alpha"
+   },
+   "bravo": {
+    "viewers": 2468,
+    "game": "Game 1",
+    "title": "Short title"
+   },
+   "delta": {
+    "viewers": 4936,
+    "game": "Game 3",
+    "title": "Stream of delta"
+   },
+   "echo": {
+    "viewers": 6170,
+    "game": "Game 4",
+    "title": "Stream of echo"
+   },
+   "golf": {
+    "viewers": 8638,
+    "game": "Game 6",
+    "title": "Stream of golf"
+   },
+   "hotel": {
+    "viewers": 9872,
+    "game": "Game 7",
+    "title": "Stream of hotel"
+   },
+   "juliet": {
+    "viewers": 12340,
+    "game": "Game 9",
+    "title": "Stream of juliet"
+   },
+   "kilo": {
+    "viewers": 13574,
+    "game": "Game 10",
+    "title": "Stream of kilo"
+   },
+   "mike": {
+    "viewers": 16042,
+    "game": "Game 12",
+    "title": "Stream of mike"
+   },
+   "november": {
+    "viewers": 17276,
+    "game": "Game 13",
+    "title": "Stream of november"
+   },
+   "papa": {
+    "viewers": 19744,
+    "game": "Game 15",
+    "title": "Stream of papa"
+   },
+   "quebec": {
+    "viewers": 20978,
+    "game": "Game 16",
+    "title": "Stream of quebec"
+   }
+  },
+  "avatars": {
+   "alpha": "http://127.0.0.1:8080/img/9146ff.png",
+   "bravo": "http://127.0.0.1:8080/img/ff4f5e.png",
+   "charlie": "http://127.0.0.1:8080/img/2b4bdc.png",
+   "echo": "http://127.0.0.1:8080/img/f5a623.png",
+   "foxtrot": "http://127.0.0.1:8080/img/00bcd4.png",
+   "golf": "http://127.0.0.1:8080/img/e91e63.png",
+   "india": "http://127.0.0.1:8080/img/795548.png",
+   "juliet": "http://127.0.0.1:8080/img/607d8b.png",
+   "kilo": "http://127.0.0.1:8080/img/9146ff.png",
+   "mike": "http://127.0.0.1:8080/img/2b4bdc.png",
+   "november": "http://127.0.0.1:8080/img/1db954.png",
+   "oscar": "http://127.0.0.1:8080/img/f5a623.png",
+   "quebec": "http://127.0.0.1:8080/img/e91e63.png",
+   "romeo": "http://127.0.0.1:8080/img/8bc34a.png"
+  },
+  "languages": {
+   "en": "English",
+   "fr": "Français"
+  },
+  "lang": "fr",
+  "chat_visible": true,
+  "corner": "bl",
+  "chat_bg": 40,
+  "chat_size": 32,
+  "sub_size": 100,
+  "sub_bg": 0,
+  "qr": "always",
+  "auto_switch": true,
+  "events": false,
+  "night": true,
+  "volume": 70,
+  "mute": false,
+  "backdrop": {
+   "base": "none",
+   "overlay": "none",
+   "color": "violet"
+  },
+  "player": "qt",
+  "power_action": "suspend",
+  "title": ""
+ },
+ "/api/follows": {
+  "configured": true,
+  "authorized": true,
+  "live": [
+   {
+    "login": "f00",
+    "avatar": "http://127.0.0.1:8080/img/9146ff.png",
+    "viewers": 500,
+    "game": "Game 0",
+    "title": "Title 0"
+   },
+   {
+    "login": "f01",
+    "avatar": "http://127.0.0.1:8080/img/ff4f5e.png",
+    "viewers": 537,
+    "game": "Game 1",
+    "title": "Title 1"
+   },
+   {
+    "login": "f02",
+    "avatar": "http://127.0.0.1:8080/img/2b4bdc.png",
+    "viewers": 574,
+    "game": "Game 2",
+    "title": "Title 2"
+   },
+   {
+    "login": "f03",
+    "avatar": "http://127.0.0.1:8080/img/1db954.png",
+    "viewers": 611,
+    "game": "Game 3",
+    "title": "Title 3"
+   },
+   {
+    "login": "f04",
+    "avatar": "http://127.0.0.1:8080/img/f5a623.png",
+    "viewers": 648,
+    "game": "Game 4",
+    "title": "Title 4"
+   },
+   {
+    "login": "f05",
+    "avatar": "http://127.0.0.1:8080/img/00bcd4.png",
+    "viewers": 685,
+    "game": "Game 5",
+    "title": "Title 5"
+   },
+   {
+    "login": "f06",
+    "avatar": "http://127.0.0.1:8080/img/e91e63.png",
+    "viewers": 722,
+    "game": "Game 6",
+    "title": "Title 6"
+   },
+   {
+    "login": "f07",
+    "avatar": "http://127.0.0.1:8080/img/8bc34a.png",
+    "viewers": 759,
+    "game": "Game 7",
+    "title": "Title 7"
+   },
+   {
+    "login": "f08",
+    "avatar": "http://127.0.0.1:8080/img/795548.png",
+    "viewers": 796,
+    "game": "Game 8",
+    "title": "Title 8"
+   }
+  ],
+  "offline": [
+   {
+    "login": "off00",
+    "avatar": ""
+   },
+   {
+    "login": "off01",
+    "avatar": "http://127.0.0.1:8080/img/2b4bdc.png"
+   },
+   {
+    "login": "off02",
+    "avatar": ""
+   },
+   {
+    "login": "off03",
+    "avatar": "http://127.0.0.1:8080/img/f5a623.png"
+   },
+   {
+    "login": "off04",
+    "avatar": ""
+   },
+   {
+    "login": "off05",
+    "avatar": "http://127.0.0.1:8080/img/e91e63.png"
+   },
+   {
+    "login": "off06",
+    "avatar": ""
+   },
+   {
+    "login": "off07",
+    "avatar": "http://127.0.0.1:8080/img/795548.png"
+   },
+   {
+    "login": "off08",
+    "avatar": ""
+   },
+   {
+    "login": "off09",
+    "avatar": "http://127.0.0.1:8080/img/9146ff.png"
+   },
+   {
+    "login": "off10",
+    "avatar": ""
+   },
+   {
+    "login": "off11",
+    "avatar": "http://127.0.0.1:8080/img/2b4bdc.png"
+   },
+   {
+    "login": "off12",
+    "avatar": ""
+   }
+  ]
+ },
+ "/api/replays": {
+  "vods": [
+   {
+    "title": "Replay 0",
+    "thumb": "http://127.0.0.1:8080/img/1db954.png",
+    "url": "https://example.com/Replay/0",
+    "seconds": 600,
+    "views": 1500,
+    "date": "@-1d",
+    "position": 0,
+    "finished": false
+   },
+   {
+    "title": "Replay 1",
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+    "url": "https://example.com/Replay/1",
+    "seconds": 697,
+    "views": 12000,
+    "date": "@-2d",
+    "position": 300,
+    "finished": false
+   },
+   {
+    "title": "Replay 2",
+    "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+    "url": "https://example.com/Replay/2",
+    "seconds": 794,
+    "views": 40500,
+    "date": "@-3d",
+    "position": 0,
+    "finished": true
+   },
+   {
+    "title": "Replay 3",
+    "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+    "url": "https://example.com/Replay/3",
+    "seconds": 891,
+    "views": 96000,
+    "date": "@-4d",
+    "position": 0,
+    "finished": false
+   },
+   {
+    "title": "Replay 4",
+    "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+    "url": "https://example.com/Replay/4",
+    "seconds": 988,
+    "views": 187500,
+    "date": "@-5d",
+    "position": 0,
+    "finished": false
+   },
+   {
+    "title": "Replay 5",
+    "thumb": "http://127.0.0.1:8080/img/795548.png",
+    "url": "https://example.com/Replay/5",
+    "seconds": 1085,
+    "views": 324000,
+    "date": "@-6d",
+    "position": 0,
+    "finished": false
+   },
+   {
+    "title": "Replay 6",
+    "thumb": "http://127.0.0.1:8080/img/607d8b.png",
+    "url": "https://example.com/Replay/6",
+    "seconds": 1182,
+    "views": 514500,
+    "date": "@-7d",
+    "position": 0,
+    "finished": false
+   }
+  ],
+  "clips": [
+   {
+    "title": "Clip 0",
+    "thumb": "http://127.0.0.1:8080/img/1db954.png",
+    "url": "https://example.com/Clip/0",
+    "seconds": 30,
+    "views": 1500,
+    "date": "@-1d"
+   },
+   {
+    "title": "Clip 1",
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+    "url": "https://example.com/Clip/1",
+    "seconds": 31,
+    "views": 12000,
+    "date": "@-2d"
+   },
+   {
+    "title": "Clip 2",
+    "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+    "url": "https://example.com/Clip/2",
+    "seconds": 32,
+    "views": 40500,
+    "date": "@-3d"
+   },
+   {
+    "title": "Clip 3",
+    "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+    "url": "https://example.com/Clip/3",
+    "seconds": 33,
+    "views": 96000,
+    "date": "@-4d"
+   },
+   {
+    "title": "Clip 4",
+    "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+    "url": "https://example.com/Clip/4",
+    "seconds": 34,
+    "views": 187500,
+    "date": "@-5d"
+   }
+  ]
+ },
+ "/api/youtube": {
+  "channels": [
+   {
+    "id": "UC0",
+    "name": "Channel 0",
+    "avatar": "http://127.0.0.1:8080/img/9146ff.png",
+    "videos": [
+     {
+      "title": "Ch0 video 0",
+      "thumb": "http://127.0.0.1:8080/img/1db954.png",
+      "url": "https://example.com/Ch0 video/0",
+      "seconds": 600,
+      "views": 1500,
+      "date": "@-1d",
+      "position": 120
+     },
+     {
+      "title": "Ch0 video 1",
+      "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+      "url": "https://example.com/Ch0 video/1",
+      "seconds": 697,
+      "views": 12000,
+      "date": "@-2d",
+      "position": 0
+     },
+     {
+      "title": "Ch0 video 2",
+      "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+      "url": "https://example.com/Ch0 video/2",
+      "seconds": 794,
+      "views": 40500,
+      "date": "@-3d",
+      "position": 0
+     },
+     {
+      "title": "Ch0 video 3",
+      "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+      "url": "https://example.com/Ch0 video/3",
+      "seconds": 891,
+      "views": 96000,
+      "date": "@-4d",
+      "position": 0
+     },
+     {
+      "title": "Ch0 video 4",
+      "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+      "url": "https://example.com/Ch0 video/4",
+      "seconds": 988,
+      "views": 187500,
+      "date": "@-5d",
+      "position": 0
+     },
+     {
+      "title": "Ch0 video 5",
+      "thumb": "http://127.0.0.1:8080/img/795548.png",
+      "url": "https://example.com/Ch0 video/5",
+      "seconds": 1085,
+      "views": 324000,
+      "date": "@-6d",
+      "position": 0
+     }
+    ]
+   },
+   {
+    "id": "UC1",
+    "name": "Channel 1",
+    "avatar": "http://127.0.0.1:8080/img/ff4f5e.png",
+    "videos": [
+     {
+      "title": "Ch1 video 0",
+      "thumb": "http://127.0.0.1:8080/img/1db954.png",
+      "url": "https://example.com/Ch1 video/0",
+      "seconds": 600,
+      "views": 1500,
+      "date": "@-1d",
+      "position": 120
+     },
+     {
+      "title": "Ch1 video 1",
+      "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+      "url": "https://example.com/Ch1 video/1",
+      "seconds": 697,
+      "views": 12000,
+      "date": "@-2d",
+      "position": 0
+     },
+     {
+      "title": "Ch1 video 2",
+      "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+      "url": "https://example.com/Ch1 video/2",
+      "seconds": 794,
+      "views": 40500,
+      "date": "@-3d",
+      "position": 0
+     },
+     {
+      "title": "Ch1 video 3",
+      "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+      "url": "https://example.com/Ch1 video/3",
+      "seconds": 891,
+      "views": 96000,
+      "date": "@-4d",
+      "position": 0
+     },
+     {
+      "title": "Ch1 video 4",
+      "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+      "url": "https://example.com/Ch1 video/4",
+      "seconds": 988,
+      "views": 187500,
+      "date": "@-5d",
+      "position": 0
+     },
+     {
+      "title": "Ch1 video 5",
+      "thumb": "http://127.0.0.1:8080/img/795548.png",
+      "url": "https://example.com/Ch1 video/5",
+      "seconds": 1085,
+      "views": 324000,
+      "date": "@-6d",
+      "position": 0
+     }
+    ]
+   },
+   {
+    "id": "UC2",
+    "name": "Channel 2",
+    "avatar": "http://127.0.0.1:8080/img/2b4bdc.png",
+    "videos": [
+     {
+      "title": "Ch2 video 0",
+      "thumb": "http://127.0.0.1:8080/img/1db954.png",
+      "url": "https://example.com/Ch2 video/0",
+      "seconds": 600,
+      "views": 1500,
+      "date": "@-1d",
+      "position": 120
+     },
+     {
+      "title": "Ch2 video 1",
+      "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+      "url": "https://example.com/Ch2 video/1",
+      "seconds": 697,
+      "views": 12000,
+      "date": "@-2d",
+      "position": 0
+     },
+     {
+      "title": "Ch2 video 2",
+      "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+      "url": "https://example.com/Ch2 video/2",
+      "seconds": 794,
+      "views": 40500,
+      "date": "@-3d",
+      "position": 0
+     },
+     {
+      "title": "Ch2 video 3",
+      "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+      "url": "https://example.com/Ch2 video/3",
+      "seconds": 891,
+      "views": 96000,
+      "date": "@-4d",
+      "position": 0
+     },
+     {
+      "title": "Ch2 video 4",
+      "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+      "url": "https://example.com/Ch2 video/4",
+      "seconds": 988,
+      "views": 187500,
+      "date": "@-5d",
+      "position": 0
+     },
+     {
+      "title": "Ch2 video 5",
+      "thumb": "http://127.0.0.1:8080/img/795548.png",
+      "url": "https://example.com/Ch2 video/5",
+      "seconds": 1085,
+      "views": 324000,
+      "date": "@-6d",
+      "position": 0
+     }
+    ]
+   },
+   {
+    "id": "UC3",
+    "name": "Channel 3",
+    "avatar": "http://127.0.0.1:8080/img/1db954.png",
+    "videos": [
+     {
+      "title": "Ch3 video 0",
+      "thumb": "http://127.0.0.1:8080/img/1db954.png",
+      "url": "https://example.com/Ch3 video/0",
+      "seconds": 600,
+      "views": 1500,
+      "date": "@-1d",
+      "position": 120
+     },
+     {
+      "title": "Ch3 video 1",
+      "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+      "url": "https://example.com/Ch3 video/1",
+      "seconds": 697,
+      "views": 12000,
+      "date": "@-2d",
+      "position": 0
+     },
+     {
+      "title": "Ch3 video 2",
+      "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+      "url": "https://example.com/Ch3 video/2",
+      "seconds": 794,
+      "views": 40500,
+      "date": "@-3d",
+      "position": 0
+     },
+     {
+      "title": "Ch3 video 3",
+      "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+      "url": "https://example.com/Ch3 video/3",
+      "seconds": 891,
+      "views": 96000,
+      "date": "@-4d",
+      "position": 0
+     },
+     {
+      "title": "Ch3 video 4",
+      "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+      "url": "https://example.com/Ch3 video/4",
+      "seconds": 988,
+      "views": 187500,
+      "date": "@-5d",
+      "position": 0
+     },
+     {
+      "title": "Ch3 video 5",
+      "thumb": "http://127.0.0.1:8080/img/795548.png",
+      "url": "https://example.com/Ch3 video/5",
+      "seconds": 1085,
+      "views": 324000,
+      "date": "@-6d",
+      "position": 0
+     }
+    ]
+   }
+  ],
+  "subs": {
+   "configured": true,
+   "authorized": true,
+   "videos": [
+    {
+     "title": "Sub video 0",
+     "thumb": "http://127.0.0.1:8080/img/1db954.png",
+     "url": "https://example.com/Sub video/0",
+     "seconds": 600,
+     "views": 1500,
+     "date": "@-1d",
+     "channel": "Channel 0",
+     "channel_id": "UC0",
+     "avatar": "http://127.0.0.1:8080/img/9146ff.png"
+    },
+    {
+     "title": "Sub video 1",
+     "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+     "url": "https://example.com/Sub video/1",
+     "seconds": 697,
+     "views": 12000,
+     "date": "@-2d",
+     "channel": "Channel 1",
+     "channel_id": "UC1",
+     "avatar": "http://127.0.0.1:8080/img/ff4f5e.png"
+    },
+    {
+     "title": "Sub video 2",
+     "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+     "url": "https://example.com/Sub video/2",
+     "seconds": 794,
+     "views": 40500,
+     "date": "@-3d",
+     "channel": "Channel 2",
+     "channel_id": "UC2",
+     "avatar": "http://127.0.0.1:8080/img/2b4bdc.png"
+    },
+    {
+     "title": "Sub video 3",
+     "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+     "url": "https://example.com/Sub video/3",
+     "seconds": 891,
+     "views": 96000,
+     "date": "@-4d",
+     "channel": "Channel 0",
+     "channel_id": "UC0",
+     "avatar": "http://127.0.0.1:8080/img/9146ff.png"
+    },
+    {
+     "title": "Sub video 4",
+     "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+     "url": "https://example.com/Sub video/4",
+     "seconds": 988,
+     "views": 187500,
+     "date": "@-5d",
+     "channel": "Channel 1",
+     "channel_id": "UC1",
+     "avatar": "http://127.0.0.1:8080/img/ff4f5e.png"
+    },
+    {
+     "title": "Sub video 5",
+     "thumb": "http://127.0.0.1:8080/img/795548.png",
+     "url": "https://example.com/Sub video/5",
+     "seconds": 1085,
+     "views": 324000,
+     "date": "@-6d",
+     "channel": "Channel 2",
+     "channel_id": "UC2",
+     "avatar": "http://127.0.0.1:8080/img/2b4bdc.png"
+    },
+    {
+     "title": "Sub video 6",
+     "thumb": "http://127.0.0.1:8080/img/607d8b.png",
+     "url": "https://example.com/Sub video/6",
+     "seconds": 1182,
+     "views": 514500,
+     "date": "@-7d",
+     "channel": "Channel 0",
+     "channel_id": "UC0",
+     "avatar": "http://127.0.0.1:8080/img/9146ff.png"
+    },
+    {
+     "title": "Sub video 7",
+     "thumb": "http://127.0.0.1:8080/img/9146ff.png",
+     "url": "https://example.com/Sub video/7",
+     "seconds": 1279,
+     "views": 768000,
+     "date": "@-8d",
+     "channel": "Channel 1",
+     "channel_id": "UC1",
+     "avatar": "http://127.0.0.1:8080/img/ff4f5e.png"
+    }
+   ]
+  }
+ },
+ "/api/youtube_search": {
+  "results": [
+   {
+    "title": "Found 0",
+    "thumb": "http://127.0.0.1:8080/img/1db954.png",
+    "url": "https://example.com/Found/0",
+    "seconds": 600,
+    "views": 1500,
+    "date": "@-1d",
+    "channel": "Someone 0"
+   },
+   {
+    "title": "Found 1",
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+    "url": "https://example.com/Found/1",
+    "seconds": 697,
+    "views": 12000,
+    "date": "@-2d",
+    "channel": "Someone 1"
+   },
+   {
+    "title": "Found 2",
+    "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+    "url": "https://example.com/Found/2",
+    "seconds": 794,
+    "views": 40500,
+    "date": "@-3d",
+    "channel": "Someone 2"
+   },
+   {
+    "title": "Found 3",
+    "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+    "url": "https://example.com/Found/3",
+    "seconds": 891,
+    "views": 96000,
+    "date": "@-4d",
+    "channel": "Someone 3"
+   },
+   {
+    "title": "Found 4",
+    "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+    "url": "https://example.com/Found/4",
+    "seconds": 988,
+    "views": 187500,
+    "date": "@-5d",
+    "channel": "Someone 4"
+   },
+   {
+    "title": "Found 5",
+    "thumb": "http://127.0.0.1:8080/img/795548.png",
+    "url": "https://example.com/Found/5",
+    "seconds": 1085,
+    "views": 324000,
+    "date": "@-6d",
+    "channel": "Someone 5"
+   }
+  ],
+  "channels": [
+   {
+    "id": "UCx0",
+    "name": "Found ch 0",
+    "avatar": "http://127.0.0.1:8080/img/00bcd4.png",
+    "followers": 12345,
+    "saved": false
+   },
+   {
+    "id": "UCx1",
+    "name": "Found ch 1",
+    "avatar": "http://127.0.0.1:8080/img/e91e63.png",
+    "followers": 197520,
+    "saved": true
+   },
+   {
+    "id": "UCx2",
+    "name": "Found ch 2",
+    "avatar": "",
+    "followers": 999945,
+    "saved": false
+   },
+   {
+    "id": "UCx3",
+    "name": "Found ch 3",
+    "avatar": "http://127.0.0.1:8080/img/795548.png",
+    "followers": 3160320,
+    "saved": false
+   },
+   {
+    "id": "UCx4",
+    "name": "Found ch 4",
+    "avatar": "http://127.0.0.1:8080/img/607d8b.png",
+    "followers": 7715625,
+    "saved": false
+   },
+   {
+    "id": "UCx5",
+    "name": "Found ch 5",
+    "avatar": "http://127.0.0.1:8080/img/9146ff.png",
+    "followers": 15999120,
+    "saved": false
+   },
+   {
+    "id": "UCx6",
+    "name": "Found ch 6",
+    "avatar": "http://127.0.0.1:8080/img/ff4f5e.png",
+    "followers": 29640345,
+    "saved": false
+   }
+  ]
+ },
+ "/api/youtube_channel": {
+  "videos": [
+   {
+    "title": "Preview 0",
+    "thumb": "http://127.0.0.1:8080/img/1db954.png",
+    "url": "https://example.com/Preview/0",
+    "seconds": 600,
+    "views": 1500,
+    "date": "@-1d"
+   },
+   {
+    "title": "Preview 1",
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+    "url": "https://example.com/Preview/1",
+    "seconds": 697,
+    "views": 12000,
+    "date": "@-2d"
+   },
+   {
+    "title": "Preview 2",
+    "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+    "url": "https://example.com/Preview/2",
+    "seconds": 794,
+    "views": 40500,
+    "date": "@-3d"
+   },
+   {
+    "title": "Preview 3",
+    "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+    "url": "https://example.com/Preview/3",
+    "seconds": 891,
+    "views": 96000,
+    "date": "@-4d"
+   },
+   {
+    "title": "Preview 4",
+    "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+    "url": "https://example.com/Preview/4",
+    "seconds": 988,
+    "views": 187500,
+    "date": "@-5d"
+   }
+  ]
+ },
+ "/api/jellyfin": {
+  "configured": true,
+  "server": "Jelly",
+  "resume": [
+   {
+    "id": "jf0",
+    "title": "Movie 0",
+    "type": "Movie",
+    "year": 2000,
+    "seconds": 5400,
+    "thumb": "http://127.0.0.1:8080/img/2b4bdc.png",
+    "position": 1200
+   },
+   {
+    "id": "jf1",
+    "title": "Movie 1",
+    "type": "Movie",
+    "year": 2001,
+    "seconds": 5400,
+    "thumb": "http://127.0.0.1:8080/img/1db954.png",
+    "position": 1200
+   },
+   {
+    "id": "jf2",
+    "title": "Movie 2",
+    "type": "Movie",
+    "year": 2002,
+    "seconds": 5400,
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+    "position": 1200
+   },
+   {
+    "id": "jf3",
+    "title": "Movie 3",
+    "type": "Movie",
+    "year": 2003,
+    "seconds": 5400,
+    "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+    "position": 1200
+   }
+  ],
+  "nextup": [
+   {
+    "id": "jf10",
+    "title": "Episode 10",
+    "type": "Episode",
+    "year": 2010,
+    "seconds": 6000,
+    "thumb": "http://127.0.0.1:8080/img/2b4bdc.png",
+    "episode": "S1E2",
+    "series": "ser0"
+   },
+   {
+    "id": "jf11",
+    "title": "Episode 11",
+    "type": "Episode",
+    "year": 2011,
+    "seconds": 6060,
+    "thumb": "http://127.0.0.1:8080/img/1db954.png",
+    "episode": "S1E3",
+    "series": "ser1"
+   },
+   {
+    "id": "jf12",
+    "title": "Episode 12",
+    "type": "Episode",
+    "year": 2012,
+    "seconds": 6120,
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+    "episode": "S1E4",
+    "series": "ser2"
+   }
+  ],
+  "libraries": [
+   {
+    "id": "lib1",
+    "name": "Movies",
+    "items": [
+     {
+      "id": "jf20",
+      "title": "Movie 20",
+      "type": "Movie",
+      "year": 2020,
+      "seconds": 6600,
+      "thumb": "http://127.0.0.1:8080/img/2b4bdc.png"
+     },
+     {
+      "id": "jf21",
+      "title": "Movie 21",
+      "type": "Movie",
+      "year": 2021,
+      "seconds": 6660,
+      "thumb": "http://127.0.0.1:8080/img/1db954.png"
+     },
+     {
+      "id": "jf22",
+      "title": "Movie 22",
+      "type": "Movie",
+      "year": 2022,
+      "seconds": 6720,
+      "thumb": "http://127.0.0.1:8080/img/f5a623.png"
+     },
+     {
+      "id": "jf23",
+      "title": "Movie 23",
+      "type": "Movie",
+      "year": 2023,
+      "seconds": 6780,
+      "thumb": "http://127.0.0.1:8080/img/00bcd4.png"
+     },
+     {
+      "id": "jf24",
+      "title": "Movie 24",
+      "type": "Movie",
+      "year": 2024,
+      "seconds": 6840,
+      "thumb": "http://127.0.0.1:8080/img/e91e63.png"
+     },
+     {
+      "id": "jf25",
+      "title": "Movie 25",
+      "type": "Movie",
+      "year": 2025,
+      "seconds": 6900,
+      "thumb": "http://127.0.0.1:8080/img/8bc34a.png"
+     },
+     {
+      "id": "jf26",
+      "title": "Movie 26",
+      "type": "Movie",
+      "year": 2026,
+      "seconds": 6960,
+      "thumb": "http://127.0.0.1:8080/img/795548.png"
+     },
+     {
+      "id": "jf27",
+      "title": "Movie 27",
+      "type": "Movie",
+      "year": 2027,
+      "seconds": 7020,
+      "thumb": "http://127.0.0.1:8080/img/607d8b.png"
+     }
+    ]
+   },
+   {
+    "id": "lib2",
+    "name": "Shows",
+    "items": [
+     {
+      "id": "jf30",
+      "title": "Series 30",
+      "type": "Series",
+      "year": 2030,
+      "seconds": 7200,
+      "thumb": "http://127.0.0.1:8080/img/2b4bdc.png",
+      "series": "ser0",
+      "unplayed": 0
+     },
+     {
+      "id": "jf31",
+      "title": "Series 31",
+      "type": "Series",
+      "year": 2031,
+      "seconds": 7260,
+      "thumb": "http://127.0.0.1:8080/img/1db954.png",
+      "series": "ser1",
+      "unplayed": 1
+     },
+     {
+      "id": "jf32",
+      "title": "Series 32",
+      "type": "Series",
+      "year": 2032,
+      "seconds": 7320,
+      "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+      "series": "ser2",
+      "unplayed": 2
+     },
+     {
+      "id": "jf33",
+      "title": "Series 33",
+      "type": "Series",
+      "year": 2033,
+      "seconds": 7380,
+      "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+      "series": "ser3",
+      "unplayed": 3
+     },
+     {
+      "id": "jf34",
+      "title": "Series 34",
+      "type": "Series",
+      "year": 2034,
+      "seconds": 7440,
+      "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+      "series": "ser4",
+      "unplayed": 4
+     }
+    ]
+   }
+  ]
+ },
+ "/api/jellyfin_search": {
+  "results": [
+   {
+    "id": "jf40",
+    "title": "Movie 40",
+    "type": "Movie",
+    "year": 2040,
+    "seconds": 7800,
+    "thumb": "http://127.0.0.1:8080/img/2b4bdc.png"
+   },
+   {
+    "id": "jf41",
+    "title": "Movie 41",
+    "type": "Movie",
+    "year": 2041,
+    "seconds": 7860,
+    "thumb": "http://127.0.0.1:8080/img/1db954.png"
+   },
+   {
+    "id": "jf42",
+    "title": "Movie 42",
+    "type": "Movie",
+    "year": 2042,
+    "seconds": 7920,
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png"
+   },
+   {
+    "id": "jf43",
+    "title": "Movie 43",
+    "type": "Movie",
+    "year": 2043,
+    "seconds": 7980,
+    "thumb": "http://127.0.0.1:8080/img/00bcd4.png"
+   }
+  ]
+ },
+ "/api/jellyfin_series": {
+  "episodes": [
+   {
+    "id": "jf50",
+    "title": "Episode 50",
+    "type": "Episode",
+    "year": 2050,
+    "seconds": 8400,
+    "thumb": "http://127.0.0.1:8080/img/2b4bdc.png",
+    "episode": "S1E1",
+    "series": "ser0",
+    "finished": true
+   },
+   {
+    "id": "jf51",
+    "title": "Episode 51",
+    "type": "Episode",
+    "year": 2051,
+    "seconds": 8460,
+    "thumb": "http://127.0.0.1:8080/img/1db954.png",
+    "episode": "S1E2",
+    "series": "ser0",
+    "finished": true
+   },
+   {
+    "id": "jf52",
+    "title": "Episode 52",
+    "type": "Episode",
+    "year": 2052,
+    "seconds": 8520,
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+    "episode": "S1E3",
+    "series": "ser0",
+    "finished": false
+   },
+   {
+    "id": "jf53",
+    "title": "Episode 53",
+    "type": "Episode",
+    "year": 2053,
+    "seconds": 8580,
+    "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+    "episode": "S1E4",
+    "series": "ser0",
+    "finished": false
+   },
+   {
+    "id": "jf54",
+    "title": "Episode 54",
+    "type": "Episode",
+    "year": 2054,
+    "seconds": 8640,
+    "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+    "episode": "S1E5",
+    "series": "ser0",
+    "finished": false
+   },
+   {
+    "id": "jf55",
+    "title": "Episode 55",
+    "type": "Episode",
+    "year": 2055,
+    "seconds": 8700,
+    "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+    "episode": "S1E6",
+    "series": "ser0",
+    "finished": false
+   }
+  ],
+  "first": 2
+ },
+ "/api/history": [
+  {
+   "key": "h0",
+   "title": "History 0",
+   "thumb": "http://127.0.0.1:8080/img/9146ff.png",
+   "kind": "youtube",
+   "url": "https://example.com/h/0",
+   "position": 0,
+   "duration": 0,
+   "finished": false
+  },
+  {
+   "key": "h1",
+   "title": "History 1",
+   "thumb": "http://127.0.0.1:8080/img/ff4f5e.png",
+   "kind": "twitch-vod",
+   "url": "https://example.com/h/1",
+   "position": 400,
+   "duration": 1800,
+   "finished": false
+  },
+  {
+   "key": "h2",
+   "title": "History 2",
+   "thumb": "http://127.0.0.1:8080/img/2b4bdc.png",
+   "kind": "twitch-clip",
+   "url": "https://example.com/h/2",
+   "position": 0,
+   "duration": 300,
+   "finished": false
+  },
+  {
+   "key": "h3",
+   "title": "History 3",
+   "thumb": "http://127.0.0.1:8080/img/1db954.png",
+   "kind": "link",
+   "url": "https://example.com/h/3",
+   "position": 90,
+   "duration": 3600,
+   "finished": false
+  },
+  {
+   "key": "h4",
+   "title": "History 4",
+   "thumb": "",
+   "kind": "jellyfin",
+   "url": "https://example.com/h/4",
+   "position": 1000,
+   "duration": 1000,
+   "finished": true
+  },
+  {
+   "key": "h5",
+   "title": "History 5",
+   "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+   "kind": "youtube",
+   "url": "https://example.com/h/5",
+   "position": 0,
+   "duration": 0,
+   "finished": false
+  },
+  {
+   "key": "h6",
+   "title": "History 6",
+   "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+   "kind": "twitch-vod",
+   "url": "https://example.com/h/6",
+   "position": 50,
+   "duration": 700,
+   "finished": false
+  },
+  {
+   "key": "h7",
+   "title": "History 7",
+   "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+   "kind": "twitch-clip",
+   "url": "https://example.com/h/7",
+   "position": 0,
+   "duration": 1200,
+   "finished": true
+  }
+ ],
+ "/api/display": {
+  "modes": [
+   "1920x1080@60",
+   "1920x1080@50",
+   "1280x720@60",
+   "3840x2160@30"
+  ],
+  "setting": "auto",
+  "auto": "1920x1080@60"
+ },
+ "/api/account": {
+  "login": "tester"
+ },
+ "/api/youtube_account": {
+  "configured": true,
+  "authorized": true,
+  "channels": 12,
+  "tv": {
+   "connected": false,
+   "pending": {
+    "user_code": "WXYZ-1234",
+    "verification_uri": "https://yt.be/activate"
+   }
+  }
+ },
+ "/api/health": {
+  "temps": {
+   "cpu": 72,
+   "disk": 38
+  },
+  "cpu": 12.5,
+  "load": 0.42,
+  "cores": 4,
+  "memory": {
+   "total": 8000000000.0,
+   "available": 5000000000.0
+  },
+  "disk": {
+   "free": 40000000000.0,
+   "total": 120000000000.0
+  },
+  "network": {
+   "rx": 1200000.0,
+   "tx": 30000.0,
+   "speed": 1000
+  },
+  "uptime": 93784,
+  "services": {
+   "mqtt": "active",
+   "youtube_tokens": "failed"
+  },
+  "player": {
+   "running": "qt",
+   "hwdec": "vaapi",
+   "size": "1920x1080",
+   "fps": 60,
+   "dropped": 3
+  },
+  "update": {
+   "running": false,
+   "last": {
+    "ok": true,
+    "date": "2026-10-23 11:48:14"
+   },
+   "next": "Tue 2026-10-27 05:07:37 CET"
+  }
+ },
+ "/api/wifi": {
+  "device": "wlan0",
+  "network": "Home",
+  "mode": "client",
+  "wired": false
+ },
+ "/api/audio": {
+  "outputs": [
+   {
+    "id": "hdmi",
+    "label": "TV (HDMI)"
+   },
+   {
+    "id": "usb",
+    "label": "USB headset"
+   }
+  ],
+  "choice": "auto",
+  "current": "hdmi"
+ },
+ "/api/bluetooth": {
+  "paired": [
+   {
+    "name": "Remote",
+    "mac": "AA:BB",
+    "connected": true
+   },
+   {
+    "name": "Pad",
+    "mac": "CC:DD",
+    "connected": false
+   }
+  ],
+  "found": [],
+  "scanning": false,
+  "busy": false
+ },
+ "/api/ssh": {
+  "available": true,
+  "enabled": true,
+  "address": "media@192.168.1.20",
+  "password": "tulip-42"
+ },
+ "/api/dev": {
+  "available": true,
+  "enabled": false
+ },
+ "/api/install": {
+  "available": true,
+  "progress": null,
+  "raid_mode": false,
+  "disks": [
+   {
+    "name": "sda",
+    "label": "Samsung SSD 256 GB",
+    "data": "Windows"
+   }
+  ]
+ },
+ "/api/backup": {
+  "usb": [
+   {
+    "name": "KINGSTON",
+    "path": "/dev/sdb1",
+    "backups": [
+     {
+      "name": "b1",
+      "date": "2026-10-20 10:00:00"
+     }
+    ]
+   }
+  ],
+  "busy": null,
+  "message": ""
+ },
+ "/api/qr": {
+  "rows": [
+   "1111111100101001010010100",
+   "1111111100011000110001100",
+   "1111111000000000000000000",
+   "1111111001100011000110001",
+   "1111111001010010100101001",
+   "1111111100101001010010100",
+   "1111111100011000110001100",
+   "0000000000000000000000000",
+   "1000110001100011000110001",
+   "0100101001010010100101001",
+   "1010010100101001010010100",
+   "0110001100011000110001100",
+   "0000000000000000000000000",
+   "1000110001100011000110001",
+   "0100101001010010100101001",
+   "1010010100101001010010100",
+   "0110001100011000110001100",
+   "0000000000000000000000000",
+   "1000110001100011000110001",
+   "0100101001010010100101001",
+   "1010010100101001010010100",
+   "0110001100011000110001100",
+   "0000000000000000000000000",
+   "1000110001100011000110001",
+   "0100101001010010100101001"
+  ]
+ }
+}
