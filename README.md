@@ -50,7 +50,7 @@ that can be installed on a phone (PWA).
 | `start.sh` | Launched by the session: chat, companion app, resolution, then loop on a permanent mpv |
 | `stream-box.lua`, `lua/streambox/` | mpv script and its modules: streamlink, small menu, Twitch / video modes, time shifting, playback bar, keys |
 | `ui.py`, `ui.qml`, `player.sh` | Qt Quick app embedding mpv (libmpv), and player loop (Qt or mpv alone) |
-| `qml/` | Large TV menu in the style of Android TV, in QML (animated, rendered by the GPU) |
+| `qml/`, `qml/menu/` | Large TV menu in the style of Android TV, in QML (animated, rendered by the GPU); its parts in `qml/menu/` |
 | `chat_overlay.py` | Twitch chat (anonymous IRC) shown in mpv through its IPC |
 | `chat_qt.py` | Chat with emotes for the Qt app (shown by `qml/ChatOverlay.qml`) |
 | `remote.py` + `remote.html` | Companion app server (Python standard library) and its page; the server's modules: `api.py`, `actions.py`, `twitch.py`, `youtube.py`, `jellyfin.py`, `playback.py`, `history.py`, `ambient.py`, `images.py`, `settings.py`, `system.py`, `common.py` |
@@ -61,7 +61,7 @@ that can be installed on a phone (PWA).
 | `update.sh`, `systemd/` | Updates, YouTube anti-bot tokens, MQTT bridge |
 | `install.sh`, `backup.sh`, `backup.py`, `boot-mode.py` | Installation, update, backup (command line, menu and page); mode depending on the keyboard at boot |
 | `audio.py` | Sound output on the TV's HDMI at boot |
-| `tests/`, `tools/check.sh` | Automated tests and checks (also run on GitHub on each push) |
+| `tests/`, `tools/check.sh`, `tools/qmlshots/` | Automated tests and checks (also run on GitHub on each push); screenshots of the TV menu without a box |
 | `CLAUDE.md` | Detailed technical documentation (decisions, pitfalls, how to test) |
 
 ## Installation (summary)

@@ -283,7 +283,8 @@ when Twitch changes something. Update: `~/.local/share/streamlink-venv/bin/pip i
 - `tools/check.sh` runs locally, in Docker, what `.github/workflows/checks.yml` runs on each push: `python` (ruff with
   the pyflakes rules of `ruff.toml`, compile, `python3 -m unittest discover -s tests -t .`), `lua` (`tests/test_lua.py`
   in the same mpv as the box image: Lua modules under luajit, then `stream-box.lua` loaded in a real mpv **in French**
-  and driven through its IPC), `shell` (shellcheck). Tests needing mpv or luajit are skipped without them.
+  and driven through its IPC), `shell` (shellcheck), `qml` (qmllint `[syntax]`, then the 233 steps of
+  `tools/qmlshots` without ReferenceError / TypeError / binding loop). Tests needing mpv or luajit are skipped without them.
 - `tests/`: translations (`test_locales.py`: same placeholders, every literal `tr()` translated, no stale key: remove
   the keys of texts you delete), `input.py` key repeat on a fake input device, `i18n.py`, `history.media_key`, the
   remote.py API started for real (`test_api.py`: throwaway HOME, fake mpv socket; skipped on a running box).
@@ -338,6 +339,17 @@ Twitch / YouTube by Qt and rounded by `MultiEffect`; weather and QR code through
 `box.ambient` (observed property), opaque veil without video (`box.videoActive`). Components: `RoundImage`,
 `Marquee` (text clipped at rest, two copies that scroll on focus), `FocusFrame`, `StreamerCard`, `VideoCard`,
 `SettingRow`, `QrCode`, `fmt.js`.
+Structure: `TvMenu.qml` keeps the data, the API calls, the timers, open / close, the computed rows (`settingsRows`,
+`ytRows`…), the dialog builders and all the key handling; the drawing lives in `qml/menu/`, one component per part,
+each taking the menu as `required property var menu` (`LiveTab { menu: menu }`; no id lookups across files): `Rail`,
+`Header`, `LiveTab`, `FollowsTab`, `ReplaysTab`, `MediaTab` (YouTube and Jellyfin page), `HistoryTab`, `RowsTab`
+(Settings or System list, `which`), `SystemStatus` (QR code and status tiles), `SearchKeyboard`, `YtAuthDialog`,
+`ActionDialog`, and `CardRow`, the horizontal card row (clip wrapper, ListView scrolling card by card with its
+`first` / `fits` window). Layout numbers in `qml/menu/layout.js` (content x and width, card size and step, row
+height…). `CardRow` pitfalls: callers bind `view.model`, `view.currentIndex`, `view.delegate`, `view.visible`
+directly on its ListView (going through properties of `CardRow`, the index reset when a row changed was never
+re-applied), and its sizes are literal numbers, not bindings to `layout.js` (the caller's current index arrives
+before, `fits` was then -1 and the first scroll was lost).
 Video cards (`VideoCard`: 456 px wide, 16:9 thumbnail, height from the width): 3 per row in Replays, YouTube,
 Jellyfin (step 482) and History (3 columns, 2 rows); the Replays and YouTube/Jellyfin rows scroll vertically (one full
 row, the top of the next one showing).
@@ -346,7 +358,10 @@ nothing to focus (empty list, history…) keeps the focus on the rail (`canEnter
 the same value); in `onTabChanged`, read `tabs[tab].id` and not `tabId` (binding not recomputed yet); lists
 with `clip`: margins (`leftMargin`, `topMargin`) so as not to cut the focus glow; models as an item count
 (the delegates read the arrays) so that the list does not reset on every state poll. Testing without
-a remote: `keypress HOMEPAGE`, `keypress DOWN`… through the IPC, screenshots with `grim`.
+a remote: `keypress HOMEPAGE`, `keypress DOWN`… through the IPC, screenshots with `grim`. Without a box:
+`tools/qmlshots` (Docker: PySide6 of the box, Xvfb, Mesa; mocks of ui.py and of the remote.py API, `fixtures.json`)
+plays 233 steps through every tab and dialog and saves one PNG per step plus `console.log` (QML warnings, menu state,
+requests); `run.sh shoot` before / after a change, then `run.sh diff` (see its README).
 
 Threads and libmpv (hangs and crashes seen, fixed):
 - Qt's main thread never calls mpv directly (keys, mouse, `force-window`, menu boolean): queue
@@ -753,7 +768,7 @@ the reference; Twitch replays: positions already reported to the Twitch account 
 ### Avoided loads (menu, page)
 
 QML menu: `/api/state` every 4 s, but `st` replaced only if the response changes (`stJson`); hidden tabs
-not computed (`rows: visible ? … : []` for Replays, YouTube/Jellyfin, Settings, System, status tiles); following
+not computed (`rows: visible ? … : []` in ReplaysTab, MediaTab, RowsTab and the status tiles); following
 list computed once (`followItems`). Page: `/api/state` paused when the page is in the background; Settings
 sections (followed channels, YouTube account, Wi-Fi) loaded when the tab opens (`settingsLoaders`).
 

@@ -1,4 +1,4 @@
-// Stream Box: the full TV menu in QML (rendered by the GPU), replacing tv_menu.lua when the player is the Qt app
+// Stream Box: the full TV menu in QML (rendered by the GPU), used when the player is the Qt app
 // (ui.py). Same tabs and same actions: everything goes through the remote.py API, like the companion app.
 // Keys arrive from ui.py (box.keyPressed) already translated: up, down, left, right, ok, back, home (Menu button,
 // closes), homescreen (WWW), corner (Play), menu (≡: options of the chosen card, including the second stream).
