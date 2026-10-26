@@ -76,7 +76,8 @@ Item {
         height: 1080
         scale: Math.min(parent.width / 1920, parent.height / 1080)
         transformOrigin: Item.TopLeft
-        AmbientScreen { backdrop: tvMenu.st.backdrop || null }   // background changed in the menu: right away here too
+        // background changed in the menu: right away here too
+        AmbientScreen { backdrop: tvMenu.st.backdrop || null; covered: tvMenu.isOpen && !tvMenu.powerOnly }
         ChatOverlay {}
         PollsOverlay {}
         LoadingOverlay {}
@@ -90,6 +91,8 @@ Item {
         TvMenu {
             id: tvMenu
             objectName: "tvMenu"
+            // With the home screen: under it (the home screen is above the menu); the "Box" dialog alone stays on top
+            z: box.ambientOn && !powerOnly ? -1 : 0
         }
         Notice {}
     }

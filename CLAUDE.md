@@ -809,10 +809,13 @@ media even outside the TV session; install.sh adds it too).
 ### Menu as the main page (Back button)
 The large menu is the main page: at boot (`home_menu()` 3 s after stream-box.lua is loaded, the time
 for the menu to load), at the end of a video (`BACK_TO_MENU`) and on Back during a stream or a video, playback
-stops (`show_home`, `home` mode) and the menu opens over the home screen. No more Back ×2 (nor
+stops (`show_home`, `home` mode) and the menu opens. No more Back ×2 (nor
 `/api/resume_last`): "▶  Resume {channel}" in Live and the History do this job. In `home` mode (menu
 closed after 90 s, by Menu, by "⌂  Home screen": animated home screen), any key reopens the
-menu. Menu open with nothing playing: Back on the tabs does not close it (QML `st.mode`, Lua `state.mode`). Menu background: glows in the
+menu. The home screen is a layer **above** the menu (somewhere you go, Back returns to the menu): in ui.qml the
+menu has `z: -1` while `box.ambientOn` (except the "Box" dialog alone), the home screen fades in over it when it
+closes (`TvMenu.underHome` keeps the menu shown 650 ms under it) and fades out to reveal it (`AmbientScreen.covered`
+while the menu is open). Menu open with nothing playing: Back on the tabs does not close it (QML `st.mode`, Lua `state.mode`). Menu background: glows in the
 tab's color that drift, two more without video behind (the veil is opaque there, to hide the home
 screen).
 

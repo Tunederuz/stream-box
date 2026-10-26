@@ -36,10 +36,14 @@ Item {
         }
         return out
     }
-    opacity: box.ambientOn ? 1 : 0
+    // Above the menu (ui.qml): it fades in over the menu when the menu closes, and fades out to reveal it
+    property bool covered: false              // menu open: the home screen steps aside
+    opacity: box.ambientOn && !covered ? 1 : 0
     visible: opacity > 0
     Behavior on opacity { NumberAnimation { duration: 600; easing.type: Easing.InOutQuad } }
 
+    onCoveredChanged: if (!covered && box.ambientOn) arrived()
+    function arrived() { qrShown = true; qrTimer.restart(); refresh() }
     function refresh() {
         var x = new XMLHttpRequest()
         x.onreadystatechange = function () {
@@ -56,7 +60,7 @@ Item {
     Timer { id: qrTimer; interval: 30000; onTriggered: root.qrShown = false }
     Connections {
         target: box
-        function onAmbientOnChanged() { if (box.ambientOn) { root.qrShown = true; qrTimer.restart(); root.refresh() } }
+        function onAmbientOnChanged() { if (box.ambientOn) root.arrived() }
     }
 
     // Animated background, chosen in Settings (Backdrop.qml)

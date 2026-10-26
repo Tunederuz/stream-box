@@ -13,7 +13,11 @@ Item {
     width: 1920
     height: 1080
     property bool isOpen: false
-    opacity: isOpen ? 1 : 0
+    // Closing with the home screen: it fades in over the menu (600 ms), the menu stays shown under it meanwhile
+    property bool underHome: false
+    onIsOpenChanged: if (!isOpen && box.ambientOn) { underHome = true; underHomeEnd.restart() }
+    Timer { id: underHomeEnd; interval: 650; onTriggered: menu.underHome = false }
+    opacity: isOpen || underHome ? 1 : 0
     visible: opacity > 0
     Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
     function tr(s, a) { return I18n.t(i18n.dict, s, a) }
