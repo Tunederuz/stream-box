@@ -58,12 +58,27 @@ class Script(unittest.TestCase):
         self.assertEqual(self.ipc("get_property", "user-data/streambox/corner").get("data"), "bl")
         self.assertEqual(self.lua_errors(), [])
 
+    def test_mpv_keys_ignored_while_input_py_runs(self):
+        # input.py announces itself (user-data/streambox/input = "evdev:<time>"): the same key received by mpv must not
+        # count a second time (mute shows it)
+        self.ipc("set_property", "user-data/streambox/input", f"evdev:{int(time.time())}")
+        self.ipc("set_property", "mute", False)
+        time.sleep(0.3)
+        self.ipc("keypress", "MUTE")
+        time.sleep(0.5)
+        self.assertEqual(self.ipc("get_property", "mute")["data"], False)
+        self.ipc("script-message", "streambox-input", "KEY_MUTE", "mute")
+        time.sleep(0.5)
+        self.assertEqual(self.ipc("get_property", "mute")["data"], True)
+        self.ipc("set_property", "user-data/streambox/input", "")
+
     def test_keys_and_messages(self):
         for args in (["streambox-input", "TEST", "home"], ["streambox-input", "TEST", "down"],
-                     ["streambox-input", "TEST", "back"], ["streambox-language"], ["streambox-keymap-wizard"],
-                     ["streambox-input", "VIRTUAL", "back"], ["streambox-flag", "night", "yes"],
-                     ["streambox-qr", "timed"]):
+                     ["streambox-input", "TEST", "back"], ["streambox-language"], ["streambox-flag", "night", "yes"],
+                     ["streambox-qr", "timed"], ["streambox-keymap-wizard"]):
             self.ipc("script-message", *args)
+        time.sleep(1)   # the wizard listens after 0.8 s; Back of the page's virtual remote then quits it
+        self.ipc("script-message", "streambox-input", "VIRTUAL", "back")
         time.sleep(1.5)
         self.assertEqual(self.ipc("get_property", "user-data/streambox/night").get("data"), True)
         self.assertEqual(self.lua_errors(), [])

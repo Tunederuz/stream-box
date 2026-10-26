@@ -25,8 +25,9 @@ local KEYS = {
 -- at the source with Linux names and sends the actions (streambox-input); while it runs, keys received
 -- here are ignored (otherwise each one would count twice)
 local input_beat = 0
-mp.observe_property("user-data/streambox/input", "string", function(_, v)
-    input_beat = tonumber((v or ""):match("^evdev:(%d+)")) or 0
+-- (read as "native": as "string", mpv gives user-data values JSON-formatted, quotes included, and the beat was never seen)
+mp.observe_property("user-data/streambox/input", "native", function(_, v)
+    input_beat = tonumber(tostring(v or ""):match("^evdev:(%d+)")) or 0
 end)
 function M.input_service() return os.time() - input_beat < 15 end
 local input_service = M.input_service
