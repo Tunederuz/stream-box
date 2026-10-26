@@ -1,13 +1,13 @@
-// Ligne de réglage : titre de section, interrupteur animé, ou valeur réglable (◀ ▶ au focus)
+// Settings row: section title, animated switch, or adjustable value (◀ ▶ when focused)
 import QtQuick
 
 Item {
     id: root
     property var row: ({})
     property bool focused: false
-    // Couleurs de l'onglet (TvMenu.pal) ; violet par défaut
+    // Tab colors (TvMenu.pal); purple by default
     property var pal: ({ accent: "#9146ff", surface: "#2a2034", surfaceFocus: "#3a2c4e", label: "#a99fc0" })
-    readonly property bool lightAccent: Qt.color(pal.accent).hslLightness > 0.7   // neutre : bouton sombre sur fond clair
+    readonly property bool lightAccent: Qt.color(pal.accent).hslLightness > 0.7   // neutral: dark knob on a light background
     readonly property bool header: !!row.header
     width: 980
     height: header ? 68 : (row.hint ? 110 : 84)
@@ -52,7 +52,7 @@ Item {
                 font.pixelSize: 20
             }
         }
-        // Interrupteur : le bouton glisse, le fond passe à la couleur de l'onglet
+        // Switch: the knob slides, the background turns to the tab color
         Rectangle {
             visible: root.row.toggle !== undefined
             anchors.right: parent.right

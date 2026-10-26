@@ -1,5 +1,5 @@
-// Logo de la Stream Box : tuile blanche, triangle de lecture anthracite aux coins arrondis. Neutre, il va sur le fond
-// violet comme sur le fond rouge de l'onglet YouTube (même dessin que les icônes de la télécommande web)
+// Stream Box logo: white tile, charcoal play triangle with rounded corners. Neutral, it fits the purple background
+// as well as the red background of the YouTube tab (same drawing as the companion app icons)
 import QtQuick
 import QtQuick.Shapes
 

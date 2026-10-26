@@ -4,8 +4,8 @@ layout(location = 0) out vec4 fragColor;
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
-    float time;      // secondes
-    float ratio;     // largeur / hauteur
+    float time;      // seconds
+    float ratio;     // width / height
     vec4 c1;
     vec4 c2;
     vec4 c3;
@@ -36,8 +36,8 @@ float vignette(vec2 uv) {
     vec2 d = uv - 0.5;
     return clamp(1.0 - dot(d, d) * 1.3, 0.0, 1.0);
 }
-// Calque soie : faisceau de fils lumineux qui ondulent ensemble, comme un tissu qui flotte ; ajouté à la lumière du
-// fond (alpha 0 : mélange additif avec l'alpha prémultiplié de Qt)
+// Silk layer: bundle of glowing threads waving together, like floating fabric; added to the light of the
+// base (alpha 0: additive blending with Qt's premultiplied alpha)
 void main() {
     vec2 uv = qt_TexCoord0;
     float x = uv.x * ratio;

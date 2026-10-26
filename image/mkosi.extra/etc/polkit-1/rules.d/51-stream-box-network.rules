@@ -1,5 +1,5 @@
-// Stream Box : media pilote NetworkManager (mode configuration Wi-Fi : point d'accès, connexion à un réseau), même
-// hors de la session de la TV
+// Stream Box: media drives NetworkManager (Wi-Fi setup mode: hotspot, connection to a network), even outside the TV
+// session
 polkit.addRule(function (action, subject) {
     if (subject.user == "media" && action.id.indexOf("org.freedesktop.NetworkManager.") == 0) {
         return polkit.Result.YES;

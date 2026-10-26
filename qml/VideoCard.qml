@@ -1,4 +1,4 @@
-// Carte vidéo (rediffusions, clips, historique) : miniature arrondie, progression, titre défilant au focus, infos
+// Video card (VODs, clips, history): rounded thumbnail, progress, title scrolling when focused, info
 import QtQuick
 
 Item {
@@ -8,8 +8,8 @@ Item {
     property string thumb: ""
     property real progress: 0
     property bool focused: false
-    property color accent: "#9146ff"   // halo et progression : rouge sur l'onglet YouTube
-    property string glyph: "▶"         // au centre, sans miniature (« + » : carte d'action, « Connecter mon compte »)
+    property color accent: "#9146ff"   // glow and progress: red on the YouTube tab
+    property string glyph: "▶"         // in the center, without a thumbnail ("+": action card, "Connect my account")
     width: 330
     height: 302
     z: focused ? 2 : 1
@@ -26,9 +26,9 @@ Item {
             anchors.fill: parent
             radius: 16
             placeholder: "#2a2034"
-            // Rediffusion du live en cours : Twitch donne une image « en cours de traitement », le ▶ dessiné vaut mieux
+            // VOD of the ongoing live: Twitch gives a "processing" image, the drawn ▶ is better
             source: root.thumb.indexOf("404_processing") >= 0 ? "" : root.thumb
-            Text {   // en attendant l'image (ou pour une rediffusion en cours, sans miniature)
+            Text {   // while waiting for the image (or for an ongoing VOD, without a thumbnail)
                 anchors.centerIn: parent
                 z: -1
                 text: "▶"
@@ -36,7 +36,7 @@ Item {
                 font.pixelSize: 42
             }
         }
-        Text {   // carte d'action, sans miniature
+        Text {   // action card, without a thumbnail
             visible: root.glyph !== "▶"
             anchors.centerIn: parent
             text: root.glyph

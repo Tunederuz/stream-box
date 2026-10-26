@@ -1,6 +1,6 @@
-// Chat Twitch avec émotes (appli Qt) : messages de chat_qt.py (via l'objet « chat » de ui.py), dans le coin choisi,
-// avec les réglages de la télécommande (fond, taille). Mots et émotes s'enchaînent dans un Flow ; les émotes animées
-// (GIF, WebP) bougent. Coordonnées en 1920x1080.
+// Twitch chat with emotes (Qt app): messages from chat_qt.py (via the "chat" object of ui.py), in the chosen corner,
+// with the settings of the companion app (background, size). Words and emotes follow each other in a Flow; animated
+// emotes (GIF, WebP) move. Coordinates in 1920x1080.
 import QtQuick
 
 Item {
@@ -9,14 +9,14 @@ Item {
     readonly property var messages: { try { return JSON.parse(chat.messages || "[]") } catch (e) { return [] } }
     readonly property bool atLeft: chat.corner === "tl" || chat.corner === "bl"
     readonly property bool atTop: chat.corner === "tl" || chat.corner === "tr"
-    // Taille réglée pour le chat ASS (\fs) : Qt dessine plus grand pour la même valeur
+    // Size set for the ASS chat (\fs): Qt draws larger for the same value
     readonly property real fontSize: chat.size * 0.78
     readonly property real maxWidth: 820
     visible: chat.visible && messages.length > 0
     opacity: visible ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: 200 } }
 
-    Rectangle {   // fond semi-transparent
+    Rectangle {   // semi-transparent background
         x: column.x - 14; y: column.y - 14
         width: column.width + 28; height: column.height + 28
         radius: 12
@@ -31,12 +31,12 @@ Item {
         spacing: 4
         Repeater {
             model: root.messages
-            // Enveloppe à la largeur réellement occupée par le message (fond ajusté, alignement à droite possible) ;
-            // le Flow dedans passe à la ligne à maxWidth
+            // Wrapper at the width actually taken by the message (fitted background, right alignment possible);
+            // the Flow inside wraps at maxWidth
             Item {
                 width: line.childrenRect.width
                 height: line.height
-                x: 0   // texte aligné à gauche dans le cadre, même dans un coin droit
+                x: 0   // text left-aligned in the frame, even in a right corner
                 Flow {
                     id: line
                     readonly property var m: modelData

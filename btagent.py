@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Stream Box : agent Bluetooth permanent (BlueZ, D-Bus), lancé par start.sh avec le Python de media-venv (dbus-fast).
+"""Stream Box: permanent Bluetooth agent (BlueZ, D-Bus), started by start.sh with media-venv's Python (dbus-fast).
 
-Les télécommandes Xiaomi (et d'autres) lancent elles-mêmes l'appairage, ou le refont à la reconnexion : sans agent pour
-répondre, BlueZ refuse (« No agent available ») et la télécommande se reconnecte en boucle sans jamais marcher.
-btsetup.py n'a un agent que pendant ses propres « pair ». Celui-ci accepte, sans code (NoInputNoOutput) :
-  - les appareils de confiance (déjà appairés une fois, ou marqués par btsetup.py) ;
-  - n'importe quel appareil pendant une recherche lancée depuis le menu ou la page (fichier PAIRING_FLAG écrit par
-    btsetup.py, valable PAIRING_WINDOW secondes) ;
-et refuse le reste : un appareil inconnu à portée ne s'appaire pas tout seul. Accepté hors recherche : marqué de
-confiance, pour qu'il se reconnecte seul ensuite.
+Xiaomi remotes (and others) start pairing themselves, or redo it on reconnection: with no agent to answer, BlueZ
+refuses ("No agent available") and the remote reconnects in a loop without ever working.
+btsetup.py only has an agent during its own "pair" runs. This one accepts, without a code (NoInputNoOutput):
+  - trusted devices (already paired once, or marked by btsetup.py);
+  - any device during a scan started from the menu or the companion app (PAIRING_FLAG file written by btsetup.py,
+    valid for PAIRING_WINDOW seconds);
+and refuses the rest: an unknown device in range doesn't pair on its own. Accepted outside a scan: marked as trusted,
+so that it reconnects on its own afterwards.
 """
 import asyncio, os, time
 
@@ -42,13 +42,13 @@ class Agent(ServiceInterface):
         trusted = await self.device_prop(device, "Trusted")
         name = await self.device_prop(device, "Alias") or device
         if trusted or pairing_open():
-            print(f"btagent.py : {what} accepté pour {name}", flush=True)
+            print(f"btagent.py: {what} accepted for {name}", flush=True)
             if not trusted:
                 await self.bus.call(Message(destination="org.bluez", path=device, interface="org.freedesktop.DBus.Properties",
                                             member="Set", signature="ssv", body=["org.bluez.Device1", "Trusted", Variant("b", True)]))
             return
-        print(f"btagent.py : {what} refusé pour {name} (inconnu, pas de recherche en cours)", flush=True)
-        raise DBusError("org.bluez.Error.Rejected", "appareil inconnu")
+        print(f"btagent.py: {what} refused for {name} (unknown, no scan in progress)", flush=True)
+        raise DBusError("org.bluez.Error.Rejected", "unknown device")
 
     @method()
     def Release(self):
@@ -56,12 +56,12 @@ class Agent(ServiceInterface):
 
     @method()
     async def RequestPinCode(self, device: "o") -> "s":
-        await self.check(device, "code PIN")
+        await self.check(device, "PIN code")
         return "0000"
 
     @method()
     async def RequestPasskey(self, device: "o") -> "u":
-        await self.check(device, "code")
+        await self.check(device, "passkey")
         return 0
 
     @method()
@@ -74,11 +74,11 @@ class Agent(ServiceInterface):
 
     @method()
     async def RequestConfirmation(self, device: "o", passkey: "u"):
-        await self.check(device, "appairage")
+        await self.check(device, "pairing")
 
     @method()
     async def RequestAuthorization(self, device: "o"):
-        await self.check(device, "autorisation")
+        await self.check(device, "authorization")
 
     @method()
     async def AuthorizeService(self, device: "o", uuid: "s"):
@@ -95,15 +95,15 @@ async def register(bus):
         reply = await bus.call(Message(destination="org.bluez", path="/org/bluez", interface="org.bluez.AgentManager1",
                                        member=member, signature=sig, body=body))
         if reply.message_type == MessageType.ERROR and reply.error_name != "org.bluez.Error.AlreadyExists":
-            raise RuntimeError(f"{member} : {reply.error_name} {reply.body}")
-    print("btagent.py : agent Bluetooth enregistré", flush=True)
+            raise RuntimeError(f"{member}: {reply.error_name} {reply.body}")
+    print("btagent.py: Bluetooth agent registered", flush=True)
 
 
 async def main():
     bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
     bus.export(AGENT_PATH, Agent(bus))
 
-    # bluetoothd relancé (ou démarré après nous) : on se réenregistre
+    # bluetoothd restarted (or started after us): register again
     def on_message(msg):
         if msg.member == "NameOwnerChanged" and msg.body and msg.body[0] == "org.bluez" and msg.body[2]:
             asyncio.ensure_future(register_retry())
@@ -113,7 +113,7 @@ async def main():
                 await register(bus)
                 return
             except RuntimeError as e:
-                print(f"btagent.py : {e}", flush=True)
+                print(f"btagent.py: {e}", flush=True)
                 await asyncio.sleep(2)
     bus.add_message_handler(on_message)
     await bus.call(Message(destination="org.freedesktop.DBus", path="/org/freedesktop/DBus", interface="org.freedesktop.DBus",

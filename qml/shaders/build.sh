@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Compile les shaders des fonds animés (qml/Backdrop.qml) en .qsb, dans Docker : PySide6-Essentials, installé sur la
-# box, n'a pas l'outil qsb. Même version de Qt que la box (install.sh, ui-venv). À relancer après chaque modification
-# d'un .frag ; les .qsb sont versionnés.
+# Compiles the animated background shaders (qml/Backdrop.qml) to .qsb, in Docker: PySide6-Essentials, installed on the
+# box, does not have the qsb tool. Same Qt version as the box (install.sh, ui-venv). Run again after each change
+# to a .frag; the .qsb files are versioned.
 set -euo pipefail
 cd "$(dirname "$0")"
 docker run --rm -v "$PWD:/s" -w /s python:3.13-slim bash -c '

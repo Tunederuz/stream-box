@@ -1,7 +1,7 @@
-// Stream Box : scène de l'appli (ui.py) : la vidéo du lecteur principal, le second stream (incrustation dans un coin ou
-// côte à côte, transitions animées), et par-dessus l'interface en QML (grand menu de la TV), dessinée en 1920x1080 et
-// mise à l'échelle de l'écran. Les vidéos gardent leur taille de rendu et sont réduites par la puce graphique
-// (scale) : le passage d'une disposition à l'autre reste fluide.
+// Stream Box: scene of the app (ui.py): the video of the main player, the second stream (inset in a corner or
+// side by side, animated transitions), and on top the QML interface (big TV menu), drawn in 1920x1080 and
+// scaled to the screen. The videos keep their render size and are scaled down by the GPU
+// (scale): switching from one layout to another stays smooth.
 import QtQuick
 import QtQuick.Effects
 import StreamBox 1.0
@@ -13,7 +13,7 @@ Item {
     readonly property bool inset: pip.layout === "pip"
     readonly property real unit: width / 1920
     readonly property real insetScale: 0.3
-    // Incrustation en haut, du côté opposé au chat s'il est en haut à droite
+    // Inset at the top, on the side opposite to the chat if it is at the top right
     readonly property bool insetLeft: pip.chatCorner === "tr"
 
     Item {
@@ -46,7 +46,7 @@ Item {
         Behavior on x { NumberAnimation { duration: 380; easing.type: Easing.InOutCubic } }
         Behavior on y { NumberAnimation { duration: 380; easing.type: Easing.InOutCubic } }
 
-        RectangularShadow {   // ombre de l'incrustation, pour la détacher de la vidéo principale
+        RectangularShadow {   // shadow of the inset, to set it apart from the main video
             anchors.fill: parent
             visible: stage.inset
             radius: 12 / stage.insetScale
@@ -54,7 +54,7 @@ Item {
             color: "black"
             opacity: 0.8
         }
-        Rectangle {   // fond noir le temps que le second stream démarre
+        Rectangle {   // black background while the second stream starts
             anchors.fill: parent
             color: "black"
         }
@@ -62,7 +62,7 @@ Item {
             anchors.fill: parent
             which: "pip"
         }
-        Rectangle {   // liseré de l'incrustation (épaisseur compensée de la réduction)
+        Rectangle {   // border of the inset (thickness compensated for the scaling)
             anchors.fill: parent
             visible: stage.inset
             color: "transparent"
@@ -76,7 +76,7 @@ Item {
         height: 1080
         scale: Math.min(parent.width / 1920, parent.height / 1080)
         transformOrigin: Item.TopLeft
-        AmbientScreen { backdrop: tvMenu.st.backdrop || null }   // fond changé dans le menu : tout de suite ici aussi
+        AmbientScreen { backdrop: tvMenu.st.backdrop || null }   // background changed in the menu: right away here too
         ChatOverlay {}
         PollsOverlay {}
         LoadingOverlay {}

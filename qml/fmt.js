@@ -1,9 +1,27 @@
-// Mise en forme commune aux composants du menu
+// Shared formatting for the menu components. Functions that produce words or units take the caller's tr function
+// (see i18n.js) as their last parameter: Fmt.viewers(n, tr). Without it, the English text is returned.
 .pragma library
 
-function viewers(v) {
+function _t(tr, s, a) {
+    if (tr) return tr(s, a)
+    for (var k in a) s = s.split("{" + k + "}").join(a[k])
+    return s
+}
+
+// One decimal, split into integer and decimal parts so the separator is translatable ("{int}.{dec}k")
+function _parts(x) {
+    var s = x.toFixed(1).split(".")
+    return { int: s[0], dec: s[1] }
+}
+
+// Number with one decimal: "4.5" (translatable separator)
+function decimal(v, tr) {
+    return _t(tr, "{int}.{dec}", _parts(Number(v) || 0))
+}
+
+function viewers(v, tr) {
     v = Number(v) || 0
-    return v >= 1000 ? (v / 1000).toFixed(1).replace(".", ",") + " k" : String(v)
+    return v >= 1000 ? _t(tr, "{int}.{dec}k", _parts(v / 1000)) : String(v)
 }
 
 function clock(t) {
@@ -13,29 +31,29 @@ function clock(t) {
     return h > 0 ? h + ":" + p(m) + ":" + p(s) : m + ":" + p(s)
 }
 
-var MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
+var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-function dateFr(iso) {
+function dateFr(iso, tr) {
     var m = /(\d+)-(\d+)-(\d+)/.exec(iso || "")
-    return m ? Number(m[3]) + " " + MONTHS[Number(m[2]) - 1] : ""
+    return m ? _t(tr, "{month} {day}", { day: Number(m[3]), month: _t(tr, MONTHS[Number(m[2]) - 1], {}) }) : ""
 }
 
-// Vidéo commencée et pas finie : reprise possible
+// Video started and not finished: can be resumed
 function resumable(position, duration, finished) {
     position = Number(position) || 0
     return !finished && position >= 30 && (!duration || position < duration)
 }
 
-// Gros nombres : 16617298 → « 16,6 M », 4500 → « 4,5 k »
-function big(v) {
+// Big numbers: 16617298 → "16.6M", 4500 → "4.5k"
+function big(v, tr) {
     v = Number(v) || 0
-    if (v >= 1e6) return (v / 1e6).toFixed(1).replace(".", ",") + " M"
-    return viewers(v)
+    if (v >= 1e6) return _t(tr, "{int}.{dec}M", _parts(v / 1e6))
+    return viewers(v, tr)
 }
 
-// Durée d'un live : « 2 h 14 », « 35 min »
-function since(epochSeconds) {
+// Duration of a live: "2h 14m", "35 min"
+function since(epochSeconds, tr) {
     var s = Math.max(0, Date.now() / 1000 - (Number(epochSeconds) || 0))
     var h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60
-    return h > 0 ? h + " h " + (m < 10 ? "0" : "") + m : m + " min"
+    return h > 0 ? _t(tr, "{h}h {m}m", { h: h, m: (m < 10 ? "0" : "") + m }) : _t(tr, "{m} min", { m: m })
 }

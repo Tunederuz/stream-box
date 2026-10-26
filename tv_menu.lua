@@ -1,67 +1,94 @@
--- Stream Box : grand menu façon Android TV, ouvert par le bouton Menu de la télécommande (touche Accueil).
--- Onglets à gauche, contenu à droite : streamers en direct, rediffusions et clips, historique, réglages, système.
--- La vidéo continue derrière, assombrie.
+-- Stream Box: large Android TV-style menu, opened by the remote's Menu button (Home key).
+-- Tabs on the left, content on the right: live streamers, replays and clips, history, settings, system.
+-- The video keeps playing behind, dimmed.
 --
--- Les données et les actions passent par l'API de remote.py (comme la page web) : menu, page et Home Assistant restent
--- d'accord. Les touches arrivent de stream-box.lua (script-message streambox-tvmenu-key), qui les transmet tant que
--- user-data/streambox/tvmenu est vrai. Les photos et miniatures sont des images brutes (overlay-add) préparées par
--- remote.py (/api/tvimage), posées par-dessus le dessin ASS : rien ne peut se dessiner sur elles, d'où les barres de
--- progression sous les miniatures et les images retirées quand une fenêtre d'actions s'ouvre.
+-- Data and actions go through the remote.py API (like the companion app): menu, page and Home Assistant stay in
+-- sync. Keys come from stream-box.lua (script-message streambox-tvmenu-key), which forwards them as long as
+-- user-data/streambox/tvmenu is true. Photos and thumbnails are raw images (overlay-add) prepared by remote.py
+-- (/api/tvimage), laid over the ASS drawing: nothing can be drawn on top of them, hence the progress bars under the
+-- thumbnails and the images removed when an action window opens.
 local mp = require "mp"
 local utils = require "mp.utils"
 
-local API = "http://127.0.0.1:8080"
-local W, H = 1920, 1080        -- coordonnées du dessin ASS, mises à l'échelle de l'écran par mpv
-local IDLE_CLOSE = 90          -- secondes sans touche avant de refermer le menu (écran de TV : pas d'image fixe)
-local REFRESH = 5              -- secondes entre deux relevés de l'état pendant que le menu est ouvert
-local MAX_IMAGES = 48          -- overlay-add accepte les identifiants 0 à 63
+-- Interface language (see i18n.py): texts written in English, translated from locales/<lang>.json next to this script;
+-- the language is in ~/.config/stream-box/language ("en" when missing), reloaded on script-message streambox-language
+local I18N = { dict = {} }
+function I18N.load()
+    local home = os.getenv("HOME") or ""
+    local f, lang = io.open(home .. "/.config/stream-box/language"), "en"
+    if f then lang = (f:read("*l") or "en"):match("^%s*(%a+)") or "en" f:close() end
+    I18N.dict, I18N.lang = {}, lang
+    if lang == "en" then return end
+    local dir = (mp.get_script_file() or ""):match("^(.*)/[^/]*$") or "."
+    local lf = io.open(dir .. "/locales/" .. lang .. ".json")
+    if lf then
+        I18N.dict = require("mp.utils").parse_json(lf:read("*a") or "") or {}
+        lf:close()
+    end
+end
+-- tr("Connected: {login}", { login = name })
+local function tr(s, a)
+    local out = I18N.dict[s] or s
+    if a then for k, v in pairs(a) do out = out:gsub("{" .. k .. "}", (tostring(v):gsub("%%", "%%%%"))) end end
+    return out
+end
+-- decimal separator of the interface language: "4.6 k" in English, "4,6 k" in French
+function I18N.dec(s) return I18N.lang == "fr" and (s:gsub("%.", ",")) or s end
+I18N.load()
 
-local TABS = { { id = "live", label = "En direct" }, { id = "follows", label = "Suivis" },
-               { id = "replays", label = "Rediffusions" }, { id = "youtube", label = "YouTube" },
+local API = "http://127.0.0.1:8080"
+local W, H = 1920, 1080        -- ASS drawing coordinates, scaled to the screen by mpv
+local IDLE_CLOSE = 90          -- seconds without a key press before closing the menu (TV screen: no still image)
+local REFRESH = 5              -- seconds between two state reads while the menu is open
+local MAX_IMAGES = 48          -- overlay-add accepts ids 0 to 63
+
+-- Labels in English, translated with tr() where they are drawn
+local TABS = { { id = "live", label = "Live" }, { id = "follows", label = "Following" },
+               { id = "replays", label = "Replays" }, { id = "youtube", label = "YouTube" },
                { id = "jellyfin", label = "Jellyfin" },
-               { id = "history", label = "Historique" }, { id = "settings", label = "Réglages" },
-               { id = "system", label = "Système" } }
-local KINDS = { youtube = "YouTube", ["twitch-vod"] = "Rediffusion Twitch", ["twitch-clip"] = "Clip Twitch", link = "Lien", jellyfin = "Jellyfin" }
-local CORNERS = { tl = "↖ haut gauche", tr = "↗ haut droite", br = "↘ bas droite", bl = "↙ bas gauche" }
-local CORNER_ORDER = { "tl", "tr", "br", "bl" }   -- même ordre que stream-box.lua
-local QR_MODES = { { "always", "Toujours" }, { "timed", "30 secondes" }, { "never", "Jamais" } }
-local VIOLET, LIVE_RED = "FF4691", "5E4FFF"       -- toutes les couleurs ASS sont en BGR (bleu, vert, rouge)
+               { id = "history", label = "History" }, { id = "settings", label = "Settings" },
+               { id = "system", label = "System" } }
+local KINDS = { youtube = "YouTube", ["twitch-vod"] = "Twitch replay", ["twitch-clip"] = "Twitch clip", link = "Link", jellyfin = "Jellyfin" }
+local CORNERS = { tl = "↖ top left", tr = "↗ top right", br = "↘ bottom right", bl = "↙ bottom left" }
+local CORNER_ORDER = { "tl", "tr", "br", "bl" }   -- same order as stream-box.lua
+local QR_MODES = { { "always", "Always" }, { "timed", "30 seconds" }, { "never", "Never" } }
+local VIOLET, LIVE_RED = "FF4691", "5E4FFF"       -- all ASS colors are BGR (blue, green, red)
 
 local osd = mp.create_osd_overlay("ass-events")
-osd.res_x, osd.res_y, osd.z = W, H, 60             -- au-dessus du chat, des sondages et des notifications
+osd.res_x, osd.res_y, osd.z = W, H, 60             -- above the chat, polls and notifications
 local is_open = false
 local state, display, account, qr = {}, nil, nil, nil
-local tab, area, index = 1, "rail", 1              -- onglet, zone qui a le focus (rail ou content), élément
-local shortcut = nil                                -- En direct : raccourci sélectionné au-dessus des streamers
-local pending_display = nil                         -- résolution choisie aux flèches, appliquée par OK
-local pending_player = nil                          -- lecteur choisi aux flèches, appliqué par OK (il redémarre)
+local tab, area, index = 1, "rail", 1              -- tab, focused area (rail or content), item
+local shortcut = nil                                -- Live: shortcut selected above the streamers
+local pending_display = nil                         -- resolution chosen with the arrows, applied by OK
+local pending_player = nil                          -- player chosen with the arrows, applied by OK (it restarts)
 local poweroff_until = 0
 local reboot_until = 0
-local power_only = false                            -- fenêtre « Box » seule, sans le menu derrière (power maintenu)
+local power_only = false                            -- "Box" window alone, without the menu behind (power held)
 local idle_timer, refresh_timer
-local images, shown = {}, {}                        -- cache des images préparées ; overlays posés (id → signature)
-local replays, rp_login = {}, nil                   -- rediffusions par streamer (/api/replays) ; streamer affiché
-local rp_row, rp_sel, rp_first = 1, {}, {}          -- rangée choisie (puces, rediffusions, clips), choix, défilement
-local history = nil                                 -- /api/history, relu à chaque ouverture du menu
-local modal = nil                                   -- fenêtre d'actions : { title, items = { { label, ok } }, sel }
+local images, shown = {}, {}                        -- cache of prepared images; placed overlays (id → signature)
+local replays, rp_login = {}, nil                   -- replays per streamer (/api/replays); streamer shown
+local rp_row, rp_sel, rp_first = 1, {}, {}          -- chosen row (chips, replays, clips), selection, scroll
+local history = nil                                 -- /api/history, reread each time the menu opens
+local modal = nil                                   -- action window: { title, items = { { label, ok } }, sel }
 local history_loading = false
-local follows, follows_loading, follows_qr = nil, false, nil   -- /api/follows ; QR code du lien d'activation
+local follows, follows_loading, follows_qr = nil, false, nil   -- /api/follows; QR code of the activation link
 local follows_timer = nil
--- YouTube et Jellyfin (/api/youtube, /api/jellyfin) : rangées de cartes, rangée et choix par onglet. Pas de recherche
--- ici (pas de clavier à l'écran avec mpv seul) : elle se fait depuis la télécommande web
-local audio_out = nil                              -- /api/audio : sorties son, choix, sortie actuelle
-local health, health_timer = nil, nil              -- /api/health, relu toutes les 5 s sur l'onglet Système
+-- YouTube and Jellyfin (/api/youtube, /api/jellyfin): rows of cards, row and selection per tab. No search here (no
+-- on-screen keyboard with mpv alone): it is done from the companion app
+local audio_out = nil                              -- /api/audio: audio outputs, choice, current output
+local health, health_timer = nil, nil              -- /api/health, reread every 5 s on the System tab
 local media = { youtube = { row = 1, sel = {}, first = {} }, jellyfin = { row = 1, sel = {}, first = {} } }
 local draw, close_menu
 
 
--- Outils
+-- Tools
 
 local function ass_escape(s)
     return (tostring(s or ""):gsub("\\", "\\\239\187\191"):gsub("{", "\\{"))
 end
 
-local function shorten(s, n)   -- coupe à n octets sans casser un caractère UTF-8
+local function shorten(s, n)   -- cuts at n bytes without breaking a UTF-8 character
     s = tostring(s or "")
     if #s <= n then return s end
     local cut = n
@@ -71,7 +98,7 @@ end
 
 local function viewers(v)
     v = tonumber(v) or 0
-    return v >= 1000 and (("%.1f k"):format(v / 1000):gsub("%.", ",")) or tostring(v)
+    return v >= 1000 and I18N.dec(("%.1f k"):format(v / 1000)) or tostring(v)
 end
 
 local function clock(t)
@@ -84,18 +111,18 @@ local function url_encode(s)
     return (s:gsub("[^%w%-_%.~]", function(c) return ("%%%02X"):format(c:byte()) end))
 end
 
--- Rectangle aux coins arrondis (rayon r), en coordonnées 1920x1080
+-- Rounded rectangle (radius r), in 1920x1080 coordinates
 local function rrect(x, y, w, h, r, color, alpha, extra)
     r = math.min(r, w / 2, h / 2)
-    local k = r * 0.4477   -- 1 - 0,5523 : point de contrôle des quarts de cercle
+    local k = r * 0.4477   -- 1 - 0.5523: control point of the quarter circles
     local p = ("m %d 0 l %d 0 b %d 0 %d %d %d %d l %d %d b %d %d %d %d %d %d l %d %d b %d %d 0 %d 0 %d l 0 %d b 0 %d %d 0 %d 0")
         :format(r, w - r, w - k, w, k, w, r, w, h - r, w, h - k, w - k, h, w - r, h, r, h, k, h, h - k, h - r, r, k, k, r)
     return ("{\\an7\\pos(%d,%d)\\bord0\\shad0%s\\1c&H%s&\\1a&H%s&\\p1}%s{\\p0}")
         :format(math.floor(x), math.floor(y), extra or "", color, alpha or "00", p)
 end
 
--- Tailles de texte ×1,2 : à taille égale, le texte ASS est plus petit que celui de l'appli Qt (qml/), le menu a
--- ainsi le même aspect avec mpv seul
+-- Text sizes ×1.2: at equal size, ASS text is smaller than the Qt app's (qml/), so the menu looks the same with
+-- mpv alone
 local FONT = 1.2
 
 local function label(x, y, size, color, s, align, extra)
@@ -104,15 +131,15 @@ local function label(x, y, size, color, s, align, extra)
 end
 
 
--- Élément sélectionné : halo violet flou, puis cadre blanc (dessinés sous l'élément, qui les recouvre au centre)
+-- Selected item: blurred violet halo, then white frame (drawn under the item, which covers them in the middle)
 local function focus_ring(x, y, w, h, r)
     return rrect(x - 10, y - 10, w + 20, h + 20, r + 8, VIOLET, "70", "\\blur14") .. "\n"
         .. rrect(x, y, w, h, r, "FFFFFF", "00")
 end
 
--- Texte trop long pour sa place : il défile après une pause, coupé à la largeur par \clip ; sinon affiché tel quel.
--- ASS ne sait pas mesurer un texte : largeur estimée à 0,52 em par caractère, et \clip dans tous les cas.
-local MARQUEE_SPEED, MARQUEE_PAUSE, MARQUEE_GAP = 70, 1.5, 90   -- pixels par seconde, secondes, pixels
+-- Text too long for its space: it scrolls after a pause, cut to the width by \clip; otherwise shown as is.
+-- ASS cannot measure text: width estimated at 0.52 em per character, and \clip in every case.
+local MARQUEE_SPEED, MARQUEE_PAUSE, MARQUEE_GAP = 70, 1.5, 90   -- pixels per second, seconds, pixels
 local marquee_start, marquee_active = 0, false
 
 local function text_width(s, size)
@@ -132,13 +159,13 @@ local function marquee(out, x, y, width, size, color, s, extra)
     marquee_active = true
     local t = (mp.get_time() - marquee_start) % ((tw + MARQUEE_GAP) / MARQUEE_SPEED + MARQUEE_PAUSE)
     local offset = math.max(0, t - MARQUEE_PAUSE) * MARQUEE_SPEED
-    for _, dx in ipairs({ 0, tw + MARQUEE_GAP }) do   -- deux copies : la seconde arrive quand la première part
+    for _, dx in ipairs({ 0, tw + MARQUEE_GAP }) do   -- two copies: the second arrives as the first leaves
         out[#out + 1] = label(x - offset + dx, y, size, color, ass_escape(s), 4, (extra or "") .. clip)
     end
 end
 
 
--- API de remote.py
+-- remote.py API
 
 local function api(method, path, body, callback)
     local args = { "curl", "-s", "-m", "10", API .. path }
@@ -154,10 +181,10 @@ local function api(method, path, body, callback)
         end)
 end
 
-local start_focus = false   -- menu tout juste ouvert, pas encore de touche : onglet recalé sur le média en cours
+local start_focus = false   -- menu just opened, no key yet: tab realigned on the current media
 
--- Onglet relatif au média en cours : direct → En direct, vidéo YouTube → YouTube, Jellyfin → Jellyfin, rediffusion ou
--- clip Twitch → Rediffusions, autre lien → Historique
+-- Tab matching the current media: live → Live, YouTube video → YouTube, Jellyfin → Jellyfin, Twitch replay or clip
+-- → Replays, other link → History
 local MEDIA_TABS = { youtube = "youtube", jellyfin = "jellyfin", ["twitch-vod"] = "replays", ["twitch-clip"] = "replays" }
 local function media_tab(d)
     if d.mode ~= "media" then return "live" end
@@ -177,14 +204,14 @@ local function refresh()
     end)
 end
 
--- Action, puis relevé de l'état (mpv applique les script-messages de façon asynchrone)
+-- Action, then state read (mpv applies script-messages asynchronously)
 local function act(name, body)
     api("POST", "/api/" .. name, body, function() mp.add_timeout(0.3, refresh) end)
 end
 
 
--- Images (photos, miniatures) : préparées par remote.py à la taille exacte en pixels de l'écran.
--- { src, x, y, w, h } en coordonnées 1920x1080, et round (disque) ou radius (coins arrondis)
+-- Images (photos, thumbnails): prepared by remote.py at the exact pixel size of the screen.
+-- { src, x, y, w, h } in 1920x1080 coordinates, and round (disc) or radius (rounded corners)
 
 local function place_images(list)
     local w = mp.get_osd_size()
@@ -201,7 +228,7 @@ local function place_images(list)
             images[key] = "loading"
             api("GET", ("/api/tvimage?src=%s&w=%d&h=%d&round=%s&radius=%d")
                 :format(url_encode(im.src), iw, ih, im.round and "1" or "0", radius), nil, function(d)
-                images[key] = d and d.path and d or false   -- false : échec, on garde l'initiale dessinée dessous
+                images[key] = d and d.path and d or false   -- false: failure, keep the initial drawn underneath
                 if is_open then draw() end
             end)
         elseif type(c) == "table" then
@@ -224,7 +251,7 @@ local function place_images(list)
 end
 
 
--- Rediffusions et historique : chargés à la première visite de l'onglet
+-- Replays and history: loaded on the first visit to the tab
 
 local function load_replays(login)
     if not login or replays[login] ~= nil then return end
@@ -242,7 +269,7 @@ local function load_history()
     end)
 end
 
--- Chaînes suivies : liste à plat, en live d'abord (triées par spectateurs côté remote.py)
+-- Followed channels: flat list, live first (sorted by viewers in remote.py)
 local function load_follows()
     if follows_loading then return end
     follows_loading = true
@@ -257,7 +284,7 @@ local function load_follows()
                     if is_open then draw() end
                 end)
             end
-            -- En attente du code tapé sur twitch.tv/activate : on relit l'état
+            -- Waiting for the code typed on twitch.tv/activate: reread the state
             if follows_timer then follows_timer:kill() end
             follows_timer = mp.add_timeout(3, function() if is_open then load_follows() end end)
         end
@@ -282,18 +309,18 @@ local function play(url, from_start)
     close_menu()
 end
 
--- Vidéo commencée et pas finie : reprise possible
+-- Video started and not finished: can be resumed
 local function resumable(position, duration, finished)
     return not finished and (tonumber(position) or 0) >= 30 and (not duration or position < duration)
 end
 
--- Rangées de l'onglet Rediffusions : streamers, puis rediffusions et clips s'il y en a
+-- Rows of the Replays tab: streamers, then replays and clips if any
 local function replay_rows()
     local rows = { { kind = "chips", items = state.streamers or {} } }
     local d = replays[rp_login]
     if type(d) == "table" then
-        if #d.vods > 0 then rows[#rows + 1] = { kind = "vods", title = "Rediffusions", items = d.vods } end
-        if #d.clips > 0 then rows[#rows + 1] = { kind = "clips", title = "Clips de la semaine", items = d.clips } end
+        if #d.vods > 0 then rows[#rows + 1] = { kind = "vods", title = tr("Replays"), items = d.vods } end
+        if #d.clips > 0 then rows[#rows + 1] = { kind = "clips", title = tr("This week's clips"), items = d.clips } end
     end
     return rows
 end
@@ -302,12 +329,12 @@ local function open_modal(title, items)
     modal = { title = title, items = items, sel = 1 }
 end
 
--- Lecture d'une vidéo : reprise proposée si elle est commencée, sinon lancée tout de suite
+-- Playing a video: resume offered if it was started, otherwise started right away
 local function choose_video(item, seconds)
     if resumable(item.position, seconds, item.finished) then
         open_modal(item.title, {
-            { label = "▶  Reprendre à " .. clock(item.position), ok = function() play(item.url) end },
-            { label = "↺  Depuis le début", ok = function() play(item.url, true) end },
+            { label = tr("▶  Resume at {time}", { time = clock(item.position) }), ok = function() play(item.url) end },
+            { label = tr("↺  From the beginning"), ok = function() play(item.url, true) end },
         })
     else
         play(item.url, true)
@@ -315,9 +342,9 @@ local function choose_video(item, seconds)
 end
 
 
--- Contenu des onglets. Chaque onglet donne ses éléments sélectionnables ; le dessin et les touches s'en servent.
+-- Tab contents. Each tab provides its selectable items; drawing and keys use them.
 
-local function pretty_mode(m)   -- « 2560x1440@60 » → « 2560 × 1440 · 60 Hz »
+local function pretty_mode(m)   -- "2560x1440@60" → "2560 × 1440 · 60 Hz"
     return (tostring(m):gsub("x", " × "):gsub("@", " · ")) .. " Hz"
 end
 
@@ -336,40 +363,48 @@ local function settings_rows()
     end
     local qr_i = 1
     for i, m in ipairs(QR_MODES) do if m[1] == s.qr then qr_i = i end end
+    local langs = {}
+    for code in pairs(s.languages or { en = "English" }) do langs[#langs + 1] = code end
+    table.sort(langs)
     return {
-        { header = "Chat" },
-        { label = "Chat sur la TV", toggle = s.chat_visible, ok = function() act("chat") end },
-        { label = "Coin du chat", value = CORNERS[s.corner] or "", step = function(d)
+        { header = tr("Language") },
+        -- names in their own language; the TV and the companion app switch right away (streambox-language)
+        { label = tr("Interface language"), value = (s.languages or {})[s.lang] or "English", step = function(d)
+            act("language", { lang = langs[(find(langs, s.lang) - 1 + d) % #langs + 1] })
+        end },
+        { header = tr("Chat") },
+        { label = tr("Chat on the TV"), toggle = s.chat_visible, ok = function() act("chat") end },
+        { label = tr("Chat corner"), value = CORNERS[s.corner] and tr(CORNERS[s.corner]) or "", step = function(d)
             local i = find(CORNER_ORDER, s.corner)
-            -- l'API ne sait qu'avancer d'un coin : trois pas en avant valent un pas en arrière
+            -- the API can only move one corner forward: three steps forward make one step back
             for _ = 1, (d > 0 and 1 or 3) do act("corner") end
             s.corner = CORNER_ORDER[(i - 1 + d) % 4 + 1]
         end },
-        { label = "Fond du chat", value = ("%d %%"):format(s.chat_bg or 0), step = function(d)
+        { label = tr("Chat background"), value = ("%d %%"):format(s.chat_bg or 0), step = function(d)
             s.chat_bg = math.max(0, math.min(100, (s.chat_bg or 0) + 10 * d))
             act("set", { key = "chat_bg", value = s.chat_bg })
         end },
-        { label = "Taille du texte", value = ("%d px"):format(s.chat_size or 0), step = function(d)
+        { label = tr("Text size"), value = ("%d px"):format(s.chat_size or 0), step = function(d)
             s.chat_size = math.max(20, math.min(60, (s.chat_size or 0) + 2 * d))
             act("set", { key = "chat_size", value = s.chat_size })
         end },
-        { header = "Sous-titres" },
-        { label = "Taille des sous-titres", value = ("%d %%"):format(s.sub_size or 100), step = function(d)
+        { header = tr("Subtitles") },
+        { label = tr("Subtitle size"), value = ("%d %%"):format(s.sub_size or 100), step = function(d)
             s.sub_size = math.max(50, math.min(200, (s.sub_size or 100) + 10 * d))
             act("set", { key = "sub_size", value = s.sub_size })
         end },
-        { label = "Fond des sous-titres", value = (s.sub_bg or 0) > 0 and ("%d %%"):format(s.sub_bg) or "Aucun",
+        { label = tr("Subtitle background"), value = (s.sub_bg or 0) > 0 and ("%d %%"):format(s.sub_bg) or tr("None"),
           step = function(d)
             s.sub_bg = math.max(0, math.min(100, (s.sub_bg or 0) + 10 * d))
             act("set", { key = "sub_bg", value = s.sub_bg })
         end },
-        { header = "Son" },
-        { label = "Sortie son",
-          value = not audio_out and "…" or audio_out.choice == "auto" and "Automatique" or (function()
+        { header = tr("Sound") },
+        { label = tr("Audio output"),
+          value = not audio_out and "…" or audio_out.choice == "auto" and tr("Automatic") or (function()
               for _, o in ipairs(audio_out.outputs) do if o.id == audio_out.choice then return o.label end end
-              return "absente"
+              return tr("missing")
           end)(),
-          hint = audio_out and audio_out.choice == "auto" and "USB ou Bluetooth branché, sinon la TV" or nil,
+          hint = audio_out and audio_out.choice == "auto" and tr("USB or Bluetooth if plugged in, otherwise the TV") or nil,
           step = function(d)
               if not audio_out then return end
               local ids = { "auto" }
@@ -381,27 +416,27 @@ local function settings_rows()
                   api("GET", "/api/audio", nil, function(a) if a and a.outputs then audio_out = a end if is_open then draw() end end)
               end)
           end },
-        { header = "Lecture" },
-        { label = "Bascule automatique", hint = "Passer sur un streamer en live si le sien est hors ligne",
+        { header = tr("Playback") },
+        { label = tr("Auto switch"), hint = tr("Switch to a live streamer if yours is offline"),
           toggle = s.auto_switch, ok = function()
             s.auto_switch = not s.auto_switch
             act("auto_switch", { enabled = s.auto_switch })
         end },
-        { label = "Sondages et prédictions", hint = "En haut de la TV pendant un direct", toggle = s.events, ok = function()
+        { label = tr("Polls and predictions"), hint = tr("At the top of the TV during a live stream"), toggle = s.events, ok = function()
             s.events = not s.events
             act("flag", { key = "events", enabled = s.events })
         end },
-        { label = "Mode nuit", hint = "Sons forts atténués, voix remontées", toggle = s.night, ok = function()
+        { label = tr("Night mode"), hint = tr("Loud sounds softened, voices boosted"), toggle = s.night, ok = function()
             s.night = not s.night
             act("flag", { key = "night", enabled = s.night })
         end },
-        { label = "Volume", value = s.mute and "muet" or ("%d %%"):format(s.volume or 0), step = function(d)
+        { label = tr("Volume"), value = s.mute and tr("muted") or ("%d %%"):format(s.volume or 0), step = function(d)
             s.volume = math.max(0, math.min(130, (s.volume or 0) + 5 * d))
             act("volume", { delta = 5 * d })
         end },
-        { header = "Affichage" },
-        { label = "Résolution de la TV", value = display and pretty(current_display) or "…",
-          hint = pending_display and pending_display ~= display.setting and "OK pour appliquer" or nil,
+        { header = tr("Display") },
+        { label = tr("TV resolution"), value = display and pretty(current_display) or "…",
+          hint = pending_display and pending_display ~= display.setting and tr("OK to apply") or nil,
           step = display and function(d)
               local i = find(modes, current_display)
               pending_display = modes[math.max(1, math.min(#modes, i + d))]
@@ -415,7 +450,7 @@ local function settings_rows()
                   end) end)
               end
           end },
-        { label = "QR code de la télécommande", value = QR_MODES[qr_i][2], step = function(d)
+        { label = tr("Companion app QR code"), value = tr(QR_MODES[qr_i][2]), step = function(d)
             local i = math.max(1, math.min(#QR_MODES, qr_i + d))
             s.qr = QR_MODES[i][1]
             act("qr", { mode = s.qr })
@@ -423,16 +458,16 @@ local function settings_rows()
     }
 end
 
--- « 2026-10-23 11:48:14 » ou « Mon 2026-10-26 05:07:37 CET » → « 23 oct. à 11:48 »
+-- "2026-10-23 11:48:14" or "Mon 2026-10-26 05:07:37 CET" → "Oct 23 at 11:48"
 local function fr_date(text)
     local y, m, d, hh, mm = tostring(text or ""):match("(%d+)-(%d+)-(%d+) (%d+):(%d+)")
     if not y then return tostring(text or "") end
-    local months = { "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc." }
-    return ("%d %s à %s:%s"):format(tonumber(d), months[tonumber(m)], hh, mm)
+    local months = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" }
+    return tr("{month} {day} at {time}", { month = tr(months[tonumber(m)]), day = tonumber(d), time = hh .. ":" .. mm })
 end
 
--- Fenêtre « Sauvegarde et restauration » : par clé USB branchée, « Sauvegarder » puis ses dernières sauvegardes
--- (OK : restaurer, après confirmation) ; relue toutes les 2 s tant qu'elle est ouverte (clé branchée, sauvegarde finie)
+-- "Backup and restore" window: for each plugged-in USB drive, "Save" then its latest backups (OK: restore, after
+-- confirmation); reread every 2 s while it is open (drive plugged in, backup finished)
 local backup_timer = nil
 local function backup_menu(again)
     api("GET", "/api/backup", nil, function(d)
@@ -440,24 +475,25 @@ local function backup_menu(again)
         local items = {}
         if not d.busy then
             for _, u in ipairs(d.usb or {}) do
-                items[#items + 1] = { label = "↓  Sauvegarder sur " .. u.name, ok = function()
+                items[#items + 1] = { label = tr("↓  Save to {name}", { name = u.name }), ok = function()
                     api("POST", "/api/backup", { action = "save_usb", path = u.path }, function() backup_menu() end)
                 end }
                 for _, b in ipairs(u.backups or {}) do
-                    items[#items + 1] = { label = "↺  Restaurer celle du " .. fr_date(b.date), ok = function()
-                        open_modal("Remplacer les réglages par ceux du " .. fr_date(b.date) .. " ? La box redémarre ensuite", {
-                            { label = "↺  Restaurer et redémarrer", danger = true, ok = function()
+                    items[#items + 1] = { label = tr("↺  Restore the backup from {date}", { date = fr_date(b.date) }), ok = function()
+                        open_modal(tr("Replace the settings with those from {date}? The box restarts afterwards",
+                                      { date = fr_date(b.date) }), {
+                            { label = tr("↺  Restore and restart"), danger = true, ok = function()
                                 api("POST", "/api/backup", { action = "restore_usb", path = u.path, name = b.name },
                                     function() backup_menu() end)
                             end },
-                            { label = "Annuler", ok = function() backup_menu() end } })
+                            { label = tr("Cancel"), ok = function() backup_menu() end } })
                     end }
                 end
             end
         end
-        if d.busy ~= "reboot" then items[#items + 1] = { label = "Fermer", ok = function() end } end
-        local title = d.message or (#(d.usb or {}) > 0 and "Sauvegarde et restauration"
-                                    or "Branche une clé USB pour sauvegarder")
+        if d.busy ~= "reboot" then items[#items + 1] = { label = tr("Close"), ok = function() end } end
+        local title = d.message or (#(d.usb or {}) > 0 and tr("Backup and restore")
+                                    or tr("Plug in a USB drive to back up"))
         local sel = modal and modal.kind == "backup" and modal.sel or 1
         modal = { title = title, items = items, sel = math.min(sel, #items), kind = "backup" }
         draw()
@@ -475,12 +511,12 @@ local function system_rows()
     local login = account and account.login
     local u = health and health.update
     return {
-        { label = "Compte Twitch", value = login and ("Connecté : " .. login) or "Non connecté",
-          hint = login and "Pas de pub sur les chaînes où tu es abonné" or "Se connecte depuis la télécommande du téléphone" },
-        -- Pour revenir à l'appli Qt (menu animé) depuis mpv seul, choisi ici ou retour automatique après des plantages
-        { label = "Lecteur", value = (pending_player or s.player) == "qt" and "Appli Qt (menu animé)" or "mpv seul",
-          hint = pending_player and pending_player ~= s.player and "OK pour appliquer : le lecteur redémarre"
-              or (s.player == "qt" and s.player_running == "mpv" and "L'appli Qt s'est arrêtée : OK pour réessayer")
+        { label = tr("Twitch account"), value = login and tr("Connected: {login}", { login = login }) or tr("Not connected"),
+          hint = login and tr("No ads on channels you're subscribed to") or tr("Sign in from the companion app") },
+        -- To go back to the Qt app (animated menu) from mpv alone, chosen here or automatic return after crashes
+        { label = tr("Player"), value = (pending_player or s.player) == "qt" and tr("Qt app (animated menu)") or tr("mpv only"),
+          hint = pending_player and pending_player ~= s.player and tr("OK to apply: the player restarts")
+              or (s.player == "qt" and s.player_running == "mpv" and tr("The Qt app stopped: OK to retry"))
               or nil,
           step = function() pending_player = (pending_player or s.player) == "qt" and "mpv" or "qt" end,
           ok = function()
@@ -490,32 +526,33 @@ local function system_rows()
               pending_player = nil
               close_menu()
           end },
-        { label = "Sauvegarde et restauration", hint = "Sur une clé USB, ou en fichier depuis la page du téléphone",
+        { label = tr("Backup and restore"), hint = tr("On a USB drive, or as a file from the companion app"),
           ok = function() backup_menu() end },
-        { label = "Mettre à jour maintenant",
-          hint = u and (u.running and "Mise à jour en cours…"
-              or ((u.last and ((u.last.ok and "Dernière : " or "Échec : ") .. fr_date(u.last.date)) or "Jamais")
-                  .. (u.next and ("  ·  prochaine : " .. fr_date(u.next)) or ""))) or nil,
+        { label = tr("Update now"),
+          hint = u and (u.running and tr("Update in progress…")
+              or ((u.last and tr(u.last.ok and "Last: {date}" or "Failed: {date}", { date = fr_date(u.last.date) })
+                   or tr("Never"))
+                  .. (u.next and tr("  ·  next: {date}", { date = fr_date(u.next) }) or ""))) or nil,
           ok = function() if not (u and u.running) then act("update") end end },
-        { label = "Bouton d'arrêt", hint = "Télécommande, téléphone et Home Assistant",
-          value = s.power_action == "suspend" and "Mise en veille" or "Arrêt complet",
+        { label = tr("Power button"), hint = tr("Remote, phone and Home Assistant"),
+          value = s.power_action == "suspend" and tr("Sleep") or tr("Full shutdown"),
           step = function()
               s.power_action = s.power_action == "suspend" and "poweroff" or "suspend"
               act("power_action", { mode = s.power_action })
           end },
-        { label = "Mettre en veille", hint = "Réveil par la télécommande, Home Assistant ou le bouton power",
+        { label = tr("Put to sleep"), hint = tr("Wake up with the remote, Home Assistant or the power button"),
           ok = function()
               act("poweroff", { mode = "suspend" })
               close_menu()
           end },
-        { label = "Configurer les touches", hint = "Apprendre les touches d'une télécommande, une par une",
+        { label = tr("Set up keys"), hint = tr("Learn the keys of a remote, one by one"),
           ok = function()
               act("keymap", { action = "wizard" })
               close_menu()
           end },
-        { label = "Touches par défaut", ok = function() act("keymap", { action = "reset" }) end },
-        { label = "Redémarrer la box",
-          hint = mp.get_time() < reboot_until and "Appuie encore sur OK pour redémarrer" or nil,
+        { label = tr("Default keys"), ok = function() act("keymap", { action = "reset" }) end },
+        { label = tr("Restart the box"),
+          hint = mp.get_time() < reboot_until and tr("Press OK again to restart") or nil,
           ok = function()
               if mp.get_time() < reboot_until then
                   act("reboot")
@@ -525,8 +562,8 @@ local function system_rows()
                   mp.add_timeout(4.1, function() if is_open then draw() end end)
               end
           end },
-        { label = "Éteindre la box",
-          hint = mp.get_time() < poweroff_until and "Appuie encore sur OK pour éteindre" or nil,
+        { label = tr("Turn off the box"),
+          hint = mp.get_time() < poweroff_until and tr("Press OK again to turn off") or nil,
           danger = true, ok = function()
               if mp.get_time() < poweroff_until then
                   act("poweroff", { mode = "full" })
@@ -539,7 +576,7 @@ local function system_rows()
     }
 end
 
--- Lignes sélectionnables d'une liste (les titres de section ne le sont pas)
+-- Selectable lines of a list (section titles are not)
 local function selectable(rows)
     local out = {}
     for i, r in ipairs(rows) do if not r.header then out[#out + 1] = i end end
@@ -548,14 +585,14 @@ end
 
 local LIVE_COLS = 4
 
--- Raccourcis en haut de l'onglet En direct : écran d'accueil, et retour au stream quand on n'y est pas
+-- Shortcuts at the top of the Live tab: home screen, and back to the stream when not on it
 local function shortcuts()
-    local list = { { label = "⌂  Écran d'accueil", current = state.mode == "home", ok = function()
+    local list = { { label = tr("⌂  Home screen"), current = state.mode == "home", ok = function()
         act("home")
         close_menu()
     end } }
     if state.mode ~= "twitch" and state.channel then
-        list[#list + 1] = { label = "▶  Reprendre " .. state.channel, ok = function()
+        list[#list + 1] = { label = tr("▶  Resume {channel}", { channel = state.channel }), ok = function()
             act("twitch")
             close_menu()
         end }
@@ -564,37 +601,37 @@ local function shortcuts()
 end
 
 
--- Dessin
+-- Drawing
 
 local function draw_rail(out)
     out[#out + 1] = rrect(0, 0, 400, H, 0, "10070B", "30")
-    out[#out + 1] = rrect(56, 62, 52, 52, 14, "F7F2F4", "00")   -- logo neutre : tuile blanche, triangle anthracite
-    out[#out + 1] = "{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H1C1517&\\p1}m 76 77 l 93 88 76 99{\\p0}"   -- ▶ dessiné
+    out[#out + 1] = rrect(56, 62, 52, 52, 14, "F7F2F4", "00")   -- neutral logo: white tile, charcoal triangle
+    out[#out + 1] = "{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H1C1517&\\p1}m 76 77 l 93 88 76 99{\\p0}"   -- drawn ▶
     out[#out + 1] = label(126, 88, 36, "FFFFFF", "Stream Box", 4, "\\b1")
     for i, t in ipairs(TABS) do
-        local y = 206 + (i - 1) * 76   -- 9 onglets entre le logo et « En cours sur la TV »
+        local y = 206 + (i - 1) * 76   -- 9 tabs between the logo and "Now on the TV"
         if i == tab and area == "rail" then
             out[#out + 1] = rrect(40, y, 320, 64, 32, "FFFFFF", "00")
-            out[#out + 1] = label(78, y + 32, 30, "20101A", ass_escape(t.label), 4, "\\b1")
+            out[#out + 1] = label(78, y + 32, 30, "20101A", ass_escape(tr(t.label)), 4, "\\b1")
         else
             if i == tab then
                 out[#out + 1] = rrect(40, y, 320, 64, 32, "FFFFFF", "E6")
-                out[#out + 1] = rrect(60, y + 26, 12, 12, 6, VIOLET, "00")   -- onglet en cours : point dans la pastille
+                out[#out + 1] = rrect(60, y + 26, 12, 12, 6, VIOLET, "00")   -- current tab: dot in the pill
             end
-            out[#out + 1] = label(i == tab and 88 or 78, y + 32, 30, i == tab and "FFFFFF" or "C2AFB4", ass_escape(t.label), 4,
+            out[#out + 1] = label(i == tab and 88 or 78, y + 32, 30, i == tab and "FFFFFF" or "C2AFB4", ass_escape(tr(t.label)), 4,
                                   i == tab and "\\b1" or "")
         end
     end
     local live = state.live or {}
     local now = state.mode == "twitch" and state.channel
-        and (state.channel .. "  ·  " .. (live[state.channel] and live[state.channel].title or "hors ligne"))
-        or state.mode == "media" and (state.title or "Vidéo") or nil
+        and (state.channel .. "  ·  " .. (live[state.channel] and live[state.channel].title or tr("offline")))
+        or state.mode == "media" and (state.title or tr("Video")) or nil
     if now then
-        out[#out + 1] = label(56, H - 172, 21, "C09FA9", "EN COURS SUR LA TV", 4, "\\b1\\fsp2")
+        out[#out + 1] = label(56, H - 172, 21, "C09FA9", tr("NOW ON THE TV"), 4, "\\b1\\fsp2")
         marquee(out, 56, H - 130, 310, 28, "FFFFFF", now)
     end
     out[#out + 1] = label(56, H - 60, 24, "A0858A",
-        "▲▼◀▶ se déplacer   ·   OK valider   ·   Retour revenir   ·   Menu fermer", 4)
+        tr("▲▼◀▶ move   ·   OK select   ·   Back go back   ·   Menu close"), 4)
 end
 
 local function draw_header(out, title, subtitle)
@@ -607,16 +644,16 @@ local function draw_header(out, title, subtitle)
     end
 end
 
--- Carte de streamer (En direct, Suivis) : photo (anneau rouge en live), nom, spectateurs, jeu
+-- Streamer card (Live, Following): photo (red ring when live), name, viewers, game
 local SCARD_W, SCARD_H, SCARD_GAP = 330, 150, 26
 
 local function streamer_card(out, imgs, x, y, name, avatar, info, focused, current)
     local cw, ch = SCARD_W, SCARD_H
     if focused then out[#out + 1] = focus_ring(x - 6, y - 6, cw + 12, ch + 12, 26) end
-    -- Streamer en cours : carte teintée de violet (un badge chevaucherait le nom)
+    -- Current streamer: violet-tinted card (a badge would overlap the name)
     out[#out + 1] = rrect(x, y, cw, ch, 22, current and "8A3C6B" or (focused and "4E2C3A" or "34202A"),
                           (focused or current) and "00" or "30")
-    -- Photo : disque de couleur avec l'initiale, recouvert par l'image quand elle est prête
+    -- Photo: colored disc with the initial, covered by the image when it is ready
     local ax, ay, as = x + 22, y + 30, 90
     if info then out[#out + 1] = rrect(ax - 5, ay - 5, as + 10, as + 10, (as + 10) / 2, LIVE_RED, "00") end
     out[#out + 1] = rrect(ax, ay, as, as, as / 2, "5C3D4A", "00")
@@ -636,7 +673,7 @@ local function streamer_card(out, imgs, x, y, name, avatar, info, focused, curre
             out[#out + 1] = label(tx, y + 116, 25, "C2AFB4", ass_escape(shorten(info.game or info.title or "", 12)), 4)
         end
     else
-        out[#out + 1] = label(tx, y + 82, 27, "A0858A", "Hors ligne", 4)
+        out[#out + 1] = label(tx, y + 82, 27, "A0858A", tr("Offline"), 4)
     end
 end
 
@@ -644,10 +681,10 @@ local function draw_live(out, imgs)
     local list, live = state.streamers or {}, state.live or {}
     local n_live = 0
     for _, name in ipairs(list) do if live[name] then n_live = n_live + 1 end end
-    draw_header(out, "En direct", n_live == 0 and "Aucun streamer de la liste n'est en live"
-        or n_live == 1 and "1 streamer en live" or (n_live .. " streamers en live"))
+    draw_header(out, tr("Live"), n_live == 0 and tr("No streamer from the list is live")
+        or n_live == 1 and tr("1 streamer live") or tr("{n} streamers live", { n = n_live }))
     if #list == 0 then
-        out[#out + 1] = label(460, 280, 34, "C2AFB4", "La liste est vide : ajoute des streamers depuis la télécommande web.")
+        out[#out + 1] = label(460, 280, 34, "C2AFB4", tr("The list is empty: add streamers from the companion app."))
         return
     end
     local cw, ch, gap, x0, y0 = SCARD_W, SCARD_H, SCARD_GAP, 460, 310
@@ -672,7 +709,7 @@ local function draw_live(out, imgs)
                           state.mode == "twitch" and state.channel == name)
         end
     end
-    -- Titre du live sélectionné, en entier, sous la grille
+    -- Title of the selected live stream, in full, under the grid
     local name = area == "content" and not shortcut and list[index]
     local info = name and live[name]
     if info and info.title then
@@ -680,14 +717,14 @@ local function draw_live(out, imgs)
     end
 end
 
--- Carte vidéo : miniature (image posée par-dessus un fond), barre de progression dessous, titre, ligne d'infos
+-- Video card: thumbnail (image laid over a background), progress bar below, title, info line
 local CARD_W, CARD_IMG_H, CARD_H, CARD_GAP = 330, 186, 302, 26
 
 local function video_card(out, imgs, x, y, item, focused, meta, progress)
     if focused then out[#out + 1] = focus_ring(x - 6, y - 6, CARD_W + 12, CARD_IMG_H + 12, 22) end
     out[#out + 1] = rrect(x, y, CARD_W, CARD_IMG_H, 16, "34202A", "00")
     out[#out + 1] = "{\\an5\\pos(" .. math.floor(x + CARD_W / 2) .. "," .. math.floor(y + CARD_IMG_H / 2)
-        .. ")\\fs60\\bord0\\shad0\\1c&H68505A&\\p1}m -14 -20 l 22 0 -14 20{\\p0}"   -- ▶ en attendant l'image
+        .. ")\\fs60\\bord0\\shad0\\1c&H68505A&\\p1}m -14 -20 l 22 0 -14 20{\\p0}"   -- ▶ while waiting for the image
     if item.thumb then
         imgs[#imgs + 1] = { src = item.thumb, x = x, y = y, w = CARD_W, h = CARD_IMG_H, radius = 16 }
     end
@@ -703,7 +740,7 @@ local function video_card(out, imgs, x, y, item, focused, meta, progress)
     if meta then out[#out + 1] = label(x, y + CARD_IMG_H + 88, 27, "C09FA9", ass_escape(shorten(meta, 26)), 4) end
 end
 
--- Premier élément visible d'une rangée qui défile, pour garder sel à l'écran
+-- First visible item of a scrolling row, to keep sel on screen
 local function scroll(first, sel, visible)
     first = first or 1
     if sel < first then first = sel end
@@ -713,24 +750,24 @@ end
 
 local function date_fr(iso)
     local _, m, d = tostring(iso or ""):match("(%d+)-(%d+)-(%d+)")
-    local months = { "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc." }
-    return d and ("%d %s"):format(tonumber(d), months[tonumber(m)]) or ""
+    local months = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" }
+    return d and tr("{month} {day}", { month = tr(months[tonumber(m)]), day = tonumber(d) }) or ""
 end
 
 local function draw_replays(out, imgs)
     local rows = replay_rows()
     rp_row = math.min(rp_row, #rows)
     local d = replays[rp_login]
-    draw_header(out, "Rediffusions", d == "loading" and ((rp_login or "") .. " · chargement…")
-        or d == false and "Twitch injoignable pour l'instant"
-        or (type(d) == "table" and #rows == 1) and ((rp_login or "") .. " : rien cette semaine")
-        or ((rp_login or "") .. " · rediffusions et clips de la semaine"))
-    -- Puces des streamers
+    draw_header(out, tr("Replays"), d == "loading" and tr("{login} · loading…", { login = rp_login or "" })
+        or d == false and tr("Twitch unreachable for now")
+        or (type(d) == "table" and #rows == 1) and tr("{login}: nothing this week", { login = rp_login or "" })
+        or tr("{login} · this week's replays and clips", { login = rp_login or "" }))
+    -- Streamer chips
     local chips = rows[1].items
     local csel = rp_sel.chips or 1
     local x, focused_row = 460, area == "content" and rp_row or nil
     local function chip_w(name) return 96 + #name * 17 end
-    -- Défilement à la largeur : la puce choisie et celle du streamer affiché doivent tenir dans la ligne
+    -- Scroll to fit the width: the chosen chip and the shown streamer's chip must fit in the line
     local keep = focused_row == 1 and csel or 1
     for i, name in ipairs(chips) do if focused_row ~= 1 and name == rp_login then keep = i end end
     local first = math.min(rp_first.chips or 1, keep)
@@ -757,7 +794,7 @@ local function draw_replays(out, imgs)
         out[#out + 1] = label(x + 70, 222, 28, "FFFFFF", ass_escape(name), 4, current and "\\b1" or "")
         x = x + cw + 16
     end
-    -- Rediffusions et clips
+    -- Replays and clips
     local y = 300
     for r = 2, #rows do
         local row = rows[r]
@@ -768,8 +805,8 @@ local function draw_replays(out, imgs)
             local item = row.items[i]
             local cx = 460 + (i - rp_first[row.kind]) * (CARD_W + CARD_GAP)
             local meta = row.kind == "vods" and (date_fr(item.date) .. " · " .. clock(item.seconds))
-                or (clock(item.seconds) .. " · " .. viewers(item.views) .. " vues")
-            if item.finished then meta = meta .. " · vu" end
+                or (clock(item.seconds) .. " · " .. tr("{n} views", { n = viewers(item.views) }))
+            if item.finished then meta = meta .. " · " .. tr("watched") end
             video_card(out, imgs, cx, y + 26, item, focused_row == r and i == sel, meta,
                        item.finished and 1 or (item.position and item.seconds and item.position / item.seconds) or 0)
         end
@@ -780,7 +817,7 @@ local function draw_replays(out, imgs)
     end
 end
 
--- YouTube et Jellyfin
+-- YouTube and Jellyfin
 
 local function load_media(id)
     local m = media[id]
@@ -796,19 +833,19 @@ local function media_rows(id)
     local m, rows = media[id], {}
     local d = m.data or {}
     if id == "youtube" then
-        -- Abonnements du compte (le compte se connecte depuis le menu animé ou la page)
+        -- Account subscriptions (the account signs in from the animated menu or the page)
         if type(d.subs) == "table" and d.subs.authorized and type(d.subs.videos) == "table" then
-            rows[#rows + 1] = { key = "subs", title = "Abonnements", items = d.subs.videos }
+            rows[#rows + 1] = { key = "subs", title = tr("Subscriptions"), items = d.subs.videos }
         end
         for _, c in ipairs(d.channels or {}) do
             rows[#rows + 1] = { key = c.id, title = c.name, items = c.videos or {} }
         end
     elseif d.configured then
-        if m.series then rows[#rows + 1] = { key = "series", title = m.series.name .. " · épisodes", items = m.series.episodes or {} } end
-        if #(d.resume or {}) > 0 then rows[#rows + 1] = { key = "resume", title = "Reprendre", items = d.resume } end
-        if #(d.nextup or {}) > 0 then rows[#rows + 1] = { key = "nextup", title = "Prochains épisodes", items = d.nextup } end
+        if m.series then rows[#rows + 1] = { key = "series", title = tr("{name} · episodes", { name = m.series.name }), items = m.series.episodes or {} } end
+        if #(d.resume or {}) > 0 then rows[#rows + 1] = { key = "resume", title = tr("Resume"), items = d.resume } end
+        if #(d.nextup or {}) > 0 then rows[#rows + 1] = { key = "nextup", title = tr("Next episodes"), items = d.nextup } end
         for _, l in ipairs(d.libraries or {}) do
-            rows[#rows + 1] = { key = "lib:" .. l.id, title = l.name .. " · ajouts récents", items = l.items or {} }
+            rows[#rows + 1] = { key = "lib:" .. l.id, title = tr("{name} · recently added", { name = l.name }), items = l.items or {} }
         end
     end
     return rows
@@ -818,8 +855,8 @@ local function days_ago(iso)
     local y, mo, d = tostring(iso or ""):match("(%d+)-(%d+)-(%d+)")
     if not d then return "" end
     local n = math.floor((os.time() - os.time({ year = y, month = mo, day = d, hour = 12 })) / 86400)
-    return n <= 0 and "aujourd'hui" or n == 1 and "hier" or n < 7 and ("il y a %d j"):format(n)
-        or n < 31 and ("il y a %d sem."):format(math.floor(n / 7)) or date_fr(iso)
+    return n <= 0 and tr("today") or n == 1 and tr("yesterday") or n < 7 and tr("{n} d ago", { n = n })
+        or n < 31 and tr("{n} wk ago", { n = math.floor(n / 7) }) or date_fr(iso)
 end
 
 local function hm(t)
@@ -832,11 +869,11 @@ local function media_meta(id, it)
     local parts = {}
     local function add(v) if v and v ~= "" then parts[#parts + 1] = tostring(v) end end
     if id == "youtube" then
-        add(it.channel_id and it.channel)   -- rangée « Abonnements » : nom de la chaîne
+        add(it.channel_id and it.channel)   -- "Subscriptions" row: channel name
         add(days_ago(it.date))
-        if it.views then add(viewers(it.views) .. " vues") end
+        if it.views then add(tr("{n} views", { n = viewers(it.views) })) end
     elseif it.type == "Series" then
-        add((it.unplayed or 0) > 0 and (it.unplayed .. " à voir") or "Série")
+        add((it.unplayed or 0) > 0 and tr("{n} to watch", { n = it.unplayed }) or tr("Series"))
         add(it.year)
     elseif it.episode then
         add(it.episode)
@@ -845,25 +882,26 @@ local function media_meta(id, it)
         if it.seconds then add(hm(it.seconds)) end
     end
     local meta = table.concat(parts, " · ")
-    return it.finished and (meta .. " · vu") or meta
+    return it.finished and (meta .. " · " .. tr("watched")) or meta
 end
 
 local function draw_media(out, imgs, id)
     local m, rows = media[id], media_rows(id)
     local d = m.data
     local subtitle
-    if not d then subtitle = "Chargement…"
-    elseif d.error then subtitle = (id == "youtube" and "YouTube" or "Jellyfin") .. " injoignable pour l'instant"
+    if not d then subtitle = tr("Loading…")
+    elseif d.error then subtitle = tr("{service} unreachable for now", { service = id == "youtube" and "YouTube" or "Jellyfin" })
     elseif id == "youtube" then
-        subtitle = #rows > 0 and (#rows .. (#rows == 1 and " chaîne" or " chaînes") .. " · recherche depuis la télécommande web")
-            or "Ajoute des favoris depuis la télécommande web (Réglages → Favoris YouTube)"
+        subtitle = #rows > 0 and (#rows == 1 and tr("1 channel · search from the companion app")
+                                  or tr("{n} channels · search from the companion app", { n = #rows }))
+            or tr("Add favorites from the companion app (Settings → YouTube favorites)")
     else
-        subtitle = d.configured and ((d.server or "Jellyfin") .. " · recherche depuis la télécommande web")
-            or "Jellyfin n'est pas associé à la box (« Lire sur… » depuis l'appli Jellyfin)"
+        subtitle = d.configured and tr("{server} · search from the companion app", { server = d.server or "Jellyfin" })
+            or tr("Jellyfin isn't paired with the box (\"Play on…\" from the Jellyfin app)")
     end
     draw_header(out, id == "youtube" and "YouTube" or "Jellyfin", subtitle)
     m.row = math.max(1, math.min(m.row, #rows))
-    local first_row = math.max(1, m.row - 1)   -- deux rangées à l'écran
+    local first_row = math.max(1, m.row - 1)   -- two rows on screen
     local y = 230
     for r = first_row, math.min(#rows, first_row + 1) do
         local row = rows[r]
@@ -879,7 +917,7 @@ local function draw_media(out, imgs, id)
                        focused_row and i == sel, media_meta(id, it),
                        it.finished and 1 or (it.position and it.seconds and it.seconds > 0 and it.position / it.seconds) or 0)
         end
-        if #row.items == 0 then out[#out + 1] = label(462, y + 90, 28, "A0858A", "Rien ici", 4) end
+        if #row.items == 0 then out[#out + 1] = label(462, y + 90, 28, "A0858A", tr("Nothing here"), 4) end
         if #row.items > f + 3 then out[#out + 1] = label(W - 40, y + 26 + CARD_IMG_H / 2, 40, "C09FA9", "›", 6) end
         y = y + CARD_H + 34
     end
@@ -907,53 +945,59 @@ local function jellyfin_choose(it)
     if it.type == "Series" or it.type == "Season" then return jellyfin_series(it) end
     local items = {}
     if resumable(it.position, it.seconds, it.finished) then
-        items[#items + 1] = { label = "▶  Reprendre à " .. clock(it.position), ok = function() jellyfin_play(it) end }
-        items[#items + 1] = { label = "↺  Depuis le début", ok = function() jellyfin_play(it, true) end }
+        items[#items + 1] = { label = tr("▶  Resume at {time}", { time = clock(it.position) }), ok = function() jellyfin_play(it) end }
+        items[#items + 1] = { label = tr("↺  From the beginning"), ok = function() jellyfin_play(it, true) end }
     else
-        items[#items + 1] = { label = it.finished and "↺  Revoir" or "▶  Lire", ok = function() jellyfin_play(it, true) end }
+        items[#items + 1] = { label = it.finished and tr("↺  Watch again") or tr("▶  Play"), ok = function() jellyfin_play(it, true) end }
     end
     if it.type == "Episode" and it.series then
-        items[#items + 1] = { label = "☰  Tous les épisodes", ok = function() jellyfin_series(it) end }
+        items[#items + 1] = { label = tr("☰  All episodes"), ok = function() jellyfin_series(it) end }
     end
     open_modal(it.episode and (it.title .. " · " .. it.episode) or it.title, items)
 end
 
--- État de la box (onglet Système) : tuiles sous les lignes, comme l'appli Qt
+-- Box status (System tab): tiles under the lines, like the Qt app
 local function health_tiles()
     local h = health
     if not h then return {} end
     local function bytes(n) n = tonumber(n) or 0
-        return n >= 1e9 and (("%.1f Go"):format(n / 1e9):gsub("%.", ",")) or ("%d Mo"):format(math.floor(n / 1e6)) end
+        return n >= 1e9 and tr("{n} GB", { n = I18N.dec(("%.1f"):format(n / 1e9)) })
+            or tr("{n} MB", { n = math.floor(n / 1e6) }) end
     local function bits(n) if n == nil then return "…" end
-        return n >= 1e6 and (("%.1f Mbit/s"):format(n / 1e6):gsub("%.", ",")) or ("%d kbit/s"):format(math.floor(n / 1e3)) end
+        return n >= 1e6 and I18N.dec(("%.1f Mbit/s"):format(n / 1e6)) or ("%d kbit/s"):format(math.floor(n / 1e3)) end
     local function since(t) t = tonumber(t) or 0
         local hr, d = math.floor(t / 3600), math.floor(t / 86400)
-        return d > 0 and ("%d j %d h"):format(d, hr % 24) or hr > 0 and ("%d h %02d"):format(hr, math.floor(t / 60) % 60)
+        return d > 0 and tr("{d} d {h} h", { d = d, h = hr % 24 }) or hr > 0 and ("%d h %02d"):format(hr, math.floor(t / 60) % 60)
             or ("%d min"):format(math.floor(t / 60)) end
     local function ok(v) return v == "active" and "✓" or "✕" end
     local t, p, net, mem = h.temps and h.temps.cpu, h.player or {}, h.network or {}, h.memory or {}
     local disk, svc = h.disk or {}, h.services or {}
-    local link = (net.speed or 0) > 0 and (" · lien " .. (net.speed >= 1000 and (net.speed / 1000 .. " Gbit/s") or (net.speed .. " Mbit/s"))) or ""
-    local hw = p.hwdec and p.hwdec ~= "no" and (" · " .. p.hwdec) or (p.size and " · processeur" or "")
+    local link = (net.speed or 0) > 0 and (" · " .. tr("link {speed}", { speed = net.speed >= 1000 and (net.speed / 1000 .. " Gbit/s")
+        or (net.speed .. " Mbit/s") })) or ""
+    local hw = p.hwdec and p.hwdec ~= "no" and (" · " .. p.hwdec) or (p.size and " · " .. tr("software") or "")
     return {
-        { "TEMPÉRATURE", t and (t .. " °C") or "–", h.temps and h.temps.disk and ("disque " .. h.temps.disk .. " °C") or "",
+        { tr("TEMPERATURE"), t and (t .. " °C") or "–", h.temps and h.temps.disk and tr("disk {t} °C", { t = h.temps.disk }) or "",
           t and (t >= 85 and "bad" or t >= 70 and "warn") or "" },
-        { "PROCESSEUR", h.cpu and (math.floor(h.cpu + 0.5) .. " %") or "…",
-          (("charge %.1f"):format(h.load or 0):gsub("%.", ",")) .. " · " .. (h.cores or "?") .. " cœurs", (h.cpu or 0) >= 85 and "warn" or "" },
-        { "MÉMOIRE", bytes((mem.total or 0) - (mem.available or 0)), "sur " .. bytes(mem.total), (mem.available or 1e10) < 5e8 and "warn" or "" },
-        { "DISQUE", bytes(disk.free) .. " libres", "sur " .. bytes(disk.total), (disk.free or 1e12) < 5e9 and "warn" or "" },
-        { "RÉSEAU", "↓ " .. bits(net.rx), "↑ " .. bits(net.tx) .. link, "" },
-        { "ALLUMÉE DEPUIS", since(h.uptime), "MQTT " .. ok(svc.mqtt) .. " · jetons YouTube " .. ok(svc.youtube_tokens),
+        { tr("PROCESSOR"), h.cpu and (math.floor(h.cpu + 0.5) .. " %") or "…",
+          tr("load {load} · {cores} cores", { load = I18N.dec(("%.1f"):format(h.load or 0)), cores = h.cores or "?" }),
+          (h.cpu or 0) >= 85 and "warn" or "" },
+        { tr("MEMORY"), bytes((mem.total or 0) - (mem.available or 0)), tr("of {total}", { total = bytes(mem.total) }),
+          (mem.available or 1e10) < 5e8 and "warn" or "" },
+        { tr("DISK"), tr("{n} free", { n = bytes(disk.free) }), tr("of {total}", { total = bytes(disk.total) }),
+          (disk.free or 1e12) < 5e9 and "warn" or "" },
+        { tr("NETWORK"), "↓ " .. bits(net.rx), "↑ " .. bits(net.tx) .. link, "" },
+        { tr("UP SINCE"), since(h.uptime), tr("MQTT {mqtt} · YouTube tokens {tokens}", { mqtt = ok(svc.mqtt), tokens = ok(svc.youtube_tokens) }),
           (svc.mqtt ~= "active" or svc.youtube_tokens ~= "active") and "warn" or "" },
-        { "LECTURE", (p.running == "qt" and "Appli Qt" or "mpv seul") .. hw,
-          p.size and (p.size:gsub("x", " × ") .. " · " .. math.floor((p.fps or 0) + 0.5) .. " im/s · " .. (p.dropped or 0) .. " perdues")
-              or "rien en lecture", p.size and (not p.hwdec or p.hwdec == "no") and "warn" or "" },
+        { tr("PLAYBACK"), (p.running == "qt" and tr("Qt app") or tr("mpv only")) .. hw,
+          p.size and tr("{size} · {fps} fps · {dropped} dropped",
+                        { size = (p.size:gsub("x", " × ")), fps = math.floor((p.fps or 0) + 0.5), dropped = p.dropped or 0 })
+              or tr("nothing playing"), p.size and (not p.hwdec or p.hwdec == "no") and "warn" or "" },
     }
 end
 
 local function draw_health(out)
     for i, tile in ipairs(health_tiles()) do
-        -- à droite des lignes, sous le QR code : deux tuiles par rangée, « Lecture » sur toute la largeur
+        -- right of the lines, under the QR code: two tiles per row, "Playback" across the full width
         local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
         local x, y = 1310 + col * 290, 430 + row * 102
         local w = i == 7 and 570 or 280
@@ -995,41 +1039,41 @@ end
 local function draw_follows(out, imgs)
     local f = follows
     if f == nil then
-        draw_header(out, "Suivis", "Chargement…")
+        draw_header(out, tr("Following"), tr("Loading…"))
         return
     end
     if f.error then
-        draw_header(out, "Suivis", "Twitch injoignable pour l'instant")
+        draw_header(out, tr("Following"), tr("Twitch unreachable for now"))
         return
     end
     if not f.configured then
-        draw_header(out, "Suivis", "Tes chaînes suivies sur Twitch")
-        out[#out + 1] = label(460, 280, 34, "FFFFFF", "Pour les afficher, la box a besoin de ta propre appli Twitch.")
-        out[#out + 1] = label(460, 336, 28, "C2AFB4", "Télécommande web → Réglages → Chaînes suivies : tout y est expliqué.")
+        draw_header(out, tr("Following"), tr("Your followed channels on Twitch"))
+        out[#out + 1] = label(460, 280, 34, "FFFFFF", tr("To show them, the box needs your own Twitch app."))
+        out[#out + 1] = label(460, 336, 28, "C2AFB4", tr("Companion app → Settings → Followed channels: it's all explained there."))
         return
     end
     if not f.authorized then
         local p = f.pending
-        draw_header(out, "Suivis", "Autorise la box à lire tes chaînes suivies (lecture seule)")
+        draw_header(out, tr("Following"), tr("Allow the box to read your followed channels (read-only)"))
         if p and p.user_code and not p.error then
-            out[#out + 1] = label(460, 290, 34, "FFFFFF", "Sur ton téléphone, ouvre twitch.tv/activate et tape :")
+            out[#out + 1] = label(460, 290, 34, "FFFFFF", tr("On your phone, open twitch.tv/activate and type:"))
             out[#out + 1] = label(460, 400, 96, "FFFFFF", ass_escape(p.user_code), 4, "\\b1\\fsp12")
-            out[#out + 1] = label(460, 500, 28, "C2AFB4", "ou scanne le QR code. La TV se met à jour toute seule.")
+            out[#out + 1] = label(460, 500, 28, "C2AFB4", tr("or scan the QR code. The TV updates by itself."))
             if follows_qr and follows_qr.rows then draw_qr_rows(out, follows_qr.rows, 1400, 240, 360) end
         else
             if p and p.error then
-                out[#out + 1] = label(460, 250, 28, "8F8FFF", ass_escape("Autorisation refusée : " .. p.error))
+                out[#out + 1] = label(460, 250, 28, "8F8FFF", ass_escape(tr("Authorization refused: {error}", { error = p.error })))
             end
             local focused = area == "content"
             if focused then out[#out + 1] = focus_ring(455, 295, 450, 84, 42) end
             out[#out + 1] = rrect(460, 300, 440, 74, 37, VIOLET, "00")
-            out[#out + 1] = label(680, 337, 32, "FFFFFF", "Autoriser la box", 5, "\\b1")
+            out[#out + 1] = label(680, 337, 32, "FFFFFF", tr("Allow the box"), 5, "\\b1")
         end
         return
     end
     local list = follows_list()
-    draw_header(out, "Suivis", (#f.live == 0 and "Personne en live" or (#f.live .. " en live")) .. "  ·  "
-        .. (#list .. " chaînes suivies"))
+    draw_header(out, tr("Following"), (#f.live == 0 and tr("Nobody live") or tr("{n} live", { n = #f.live })) .. "  ·  "
+        .. tr("{n} followed channels", { n = #list }))
     local focus_row = area == "content" and math.floor((index - 1) / LIVE_COLS) or 0
     local first_row = math.max(0, focus_row - FOLLOW_ROWS + 1)
     for i, c in ipairs(list) do
@@ -1050,18 +1094,18 @@ local HIST_COLS, HIST_ROWS = 4, 2
 
 local function draw_history(out, imgs)
     local list = history or {}
-    draw_header(out, "Historique", history == nil and "Chargement…"
-        or #list == 0 and "Les vidéos lancées sur la TV s'afficheront ici"
-        or (#list == 1 and "1 vidéo" or (#list .. " vidéos")) .. " · OK pour reprendre ou retirer")
+    draw_header(out, tr("History"), history == nil and tr("Loading…")
+        or #list == 0 and tr("Videos played on the TV will show up here")
+        or (#list == 1 and tr("1 video · OK to resume or remove") or tr("{n} videos · OK to resume or remove", { n = #list })))
     local focus_row = area == "content" and math.floor((index - 1) / HIST_COLS) or 0
     local first_row = math.max(0, focus_row - HIST_ROWS + 1)
     for i, e in ipairs(list) do
         local row, col = math.floor((i - 1) / HIST_COLS) - first_row, (i - 1) % HIST_COLS
         if row >= 0 and row < HIST_ROWS then
             local started = resumable(e.position, e.duration, e.finished)
-            local meta = KINDS[e.kind] or ""
+            local meta = KINDS[e.kind] and tr(KINDS[e.kind]) or ""
             if e.finished then
-                meta = meta .. " · vu"
+                meta = meta .. " · " .. tr("watched")
             elseif e.duration and e.duration > 0 then
                 meta = meta .. " · " .. clock(e.position) .. " / " .. clock(e.duration)
             end
@@ -1097,7 +1141,7 @@ local function draw_rows(out, rows, title, subtitle, width)
     local sel = selectable(rows)
     local focused_row = area == "content" and sel[index] or nil
     local x, y, rw = 460, 210, width or 980
-    -- Défilement : on part de la ligne qui garde l'élément choisi dans les 760 px disponibles
+    -- Scrolling: start from the line that keeps the chosen item within the 760 px available
     local heights = {}
     for i, r in ipairs(rows) do heights[i] = r.header and 68 or (r.hint and 110 or 84) end
     local first, used = 1, 0
@@ -1121,7 +1165,7 @@ local function draw_rows(out, rows, title, subtitle, width)
             local ty = r.hint and y + 38 or y + h / 2
             out[#out + 1] = label(x + 30, ty, 34, r.danger and "8F8FFF" or "FFFFFF", ass_escape(r.label), 4)
             if r.hint then out[#out + 1] = label(x + 30, y + 78, 25, "C2AFB4", ass_escape(r.hint), 4) end
-            if r.toggle ~= nil then   -- interrupteur dessiné
+            if r.toggle ~= nil then   -- drawn switch
                 local sx, sy = x + rw - 110, y + h / 2 - 20
                 out[#out + 1] = rrect(sx, sy, 76, 40, 20, r.toggle and VIOLET or "68505A", "00")
                 out[#out + 1] = rrect(sx + (r.toggle and 40 or 4), sy + 4, 32, 32, 16, "FFFFFF", "00")
@@ -1163,9 +1207,9 @@ end
 function draw()
     if not is_open then return end
     marquee_active = false
-    -- Voile sur la vidéo ; opaque sans vidéo, pour cacher l'écran d'ambiance (horloge, QR code)
+    -- Veil over the video; opaque without video, to hide the ambient screen (clock, QR code)
     local out = { rrect(0, 0, W, H, 0, "12060A", mp.get_property_native("video-params") and "1C" or "00") }
-    if power_only and modal then   -- fenêtre « Box » seule (power maintenu) : pas de menu derrière
+    if power_only and modal then   -- "Box" window alone (power held): no menu behind
         out = {}
         draw_modal(out)
         osd.data = table.concat(out, "\n")
@@ -1197,33 +1241,33 @@ function draw()
         draw_history(out, imgs)
     elseif id == "settings" then
         if audio_out == nil then
-            audio_out = false   -- une seule demande à la fois
+            audio_out = false   -- only one request at a time
             api("GET", "/api/audio", nil, function(a) audio_out = a and a.outputs and a or nil if is_open then draw() end end)
         end
-        draw_rows(out, settings_rows(), "Réglages", "◀ ▶ pour changer une valeur")
+        draw_rows(out, settings_rows(), tr("Settings"), tr("◀ ▶ to change a value"))
     else
-        draw_rows(out, system_rows(), "Système", nil, 820)
+        draw_rows(out, system_rows(), tr("System"), nil, 820)
         draw_health(out)
-        if not health_timer then   -- relu toutes les 5 s tant que l'onglet est affiché
+        if not health_timer then   -- reread every 5 s while the tab is shown
             local function poll() api("GET", "/api/health", nil, function(d) if d then health = d end if is_open then draw() end end) end
             poll()
             health_timer = mp.add_periodic_timer(5, function()
                 if is_open and TABS[tab].id == "system" then poll() else health_timer:kill() health_timer = nil end
             end)
         end
-        -- QR code de la télécommande web : pour tout ce qui demande de taper du texte
-        -- QR code de la télécommande web à droite, textes à côté ; tuiles d'état dessous (draw_health)
+        -- Companion app QR code: for anything that requires typing text
+        -- Companion app QR code on the right, texts next to it; status tiles below (draw_health)
         local side = draw_qr(out, 1310, 210, 170)
         if side then
-            out[#out + 1] = label(1310 + side + 20, 260, 20, "FFFFFF", "Télécommande sur le téléphone", 4, "\\b1")
-            out[#out + 1] = label(1310 + side + 20, 300, 18, "C2AFB4", "Lien, streamer, compte Twitch…", 4)
+            out[#out + 1] = label(1310 + side + 20, 260, 20, "FFFFFF", tr("Companion app on your phone"), 4, "\\b1")
+            out[#out + 1] = label(1310 + side + 20, 300, 18, "C2AFB4", tr("Link, streamer, Twitch account…"), 4)
             out[#out + 1] = label(1310 + side + 20, 336, 18, "C2AFB4",
                                   ass_escape((qr.url or ""):gsub("^https?://", ""):gsub("/$", "")), 4)
         end
     end
     if modal then
         draw_modal(out)
-        imgs = {}   -- les images passeraient par-dessus la fenêtre
+        imgs = {}   -- the images would show over the window
     end
     osd.data = table.concat(out, "\n")
     osd:update()
@@ -1231,7 +1275,7 @@ function draw()
 end
 
 
--- Ouverture, fermeture, touches
+-- Opening, closing, keys
 
 local function arm_idle()
     if idle_timer then idle_timer:kill() end
@@ -1253,14 +1297,14 @@ local function open_menu()
     power_only = false
     if is_open then return end
     is_open = true
-    -- Onglet du média en cours (recalé quand l'état arrive), rangée et carte gardées pour YouTube et Jellyfin
+    -- Tab of the current media (realigned when the state arrives), row and card kept for YouTube and Jellyfin
     for i, t in ipairs(TABS) do if t.id == media_tab(state) then tab = i end end
     area, index, shortcut, start_focus = "content", 1, nil, true
     media.youtube.data, media.jellyfin.data, audio_out = nil, nil, nil
-    -- Relus à chaque ouverture : l'historique change, remote.py garde les rediffusions 5 min en cache
+    -- Reread at each opening: the history changes, remote.py caches replays for 5 min
     history, history_loading, replays, rp_login, rp_row, rp_sel, rp_first = nil, false, {}, nil, 1, {}, {}
     follows = nil
-    -- Focus de départ : le streamer regardé
+    -- Initial focus: the streamer being watched
     for i, name in ipairs(state.streamers or {}) do
         if name == state.channel then index = i end
     end
@@ -1333,12 +1377,12 @@ local function on_key(key)
                 rp_row = 1
                 for i, name in ipairs(state.streamers or {}) do if name == rp_login then rp_sel.chips = i end end
             end
-        elseif key == "back" and state.mode ~= "home" then   -- rien en lecture : le menu reste la page principale
+        elseif key == "back" and state.mode ~= "home" then   -- nothing playing: the menu stays the main page
             return close_menu()
         end
         return draw()
     end
-    -- Contenu
+    -- Content
     local id, count = TABS[tab].id, content_count()
     if key == "back" then
         area, pending_display, pending_player = "rail", nil, nil
@@ -1431,8 +1475,8 @@ local function on_key(key)
                     return
                 end
                 open_modal(name, {
-                    { label = "▶  Regarder", ok = watch },
-                    { label = "＋  Ajouter à ma liste", ok = function()
+                    { label = tr("▶  Watch"), ok = watch },
+                    { label = tr("＋  Add to my list"), ok = function()
                         api("POST", "/api/streamers", { action = "add", login = name }, function() refresh() end)
                     end },
                 })
@@ -1457,12 +1501,12 @@ local function on_key(key)
             local e = list[index]
             local items = {}
             if resumable(e.position, e.duration, e.finished) then
-                items[#items + 1] = { label = "▶  Reprendre à " .. clock(e.position), ok = function() play(e.url) end }
-                items[#items + 1] = { label = "↺  Depuis le début", ok = function() play(e.url, true) end }
+                items[#items + 1] = { label = tr("▶  Resume at {time}", { time = clock(e.position) }), ok = function() play(e.url) end }
+                items[#items + 1] = { label = tr("↺  From the beginning"), ok = function() play(e.url, true) end }
             else
-                items[#items + 1] = { label = e.finished and "↺  Revoir" or "▶  Lire", ok = function() play(e.url, true) end }
+                items[#items + 1] = { label = e.finished and tr("↺  Watch again") or tr("▶  Play"), ok = function() play(e.url, true) end }
             end
-            items[#items + 1] = { label = "✕  Retirer de l'historique", danger = true, ok = function()
+            items[#items + 1] = { label = tr("✕  Remove from history"), danger = true, ok = function()
                 api("POST", "/api/history", { action = "remove", key = e.key }, function() load_history() end)
                 table.remove(list, index)
                 index = math.max(1, math.min(index, #list))
@@ -1482,7 +1526,7 @@ local function on_key(key)
             if index + LIVE_COLS <= count then
                 index = index + LIVE_COLS
             elseif math.ceil(index / LIVE_COLS) < math.ceil(count / LIVE_COLS) then
-                index = count   -- dernière rangée incomplète
+                index = count   -- incomplete last row
             end
         elseif key == "ok" then
             local name = (state.streamers or {})[index]
@@ -1511,22 +1555,27 @@ local function on_key(key)
 end
 
 mp.register_script_message("streambox-tvmenu-open", open_menu)
--- Power maintenu 1 s (stream-box.lua) : veille, redémarrage, extinction
+-- Power held 1 s (stream-box.lua): sleep, restart, shutdown
 mp.register_script_message("streambox-power-menu", function()
     open_menu()
     power_only = true
     open_modal("Box", {
-        { label = "☾  Mettre en veille", ok = function() act("poweroff", { mode = "suspend" }) close_menu() end },
-        { label = "↻  Redémarrer", ok = function() act("reboot") close_menu() end },
-        { label = "⏻  Éteindre", danger = true, ok = function() act("poweroff", { mode = "full" }) close_menu() end },
-        { label = "Annuler", ok = function() close_menu() end },
+        { label = tr("☾  Sleep"), ok = function() act("poweroff", { mode = "suspend" }) close_menu() end },
+        { label = tr("↻  Restart"), ok = function() act("reboot") close_menu() end },
+        { label = tr("⏻  Turn off"), danger = true, ok = function() act("poweroff", { mode = "full" }) close_menu() end },
+        { label = tr("Cancel"), ok = function() close_menu() end },
     })
     draw()
 end)
 mp.register_script_message("streambox-tvmenu-close", close_menu)
 mp.register_script_message("streambox-tvmenu-key", on_key)
+-- Interface language changed (companion app): reload the translations, redraw if open
+mp.register_script_message("streambox-language", function()
+    I18N.load()
+    if is_open then draw() end
+end)
 mp.observe_property("osd-dimensions", "native", function() if is_open then draw() end end)
-mp.add_periodic_timer(20, function() if is_open then draw() end end)   -- heure
-mp.add_periodic_timer(1 / 15, function() if is_open and marquee_active then draw() end end)   -- textes défilants
+mp.add_periodic_timer(20, function() if is_open then draw() end end)   -- clock
+mp.add_periodic_timer(1 / 15, function() if is_open and marquee_active then draw() end end)   -- scrolling texts
 mp.set_property_native("user-data/streambox/tvmenu", false)
 refresh()

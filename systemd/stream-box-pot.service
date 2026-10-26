@@ -1,9 +1,9 @@
 [Unit]
-Description=Stream Box : jetons anti-robot YouTube pour yt-dlp (bgutil-ytdlp-pot-provider, port 4416)
+Description=Stream Box: YouTube anti-bot tokens for yt-dlp (bgutil-ytdlp-pot-provider, port 4416)
 
 [Service]
 WorkingDirectory=%h/.local/share/bgutil-pot-provider/server
-# Node du venv (install.sh : nodejs-wheel) s'il existe, sinon celui du système (image : paquet nodejs)
+# The venv's Node (install.sh: nodejs-wheel) if it exists, otherwise the system one (image: nodejs package)
 ExecStart=/usr/bin/env PATH=%h/.local/share/media-venv/bin:/usr/local/bin:/usr/bin node build/main.js
 Restart=always
 RestartSec=10

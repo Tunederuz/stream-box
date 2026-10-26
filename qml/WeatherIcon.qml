@@ -1,5 +1,5 @@
-// Icône météo dessinée et animée d'après le code WMO d'Open-Meteo : soleil (ou lune la nuit), éclaircies, nuages,
-// brouillard, pluie, neige, orage. Les rayons tournent, les gouttes et les flocons tombent, l'éclair clignote.
+// Drawn and animated weather icon from the Open-Meteo WMO code: sun (or moon at night), sunny spells, clouds,
+// fog, rain, snow, storm. The rays turn, the drops and flakes fall, the lightning flashes.
 import QtQuick
 
 Item {
@@ -14,7 +14,7 @@ Item {
     readonly property bool showSun: kind === "clear" || kind === "partly"
     readonly property bool showCloud: kind !== "clear"
 
-    // Soleil : disque et rayons qui tournent lentement
+    // Sun: disc and rays turning slowly
     Item {
         id: sun
         visible: root.showSun && !root.night
@@ -41,7 +41,7 @@ Item {
             color: "#ffc94a"
         }
     }
-    // Lune (la nuit, ciel dégagé ou éclaircies) : croissant
+    // Moon (at night, clear sky or sunny spells): crescent
     Canvas {
         visible: root.showSun && root.night
         width: root.kind === "clear" ? root.width * 0.7 : root.width * 0.5
@@ -57,7 +57,7 @@ Item {
             c.beginPath(); c.arc(r * 1.45, r * 0.7, r * 0.85, 0, 2 * Math.PI); c.fill()
         }
     }
-    // Nuage : trois disques et une base arrondie, qui dérivent un peu
+    // Cloud: three discs and a rounded base, drifting a little
     Item {
         id: cloud
         visible: root.showCloud && root.kind !== "fog"
@@ -75,7 +75,7 @@ Item {
         Rectangle { x: cloud.width * 0.12; y: cloud.height * 0.22; width: cloud.height * 0.6; height: width; radius: width / 2; color: cloud.tint }
         Rectangle { x: cloud.width * 0.36; y: 0; width: cloud.height * 0.85; height: width; radius: width / 2; color: cloud.tint }
     }
-    // Pluie et neige : gouttes ou flocons qui tombent sous le nuage
+    // Rain and snow: drops or flakes falling under the cloud
     Repeater {
         model: root.kind === "rain" || root.kind === "snow" ? 3 : 0
         Rectangle {
@@ -98,7 +98,7 @@ Item {
             }
         }
     }
-    // Orage : éclair qui clignote
+    // Storm: flashing lightning
     Canvas {
         visible: root.kind === "storm"
         width: root.width * 0.3; height: root.height * 0.4
@@ -119,7 +119,7 @@ Item {
             NumberAnimation { to: 1; duration: 120 }
         }
     }
-    // Brouillard : bandes qui glissent
+    // Fog: sliding bands
     Repeater {
         model: root.kind === "fog" ? 3 : 0
         Rectangle {

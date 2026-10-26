@@ -1,5 +1,5 @@
-// Image arrondie (disque ou coins arrondis), chargée en arrière-plan et révélée en fondu. Masque calculé par la puce
-// graphique (MultiEffect) ; en attendant l'image, un fond de couleur.
+// Rounded image (disc or rounded corners), loaded in the background and revealed with a fade. Mask computed by the
+// GPU (MultiEffect); while waiting for the image, a colored background.
 import QtQuick
 import QtQuick.Effects
 
@@ -22,7 +22,7 @@ Item {
         visible: false
         asynchronous: true
         fillMode: Image.PreserveAspectCrop
-        sourceSize.width: root.width * 1.5   // un peu plus que la taille affichée : net quand la carte grossit
+        sourceSize.width: root.width * 1.5   // a bit more than the displayed size: sharp when the card grows
         sourceSize.height: root.height * 1.5
     }
     Item {

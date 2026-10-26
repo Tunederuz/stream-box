@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Stream Box : mode développeur, activé ou coupé depuis le menu Système de la TV (stream-box-dev@enable|disable.service).
-# L'image n'a ni mot de passe root ni sudo pour media : sans ce mode, la box installée n'offre aucun accès root.
-#   enable  : sudo sans mot de passe pour media (/etc/sudoers.d/90-stream-box-dev), et SSH activé (mot de passe affiché
-#             sur la TV, voir ssh-access) : ssh media@box puis sudo
-#   disable : sudo retiré (SSH garde son propre réglage)
+# Stream Box: developer mode, enabled or disabled from the TV System menu (stream-box-dev@enable|disable.service).
+# The image has neither a root password nor sudo for media: without this mode, the installed box offers no root access.
+#   enable  : passwordless sudo for media (/etc/sudoers.d/90-stream-box-dev), and SSH enabled (password shown on the
+#             TV, see ssh-access): ssh media@box then sudo
+#   disable : sudo removed (SSH keeps its own setting)
 set -euo pipefail
 SUDOERS=/etc/sudoers.d/90-stream-box-dev
-MARK=/var/lib/stream-box/dev-mode   # lisible par media (remote.py) : /etc/sudoers.d ne l'est pas
+MARK=/var/lib/stream-box/dev-mode   # readable by media (remote.py): /etc/sudoers.d is not
 case "${1:-}" in
   enable)
     install -d -m 750 /etc/sudoers.d
@@ -22,5 +22,5 @@ case "${1:-}" in
   disable)
     rm -f "$SUDOERS" "$MARK"
     ;;
-  *) echo "usage : $0 enable|disable" >&2; exit 2 ;;
+  *) echo "usage: $0 enable|disable" >&2; exit 2 ;;
 esac

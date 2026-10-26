@@ -1,8 +1,8 @@
 {
   "name": "Stream Box",
   "short_name": "Stream Box",
-  "description": "Télécommande de la Stream Box",
-  "lang": "fr",
+  "description": "Stream Box companion app",
+  "lang": "en",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

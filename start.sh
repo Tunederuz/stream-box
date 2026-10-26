@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "$0")" && pwd)"
-# streamlink est installé dans un venv, lien dans ~/.local/bin (pas forcément dans le PATH de l'autostart)
+# streamlink is installed in a venv, linked in ~/.local/bin (not necessarily in the autostart PATH)
 export PATH="$HOME/.local/bin:$PATH"
-# Curseur invisible pour cage seul (cursors/blank, voir la session) : sinon son pointeur apparaît pendant les
-# transitions, quand aucune fenêtre ne couvre l'écran. Les applis reprennent le thème normal (souris qui bouge)
+# Invisible cursor for cage only (cursors/blank, see the session): otherwise its pointer shows up during transitions,
+# when no window covers the screen. The apps go back to the normal theme (moving mouse)
 unset XCURSOR_THEME XCURSOR_PATH
-# Résolution enregistrée depuis la télécommande (« auto » par défaut : jamais de 4K à 30 Hz), d'abord : puis image de
-# démarrage (la même que l'écran de Plymouth) le temps que tout se lance, sinon ~3 s de noir. ui.py la retire à sa
-# première image dessinée (player.sh pour mpv seul), et de toute façon au bout de 30 s
+# Resolution saved from the companion app ("auto" by default: never 4K at 30 Hz), first: then the boot image (the same
+# as the Plymouth screen) while everything starts, otherwise ~3 s of black. ui.py removes it on its first drawn frame
+# (player.sh for mpv alone), and after 30 s anyway
 python3 "$DIR/display.py" apply
 SPLASH_PID="${XDG_RUNTIME_DIR:-/tmp}/stream-box-splash.pid"
 mpv --no-config --really-quiet --fs --no-osc --osd-level=0 --no-input-default-bindings --input-vo-keyboard=no \
@@ -16,28 +16,28 @@ mpv --no-config --really-quiet --fs --no-osc --osd-level=0 --no-input-default-bi
     "$DIR/boot-splash.png" > /dev/null 2>&1 &
 echo $! > "$SPLASH_PID"
 ( sleep 30; kill "$(cat "$SPLASH_PID" 2> /dev/null)" 2> /dev/null; rm -f "$SPLASH_PID" ) &
-# Réseau : on l'attend 20 s au plus. Sans réseau, la box démarre quand même : écran d'accueil, et mode configuration
-# Wi-Fi (point d'accès de la box, voir netsetup.py) s'il y a une carte Wi-Fi
+# Network: wait for it 20 s at most. Without network, the box starts anyway: home screen, and Wi-Fi setup mode (box
+# hotspot, see netsetup.py) if there is a Wi-Fi card
 for _ in $(seq 10); do getent hosts www.twitch.tv > /dev/null && break; sleep 2; done
 
 python3 "$DIR/chat_overlay.py" &
-python3 "$DIR/remote.py" &   # télécommande web, port 8080
+python3 "$DIR/remote.py" &   # companion app, port 8080
 
-# Sortie son (voir audio.py) : la TV branchée en HDMI / DisplayPort, ou un appareil USB / Bluetooth, ou le choix fait
-# dans les réglages ; suivie en continu (branchements, débranchements)
+# Sound output (see audio.py): the TV plugged in over HDMI / DisplayPort, or a USB / Bluetooth device, or the choice
+# made in the settings; followed continuously (plugs, unplugs)
 python3 "$DIR/audio.py" watch &
-# Touches lues à la source (télécommandes, manettes, claviers : voir input.py) ; sans droits sur /dev/input, il
-# s'arrête et les touches restent à l'appli Qt et à mpv
+# Keys read at the source (remotes, gamepads, keyboards: see input.py); without permissions on /dev/input, it stops
+# and the keys stay with the Qt app and mpv
 python3 "$DIR/input.py" &
-# Agent Bluetooth permanent (btagent.py : les télécommandes qui lancent elles-mêmes l'appairage), avec dbus-fast
+# Permanent Bluetooth agent (btagent.py: remotes that start pairing themselves), with dbus-fast
 MEDIA_PY="$HOME/.local/share/media-venv/bin/python"
 "$MEDIA_PY" -c "import dbus_fast" 2> /dev/null && "$MEDIA_PY" "$DIR/btagent.py" &
-# Récepteur YouTube Cast (cast/cast.js : la box dans le bouton Caster de l'appli YouTube), si ses modules sont
-# installés (npm install dans cast/)
+# YouTube Cast receiver (cast/cast.js: the box in the Cast button of the YouTube app), if its modules are installed
+# (npm install in cast/)
 if [ -d "$DIR/cast/node_modules" ]; then
   NODE="$HOME/.local/share/media-venv/bin/node"; [ -x "$NODE" ] || NODE=node
   "$NODE" "$DIR/cast/cast.js" &
 fi
 
-# Lecteur permanent (mpv, ou l'appli Qt qui l'embarque) : voir player.sh
+# Permanent player (mpv, or the Qt app embedding it): see player.sh
 exec "$DIR/player.sh"

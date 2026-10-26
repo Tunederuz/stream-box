@@ -1,5 +1,5 @@
-// Cadre de focus, sous l'élément choisi : halo violet en dégradé doux tout autour (ombre rectangulaire floue, calculée
-// par la puce graphique) et bord blanc, en fondu
+// Focus frame, under the chosen item: soft gradient purple glow all around (blurry rectangular shadow, computed
+// by the GPU) and white border, fading
 import QtQuick
 import QtQuick.Effects
 
@@ -7,7 +7,7 @@ Item {
     id: root
     property bool active: false
     property real radius: 22
-    property color glow: "#9146ff"   // violet ; rouge sur l'onglet YouTube
+    property color glow: "#9146ff"   // purple; red on the YouTube tab
     anchors.fill: parent
     opacity: active ? 1 : 0
     visible: opacity > 0

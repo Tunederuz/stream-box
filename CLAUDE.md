@@ -1,961 +1,977 @@
 # Stream Box
 
-> Les valeurs entre chevrons (`<ip-box>`…) et les domaines `example.com` sont propres à chaque installation. Les
-> détails d'une installation donnée (réseau, matériel, comptes) vont dans `CLAUDE.local.md`, non versionné.
+> Values in angle brackets (`<box-ip>`…) and the `example.com` domains are specific to each installation. The details
+> of a given installation (network, hardware, accounts) go in `CLAUDE.local.md`, which is not versioned.
 
-Mini PC Linux branché sur la TV. Au démarrage, il affiche le grand menu (page principale, fond animé, rien en lecture) ; un stream Twitch se regarde avec le chat
-en overlay. Quand la souris bouge (ou avec une télécommande Bluetooth), un menu permet de changer de streamer et de
-régler le chat. Une télécommande web (installable comme appli) fait la même chose depuis un téléphone, et plus encore.
-Installation et mise à jour : `install.sh` (voir le README) ; sauvegarde des réglages : menu Système de la TV et page web (`backup.py`), ou `backup.sh`.
+Linux mini PC plugged into the TV. At boot, it shows the large menu (main page, animated background, nothing playing); a Twitch stream is watched with the chat
+as an overlay. When the mouse moves (or with a Bluetooth remote), a menu lets you change streamer and adjust the
+chat. A companion app (installable as an app) does the same from a phone, and more.
+Installation and update: `install.sh` (see the README); settings backup: TV System menu and companion app (`backup.py`), or `backup.sh`.
 
-## Système
-- **Distribution Arch** (testé sur CachyOS). La box tourne sous l'utilisateur dédié **`media`** (shell bash, pas de mot
-  de passe ; `install.sh` lui copie la clé SSH du compte d'admin : `ssh media@<ip-box>`). Un compte d'admin avec sudo
-  sert à la maintenance.
-- **Session dédiée sans bureau** : le gestionnaire de connexion (Plasma Login, ou SDDM) connecte automatiquement `media`
-  dans la session `/usr/share/wayland-sessions/stream-box.desktop` → `cage -s -- /home/media/stream-box/start.sh`
-  (cage = compositeur Wayland « kiosque » ; `-s` garde Ctrl+Alt+F2 pour une console). Pour retrouver le bureau :
-  démarrer avec un clavier branché et se connecter avec le compte d'admin.
-- **Mode selon le clavier** : `stream-box-boot-mode.service` (root, avant le gestionnaire de connexion) lance
-  `/usr/local/lib/stream-box/boot-mode.py` (copie root de `boot-mode.py`, installée par `install.sh`, qui lui passe
-  `--dropin` selon le gestionnaire de connexion). Un périphérique avec des touches de lettres (Q, A, Z, espace) =
-  clavier. Sans clavier, il écrit `<dossier .conf.d>/50-stream-box.conf` (autologin media + session Stream Box). Avec
-  clavier, il le supprime et l'écran de connexion s'affiche. Le fichier de config principal ne doit pas contenir de
-  section `[Autologin]` : elle passerait avant le dossier `.conf.d` (`install.sh` la retire, avec une sauvegarde
-  `.bak-stream-box`). Le choix se fait au démarrage seulement. Après une modification de `boot-mode.py`, relancer
-  `install.sh` (ou recopier en root). Test : `boot-mode.py --dry-run`.
-- Sans bureau, le bouton power est géré par logind (`HandlePowerKey=poweroff` par défaut) : extinction directe.
-- **Son** : `audio.py` (lancé par `start.sh`) bascule la carte son sur son profil HDMI et en fait la sortie par défaut
-  si la sortie actuelle n'est pas déjà en HDMI : un nouvel utilisateur démarre souvent sur le haut-parleur interne.
-  `~/.config/stream-box/no-hdmi-audio` désactive ce choix. WirePlumber mémorise ensuite profil et volume
+## Languages
+- Code, comments and docs are in English. User-facing texts are written in English in the code and wrapped with
+  `tr()`: Python `i18n.py`; QML `qml/i18n.js` + the `i18n.dict` context property set by `ui.py`; Lua `tr()` in
+  `stream-box.lua` / `tv_menu.lua`; companion app `tr()` and translation of static texts in `remote.html`.
+- Translations: `locales/<lang>.json`, keyed by the English text (placeholders `{name}`).
+- Language stored in `~/.config/stream-box/language` (default `en`), changed by `POST /api/language`, which sends the
+  script-message `streambox-language` to the TV.
+- `GET /api/state` carries `lang` (current code) and `languages` (`{code: name in its own language}`, from
+  `i18n.LANGUAGES`). Pickers: companion app section `#language-section` of Settings (moved to the top of the
+  `#setup` screen in setup mode, so the language is chosen first); TV: "Interface language" row (header "Language")
+  in `settingsRows()` (QML) and `settings_rows()` (Lua).
+- Adding a language: add its code to `LANGUAGES` in `i18n.py` and create `locales/<code>.json`. Decimal separator:
+  `qml/fmt.js` (translatable `{int}.{dec}` keys), `I18N.dec` in `stream-box.lua` / `tv_menu.lua`, and the
+  `LANG === "fr"` checks in `remote.html` (currently only `fr` uses a comma); QML dates pick the Qt locale from
+  `i18n.lang` in `qml/TvMenu.qml` (`fr_FR` or `en_US`).
+
+## System
+- **Arch distribution** (tested on CachyOS). The box runs as the dedicated user **`media`** (bash shell, no
+  password; `install.sh` copies the admin account's SSH key to it: `ssh media@<box-ip>`). An admin account with sudo
+  is used for maintenance.
+- **Dedicated session without a desktop**: the display manager (Plasma Login, or SDDM) automatically logs `media` in
+  to the session `/usr/share/wayland-sessions/stream-box.desktop` → `cage -s -- /home/media/stream-box/start.sh`
+  (cage = "kiosk" Wayland compositor; `-s` keeps Ctrl+Alt+F2 for a console). To get the desktop back:
+  boot with a keyboard plugged in and log in with the admin account.
+- **Mode depending on the keyboard**: `stream-box-boot-mode.service` (root, before the display manager) runs
+  `/usr/local/lib/stream-box/boot-mode.py` (root copy of `boot-mode.py`, installed by `install.sh`, which passes it
+  `--dropin` depending on the display manager). A device with letter keys (Q, A, Z, space) = keyboard. Without a
+  keyboard, it writes `<.conf.d folder>/50-stream-box.conf` (autologin media + Stream Box session). With a keyboard,
+  it deletes it and the login screen is shown. The main config file must not contain an `[Autologin]` section: it
+  would take precedence over the `.conf.d` folder (`install.sh` removes it, with a `.bak-stream-box` backup). The
+  choice is made at boot only. After changing `boot-mode.py`, run `install.sh` again (or copy it again as root).
+  Test: `boot-mode.py --dry-run`.
+- Without a desktop, the power button is handled by logind (`HandlePowerKey=poweroff` by default): immediate shutdown.
+- **Sound**: `audio.py` (run by `start.sh`) switches the sound card to its HDMI profile and makes it the default output
+  if the current output is not already HDMI: a new user often starts on the internal speaker.
+  `~/.config/stream-box/no-hdmi-audio` disables this. WirePlumber then remembers profile and volume
   (`~media/.local/state/wireplumber/`).
-- **Réseau** : de préférence en Ethernet avec une IP fixe (`install.sh --static-ip … --gateway …`), indispensable pour
-  le Wake-on-LAN (`--wol`, et l'option correspondante dans le BIOS).
-- **Pare-feu** : si ufw est actif, le port 8080 de la télécommande web doit être ouvert au reverse proxy
-  (`install.sh --allow-from <ip-proxy>`).
-- **HTTPS** : un reverse proxy (par exemple Nginx Proxy Manager) vers `http://<ip-box>:8080` avec un certificat,
-  sur un nom qui peut ne se résoudre qu'en DNS local. Nécessaire pour installer la télécommande sur Android.
-- Pas de sudo sans mot de passe pour `media`. mpv et cage viennent des paquets du système.
+- **Network**: preferably Ethernet with a static IP (`install.sh --static-ip … --gateway …`), required for
+  Wake-on-LAN (`--wol`, and the matching option in the BIOS).
+- **Firewall**: if ufw is active, the companion app's port 8080 must be open to the reverse proxy
+  (`install.sh --allow-from <proxy-ip>`).
+- **HTTPS**: a reverse proxy (for example Nginx Proxy Manager) to `http://<box-ip>:8080` with a certificate,
+  on a name that may only resolve in local DNS. Needed to install the companion app on Android.
+- No passwordless sudo for `media`. mpv and cage come from the system packages.
 
-## Fichiers (`/home/media/stream-box/`)
-- `start.sh` : attend le réseau (`getent hosts www.twitch.tv`), lance `chat_overlay.py` et `remote.py` en arrière-plan,
-  puis boucle sur un mpv **permanent** (`--idle --force-window --fs --osc=no`, IPC `/tmp/stream-box-mpv.sock`,
-  script `stream-box.lua`). La boucle relance mpv s'il est fermé, et tue d'abord les streamlink restés orphelins.
-- `stream-box.lua` (script mpv) :
-  - lance streamlink en mode serveur HTTP local (`--player-external-http`, 127.0.0.1, port 34501–34550 qui change
-    à chaque chaîne) avec `--twitch-low-latency --retry-streams 30`, puis `loadfile http://127.0.0.1:<port>/` ;
-  - si la chaîne n'est pas en live : écran noir avec « <pseudo> n'est pas en live », nouvel essai toutes les 15 s ;
-  - menu au mouvement de la souris (masqué après 4 s) : streamers en grille (plusieurs colonnes et police réduite
-    s'il y en a beaucoup), puis une ligne pour le chat : case à cocher pour l'afficher ou le masquer, et un bouton
-    qui le fait tourner entre les 4 coins (↖ ↗ ↘ ↙) ;
-  - publie `user-data/streambox/{channel,corner,chat_visible}` pour `chat_overlay.py` ;
-  - script-messages pour la télécommande : `streambox-channel <pseudo>`, `streambox-toggle-chat`, `streambox-cycle-corner` ;
-  - désactive le double-clic plein écran.
-- `chat_overlay.py` : chat Twitch en anonyme (IRC TLS, pseudo `justinfanNNNN`, lecture seule). Il suit les
-  propriétés `user-data/streambox/*` de mpv (`observe_property`) : il change de salon quand la chaîne change, et il
-  vide les messages à ce moment-là. Il garde les 10 derniers messages (45 s max) et les envoie à mpv avec
-  `osd-overlay` (`ass-events`, résolution 1920x1080). Fond noir semi-transparent (opacité `chat_bg`, marge `BG_PADDING`) : le texte
-  est d'abord rendu caché avec `compute_bounds` pour mesurer sa taille, puis le fond (overlay 2, z=0) est dessiné sous
-  le texte (overlay 1, z=1). Il gère `CLEARMSG` / `CLEARCHAT`. Bibliothèque standard uniquement.
-- `remote.py` : télécommande web sur le port 8080 (bibliothèque standard, `ThreadingHTTPServer`). Sert `remote.html`
-  et les fichiers PWA (`manifest.webmanifest`, `sw.js`, `icon-*.png`). API : `GET /api/state`,
-  `POST /api/{channel,chat,corner,set,display,volume,mute,pause,poweroff}`, `GET /api/display`. Elle ouvre une connexion IPC par requête. Le volume est
-  celui de mpv, pas celui du système.
-- Compte Twitch (section de la page, `POST /api/login|logout`, `GET /api/account`) : le jeton du site (cookie
-  `auth-token`) est écrit dans `~media/.config/streamlink/config.twitch` (`twitch-api-header=Authorization=OAuth …`,
-  mode 600), que streamlink lit tout seul. C'est le seul jeton qui retire les pubs des chaînes où l'on est abonné
-  (les jetons OAuth d'applis tierces ne le font pas). Il est vérifié via `id.twitch.tv/oauth2/validate` à
-  l'enregistrement puis toutes les 30 min. **Un jeton refusé bloque toute lecture** (« Unauthorized ») : s'il
-  expire, `remote.py` le supprime et relance le stream en anonyme. Sans jeton, streamlink saute les pubs et
-  l'image se fige pendant leur durée. Le jeton est aussi écrit en cookie pour yt-dlp
-  (`~media/.config/stream-box/twitch-cookies.txt`, option `cookies` de `ytdl-raw-options`) pour les VOD réservées
-  aux abonnés. yt-dlp réécrit ce fichier en 644 à chaque lecture : c'est le dossier (700) qui le protège.
-- Réglages du chat dans la page : opacité du fond (`chat_bg`, 0–100 %, défaut 60) et taille du texte (`chat_size`,
-  20–60 px en 1920x1080, défaut 32). `POST /api/set` → script-message `streambox-set <clé> <valeur>` → `set_number` dans
-  stream-box.lua (bornes, fichier d'état, `user-data/streambox/*`), que `chat_overlay.py` observe.
-- Résolution : `display.py` (wlr-randr, que cage gère ; paquet `wlr-randr` à installer). Seuls les modes ≥ 59 Hz sont
-  proposés : beaucoup de mini PC ne sortent le 4K qu'en **30 Hz** en HDMI, ce qui jette une image sur deux des streams
-  à 60 i/s.
-  « auto » = mode préféré de la TV s'il est à 60 Hz, sinon la plus grande définition à 60 Hz. Réglage dans
-  `~media/.local/state/stream-box/display_mode`, appliqué par `start.sh` avant mpv et en direct depuis la page.
-- **Mode Média** (stream-box.lua, `user-data/streambox/mode` = `twitch` | `media`) : tout fichier qui n'est pas le flux
-  streamlink (lien envoyé, Jellyfin) arrête streamlink et passe en `media` ; le chat est masqué. Fin de fichier puis
-  mpv vide pendant `BACK_TO_MENU` (3 s) → plus rien en lecture, grand menu (le délai laisse Jellyfin enchaîner l'épisode suivant).
-  Script-messages `streambox-play <url>`, `streambox-twitch`. Un crochet `on_load` (avant l'ouverture de chaque fichier,
-  y compris ceux de Jellyfin) règle `demuxer-max-bytes` (750 KiB pour le direct, 150 MiB pour les vidéos) et remet
-  `hwdec=auto-safe` : le shim impose sa propre valeur de `hwdec` en s'accrochant (défaut `"no"`, réglé à `auto-safe`
-  dans sa `conf.json`). `--ytdl-format` : par défaut 1440p max et **pas d'AV1**, que beaucoup d'iGPU ne décodent
-  pas en matériel (le VP9 et le H.264 passent par le décodage matériel) ; une autre règle peut être mise dans
-  `~/.config/stream-box/ytdl-format`. Avec yt-dlp, YouTube n'envoie pas de pub. Sous-titres : `--ytdl-raw-options-append` avec
-  `sub-langs=fr,fr-FR,fr-orig,en,en-US,en-GB,en-orig` + `write-subs`/`write-auto-subs` (`fr.*` ramènerait plus de 100
-  traductions automatiques). À chaud, passer `ytdl-raw-options` en objet JSON : la forme texte est coupée aux virgules.
-  Les sous-titres **automatiques** (`kind=asr`) ont des répliques qui se chevauchent (deux toujours à l'écran) :
-  à `file-loaded` en mode média, stream-box.lua les remplace par `http://127.0.0.1:8080/subs?u=<url>` (remote.py coupe
-  chaque réplique au début de la suivante), en EDL `delay_open` pour ne télécharger que la piste choisie : YouTube
-  répond 429 aux rafales, surtout pour les traductions automatiques (`tlang`). yt-dlp et jellyfin-mpv-shim sont dans `~media/.local/share/media-venv` (liens dans
-  `~/.local/bin`, mise à jour : `…/media-venv/bin/pip install -U yt-dlp jellyfin-mpv-shim`).
-- Page : bloc replié « Lire un lien sur la TV » (`POST /api/play {url}`, `/api/twitch`) et cible de partage Android
-  (`share_target` du manifeste → `GET /share?title&text&url`, premier lien http(s) trouvé, puis redirection vers `/`).
-- Jellyfin (jellyfin.example.com) : jellyfin-mpv-shim en mode mpv externe (`mpv_ext`, `mpv_ext_start=false`,
-  `mpv_ext_ipc=/tmp/stream-box-mpv.sock`, `mpv_ext_no_ovr`, `enable_gui=false`, `mpv_idle_quit=false`) pilote le mpv de la
-  box ; dans ce mode il ne ferme jamais mpv. Connecté au compte Jellyfin de l'utilisateur (Quick Connect ; identifiants
-  dans `~media/.config/jellyfin-mpv-shim/users.json`), pour que la progression suive ce compte. Relancé par `start.sh`
-  à chaque (re)lancement de mpv (il ne se raccroche pas seul à un mpv relancé), journal dans `/tmp/jellyfin-shim.log`.
-  La pause de mpv survit au changement de fichier : `load_stream` la retire, sinon le direct reste figé. Pour se reconnecter : `jellyfin-mpv-shim clear`, puis
-  `jellyfin-mpv-shim --no-gui --server https://jellyfin.example.com --quick-connect` et approuver le code affiché.
-- **Qui est en live** : `remote.py` interroge Twitch (GQL, client-id public du site) chaque minute pour toute la
-  liste (avec les photos de profil, `avatars` de `/api/state`, et la miniature du live, `thumb`, pour la page), publie le résultat dans `user-data/streambox/live` (menu de la TV : point rouge + spectateurs) et le renvoie
-  dans `/api/state` (page : spectateurs, jeu, titre). Après un redémarrage de mpv, le menu le reçoit au relevé suivant.
-- **Bascule automatique** (stream-box.lua, `auto_switch`, désactivable : onglet Réglages → Lecture, `POST /api/auto_switch
-  {enabled}`, interrupteur MQTT, état dans `user-data/streambox/auto_switch` et le fichier d'état `auto_switch`) : si
-  la chaîne en cours est hors ligne et qu'elle a été
-  choisie il y a plus d'`AUTO_SWITCH` (60 s), la box passe au premier streamer en live dans l'ordre de `streamers.txt`.
-- **Chien de garde** : direct dont `playback-time` n'avance plus depuis `FROZEN` (20 s), sans pause → la chaîne est
-  relancée. Testé en gelant streamlink (`kill -STOP`).
-- **YouTube et les jetons anti-robot** : yt-dlp a besoin d'un moteur JavaScript (**Deno**, paquet pip `deno` +
-  `yt-dlp[default]` pour `yt-dlp-ejs`, lien dans `~/.local/bin`) et d'un **PO token** pour les sous-titres. Sans
-  jeton, YouTube finit par bloquer l'IP publique de la maison sur `timedtext` (HTTP 429, page « Sorry… »), et un
-  jeton valide n'y change rien tant que le blocage dure (quelques heures). Jetons : plugin pip
-  `bgutil-ytdlp-pot-provider` + son serveur (même version, `~/.local/share/bgutil-pot-provider`, compilé avec Node
-  du paquet pip `nodejs-wheel`), service utilisateur `stream-box-pot` (127.0.0.1:4416). mpv passe
-  `extractor-args=youtube:player_client=tv_simply,android_vr;fetch_pot=always` : le client TV choisi par défaut
-  recevait des flux refusés (HTTP 403 sur googlevideo, même en IPv4 de bout en bout). Si YouTube recasse, comparer
-  les clients avec `yt-dlp --extractor-args youtube:player_client=<client> -g <url>` puis `curl -r 0-1000` sur l'URL. Vérifier : `yt-dlp -v --simulate <url>` → `PO Token Providers: bgutil:http`.
-- **Retour en arrière dans le direct** : `on_load` garde `LIVE_BACK` (400 MiB ≈ 7-8 min en 1080p60) avec
-  `demuxer-seekable-cache=yes`. `live_window()` lit `demuxer-cache-state.seekable-ranges`. En différé ou en pause,
-  `set_live_buffer` passe le tampon avant à 150 MiB (sinon mpv cesse de lire le flux et le retard fond) ; retour au
-  direct → 750 KiB. Télécommande Bluetooth : ←/→ ±10 s. Page : −30 s / +30 s / Direct
-  (`POST /api/live_seek {delta|"live"}` → script-message `streambox-live-seek`), retard dans `/api/state` (`delay`).
-  La barre de lecture affiche « −0:42 » ou « ● EN DIRECT ».
-- **Notification de live** : `remote.py` repère les streamers qui viennent de passer en live (pas au premier relevé)
-  → script-message `streambox-went-live <pseudo>` → bandeau en haut à droite 12 s ; OK y va, Retour le ferme.
-- **Rediffusions et clips** : `GET /api/replays?login=` (GQL, 8 VOD + 6 clips de la semaine, cache 5 min), bloc
-  replié dans la page ; un appui lance la vidéo via `/api/play`.
-- **Liste des streamers depuis la page** : bloc « Gérer la liste » (`POST /api/streamers {action: add|remove,
-  login}`) ; l'ajout vérifie que la chaîne existe sur Twitch, les commentaires de `streamers.txt` sont conservés.
-- **Home Assistant (MQTT)** : `mqtt_bridge.py`, service utilisateur `stream-box-mqtt` (Python du venv media, paho-mqtt).
-  Lit `/api/state` toutes les 2 s et publie `stream-box/state` (+ `stream-box/live`, `stream-box/status` online/offline
-  en dernière volonté) ; les commandes `stream-box/cmd/*` deviennent des appels à l'API de `remote.py`. Le pont démarre
-  bien avant mpv : il n'annonce `online` qu'une fois l'API prête et le Lua chargé (chaîne publiée), et garde 2 min les
-  commandes reçues avant (sinon le choix du streamer envoyé par HA au réveil était perdu). 19 entités par
-  découverte (`homeassistant/…/stream_box/…`), réannoncées quand HA redémarre ou que la liste change. Config locale
-  `~/.config/stream-box/mqtt.json` + `mqtt-password` (600). Entités et automatisation d'exemple : `docs/home-assistant.md`.
-- **Écran d'accueil à la demande** : mode `home` (`show_home`, script-message `streambox-home`, `POST /api/home`,
-  bouton dans la page au-dessus des streamers, première ligne du menu de la TV, bouton MQTT) : stream arrêté, écran d'ambiance affiché, pas
-  de bascule automatique ni de chien de garde ; on en sort en choisissant un streamer ou une vidéo, ou par Jellyfin.
-- **Écran d'ambiance** (stream-box.lua, `draw_ambient`) quand rien ne joue (chaîne hors ligne, liste vide, mode `home`) : horloge,
-  date en français, météo, prochains lives prévus, et le message d’état en petit en bas, sur un fond « aurore » (`AURORA` :
-  trois taches très floues qui dérivent, redessinées toutes les 2 s, ~2 % de CPU). Le texte se déplace un peu chaque
-  minute (TV). Données de `remote.py` (`ambient_loop`, toutes les 10 min, republiées toutes les 10 s dans
-  `user-data/streambox/ambient`) : météo Open-Meteo (lieu dans `~/.config/stream-box/ambient.json`, `city`,
-  `latitude`, `longitude`, `timezone` ; sans ce fichier, pas de météo) et plannings Twitch (GQL `schedule.segments`,
-  créneaux de la semaine en cours : un créneau passé est reporté d'une semaine ; créneaux annulés (`isCancelled`)
-  ignorés ; pendant une pause Twitch (`schedule.interruption`, les vacances du streamer) : « en pause jusqu'au … » ; au-delà
-  d'une semaine, la date est ajoutée au jour ; calcul testable dans `next_streams`). Les captures de mpv sont vides quand
-  rien ne joue : vérifier l'écran sur la TV.
-- **QR code de la télécommande** (invités) : `remote.py` (`remote_qr`) le calcule avec segno (venv media, appelé en
-  sous-processus : `remote.py` tourne avec le Python du système) pour l'adresse de `~/.config/stream-box/remote-url`
-  (option `--remote-url` d'install.sh ; sinon `http://<IP de la box>:8080`, que le pare-feu peut bloquer), et le publie
-  dans `user-data/streambox/ambient` (`qr` : adresse + lignes de « 0 »/« 1 »). `qr_code()` du Lua le dessine en un
-  seul tracé ASS, en gris clair (moins marquant que du blanc) : en bas à droite de l'écran d'ambiance (il dérive avec
-  le reste) et à droite du menu quand l'écran d'ambiance n'est pas affiché.
-  Affichage réglable (Réglages → Affichage, `POST /api/qr {mode}`, select MQTT, script-message `streambox-qr`, fichier
-  d'état `qr`) : `always`, `timed` (`QR_SECONDS` = 30 s à chaque arrivée sur l'écran d'ambiance et ouverture du menu),
-  `never` ; le test se fait dans `qr_code()`.
-- **Sondages et prédictions** (`remote.py`, `events_loop` / `fetch_events`) : plus de PubSub pour un spectateur, donc
-  relevé GQL toutes les 10 s, seulement pendant un direct de la liste avec l'encart activé : `user.viewablePoll`
-  (sondage en cours ou terminé ; pas d'heure de fin, on montre le résultat 60 s après l'avoir vu terminé),
-  `channel.activePredictionEvents`, `lockedPredictionEvents`, et `resolvedPredictionEvents(first:1)` (résultat montré
-  60 s après `endedAt`). Publié dans `user-data/streambox/polls` (ne pas confondre avec `user-data/streambox/events`, le
-  réglage). Encart en haut au centre (`draw_events`, redessiné chaque seconde pour le temps restant), loin des coins du
-  chat. Réglage oui/non `events` (Réglages → Lecture, interrupteur MQTT). Les prédictions se lisent sans compte ; aucun
-  sondage n'était ouvert sur ~280 lives au moment des tests, l'affichage a été vérifié avec des données simulées
-  (`set_property user-data/streambox/polls …` par l'IPC).
-- **Mode nuit** : filtre audio `@night:lavfi=[acompressor=…,alimiter=…]` ajouté/retiré par le Lua (réglage `night`,
-  bouton dans Télécommande → Lecture, interrupteur MQTT). `af` est une option globale de mpv : il reste d'un fichier à
-  l'autre, Jellyfin compris. Réglages oui/non : script-message `streambox-flag <clé> yes|no`, `POST /api/flag {key,
-  enabled}`, état dans `user-data/streambox/<clé>` et le fichier d'état du même nom.
-- **Historique et reprise** (`remote.py`, `play` / `history_loop`) des vidéos lancées depuis la télécommande (liens,
-  YouTube, rediffusions et clips Twitch ; Jellyfin gère sa progression). Clé stable par vidéo (`media_key` : id
-  YouTube, id de VOD, slug de clip), historique dans `~media/.local/state/stream-box/history.json` (60 entrées).
-  Position notée toutes les 10 s ; reprise si > 30 s et pas « vue » (à moins de 30 s de la fin ou au-delà de 95 %),
-  donnée à mpv comme option `start=` du fichier (`streambox-play <url> <début>`). **Rediffusions Twitch synchronisées
-  avec le compte** : position lue au lancement (`video.self.viewingHistory`, la plus récente l'emporte sur celle de la
-  box) et écrite toutes les 30 s et à l'arrêt (mutation `updateUserViewedVideo`). YouTube : impossible de synchroniser
-  avec le compte (pas d'API ; yt-dlp ne sait que marquer « vu »), la mémoire reste sur la box. Page : bloc Historique
-  (Reprendre / Depuis le début / ✕, tout effacer) et barres de progression dans les rediffusions (`GET /api/history`,
-  `POST /api/history {action: remove|clear}`, `POST /api/play {url, from_start}`). Limite connue : certaines
-  rediffusions Twitch (playlist `EVENT`) démarrent une minute après le début même sans reprise, mpv nu compris.
-- **Aperçu de la TV** dans la page (bloc replié, onglet Télécommande) : `GET /api/preview` →
-  écran entier par **grim** (protocole wlr-screencopy de cage : écran d'ambiance, menu et bandeaux compris, réduit à
-  960 px par `-s`) ; faute de grim, `screenshot-to-file … window` de mpv réduit par ffmpeg. Une
-  capture à la fois, gardée 1 s pour plusieurs téléphones. La page en redemande une 1,5 s après chaque réponse,
-  seulement tant que le bloc est ouvert et visible. Sans grim et sans vidéo : réponse 204.
-- **Mises à jour** : `update.sh` (timer systemd utilisateur `stream-box-update.timer`, lundi ~5 h, rattrapé au démarrage)
-  met à jour streamlink, yt-dlp, Deno, Node, le plugin de jetons et jellyfin-mpv-shim (et recompile le serveur de jetons si sa version change), teste chaque venv et remet les versions d'avant si le test
-  échoue. Journal : `~media/.local/state/stream-box/update.log`.
-- **git** : `/home/media/stream-box` est un dépôt git (pas de secret dedans : jeton Twitch et identifiants Jellyfin
-  sont ailleurs). Committer après chaque modification.
-- **Télécommande Bluetooth** (testé avec celle du Xiaomi TV Stick, appairée et de confiance pour `media`). Linux la
-  voit comme un clavier sans les touches Q et A : la règle de démarrage ne la prend pas pour un vrai clavier. Une autre
-  télécommande qui annoncerait ces touches est à ajouter à `IGNORE` dans `boot-mode.py`. cage transmet ses touches à mpv ; stream-box.lua les lie (`KEYS`, `on_key`) : OK = `0x21ffa0`, Menu ≡ =
-  `0x2111a0` (codes de la télécommande Xiaomi : à adapter pour une autre), Retour = `GO_BACK`, Accueil = `HOMEPAGE`, flèches, volume (actions par défaut de mpv). Menu fermé en
-  Twitch : haut/bas zappent, OK affiche/retire le bandeau d'infos (titre, « EN DIRECT » ou retard), Accueil ouvre
-  le grand menu (OK aussi sur l'écran d'accueil ; le petit menu ne sert plus qu'à la souris), Menu ≡ affiche/masque le chat. Dans tous les modes : WWW (le bouton
-  « navigateur ») affiche l'écran d'accueil, Play (`PLAY`/`PLAYPAUSE`, lié exprès : sinon mpv met en pause, ce qui
-  figeait le direct) fait changer le chat de coin. En vidéo : OK pause, ←/→ ±10 s,
-  ↑ affiche/retire la barre de lecture (↓ la retire), Menu ≡ change de sous-titres. Menu ouvert : flèches = sélection (le bouton
-  le plus proche dans la direction), OK valide, Retour/Accueil ferment. Power éteint la box (logind).
-  Appairage : mettre la télécommande en mode appairage (Xiaomi : Accueil + Retour jusqu'au clignotement), puis
-  `bluetoothctl` → `scan on`, `pair`, `trust`. Les appairages sont dans la sauvegarde de `backup.sh`.
-- **Barre de lecture des vidéos** (stream-box.lua, `draw_bar`) façon YouTube : bandeau en bas (titre, partie lue en
-  violet, partie chargée, temps). Affichée `BAR_SECONDS` (2,5 s) par ↑, ←/→ ou OK ; ↑ ou ↓ la retirent ; toujours
-  visible pendant la pause (symbole pause dessiné). Préférée à l'OSC de mpv, désactivée (`--osc=no`) car pensée
-  pour la souris et en conflit avec notre menu.
-- Icône d'extinction en haut à droite de la page (confirmation « Éteindre la box ? ») → `POST /api/poweroff` →
-  `systemctl poweroff` en tant que media. Autorisé sans mot de passe par `/etc/polkit-1/rules.d/50-stream-box.rules`
-  (installée par `install.sh`), y compris quand une autre session est ouverte (SSH).
-- PWA : grâce au HTTPS du reverse proxy, Chrome Android propose « Installer l'application » ; sur iPhone, « Sur l'écran
-  d'accueil ». En HTTP direct (:8080), Android ne donnerait qu'un raccourci.
-- `streamers.txt` : un pseudo par ligne, `#` pour les commentaires. Relu à chaque ouverture du menu, pas besoin de redémarrer.
+## Files (`/home/media/stream-box/`)
+- `start.sh`: waits for the network (`getent hosts www.twitch.tv`), starts `chat_overlay.py` and `remote.py` in the
+  background, then loops on a **permanent** mpv (`--idle --force-window --fs --osc=no`, IPC `/tmp/stream-box-mpv.sock`,
+  script `stream-box.lua`). The loop restarts mpv if it is closed, and first kills any orphaned streamlink.
+- `stream-box.lua` (mpv script):
+  - starts streamlink in local HTTP server mode (`--player-external-http`, 127.0.0.1, port 34501–34550, which changes
+    with each channel) with `--twitch-low-latency --retry-streams 30`, then `loadfile http://127.0.0.1:<port>/`;
+  - if the channel is not live: black screen with "{channel} is not live, retrying in {seconds} s", new attempt every 15 s;
+  - menu on mouse movement (hidden after 4 s): streamers in a grid (several columns and smaller font
+    if there are many), then a row for the chat: a checkbox to show or hide it, and a button
+    that rotates it through the 4 corners (↖ ↗ ↘ ↙);
+  - publishes `user-data/streambox/{channel,corner,chat_visible}` for `chat_overlay.py`;
+  - script-messages for the companion app: `streambox-channel <login>`, `streambox-toggle-chat`, `streambox-cycle-corner`;
+  - disables double-click full screen.
+- `chat_overlay.py`: anonymous Twitch chat (IRC TLS, login `justinfanNNNN`, read-only). It follows mpv's
+  `user-data/streambox/*` properties (`observe_property`): it changes room when the channel changes, and clears the
+  messages at that moment. It keeps the last 10 messages (45 s max) and sends them to mpv with
+  `osd-overlay` (`ass-events`, resolution 1920x1080). Semi-transparent black background (opacity `chat_bg`, margin `BG_PADDING`): the text
+  is first rendered hidden with `compute_bounds` to measure its size, then the background (overlay 2, z=0) is drawn
+  under the text (overlay 1, z=1). It handles `CLEARMSG` / `CLEARCHAT`. Standard library only.
+- `remote.py`: companion app server on port 8080 (standard library, `ThreadingHTTPServer`). Serves `remote.html`
+  and the PWA files (`manifest.webmanifest`, `sw.js`, `icon-*.png`). API: `GET /api/state`,
+  `POST /api/{channel,chat,corner,set,display,volume,mute,pause,poweroff}`, `GET /api/display`. It opens one IPC connection per request. The volume is
+  mpv's, not the system's.
+- Twitch account (section of the page, `POST /api/login|logout`, `GET /api/account`): the website's token (cookie
+  `auth-token`) is written to `~media/.config/streamlink/config.twitch` (`twitch-api-header=Authorization=OAuth …`,
+  mode 600), which streamlink reads on its own. It is the only token that removes ads on channels you are subscribed to
+  (third-party app OAuth tokens do not). It is checked via `id.twitch.tv/oauth2/validate` when saved, then every
+  30 min. **A rejected token blocks all playback** ("Unauthorized"): if it expires, `remote.py` deletes it and restarts
+  the stream anonymously. Without a token, streamlink skips the ads and the picture freezes for their duration. The
+  token is also written as a cookie for yt-dlp (`~media/.config/stream-box/twitch-cookies.txt`, `cookies` option of
+  `ytdl-raw-options`) for subscriber-only VODs. yt-dlp rewrites this file as 644 on each playback: the folder (700) is
+  what protects it.
+- Chat settings in the page: background opacity (`chat_bg`, 0–100 %, default 60) and text size (`chat_size`,
+  20–60 px at 1920x1080, default 32). `POST /api/set` → script-message `streambox-set <key> <value>` → `set_number` in
+  stream-box.lua (bounds, state file, `user-data/streambox/*`), which `chat_overlay.py` observes.
+- Resolution: `display.py` (wlr-randr, which cage supports; `wlr-randr` package to install). Only modes ≥ 59 Hz are
+  offered: many mini PCs only output 4K at **30 Hz** over HDMI, which drops every other frame of 60 fps
+  streams.
+  "auto" = the TV's preferred mode if it is 60 Hz, otherwise the highest resolution at 60 Hz. Setting stored in
+  `~media/.local/state/stream-box/display_mode`, applied by `start.sh` before mpv and live from the page.
+- **Media mode** (stream-box.lua, `user-data/streambox/mode` = `twitch` | `media`): any file that is not the streamlink
+  stream (link sent, Jellyfin) stops streamlink and switches to `media`; the chat is hidden. End of file then
+  mpv idle for `BACK_TO_MENU` (3 s) → nothing playing any more, large menu (the delay lets Jellyfin move on to the next episode).
+  Script-messages `streambox-play <url>`, `streambox-twitch`. An `on_load` hook (before each file is opened,
+  including Jellyfin's) sets `demuxer-max-bytes` (750 KiB for live, 150 MiB for videos) and resets
+  `hwdec=auto-safe`: the shim imposes its own `hwdec` value when it attaches (default `"no"`, set to `auto-safe`
+  in its `conf.json`). `--ytdl-format`: by default 1440p max and **no AV1**, which many iGPUs cannot decode
+  in hardware (VP9 and H.264 go through hardware decoding); another rule can be put in
+  `~/.config/stream-box/ytdl-format`. With yt-dlp, YouTube sends no ads. Subtitles: `--ytdl-raw-options-append` with
+  `sub-langs=fr,fr-FR,fr-orig,en,en-US,en-GB,en-orig` + `write-subs`/`write-auto-subs` (`fr.*` would bring more than 100
+  automatic translations). At runtime, pass `ytdl-raw-options` as a JSON object: the text form is split at commas.
+  **Automatic** subtitles (`kind=asr`) have overlapping lines (two always on screen):
+  at `file-loaded` in media mode, stream-box.lua replaces them with `http://127.0.0.1:8080/subs?u=<url>` (remote.py cuts
+  each line at the start of the next one), as EDL `delay_open` so that only the chosen track is downloaded: YouTube
+  answers 429 to bursts, especially for automatic translations (`tlang`). yt-dlp and jellyfin-mpv-shim are in `~media/.local/share/media-venv` (links in
+  `~/.local/bin`, update: `…/media-venv/bin/pip install -U yt-dlp jellyfin-mpv-shim`).
+- Page: collapsed "Play a link on the TV" block (`POST /api/play {url}`, `/api/twitch`) and Android share target
+  (`share_target` of the manifest → `GET /share?title&text&url`, first http(s) link found, then redirect to `/`).
+- Jellyfin (jellyfin.example.com): jellyfin-mpv-shim in external mpv mode (`mpv_ext`, `mpv_ext_start=false`,
+  `mpv_ext_ipc=/tmp/stream-box-mpv.sock`, `mpv_ext_no_ovr`, `enable_gui=false`, `mpv_idle_quit=false`) drives the box's
+  mpv; in this mode it never closes mpv. Connected to the user's Jellyfin account (Quick Connect; credentials
+  in `~media/.config/jellyfin-mpv-shim/users.json`), so that progress follows that account. Restarted by `start.sh`
+  each time mpv is (re)started (it does not reattach to a restarted mpv on its own), log in `/tmp/jellyfin-shim.log`.
+  mpv's pause survives a file change: `load_stream` removes it, otherwise the live stream stays frozen. To reconnect: `jellyfin-mpv-shim clear`, then
+  `jellyfin-mpv-shim --no-gui --server https://jellyfin.example.com --quick-connect` and approve the code shown.
+- **Who is live**: `remote.py` queries Twitch (GQL, the website's public client-id) every minute for the whole
+  list (with profile pictures, `avatars` of `/api/state`, and the live thumbnail, `thumb`, for the page), publishes the result in `user-data/streambox/live` (TV menu: red dot + viewers) and returns it
+  in `/api/state` (page: viewers, game, title). After an mpv restart, the menu receives it at the next poll.
+- **Auto switch** (stream-box.lua, `auto_switch`, can be disabled: Settings tab → Playback, `POST /api/auto_switch
+  {enabled}`, MQTT switch, state in `user-data/streambox/auto_switch` and the `auto_switch` state file): if
+  the current channel is offline and was
+  chosen more than `AUTO_SWITCH` (60 s) ago, the box switches to the first live streamer in the order of `streamers.txt`.
+- **Watchdog**: a live stream whose `playback-time` has not advanced for `FROZEN` (20 s), without pause → the channel
+  is restarted. Tested by freezing streamlink (`kill -STOP`).
+- **YouTube and anti-bot tokens**: yt-dlp needs a JavaScript engine (**Deno**, pip package `deno` +
+  `yt-dlp[default]` for `yt-dlp-ejs`, link in `~/.local/bin`) and a **PO token** for subtitles. Without a
+  token, YouTube ends up blocking the home's public IP on `timedtext` (HTTP 429, "Sorry…" page), and a
+  valid token changes nothing while the block lasts (a few hours). Tokens: pip plugin
+  `bgutil-ytdlp-pot-provider` + its server (same version, `~/.local/share/bgutil-pot-provider`, built with Node
+  from the pip package `nodejs-wheel`), user service `stream-box-pot` (127.0.0.1:4416). mpv passes
+  `extractor-args=youtube:player_client=tv_simply,android_vr;fetch_pot=always`: the TV client chosen by default
+  received rejected streams (HTTP 403 on googlevideo, even with IPv4 end to end). If YouTube breaks again, compare
+  the clients with `yt-dlp --extractor-args youtube:player_client=<client> -g <url>` then `curl -r 0-1000` on the URL. Check: `yt-dlp -v --simulate <url>` → `PO Token Providers: bgutil:http`.
+- **Rewinding the live stream**: `on_load` keeps `LIVE_BACK` (400 MiB ≈ 7-8 min at 1080p60) with
+  `demuxer-seekable-cache=yes`. `live_window()` reads `demuxer-cache-state.seekable-ranges`. When time-shifted or paused,
+  `set_live_buffer` raises the forward buffer to 150 MiB (otherwise mpv stops reading the stream and the delay melts
+  away); back to live → 750 KiB. Bluetooth remote: ←/→ ±10 s. Page: −30 s / +30 s / Live
+  (`POST /api/live_seek {delta|"live"}` → script-message `streambox-live-seek`), delay in `/api/state` (`delay`).
+  The playback bar shows "−0:42" or "● LIVE".
+- **Live notification**: `remote.py` spots the streamers who have just gone live (not at the first poll)
+  → script-message `streambox-went-live <login>` → banner at the top right for 12 s; OK goes there, Back closes it.
+- **Replays and clips**: `GET /api/replays?login=` (GQL, 8 VODs + 6 clips of the week, 5 min cache), collapsed
+  block in the page; a tap plays the video via `/api/play`.
+- **Streamer list from the page**: "Streamer list" section of Settings (`POST /api/streamers {action: add|remove,
+  login}`); adding checks that the channel exists on Twitch, comments in `streamers.txt` are kept.
+- **Home Assistant (MQTT)**: `mqtt_bridge.py`, user service `stream-box-mqtt` (Python from the media venv, paho-mqtt).
+  Reads `/api/state` every 2 s and publishes `stream-box/state` (+ `stream-box/live`, `stream-box/status` online/offline
+  as last will); the `stream-box/cmd/*` commands become calls to the `remote.py` API. The bridge starts
+  well before mpv: it only announces `online` once the API is ready and the Lua loaded (channel published), and keeps
+  commands received before that for 2 min (otherwise the streamer choice sent by HA at wake-up was lost). 19 entities by
+  discovery (`homeassistant/…/stream_box/…`), announced again when HA restarts or the list changes. Local config
+  `~/.config/stream-box/mqtt.json` + `mqtt-password` (600). Entities and example automation: `docs/home-assistant.md`.
+- **Home screen on demand**: `home` mode (`show_home`, script-message `streambox-home`, `POST /api/home`,
+  button in the page above the streamers, first row of the TV menu, MQTT button): stream stopped, ambient screen shown, no
+  automatic switch or watchdog; you leave it by choosing a streamer or a video, or through Jellyfin.
+- **Ambient screen** (stream-box.lua, `draw_ambient`) when nothing is playing (channel offline, empty list, `home` mode): clock,
+  date in the interface language, weather, upcoming scheduled streams, and the status message small at the bottom, on an "aurora" background (`AURORA`:
+  three very blurry blobs that drift, redrawn every 2 s, ~2 % CPU). The text moves a little every
+  minute (TV). Data from `remote.py` (`ambient_loop`, every 10 min, republished every 10 s in
+  `user-data/streambox/ambient`): Open-Meteo weather (location in `~/.config/stream-box/ambient.json`, `city`,
+  `latitude`, `longitude`, `timezone`; without this file, no weather) and Twitch schedules (GQL `schedule.segments`,
+  slots of the current week: a past slot is moved forward one week; cancelled slots (`isCancelled`)
+  ignored; during a Twitch break (`schedule.interruption`, the streamer's vacation): "on a break until {date}"; beyond
+  a week, the date is added to the day; testable computation in `next_streams`). mpv screenshots are empty when
+  nothing is playing: check the screen on the TV.
+- **Companion app QR code** (guests): `remote.py` (`remote_qr`) computes it with segno (media venv, called as a
+  subprocess: `remote.py` runs with the system Python) for the address in `~/.config/stream-box/remote-url`
+  (install.sh's `--remote-url` option; otherwise `http://<box IP>:8080`, which the firewall may block), and publishes it
+  in `user-data/streambox/ambient` (`qr`: address + lines of "0"/"1"). The Lua's `qr_code()` draws it as a
+  single ASS path, in light gray (less striking than white): at the bottom right of the ambient screen (it drifts with
+  the rest) and to the right of the menu when the ambient screen is not shown.
+  Adjustable display (Settings → Display, `POST /api/qr {mode}`, MQTT select, script-message `streambox-qr`, state
+  file `qr`): `always`, `timed` (`QR_SECONDS` = 30 s each time the ambient screen appears and the menu opens),
+  `never`; the check is done in `qr_code()`.
+- **Polls and predictions** (`remote.py`, `events_loop` / `fetch_events`): no more PubSub for a viewer, so
+  GQL polling every 10 s, only during a live stream from the list with the panel enabled: `user.viewablePoll`
+  (current or ended poll; no end time, the result is shown for 60 s after it is seen ended),
+  `channel.activePredictionEvents`, `lockedPredictionEvents`, and `resolvedPredictionEvents(first:1)` (result shown
+  for 60 s after `endedAt`). Published in `user-data/streambox/polls` (not to be confused with `user-data/streambox/events`, the
+  setting). Panel at the top center (`draw_events`, redrawn every second for the time left), away from the chat
+  corners. Yes/no setting `events` (Settings → Playback, MQTT switch). Predictions can be read without an account; no
+  poll was open on ~280 live streams at testing time, the display was checked with simulated data
+  (`set_property user-data/streambox/polls …` through the IPC).
+- **Night mode**: audio filter `@night:lavfi=[acompressor=…,alimiter=…]` added/removed by the Lua (setting `night`,
+  TV Settings → Playback, MQTT switch). `af` is a global mpv option: it stays from one file to
+  the next, Jellyfin included. Yes/no settings: script-message `streambox-flag <key> yes|no`, `POST /api/flag {key,
+  enabled}`, state in `user-data/streambox/<key>` and the state file of the same name.
+- **History and resume** (`remote.py`, `play` / `history_loop`) of videos started from the companion app (links,
+  YouTube, Twitch replays and clips; Jellyfin handles its own progress). Stable key per video (`media_key`: YouTube
+  id, VOD id, clip slug), history in `~media/.local/state/stream-box/history.json` (60 entries).
+  Position recorded every 10 s; resume if > 30 s and not "watched" (less than 30 s from the end or beyond 95 %),
+  given to mpv as the file's `start=` option (`streambox-play <url> <start>`). **Twitch replays synced
+  with the account**: position read at start (`video.self.viewingHistory`, the most recent wins over the box's)
+  and written every 30 s and on stop (mutation `updateUserViewedVideo`). YouTube: impossible to sync
+  with the account (no API; yt-dlp can only mark as "watched"), the memory stays on the box. Page: History block
+  (Resume / From the beginning / ✕, clear all) and progress bars in the replays (`GET /api/history`,
+  `POST /api/history {action: remove|clear}`, `POST /api/play {url, from_start}`). Known limitation: some
+  Twitch replays (`EVENT` playlist) start one minute after the beginning even without resuming, bare mpv included.
+- **TV preview** in the page (collapsed block, Remote tab): `GET /api/preview` →
+  whole screen by **grim** (cage's wlr-screencopy protocol: ambient screen, menu and banners included, scaled down to
+  960 px by `-s`); without grim, mpv's `screenshot-to-file … window` scaled down by ffmpeg. One
+  capture at a time, kept for 1 s for several phones. The page asks for another one 1.5 s after each response,
+  only while the block is open and visible. Without grim and without video: 204 response.
+- **Updates**: `update.sh` (systemd user timer `stream-box-update.timer`, Monday ~5 am, caught up at boot)
+  updates streamlink, yt-dlp, Deno, Node, the token plugin and jellyfin-mpv-shim (and rebuilds the token server if its version changes), tests each venv and restores the previous versions if the test
+  fails. Log: `~media/.local/state/stream-box/update.log`.
+- **git**: `/home/media/stream-box` is a git repository (no secrets in it: Twitch token and Jellyfin credentials
+  are elsewhere). Commit after each change.
+- **Bluetooth remote** (tested with the Xiaomi TV Stick one, paired and trusted for `media`). Linux
+  sees it as a keyboard without the Q and A keys: the boot rule does not take it for a real keyboard. Another
+  remote that would announce these keys must be added to `IGNORE` in `boot-mode.py`. cage passes its keys to mpv; stream-box.lua binds them (`KEYS`, `on_key`): OK = `0x21ffa0`, Menu ≡ =
+  `0x2111a0` (Xiaomi remote codes: to adapt for another one), Back = `GO_BACK`, Home = `HOMEPAGE`, arrows, volume (mpv's default actions). Menu closed in
+  Twitch: up/down change channel, OK shows/hides the info banner (title, "LIVE" or delay), Home opens
+  the large menu (OK too on the home screen; the small menu is now only for the mouse), Menu ≡ shows/hides the chat. In all modes: WWW (the
+  "browser" button) shows the home screen, Play (`PLAY`/`PLAYPAUSE`, bound on purpose: otherwise mpv pauses, which
+  froze the live stream) moves the chat to another corner. In video: OK pauses, ←/→ ±10 s,
+  ↑ shows/hides the playback bar (↓ hides it), Menu ≡ changes subtitles. Menu open: arrows = selection (the closest
+  button in that direction), OK confirms, Back/Home close it. Power turns the box off (logind).
+  Pairing: put the remote in pairing mode (Xiaomi: Home + Back until it blinks), then
+  `bluetoothctl` → `scan on`, `pair`, `trust`. Pairings are included in the `backup.sh` backup.
+- **Video playback bar** (stream-box.lua, `draw_bar`) in the style of YouTube: banner at the bottom (title, played
+  part in purple, buffered part, time). Shown for `BAR_SECONDS` (2.5 s) by ↑, ←/→ or OK; ↑ or ↓ hide it; always
+  visible while paused (pause symbol drawn). Preferred to mpv's OSC, disabled (`--osc=no`) because it is designed
+  for the mouse and conflicts with our menu.
+- Power icon at the top right of the page (confirmation "Turn off the box?", or "Put the box to sleep?" when the power button is set to sleep) → `POST /api/poweroff` →
+  `systemctl poweroff` as media. Allowed without a password by `/etc/polkit-1/rules.d/50-stream-box.rules`
+  (installed by `install.sh`), including when another session is open (SSH).
+- PWA: thanks to the reverse proxy's HTTPS, Chrome Android offers "Install app"; on iPhone, "Add to Home
+  Screen". Over direct HTTP (:8080), Android would only give a shortcut.
+- `streamers.txt`: one login per line, `#` for comments. Reread each time the menu opens, no need to restart.
 
-## État conservé (`~media/.local/state/stream-box/`)
-- `channel` : dernier streamer regardé, chaîne courante au démarrage (« Reprendre … » du menu, Retour au stream) s'il est encore dans `streamers.txt` (sinon le premier).
-- `chat_corner` : `tl` / `tr` / `br` / `bl`.
-- `chat_visible` : `yes` / `no`.
-- `chat_bg`, `chat_size` : nombres. `display_mode` : `auto` ou `LxH@Hz`.
+## Saved state (`~media/.local/state/stream-box/`)
+- `channel`: last streamer watched, current channel at boot ("▶  Resume {channel}" in the menu, "Back to the stream") if it is still in `streamers.txt` (otherwise the first one).
+- `chat_corner`: `tl` / `tr` / `br` / `bl`.
+- `chat_visible`: `yes` / `no`.
+- `chat_bg`, `chat_size`: numbers. `display_mode`: `auto` or `WxH@Hz`.
 
 ## streamlink
-Installé dans un venv `~/.local/share/streamlink-venv`, avec un lien dans `~/.local/bin/streamlink` (`start.sh` ajoute
-`~/.local/bin` au PATH). Le paquet du système n'est pas utilisé : il est souvent en retard, et le module Twitch casse
-quand Twitch change quelque chose. Mise à jour : `~/.local/share/streamlink-venv/bin/pip install -U streamlink`.
+Installed in a venv `~/.local/share/streamlink-venv`, with a link in `~/.local/bin/streamlink` (`start.sh` adds
+`~/.local/bin` to the PATH). The system package is not used: it is often behind, and the Twitch plugin breaks
+when Twitch changes something. Update: `~/.local/share/streamlink-venv/bin/pip install -U streamlink`.
 
-## Pièges connus
-- La connexion IPC à mpv doit rester ouverte : mpv retire l'overlay quand le client se déconnecte.
-- Les couleurs ASS sont en BGR (`&HBBGGRR&`). Le texte est échappé comme dans les scripts intégrés de mpv
-  (`\` → `\` + U+FEFF, `{` → `\{`). Les pseudos trop sombres sont remplacés par du lavande (#C9B8FF).
-- Les glyphes ☐/☑ ne sont pas dans toutes les polices : la case à cocher est dessinée en ASS.
-- `pkill -f <motif>` lancé en SSH peut se tuer lui-même, parce que sa propre ligne de commande contient le motif.
-  Utiliser `pkill -f "[c]hat_overlay"`.
+## Known pitfalls
+- The IPC connection to mpv must stay open: mpv removes the overlay when the client disconnects.
+- ASS colors are in BGR (`&HBBGGRR&`). Text is escaped as in mpv's built-in scripts
+  (`\` → `\` + U+FEFF, `{` → `\{`). Logins that are too dark are replaced with lavender (#C9B8FF).
+- The ☐/☑ glyphs are not in every font: the checkbox is drawn in ASS.
+- `pkill -f <pattern>` run over SSH can kill itself, because its own command line contains the pattern.
+  Use `pkill -f "[c]hat_overlay"`.
 
-## Tester à distance
-- `start.sh` est lancé par cage : tuer mpv (`pkill -u media -x mpv`) le relance avec le nouveau `stream-box.lua`.
-  Pour `remote.py` ou `chat_overlay.py`, les tuer puis les relancer avec `nohup` (ou redémarrer la box).
-- Déployer par renommage (copie dans un dossier temporaire puis `mv`), pas en écrasant : bash relit `start.sh`
-  pendant qu'il tourne.
-- Simuler la souris par l'IPC : `{"command":["mouse",x,y]}` pour bouger, `["mouse",x,y,0,"single"]` pour cliquer.
-  Les coordonnées sont en pixels de l'écran (`osd-dimensions`).
-- Captures : `["screenshot-to-file","/tmp/x.png","window"]`. Elles sortent vides tant qu'aucune vidéo ne joue.
-- Quelqu'un peut cliquer devant la TV pendant un test : l'état peut changer pendant que tu testes.
+## Testing remotely
+- `start.sh` is run by cage: killing mpv (`pkill -u media -x mpv`) restarts it with the new `stream-box.lua`.
+  For `remote.py` or `chat_overlay.py`, kill them then start them again with `nohup` (or reboot the box).
+- Deploy by renaming (copy to a temporary folder then `mv`), not by overwriting: bash rereads `start.sh`
+  while it runs.
+- Simulate the mouse through the IPC: `{"command":["mouse",x,y]}` to move, `["mouse",x,y,0,"single"]` to click.
+  Coordinates are in screen pixels (`osd-dimensions`).
+- Screenshots: `["screenshot-to-file","/tmp/x.png","window"]`. They come out empty as long as no video is playing.
+- Someone may click in front of the TV during a test: the state can change while you are testing.
 
-## Pistes
-- Emotes en image (`overlay-add` avec des bitmaps BGRA bruts) : nettement plus complexe.
-- Indiquer dans le menu qui est en live.
+## Ideas
+- Emotes as images (`overlay-add` with raw BGRA bitmaps): much more complex.
+- Show in the menu who is live.
 
-## Page web (remote.html)
+## Companion app page (remote.html)
 
-Thème sombre en verre dépoli (glassmorphism : cartes et onglets translucides `backdrop-filter`, sur des taches de
-couleur qui dérivent en `body::before/::after` ; le fond est sur `html`, sinon celui de `body` les cache), sans
-dépendance externe, onglets collés en haut : en-tête avec l'état de la TV, carte « Sur la TV »
-(miniature du live, streamer, titre, retour en arrière ; compacte pour l'écran d'accueil et une chaîne hors ligne),
-streamers en cartes avec photo (anneau rouge en live), boutons à icônes SVG en ligne, interrupteurs (`button.toggle`
-avec `aria-pressed`, dessinés en CSS). Version précédente de la page : tag git `page-v1` (`git show
-page-v1:remote.html > remote.html` pour revenir en arrière). Pour juger d'un changement sans téléphone : copie de la
-page avec un `render(<état de /api/state>)` à la place de `refresh()`, capturée par `firefox --headless --screenshot`
-(il n'attend pas les requêtes de la page ; ne pas faire défiler : les éléments collés s'y dessinent mal).
+Dark frosted-glass theme (glassmorphism: translucent `backdrop-filter` cards and tabs, over drifting color blobs
+in `body::before/::after`; the background is on `html`, otherwise the `body` one hides them), with no
+external dependency, tabs stuck at the top: header with the TV state, "On the TV" card
+(live thumbnail, streamer, title, rewind; compact for the home screen and an offline channel),
+streamers as cards with a picture (red ring when live), inline SVG icon buttons, switches (`button.toggle`
+with `aria-pressed`, drawn in CSS). Previous version of the page: git tag `page-v1` (`git show
+page-v1:remote.html > remote.html` to go back). To judge a change without a phone: copy of the
+page with a `render(<state from /api/state>)` instead of `refresh()`, captured by `firefox --headless --screenshot`
+(it does not wait for the page's requests; do not scroll: sticky elements are drawn badly there).
 
-## Grand menu de la TV (tv_menu.lua)
+## Large TV menu (tv_menu.lua)
 
-Façon Android TV, ouvert par le bouton Menu de la télécommande (touche Accueil) dans tous les modes : onglets à gauche
-(En direct, Suivis, Rediffusions, Historique, Réglages, Système), contenu à droite, vidéo assombrie derrière, refermé par Menu, Retour depuis les
-onglets, ou au bout de 90 s sans touche. Script séparé, chargé par `start.sh` (`--script` en second). Tant qu'il est
-ouvert (`user-data/streambox/tvmenu`, que `chat_overlay.py` suit aussi pour masquer le chat, sinon dessiné
-par-dessus), `stream-box.lua` lui transmet toutes les touches (`streambox-tvmenu-key`) ;
-il lit l'état et agit par l'API de `remote.py` (curl en sous-processus), comme la page web. Réglages : ◀ ▶ changent
-une valeur, OK bascule un interrupteur ; la résolution choisie aux flèches ne s'applique qu'à OK. En direct : raccourcis
-au-dessus des streamers (écran d'accueil, « Reprendre <streamer> » hors du stream ; ▲ depuis la première rangée).
-Système : état du compte, extinction (OK deux fois), QR code de la télécommande web pour ce qui
-demande de taper du texte. Photos : images brutes posées par `overlay-add` (au-dessus du dessin ASS, coordonnées en
-pixels de l'écran), préparées par `GET /api/tvimage?src=&w=&h=&round=` (ffmpeg : recadrage, disque à bord adouci,
-BGRA à alpha prémultiplié, cache `/tmp/stream-box-images`, seulement les serveurs d'images Twitch et YouTube).
-Tester : `keypress HOMEPAGE`, `keypress DOWN`… par l'IPC, puis `/api/preview`. Pour recharger le script sans
-redémarrer la session : relancer mpv puis `load-script` une seule fois (un second `load-script` en ferait deux).
-Rediffusions : puces des streamers (défilement à la largeur), puis rangées « Rediffusions » et « Clips de la
-semaine » de `/api/replays` (4 cartes visibles, ◀ ▶ défilent). Historique : grille de `/api/history`, 2 rangées
-visibles. Cartes vidéo : miniature à coins arrondis (`radius` de `/api/tvimage`), barre de progression et textes
-dessous (rien ne se dessine sur une image posée). OK sur une vidéo commencée ouvre une fenêtre d'actions (Reprendre à
-…, Depuis le début, et Retirer de l'historique dans l'historique) ; les images sont retirées tant qu'elle est ouverte,
-sinon elles passeraient par-dessus. La miniature d'un live en cours (`vod-secure.twitch.tv`, image « en cours de
-traitement ») n'est pas autorisée : la carte garde son ▶ dessiné.
-Finitions : halo violet flou autour de l'élément choisi (`focus_ring`), textes trop longs qui défilent après une
-pause (`marquee` : largeur estimée à 0,52 em par caractère, `\clip` à la largeur, redessin à 15 images/s seulement
-tant qu'un texte défile, reparti du début à chaque touche ; menu ouvert ≈ +30 % d'un cœur), « En cours sur la TV »
-en bas du rail, météo de l'écran d'ambiance à côté de l'heure, carte du streamer regardé teintée de violet. Textes
-dimensionnés pour une TV vue du canapé (titres de cartes vidéo 33 px, infos 27 px, en 1920x1080).
+In the style of Android TV, opened by the remote's Menu button (Home key) in all modes: tabs on the left
+(Live, Following, Replays, History, Settings, System), content on the right, video dimmed behind, closed by Menu, Back from the
+tabs, or after 90 s without a key press. Separate script, loaded by `start.sh` (second `--script`). While it is
+open (`user-data/streambox/tvmenu`, which `chat_overlay.py` also follows to hide the chat, otherwise drawn
+on top), `stream-box.lua` passes it all keys (`streambox-tvmenu-key`);
+it reads the state and acts through the `remote.py` API (curl as a subprocess), like the companion app. Settings: ◀ ▶ change
+a value, OK toggles a switch; the resolution chosen with the arrows is only applied on OK. Live: shortcuts
+above the streamers (home screen, "▶  Resume {channel}" outside the stream; ▲ from the first row).
+System: account status, power off (OK twice), companion app QR code for whatever
+requires typing text. Pictures: raw images placed by `overlay-add` (above the ASS drawing, coordinates in
+screen pixels), prepared by `GET /api/tvimage?src=&w=&h=&round=` (ffmpeg: crop, disc with a soft edge,
+BGRA with premultiplied alpha, cache `/tmp/stream-box-images`, only the Twitch and YouTube image servers).
+Testing: `keypress HOMEPAGE`, `keypress DOWN`… through the IPC, then `/api/preview`. To reload the script without
+restarting the session: restart mpv then `load-script` only once (a second `load-script` would make two).
+Replays: streamer chips (scrolling to fit the width), then "Replays" and "Clips of the
+week" rows from `/api/replays` (4 cards visible, ◀ ▶ scroll). History: grid from `/api/history`, 2 rows
+visible. Video cards: thumbnail with rounded corners (`radius` of `/api/tvimage`), progress bar and texts
+below (nothing is drawn over a placed image). OK on a started video opens an actions popup (Resume at
+…, From the beginning, and Remove from history in the history); images are removed while it is open,
+otherwise they would show on top of it. The thumbnail of a live stream in progress (`vod-secure.twitch.tv`, "being
+processed" image) is not allowed: the card keeps its drawn ▶.
+Finishing touches: blurred purple glow around the selected item (`focus_ring`), texts that are too long scroll after a
+pause (`marquee`: width estimated at 0.52 em per character, `\clip` to the width, redraw at 15 fps only
+while a text is scrolling, restarted from the beginning at each key press; menu open ≈ +30 % of a core), "Now on the TV"
+at the bottom of the rail, ambient screen weather next to the time, card of the watched streamer tinted purple. Texts
+sized for a TV seen from the couch (video card titles 33 px, info 27 px, at 1920x1080).
 
-## Chaînes suivies (onglet Suivis)
+## Followed channels (Following tab)
 
-Twitch refuse la liste des chaînes suivies au jeton du site : GQL `currentUser.follows` / `followedLiveUsers` →
-« service error » (probablement réservé au vrai navigateur, contrôle d'intégrité), Helix → « Missing scope:
-user:read:follows ». D'où une appli Twitch à soi (dev.twitch.tv/console/apps, redirect `http://localhost` jamais
-utilisée, type Public sans secret ou Confidentiel avec secret) et l'autorisation par code (device code flow) :
-`POST /api/follows_login` → code à taper sur twitch.tv/activate (affiché sur la TV avec un QR code, et dans la page),
-`follows_poll` attend la validation, jetons dans `~/.config/stream-box/twitch-follows-token.json` (600, renouvelés par
-refresh token ; retirés si Twitch refuse). Config de l'appli : `twitch-app.json` (600), écrite par la page
-(`POST /api/follows_app {client_id, client_secret?}`, Réglages → Chaînes suivies). `GET /api/follows` : état et listes
-(Helix `streams/followed`, `channels/followed` jusqu'à 500, photos par `users`), cache 60 s. `/api/channel` accepte
-aussi une chaîne suivie. Sur la TV : grille comme En direct (live d'abord), OK regarde, ou propose « Ajouter à ma
-liste » si la chaîne n'y est pas. `GET /api/qr?text=` : QR code générique (segno).
+Twitch refuses the followed channel list to the website's token: GQL `currentUser.follows` / `followedLiveUsers` →
+"service error" (probably reserved for the real browser, integrity check), Helix → "Missing scope:
+user:read:follows". Hence a Twitch app of your own (dev.twitch.tv/console/apps, redirect `http://localhost` never
+used, Public type without a secret or Confidential with a secret) and device code authorization (device code flow):
+`POST /api/follows_login` → code to type on twitch.tv/activate (shown on the TV with a QR code, and in the page),
+`follows_poll` waits for the approval, tokens in `~/.config/stream-box/twitch-follows-token.json` (600, renewed with
+the refresh token; removed if Twitch refuses them). App config: `twitch-app.json` (600), written by the page
+(`POST /api/follows_app {client_id, client_secret?}`, Settings → Followed channels). `GET /api/follows`: status and lists
+(Helix `streams/followed`, `channels/followed` up to 500, pictures through `users`), 60 s cache. `/api/channel` also
+accepts a followed channel. On the TV: grid like Live (live first), OK watches, or offers "Add to my
+list" if the channel is not in it. `GET /api/qr?text=`: generic QR code (segno).
 
-## Appli Qt qui embarque mpv (ui.py, player.sh)
+## Qt app embedding mpv (ui.py, player.sh)
 
-Pour un menu rendu par la puce graphique (animations fluides) et, plus tard, deux vidéos à la fois, la fenêtre de la
-session cage n'est plus forcément mpv : `ui.py` est une appli Qt Quick (PySide6, venv `~/.local/share/ui-venv`) qui
-fait dessiner la vidéo par libmpv (render API OpenGL, python-mpv) dans un `QQuickFramebufferObject` (`MpvVideo`,
-scène `ui.qml`), le QML pouvant ensuite se poser par-dessus. `player.sh` (lancé par `start.sh`) est la boucle du
-lecteur : appli Qt si `~/.config/stream-box/player` contient `qt`, sinon mpv seul ; retour automatique à mpv si l'appli
-s'arrête trois fois de suite en moins de 30 s (journal `/tmp/stream-box-ui.log`). `ui.py` prend les mêmes options que
-la ligne de commande de mpv (`--x=y`, `--script=` cumulés, `--…-append=` par `change-list`) : scripts Lua, socket IPC,
-chat, Jellyfin, Home Assistant marchent comme avant. Points délicats, vérifiés :
-- décodage matériel : libmpv a besoin d'une connexion Wayland (`wl_display`, ici une connexion à part ouverte par
-  `wl_display_connect`) pour créer son VADisplay ; sans elle « Could not create a VA display » et décodage au processeur.
-  Avec : vaapi, 1080p60 sans image perdue, ~28 % d'un cœur comme mpv seul ;
-- PySide libérerait le `QOpenGLFramebufferObject` rendu à Qt (plantage dans `texture()`) : référence gardée ;
-- pas de retournement vertical (`setMirrorVertically`) : l'image serait à l'envers ;
-- `force-window` activé seulement une fois le contexte de rendu créé (`Bridge.ready`) : passé au démarrage, mpv ne peut
-  pas encore ouvrir sa sortie vidéo et le désactive ; sans lui, rien ne se redessine sans vidéo (écran d'ambiance et
-  chaîne hors ligne figés sur la dernière image) ;
-- touches : Qt → noms mpv (`KEYS`) ; les touches XF86 sans nom (OK de la télécommande Xiaomi : keysym 0x1008ffa0)
-  prennent le nom que mpv leur donnait, « 0x21 » + 4 derniers chiffres du keysym (`0x21ffa0`) ; souris → `mouse` ;
-- `jellyfin-mpv-shim` abandonne si le socket n'existe pas encore (l'appli l'ouvre plus tard que mpv) : `player.sh`
-  efface l'ancien socket et attend le nouveau avant de lancer le shim. Attention aux `pkill -f '[j]ellyfin-mpv-shim'`
-  de la boucle : ils tuent aussi une commande SSH qui contiendrait ce mot ;
-- streamlink (`--player-external-http`) ne sert qu'un client à la fois : pour tester une seconde fenêtre, un second
-  streamlink sur un autre port.
-Changer de lecteur sans redémarrer la box : écrire le fichier puis `quit` par l'IPC (la boucle relance). Un nouveau
-`start.sh`/`player.sh` ne s'applique qu'au démarrage suivant de la session (bash garde le script lu en mémoire).
+For a GPU-rendered menu (smooth animations) and, later, two videos at once, the window of the
+cage session is no longer necessarily mpv: `ui.py` is a Qt Quick app (PySide6, venv `~/.local/share/ui-venv`) that
+has libmpv draw the video (OpenGL render API, python-mpv) into a `QQuickFramebufferObject` (`MpvVideo`,
+scene `ui.qml`), so that QML can then be laid on top. `player.sh` (run by `start.sh`) is the player
+loop: Qt app if `~/.config/stream-box/player` contains `qt`, otherwise mpv alone; automatic fallback to mpv if the app
+stops three times in a row in less than 30 s (log `/tmp/stream-box-ui.log`). `ui.py` takes the same options as
+mpv's command line (`--x=y`, cumulative `--script=`, `--…-append=` through `change-list`): Lua scripts, IPC socket,
+chat, Jellyfin, Home Assistant work as before. Tricky points, checked:
+- hardware decoding: libmpv needs a Wayland connection (`wl_display`, here a separate connection opened by
+  `wl_display_connect`) to create its VADisplay; without it "Could not create a VA display" and CPU decoding.
+  With it: vaapi, 1080p60 without dropped frames, ~28 % of a core like mpv alone;
+- PySide would free the `QOpenGLFramebufferObject` returned to Qt (crash in `texture()`): reference kept;
+- no vertical flip (`setMirrorVertically`): the picture would be upside down;
+- `force-window` enabled only once the render context is created (`Bridge.ready`): passed at startup, mpv cannot
+  open its video output yet and disables it; without it, nothing is redrawn without video (ambient screen and
+  offline channel frozen on the last frame);
+- keys: Qt → mpv names (`KEYS`); unnamed XF86 keys (OK of the Xiaomi remote: keysym 0x1008ffa0)
+  take the name mpv gave them, "0x21" + last 4 digits of the keysym (`0x21ffa0`); mouse → `mouse`;
+- `jellyfin-mpv-shim` gives up if the socket does not exist yet (the app opens it later than mpv): `player.sh`
+  deletes the old socket and waits for the new one before starting the shim. Beware of the loop's
+  `pkill -f '[j]ellyfin-mpv-shim'`: they also kill an SSH command that would contain that word;
+- streamlink (`--player-external-http`) only serves one client at a time: to test a second window, a second
+  streamlink on another port.
+Switching players without rebooting the box: write the file then `quit` through the IPC (the loop restarts). A new
+`start.sh`/`player.sh` only applies at the next session start (bash keeps the script it read in memory).
 
-### Grand menu en QML (qml/TvMenu.qml)
+### Large menu in QML (qml/TvMenu.qml)
 
-Avec l'appli Qt, le grand menu est en QML (rendu par la puce graphique, animations : fondu à l'ouverture, pastille
-d'onglet qui glisse, contenu qui arrive en glissant, cartes qui grossissent avec un halo flou, défilement doux des
-grilles et rangées, interrupteurs animés, fenêtre d'actions qui rebondit). `ui.py` ne charge alors pas `tv_menu.lua`
-(deux menus répondraient), qui reste le menu de secours en mode mpv seul ou si le QML ne se charge pas. Ouverture :
-`streambox-tvmenu-open` de stream-box.lua intercepté par python-mpv (`register_message_handler`). Touches : tant que le
-menu est ouvert, `View.keyPressEvent` les donne au QML (`box.keyPressed`, rôles de `MENU_KEYS` : up, ok, back, home…)
-au lieu de mpv (le volume reste à mpv) ; une touche envoyée par l'IPC (`keypress` → stream-box.lua →
-`streambox-tvmenu-key`) arrive au même endroit, ce qui sert aux tests. `box.setMenuOpen` écrit un vrai booléen dans
-`user-data/streambox/tvmenu` (`MPV_FORMAT_FLAG` : python-mpv écrirait la chaîne « yes ») pour le chat et la souris.
-Données et actions : `XMLHttpRequest` vers l'API de remote.py ; photos et miniatures chargées directement depuis
-Twitch / YouTube par Qt et arrondies par `MultiEffect` (plus besoin de `/api/tvimage`) ; météo et QR code par
-`box.ambient` (propriété observée), voile opaque sans vidéo (`box.videoActive`). Composants : `RoundImage`,
-`Marquee` (texte coupé au repos, deux copies qui défilent au focus), `FocusFrame`, `StreamerCard`, `VideoCard`,
-`SettingRow`, `QrCode`, `fmt.js`. Pièges : tailles de police ×0,78 par rapport au menu ASS (Qt dessine plus grand pour
-la même valeur) ; dans `onTabChanged`, lire `tabs[tab].id` et pas `tabId` (liaison pas encore recalculée) ; listes
-avec `clip` : marges (`leftMargin`, `topMargin`) pour ne pas couper le halo du focus ; modèles en nombre d'éléments
-(les délégués lisent les tableaux) pour que la liste ne se réinitialise pas à chaque relevé de l'état. Tester sans
-télécommande : `keypress HOMEPAGE`, `keypress DOWN`… par l'IPC, captures par `grim`.
+With the Qt app, the large menu is in QML (rendered by the GPU, animations: fade on opening, tab
+pill that slides, content that slides in, cards that grow with a blurred glow, smooth scrolling of
+grids and rows, animated switches, actions popup that bounces). `ui.py` then does not load `tv_menu.lua`
+(two menus would respond), which remains the fallback menu in mpv-alone mode or if the QML fails to load. Opening:
+stream-box.lua's `streambox-tvmenu-open` intercepted by python-mpv (`register_message_handler`). Keys: while the
+menu is open, `View.keyPressEvent` gives them to QML (`box.keyPressed`, roles from `MENU_KEYS`: up, ok, back, home…)
+instead of mpv (volume stays with mpv); a key sent through the IPC (`keypress` → stream-box.lua →
+`streambox-tvmenu-key`) arrives at the same place, which is useful for tests. `box.setMenuOpen` writes a real boolean to
+`user-data/streambox/tvmenu` (`MPV_FORMAT_FLAG`: python-mpv would write the string "yes") for the chat and the mouse.
+Data and actions: `XMLHttpRequest` to the remote.py API; pictures and thumbnails loaded directly from
+Twitch / YouTube by Qt and rounded by `MultiEffect` (no more need for `/api/tvimage`); weather and QR code through
+`box.ambient` (observed property), opaque veil without video (`box.videoActive`). Components: `RoundImage`,
+`Marquee` (text clipped at rest, two copies that scroll on focus), `FocusFrame`, `StreamerCard`, `VideoCard`,
+`SettingRow`, `QrCode`, `fmt.js`. Pitfalls: font sizes ×0.78 compared to the ASS menu (Qt draws larger for
+the same value); in `onTabChanged`, read `tabs[tab].id` and not `tabId` (binding not recomputed yet); lists
+with `clip`: margins (`leftMargin`, `topMargin`) so as not to cut the focus glow; models as an item count
+(the delegates read the arrays) so that the list does not reset on every state poll. Testing without
+a remote: `keypress HOMEPAGE`, `keypress DOWN`… through the IPC, screenshots with `grim`.
 
-Fils et libmpv (blocages et plantages vus, corrigés) :
-- le fil principal de Qt n'appelle jamais mpv directement (touches, souris, `force-window`, booléen du menu) : file
-  `to_mpv` vidée par un fil à part. Un appel synchrone pouvait attendre la sortie vidéo, qui attend le fil de rendu,
-  bloqué par le fil principal ;
-- rendu : `ctx.update()` avant chaque `render`, et `block_for_target_time=False` : sinon le fil de rendu restait bloqué
-  dans `render` au démarrage, une relance sur deux ou trois (socket IPC qui coupe les connexions, image figée) ;
-  10 relances de suite sans blocage après correction ;
-- à la sortie, pas de `player.terminate()` : libmpv s'arrête net (abort, code 134) si le contexte de rendu existe
-  encore ; `os._exit` directement (mpv a déjà quitté). Avant, chaque `quit` finissait en plantage, et trois arrêts
-  rapprochés ont fait basculer `player.sh` sur mpv seul jusqu'au redémarrage suivant ;
-- `kill -USR1 <pid de ui.py>` écrit la pile de chaque fil dans `/tmp/stream-box-ui.log` ; plantages : `coredumpctl`.
-Halo du focus : `RectangularShadow` (QtQuick.Effects), sous l'élément. Grilles et rangées sans `clip` (il coupait le
-halo) : les éléments hors de la zone visible s'effacent en fondu (`rel` = position moins `contentX`/`contentY`).
-Marges des vues seulement dans le sens du défilement (`topMargin` d'une rangée horizontale, `leftMargin` d'une grille
-verticale) : Qt remet l'autre axe à zéro au premier `positionViewAtIndex`, et la rangée sautait sur le texte voisin.
+Threads and libmpv (hangs and crashes seen, fixed):
+- Qt's main thread never calls mpv directly (keys, mouse, `force-window`, menu boolean): queue
+  `to_mpv` emptied by a separate thread. A synchronous call could wait for the video output, which waits for the render
+  thread, blocked by the main thread;
+- rendering: `ctx.update()` before each `render`, and `block_for_target_time=False`: otherwise the render thread stayed
+  blocked in `render` at startup, one restart in two or three (IPC socket dropping connections, frozen picture);
+  10 restarts in a row without hanging after the fix;
+- on exit, no `player.terminate()`: libmpv stops abruptly (abort, code 134) if the render context still
+  exists; `os._exit` directly (mpv has already quit). Before, every `quit` ended in a crash, and three stops
+  close together made `player.sh` fall back to mpv alone until the next reboot;
+- `kill -USR1 <ui.py pid>` writes each thread's stack to `/tmp/stream-box-ui.log`; crashes: `coredumpctl`.
+Focus glow: `RectangularShadow` (QtQuick.Effects), under the item. Grids and rows without `clip` (it cut the
+glow): items outside the visible area fade out (`rel` = position minus `contentX`/`contentY`).
+View margins only in the scrolling direction (`topMargin` of a horizontal row, `leftMargin` of a vertical
+grid): Qt resets the other axis to zero at the first `positionViewAtIndex`, and the row jumped onto the neighboring text.
 
-### Deux streams à la fois (appli Qt)
+### Two streams at once (Qt app)
 
-Second lecteur libmpv (`pip_player` dans ui.py, son coupé, petit tampon de direct, pas d'interface) avec son propre
-streamlink (port `PIP_PORT` 34590 ; 720p en incrustation, meilleure qualité côte à côte), dessiné par un second
-`MpvVideo { which: "pip" }`. Dispositions dans ui.qml : `pip` (30 % de l'écran, en haut, du côté opposé au chat s'il
-est en haut à droite, ombre et liseré) et `split` (deux moitiés). Les vidéos gardent leur taille de rendu et sont
-réduites par `scale` : transitions animées sans recréer les tampons d'image. Commandes : menu QML (Menu ≡ sur une carte
-En direct ou Suivis en live : En incrustation, Côte à côte ; raccourcis Inverser, Côte à côte/Incrustation, Fermer),
-page web (barre « Second stream » quand il est actif), `POST /api/pip {action: open|close|swap|layout, name, layout}` →
-script-message `streambox-pip` → classe `Pip` de ui.py. État dans `user-data/streambox/pip` et `/api/state` (`pip`).
-Inverser = la chaîne du second passe en principal (`streambox-channel`) et inversement, donc le son suit. Le second se
-ferme seul si le principal passe en écran d'accueil, en vidéo, ou sur la même chaîne. Charge mesurée : ~66 % d'un cœur
-pour les deux (1080p60 + 720p60, décodage vaapi).
+Second libmpv player (`pip_player` in ui.py, muted, small live buffer, no interface) with its own
+streamlink (port `PIP_PORT` 34590; 720p in picture-in-picture, best quality side by side), drawn by a second
+`MpvVideo { which: "pip" }`. Layouts in ui.qml: `pip` (30 % of the screen, at the top, on the side opposite the chat if
+it is at the top right, shadow and border) and `split` (two halves). The videos keep their render size and are
+scaled down by `scale`: animated transitions without recreating the frame buffers. Commands: QML menu (Menu ≡ on a Live
+or Following card that is live: Picture-in-picture, Side by side; shortcuts Swap, Side by side/Picture-in-picture, Close),
+companion app ("Second stream" bar when it is active), `POST /api/pip {action: open|close|swap|layout, name, layout}` →
+script-message `streambox-pip` → `Pip` class of ui.py. State in `user-data/streambox/pip` and `/api/state` (`pip`).
+Swap = the second one's channel becomes the main one (`streambox-channel`) and vice versa, so the sound follows. The
+second one closes on its own if the main one switches to the home screen, to a video, or to the same channel. Measured
+load: ~66 % of a core for both (1080p60 + 720p60, vaapi decoding).
 
-### Choix du lecteur
+### Choice of player
 
-Système → Lecteur (menus QML et Lua de la TV ; section Système des réglages de la page web) : `POST /api/player {mode: qt|mpv}` écrit
-`~/.config/stream-box/player` et quitte le lecteur ; la boucle de player.sh relance le bon. `/api/state` donne `player`
-(choisi) et `player_running` (`qt` si `current-vo` vaut `libmpv`) : la page signale un retour automatique à mpv.
-player.sh oublie les échecs de l'appli Qt quand le fichier est réécrit (date de modification), ce qui permet de la
-réessayer sans redémarrer.
+System → Player (QML and Lua TV menus; System section of the companion app settings): `POST /api/player {mode: qt|mpv}` writes
+`~/.config/stream-box/player` and quits the player; the player.sh loop starts the right one. `/api/state` gives `player`
+(chosen) and `player_running` (`qt` if `current-vo` is `libmpv`): the page reports an automatic fallback to mpv.
+player.sh forgets the Qt app's failures when the file is rewritten (modification date), which allows retrying it
+without rebooting.
 
-### Chat avec émotes (appli Qt)
+### Chat with emotes (Qt app)
 
-`chat_qt.py` (importé par ui.py) lit le chat comme chat_overlay.py (IRC anonyme) et découpe chaque message en mots et
-émotes : Twitch par le tag `emotes` (positions en caractères), 7TV / BTTV / FFZ par nom (listes globales chargées une
-fois, listes de la chaîne dès le ROOMSTATE qui donne son identifiant ; priorité 7TV > BTTV > FFZ). `qml/ChatOverlay.qml`
-les dessine (Flow de Text et d'AnimatedImage : GIF et WebP animés, plugin `libqwebp` de Qt), dans le coin et avec le fond
-et la taille réglés, masqué en vidéo, sur l'écran d'accueil et menu ouvert. Quand l'appli tourne, elle écrit
-`user-data/streambox/chat_ui = qml` et chat_overlay.py (texte dans mpv) se tait ; il repart de zéro à chaque nouveau
-lecteur (mpv seul : chat texte). Piège QML : `left`, `top` sont des propriétés réservées des éléments (FINAL) ; une
-erreur de chargement de ui.qml fait retomber l'appli sur le menu Lua et le chat texte, sans planter.
-Fermeture : à l'événement `shutdown` de mpv, `os._exit` tout de suite depuis le fil d'événements de python-mpv (qui
-sinon détruit sa connexion et attend le contexte de rendu tenu par Qt : appli figée, pas de relance ; 6/6 relances
-propres après correction).
+`chat_qt.py` (imported by ui.py) reads the chat like chat_overlay.py (anonymous IRC) and splits each message into words
+and emotes: Twitch through the `emotes` tag (positions in characters), 7TV / BTTV / FFZ by name (global lists loaded
+once, channel lists as soon as the ROOMSTATE that gives its id arrives; priority 7TV > BTTV > FFZ). `qml/ChatOverlay.qml`
+draws them (Flow of Text and AnimatedImage: animated GIF and WebP, Qt's `libqwebp` plugin), in the corner and with the
+background and size set, hidden in video, on the home screen and with the menu open. When the app runs, it writes
+`user-data/streambox/chat_ui = qml` and chat_overlay.py (text in mpv) goes silent; it starts from scratch with each new
+player (mpv alone: text chat). QML pitfall: `left`, `top` are reserved item properties (FINAL); an
+error loading ui.qml makes the app fall back to the Lua menu and the text chat, without crashing.
+Shutdown: on mpv's `shutdown` event, `os._exit` right away from python-mpv's event thread (which
+otherwise destroys its connection and waits for the render context held by Qt: frozen app, no restart; 6/6 clean
+restarts after the fix).
 
-### Écran d'accueil en QML (appli Qt)
+### Home screen in QML (Qt app)
 
-`qml/AmbientScreen.qml` : affiché quand stream-box.lua le décide (`user-data/streambox/ambient_on`, publié par
-`update_ambient` ; `draw_ambient` ne dessine plus rien quand `chat_ui` vaut `qml`), avec le message d'état
-(`user-data/streambox/status`, publié par `set_status`) et le mode du QR code (`qr`), relayés par `box` (`ambientOn`,
-`statusText`, `qrMode`). Fond : taches de couleur en `RectangularShadow` très flous (pas de calque, flou par la puce
-graphique) qui dérivent sur une minute ou plus ; contenu qui dérive de ±36 px sur 7 à 11 min. Horloge, date (locale
-fr_FR), météo avec `WeatherIcon.qml` (icône dessinée et animée d'après le code WMO, `code` ajouté par remote.py ; lune
-de 20 h à 7 h), « En live maintenant » (streamers de la liste en live hors celui regardé, `/api/state`), prochains
-lives en cartes de verre avec photos, QR code (toujours, 30 s à chaque arrivée, jamais).
+`qml/AmbientScreen.qml`: shown when stream-box.lua decides so (`user-data/streambox/ambient_on`, published by
+`update_ambient`; `draw_ambient` no longer draws anything when `chat_ui` is `qml`), with the status message
+(`user-data/streambox/status`, published by `set_status`) and the QR code mode (`qr`), relayed by `box` (`ambientOn`,
+`statusText`, `qrMode`). Background: very blurry color blobs as `RectangularShadow` (no layer, blur done by the
+GPU) that drift over a minute or more; content that drifts by ±36 px over 7 to 11 min. Clock, date (locale of the
+interface language), weather with `WeatherIcon.qml` (icon drawn and animated from the WMO code, `code` added by
+remote.py; moon from 8 pm to 7 am), "Live now" (streamers from the list who are live, except the one being watched,
+`/api/state`), upcoming streams as glass cards with pictures, QR code (always, 30 s at each arrival, never).
 
-### Voter aux sondages et prédictions depuis la page
+### Voting in polls and predictions from the page
 
-Helix n'a rien pour un spectateur : GQL du site avec le jeton du compte connecté, sans contrôle d'intégrité (vérifié
-avec des identifiants factices : `POLL_NOT_FOUND`, `NOT_FOUND`). Sondage : `voteInPoll(input: {pollID, choiceID,
-userID, voteID})` ; prédiction : `makePrediction(input: {eventID, outcomeID, points, transactionID})`. Le relevé
-(`fetch_events`) donne maintenant les identifiants, le pari en cours (`PredictionEvent.self.prediction`) et le solde de
-points (`channel.self.communityPoints.balance`) ; Twitch ne redonne pas le choix fait dans un sondage : `poll_votes`
-retient ceux faits depuis la box. `GET /api/events` (relevé fait sur place si l'encart de la TV est désactivé),
-`POST /api/vote {poll, choice}`, `POST /api/predict {event, outcome, points}` (codes d'erreur traduits, `VOTE_ERRORS`).
-Page : carte « Sondage / Prédiction » sous « Sur la TV », relevée toutes les 3 s pendant un direct ; mise 10, 100, 1000,
-Tout ou libre, confirmation avant de parier. Le relevé régulier suit maintenant toute chaîne en direct, pas seulement
-celles de la liste. Non testé en vrai (pas de sondage ouvert, et un pari dépense des points) : affichage vérifié avec
-des données simulées.
+Helix has nothing for a viewer: the website's GQL with the connected account's token, without integrity check (checked
+with fake ids: `POLL_NOT_FOUND`, `NOT_FOUND`). Poll: `voteInPoll(input: {pollID, choiceID,
+userID, voteID})`; prediction: `makePrediction(input: {eventID, outcomeID, points, transactionID})`. The poll
+(`fetch_events`) now gives the ids, the current bet (`PredictionEvent.self.prediction`) and the points
+balance (`channel.self.communityPoints.balance`); Twitch does not return the choice made in a poll: `poll_votes`
+remembers those made from the box. `GET /api/events` (polled on the spot if the TV panel is disabled),
+`POST /api/vote {poll, choice}`, `POST /api/predict {event, outcome, points}` (translated error codes, `VOTE_ERRORS`).
+Page: "Poll / Prediction" card under "On the TV", polled every 3 s during a live stream; bet 10, 100, 1000,
+All or custom, confirmation before betting. Regular polling now follows any live channel, not only
+those from the list. Not tested for real (no open poll, and a bet spends points): display checked with
+simulated data.
 
-### Bandeau, barre de lecture, notification, encart des sondages en QML (appli Qt)
+### Banner, playback bar, notification, polls panel in QML (Qt app)
 
-stream-box.lua garde la logique (OK, ←/→, pause, délais, touches de la notification) et, quand `qt_ui()` (chat_ui =
-qml), publie au lieu de dessiner : `user-data/streambox/bar` (barre visible), `toast` ({name, title, game, viewers,
-seconds}, vide à la fin) ; `draw_bar` et `draw_events` ne dessinent rien. ui.py (`Osd`) relaie ces propriétés, `polls`,
-`storyboard`, `live`, et lit la position de lecture (time-pos, duration, pause, cache, fenêtre du différé) depuis un fil
-à part, 4 fois par seconde seulement quand la barre est visible. QML : `InfoBar.qml` (direct : photo, titre, jeu,
-spectateurs, « en live depuis » d'après `started` = `stream.createdAt` ajouté par remote.py, mémoire du différé et
-« EN DIRECT » ou retard ; vidéo : pause, titre, partie chargée, durée, et aperçu YouTube), `Toast.qml` (glisse depuis
-la droite, ligne de temps restant), `PollsOverlay.qml` (barres animées, ★ gagnant, ✓ vote ou pari fait depuis la box).
-Aperçu YouTube : à chaque lecture YouTube, remote.py lance `yt-dlp -J` une fois et publie la planche de miniatures
-(`storyboard` : fragments d'images en grille rows × columns, chacun couvrant `duration` s) ; la case affichée est
-choisie d'après la position. Piège QML encore : `left` (FINAL) ne peut pas servir de nom de propriété.
-Couleur de la barre selon la source (`InfoBar.source`, d'après `path` relayé par ui.py) : rouge pour YouTube, bleu
-pour Jellyfin (lien de serveur : `/Videos/…`, `api_key=`, `MediaSourceId=`), violet sinon et en direct.
+stream-box.lua keeps the logic (OK, ←/→, pause, delays, notification keys) and, when `qt_ui()` (chat_ui =
+qml), publishes instead of drawing: `user-data/streambox/bar` (bar visible), `toast` ({name, title, game, viewers,
+seconds}, empty at the end); `draw_bar` and `draw_events` draw nothing. ui.py (`Osd`) relays these properties, `polls`,
+`storyboard`, `live`, and reads the playback position (time-pos, duration, pause, cache, time-shift window) from a separate
+thread, 4 times per second only when the bar is visible. QML: `InfoBar.qml` (live: picture, title, game,
+viewers, "live for" based on `started` = `stream.createdAt` added by remote.py, time-shift memory and
+"LIVE" or delay; video: pause, title, buffered part, duration, and YouTube preview), `Toast.qml` (slides in from
+the right, time-left line), `PollsOverlay.qml` (animated bars, ★ winner, ✓ vote or bet made from the box).
+YouTube preview: at each YouTube playback, remote.py runs `yt-dlp -J` once and publishes the thumbnail sheet
+(`storyboard`: image fragments in a rows × columns grid, each covering `duration` s); the cell shown is
+chosen from the position. QML pitfall again: `left` (FINAL) cannot be used as a property name.
+Bar color depending on the source (`InfoBar.source`, from `path` relayed by ui.py): red for YouTube, blue
+for Jellyfin (server link: `/Videos/…`, `api_key=`, `MediaSourceId=`), purple otherwise and for live.
 
-### État de la box (page, Réglages → Système)
+### Box status (page, Settings → System)
 
-`GET /api/health` : températures (hwmon `coretemp`/`k10temp` et `nvme`), processeur (% sur 5 s, `health_loop`) et
-charge, mémoire, disque, réseau (interface de la route par défaut, vitesse du lien, débits sur 5 s), lecture (lecteur
-réellement actif, décodage, taille, images/s, images perdues), services utilisateur (MQTT, jetons YouTube :
-`systemctl --user is-active`), mises à jour (en cours, prochaine d'après le minuteur, dernière d'après
-`update.log`). `POST /api/update` lance `stream-box-update.service` (`--no-block`). La page relit toutes les 5 s tant
-que l'onglet Réglages est affiché ; tuiles en orange ou rouge au-delà des seuils (70 °C, 85 °C, mémoire, disque,
-service arrêté, décodage par le processeur).
-Même état dans l'onglet Système du menu QML de la TV (tuiles sous les lignes, `/api/health` relu toutes les 5 s tant
-que l'onglet est affiché), avec une ligne « Mettre à jour maintenant » (dernière et prochaine mise à jour).
+`GET /api/health`: temperatures (hwmon `coretemp`/`k10temp` and `nvme`), CPU (% over 5 s, `health_loop`) and
+load, memory, disk, network (interface of the default route, link speed, throughput over 5 s), playback (player
+actually running, decoding, size, frames/s, dropped frames), user services (MQTT, YouTube tokens:
+`systemctl --user is-active`), updates (in progress, next one from the timer, last one from
+`update.log`). `POST /api/update` starts `stream-box-update.service` (`--no-block`). The page rereads every 5 s while
+the Settings tab is shown; tiles in orange or red beyond thresholds (70 °C, 85 °C, memory, disk,
+stopped service, CPU decoding).
+Same status in the System tab of the QML TV menu (tiles under the rows, `/api/health` reread every 5 s while
+the tab is shown), with an "Update now" row (last and next update).
 
-### YouTube (chaînes et recherche)
+### YouTube (channels and search)
 
-Liste de chaînes dans `~/.config/stream-box/youtube.json` (id UC…, nom, @, photo), éditée par
-`POST /api/youtube_channels` {action: add|remove|move, channel, delta} ; l'ajout résout « @nom », un lien ou un id avec
-`yt-dlp --flat-playlist -J --playlist-items 0` (~1 s). `GET /api/youtube` : 15 dernières vidéos par chaîne d'après le
-flux RSS public (`feeds/videos.xml?channel_id=`, sans clé, Shorts écartés, cache 20 min), fusionnées avec
-l'historique (position, vu). `GET /api/youtube_search?q=` : `yt-dlp --flat-playlist -J ytsearch20:` (~1,6 s, cache
-10 min, `youtube:lang=fr` sinon titres traduits en anglais) : vidéos, et chaînes dont le nom correspond (même
-requête ; id UC…, abonnés, photo, `saved`), playlists écartées. `GET /api/youtube_channel?id=UC…` : dernières vidéos
-d'une chaîne trouvée, même hors de la liste. Peu de requêtes : YouTube a déjà limité
-l'adresse IP de la box.
-Compte YouTube (rangée « Abonnements », en tête des rangées de chaînes) : appli Google à soi (console.cloud.google.com,
-YouTube Data API v3, audience Externe publiée sinon jetons valables 7 jours, client « TV et appareils à saisie
-limitée »), autorisation par code sur google.com/device, droit `youtube.readonly`. `youtube-app.json` (client_id,
-client_secret), `youtube-token.json`, `youtube-subs.json` (abonnements relus une fois par jour), en 600 dans
-`~/.config/stream-box`. Tout passe par googleapis.com (quota 10 000 unités par jour), rien par youtube.com :
-`subscriptions` (1 unité par 50), puis par chaîne `playlistItems` sur la playlist `UULF` + id sans « UC » (vidéos sans
-Shorts ni directs ; `UU` en secours), 4 dernières, 8 en parallèle ; `videos` pour durées, vues et directs à venir
-(écartés), 60 vidéos gardées, durées et vues relues au plus toutes les heures. Chaque chaîne à son rythme
-(`YT_CHANNEL_RHYTHM`, âge de sa dernière vidéo : < 2 j → toutes les heures, < 7 j → 3 h, < 30 j → 12 h, sinon 24 h),
-tour toutes les minutes (`yt_subfeed_loop`, 16 en parallèle) ; relevés dans `youtube-subfeed.json` (et unités du
-jour, quota remis à zéro à minuit heure du Pacifique, plafond `YT_DAILY_BUDGET` 7000). 347 abonnements : ~1 800
-unités par jour. `/api/youtube` sert le dernier fil (le tout premier, juste après l'autorisation, est attendu).
-`GET /api/youtube` → `subs` {configured, authorized, pending, channels, synced, videos} ; `GET /api/youtube_account` ;
-`POST /api/youtube_app|youtube_login|youtube_logout|youtube_sync`. TV : carte « + Connecter mon compte » dans la rangée
-tant que la box n'est pas autorisée → fenêtre du code et QR code (`ytAuth`, relue toutes les 3 s) ; ligne « Compte
-YouTube » du menu Système (relire les abonnements, déconnecter). Page : section « Compte YouTube » des Réglages
-(création de l'appli, code, état). tv_menu.lua affiche la rangée, sans connexion.
-Favoris : servis par le relevé des abonnements quand la chaîne en fait partie (`yt_fav_videos`, 15 vidéos par
-favori au lieu de 4, durées et vues, aucune requête à youtube.com : `/api/youtube` en ~15 ms), sinon flux RSS lus en
-parallèle, échecs gardés 10 min (`YT_FEED_RETRY`). Le menu garde `yt` d'une ouverture à l'autre et le relit en fond ;
-la page ne lit que la liste (`GET /api/youtube_channels`). Rangées : cartes créées seulement pour les rangées visées
-et leurs voisines (`near`).
-Favoris (liste `youtube.json`, une rangée par chaîne) : Options sur une vidéo des abonnements → « Ajouter aux favoris »
-(chaîne prise dans `youtube-subs.json`, sans requête à YouTube), « Voir ses dernières vidéos », « Lire la vidéo ».
-Page : bloc YouTube de l'onglet Télécommande (recherche, une puce par chaîne) et « Chaînes YouTube » dans Réglages.
-TV (onglet YouTube du menu QML) : ligne de recherche → clavier à l'écran (grille de 10 de large, ↑↓←→ et OK, Retour
-ferme), puis les chaînes trouvées (photos rondes ; OK : « Voir ses dernières vidéos », rangée `preview` juste dessous, ou
-« Ajouter / Retirer de mes chaînes »), les vidéos trouvées et une rangée par chaîne de la liste ; OK sur une vidéo
-lance (ou propose la reprise, `chooseVideo`). Page : chaînes trouvées en tête des résultats (toucher : leurs vidéos,
-« + Ajouter »).
-Les résultats restent d'une ouverture du menu à l'autre (pas d'un redémarrage du lecteur). Couleurs par onglet (`menu.theme`, `menu.pal`) : violet pour
-Twitch (direct, suivis, rediffusions), rouge pour YouTube, neutre anthracite à halo blanc pour historique, réglages et
-système ; fond, lueurs, rail, halos (`FocusFrame.glow`), `VideoCard.accent`, `SettingRow.pal` (interrupteur clair à
-bouton sombre en neutre), fenêtre d'actions, clavier. Le bleu reste libre pour Jellyfin. Logo (`qml/Logo.qml`, icônes `icon-*.png`,
-tv_menu.lua) : tuile blanche, triangle anthracite arrondi, neutre sur fond violet comme rouge.
+Channel list in `~/.config/stream-box/youtube.json` (UC… id, name, @, picture), edited by
+`POST /api/youtube_channels` {action: add|remove|move, channel, delta}; adding resolves "@name", a link or an id with
+`yt-dlp --flat-playlist -J --playlist-items 0` (~1 s). `GET /api/youtube`: 15 latest videos per channel from the
+public RSS feed (`feeds/videos.xml?channel_id=`, no key, Shorts excluded, 20 min cache), merged with
+the history (position, watched). `GET /api/youtube_search?q=`: `yt-dlp --flat-playlist -J ytsearch20:` (~1.6 s, 10 min
+cache, `youtube:lang=fr`, otherwise titles are translated into English): videos, and channels whose name matches (same
+request; UC… id, subscribers, picture, `saved`), playlists excluded. `GET /api/youtube_channel?id=UC…`: latest videos
+of a channel found, even outside the list. Few requests: YouTube has already rate-limited
+the box's IP address.
+YouTube account ("Subscriptions" row, at the top of the channel rows): a Google app of your own (console.cloud.google.com,
+YouTube Data API v3, External audience published, otherwise tokens valid for 7 days, client "TVs and Limited Input
+devices"), authorization by code on google.com/device, `youtube.readonly` scope. `youtube-app.json` (client_id,
+client_secret), `youtube-token.json`, `youtube-subs.json` (subscriptions reread once a day), as 600 in
+`~/.config/stream-box`. Everything goes through googleapis.com (quota 10,000 units per day), nothing through youtube.com:
+`subscriptions` (1 unit per 50), then per channel `playlistItems` on the `UULF` playlist + id without "UC" (videos without
+Shorts or live streams; `UU` as fallback), 4 latest, 8 in parallel; `videos` for durations, views and upcoming live streams
+(excluded), 60 videos kept, durations and views reread at most every hour. Each channel at its own pace
+(`YT_CHANNEL_RHYTHM`, age of its latest video: < 2 d → every hour, < 7 d → 3 h, < 30 d → 12 h, otherwise 24 h),
+a round every minute (`yt_subfeed_loop`, 16 in parallel); results in `youtube-subfeed.json` (and the day's units,
+quota reset at midnight Pacific time, cap `YT_DAILY_BUDGET` 7000). 347 subscriptions: ~1,800
+units per day. `/api/youtube` serves the latest feed (the very first one, right after authorization, is awaited).
+`GET /api/youtube` → `subs` {configured, authorized, pending, channels, synced, videos}; `GET /api/youtube_account`;
+`POST /api/youtube_app|youtube_login|youtube_logout|youtube_sync`. TV: "Connect my account" card in the Subscriptions row
+as long as the box is not authorized → code popup and QR code (`ytAuth`, reread every 3 s); "YouTube
+account" row of the System menu (reread subscriptions, disconnect). Page: "YouTube account" section of Settings
+(app creation, code, status). tv_menu.lua shows the row, without connection.
+Favorites: served by the subscription poll when the channel is part of it (`yt_fav_videos`, 15 videos per
+favorite instead of 4, durations and views, no request to youtube.com: `/api/youtube` in ~15 ms), otherwise RSS feeds
+read in parallel, failures kept for 10 min (`YT_FEED_RETRY`). The menu keeps `yt` from one opening to the next and
+rereads it in the background; the page only reads the list (`GET /api/youtube_channels`). Rows: cards created only for
+the targeted rows and their neighbors (`near`).
+Favorites (`youtube.json` list, one row per channel): Options on a subscription video → "Add to favorites"
+(channel taken from `youtube-subs.json`, no request to YouTube), "See latest videos", "Play the video".
+Page: YouTube block of the Remote tab (search, one chip per channel) and "YouTube favorites" in Settings.
+TV (YouTube tab of the QML menu): search row → on-screen keyboard (grid 10 wide, ↑↓←→ and OK, Back
+closes), then the channels found (round pictures; OK: "See latest videos", `preview` row right below, or
+"★  Add to favorites" / "✕  Remove from favorites"), the videos found and one row per channel of the list; OK on a video
+plays it (or offers to resume, `chooseVideo`). Page: channels found at the top of the results (tap: their videos,
+"Add").
+Results are kept from one menu opening to the next (not across a player restart). Colors per tab (`menu.theme`, `menu.pal`): purple for
+Twitch (live, following, replays), red for YouTube, neutral charcoal with a white glow for history, settings and
+system; background, glows, rail, focus glows (`FocusFrame.glow`), `VideoCard.accent`, `SettingRow.pal` (light switch with a
+dark knob in neutral), actions popup, keyboard. Blue is left free for Jellyfin. Logo (`qml/Logo.qml`, icons `icon-*.png`,
+tv_menu.lua): white tile, rounded charcoal triangle, neutral on a purple background as well as on red.
 
-### Jellyfin (onglet du menu QML et page)
+### Jellyfin (QML menu tab and page)
 
-remote.py réutilise le serveur associé à jellyfin-mpv-shim (`~/.config/jellyfin-mpv-shim/users.json` : adresse,
-UserId, AccessToken ; en-tête `Authorization: MediaBrowser Token="…"`, rien d'autre à configurer). `GET /api/jellyfin`
-(cache 30 s) : `Items/Resume`, `Shows/NextUp`, `Items/Latest` par bibliothèque (films, séries ; les séries arrivent
-par saison) ; `GET /api/jellyfin_search?q=`, `GET /api/jellyfin_series?id=` (épisodes et index du premier pas vu) ;
-`POST /api/jellyfin_play` {id, from_start} : flux direct `/Videos/{id}/stream?static=true&api_key=…`, reprise à la
-position du serveur, titre passé à mpv (`streambox-play url start titre` → `force-media-title`, longueur en
-préfixe %n%). Progression renvoyée au serveur : `Sessions/Playing` au lancement, `/Progress` toutes les 10 s par
-history_loop, `/Stopped` à l'arrêt (le serveur décide du « vu »). Entrée dans l'historique de la box sous
-« jellyfin:ID » (sans jeton ; `play()` la relance par jellyfin_play), aussi pour les lectures lancées par le shim
-(« Lire sur… », `shim_video` : le shim rend compte lui-même). Sous-titres externes (.srt à côté du fichier) absents du
-flux direct : ajoutés par `sub-add` une fois la vidéo ouverte (`jf_add_subtitles`). Les
-images du serveur sont publiques (pas de jeton dans leurs liens).
-TV : onglet « Jellyfin » (thème bleu) sur la même page que YouTube (`mediaRows`, `mRow`/`mSel`, `keyMedia`, état
-propre `jfRow`/`jfSel`) : recherche au clavier à l'écran, épisodes d'une série ouverte, Reprendre, Prochains
-épisodes, ajouts récents ; OK sur un film ou un épisode : Reprendre / Depuis le début / Tous les épisodes. Rail
-resserré (pas de 76) pour 9 onglets. Rangées
-horizontales : défilement carte par carte aligné à gauche (`first`, `fits`), rangée découpée 28 px avant le contenu
-(`clip` sur une enveloppe plus haute que les cartes, pour le halo) et cartes affichées d'après la fenêtre visée, pas
-leur position animée : celle qui sort s'efface en 90 ms sans passer sous le rail. Même chose à la verticale : grilles (direct, suivis,
-historique), listes (réglages, système) et rangées YouTube/Jellyfin sont dans une enveloppe `clip` (marge de 40 px
-autour pour le halo) qui s'arrête sous le titre et au-dessus de l'aide en bas ; rangées YouTube/Jellyfin affichées
-d'après la rangée visée. Piège QML : une fonction ne doit pas reprendre le nom d'une propriété
-(`setSel` existait : les touches de l'onglet échouaient en silence, sauf dans le journal).
-Page : bloc Jellyfin de l'onglet Télécommande (puces par rangée, recherche, épisodes d'une série).
+remote.py reuses the server associated with jellyfin-mpv-shim (`~/.config/jellyfin-mpv-shim/users.json`: address,
+UserId, AccessToken; header `Authorization: MediaBrowser Token="…"`, nothing else to configure). `GET /api/jellyfin`
+(30 s cache): `Items/Resume`, `Shows/NextUp`, `Items/Latest` per library (movies, series; series arrive
+by season); `GET /api/jellyfin_search?q=`, `GET /api/jellyfin_series?id=` (episodes and index of the first unwatched one);
+`POST /api/jellyfin_play` {id, from_start}: direct stream `/Videos/{id}/stream?static=true&api_key=…`, resumed at the
+server's position, title passed to mpv (`streambox-play url start title` → `force-media-title`, length as a
+%n% prefix). Progress reported to the server: `Sessions/Playing` at start, `/Progress` every 10 s by
+history_loop, `/Stopped` on stop (the server decides what is "watched"). Entry in the box's history as
+"jellyfin:ID" (without token; `play()` restarts it through jellyfin_play), also for playbacks started by the shim
+("Play on…", `shim_video`: the shim reports on its own). External subtitles (.srt next to the file) missing from the
+direct stream: added by `sub-add` once the video is open (`jf_add_subtitles`). The
+server's images are public (no token in their links).
+TV: "Jellyfin" tab (blue theme) on the same page as YouTube (`mediaRows`, `mRow`/`mSel`, `keyMedia`, its own
+state `jfRow`/`jfSel`): search with the on-screen keyboard, episodes of an open series, Continue watching, Next
+up, recently added; OK on a movie or an episode: Resume / From the beginning / All episodes. Rail
+tightened (step of 76) for 9 tabs. Horizontal
+rows: card-by-card scrolling aligned to the left (`first`, `fits`), row clipped 28 px before the content
+(`clip` on a wrapper taller than the cards, for the glow) and cards shown according to the targeted window, not
+their animated position: the one leaving fades out in 90 ms without passing under the rail. Same thing vertically: grids (live, following,
+history), lists (settings, system) and YouTube/Jellyfin rows are in a `clip` wrapper (40 px margin
+around for the glow) that stops under the title and above the help at the bottom; YouTube/Jellyfin rows shown
+according to the targeted row. QML pitfall: a function must not reuse the name of a property
+(`setSel` existed: the tab's keys failed silently, except in the log).
+Page: Jellyfin block of the Remote tab (chips per row, search, episodes of a series).
 
-### Sous-titres et audio pendant une vidéo (touche ≡, appli Qt)
+### Subtitles and audio during a video (≡ key, Qt app)
 
-stream-box.lua : en mode vidéo, ≡ ouvre la liste (track-list : « Désactivés », sous-titres, puis pistes audio s'il y en
-a plusieurs ; langues en français, « (forcés) », « (d'origine) ») et affiche la barre ; tant qu'elle est ouverte
-(`tracks_open`), ↑ ↓ choisissent, OK règle `sid`/`aid` et ferme, toute autre touche ferme. État publié dans
-`user-data/streambox/tracks` {open, items, sel}, relayé par ui.py (`osd.tracks`), dessiné par `qml/TracksPanel.qml`
-au-dessus de la barre, à droite. La barre rappelle « ≡ sous-titres et audio ». Avec mpv seul, ≡ passe aux
-sous-titres suivants (comme avant).
-Réglages « Taille des sous-titres » (`sub_size`, 50–200 %, → `sub-scale`) et « Fond des sous-titres » (`sub_bg`,
-0–100 % : bandeau noir `sub-border-style=background-box` + `sub-back-color` #AA000000, 0 = contour habituel) : NUMBERS
-de stream-box.lua (`apply_sub_style`), `POST /api/set`, onglet Réglages de la TV et section Sous-titres de la page.
-Les deux menus s'ouvrent sur l'onglet du média en cours (`mediaTab` / `media_tab`, d'après `mode` et `media_kind` de
-/api/state : direct → En direct, YouTube, Jellyfin, rediffusion ou clip → Rediffusions, autre lien → Historique),
-recalé quand l'état arrive tant qu'aucune touche n'a été pressée ; YouTube et Jellyfin gardent rangée et carte. mpv gardant la pause d'un fichier à l'autre,
-`play_media` et `start_channel` la retirent.
-Fond du menu : deux lueurs floues (RectangularShadow, pas de forme nette) de la couleur de l'onglet, en haut à droite
-(`pal.glow`) et en bas (`pal.glowLow`), sur tous les thèmes ; presque invisibles en neutre.
-Menu Lua (mpv seul, tv_menu.lua) : onglets YouTube et Jellyfin (rangées de cartes, reprise, épisodes d'une série ;
-pas de recherche, faute de clavier : elle passe par la page), réglages des sous-titres, onglet gardé à la
-réouverture. Tailles de texte ×1,2 (`FONT`) pour le même aspect que l'appli Qt. `/api/tvimage` accepte aussi les
-images du serveur Jellyfin.
-Onglet Système du menu Lua : ligne « Mettre à jour maintenant » et tuiles d'état (`draw_health`, /api/health toutes les 5 s).
+stream-box.lua: in video mode, ≡ opens the list (track-list: "Off", subtitles, then audio tracks if there are
+several; language names in the interface language, "(forced)", "(original)") and shows the bar; while it is open
+(`tracks_open`), ↑ ↓ choose, OK sets `sid`/`aid` and closes, any other key closes. State published in
+`user-data/streambox/tracks` {open, items, sel}, relayed by ui.py (`osd.tracks`), drawn by `qml/TracksPanel.qml`
+above the bar, on the right. The row of buttons below the bar has "Subtitles" (and "Quality", see below). With mpv alone, ≡ switches to the
+next subtitles (as before).
+Settings "Subtitle size" (`sub_size`, 50–200 %, → `sub-scale`) and "Subtitle background" (`sub_bg`,
+0–100 %: black band `sub-border-style=background-box` + `sub-back-color` #AA000000, 0 = usual outline): NUMBERS
+of stream-box.lua (`apply_sub_style`), `POST /api/set`, Settings tab of the TV and Subtitles section of the page.
+Both menus open on the tab of the current media (`mediaTab` / `media_tab`, from `mode` and `media_kind` of
+/api/state: live → Live, YouTube, Jellyfin, replay or clip → Replays, other link → History),
+readjusted when the state arrives as long as no key has been pressed; YouTube and Jellyfin keep row and card. Since mpv keeps the pause from one file to the next,
+`play_media` and `start_channel` remove it.
+Menu background: two blurred glows (RectangularShadow, no sharp shape) in the tab's color, at the top right
+(`pal.glow`) and at the bottom (`pal.glowLow`), on all themes; almost invisible in neutral.
+Lua menu (mpv alone, tv_menu.lua): YouTube and Jellyfin tabs (rows of cards, resume, episodes of a series;
+no search, for lack of a keyboard: it goes through the page), subtitle settings, tab kept on
+reopening. Text sizes ×1.2 (`FONT`) for the same look as the Qt app. `/api/tvimage` also accepts
+images from the Jellyfin server.
+System tab of the Lua menu: "Update now" row and status tiles (`draw_health`, /api/health every 5 s).
 
-### Écran de chargement entre deux vidéos ou chaînes
+### Loading screen between two videos or channels
 
-stream-box.lua (`set_loading`) publie `user-data/streambox/loading` {title, thumb} au lancement d'une vidéo
-(`play_media url start titre_imposé image titre_affiché`) ou d'une chaîne (`start_channel`), et l'efface à la première
-image (`playback-restart`), sur erreur, à l'écran d'accueil ou au bout de 45 s. `qml/LoadingOverlay.qml` (relais
-`osd.loading`, `kind` : twitch, youtube, jellyfin, video) : miniature floutée, logo de la box qui respire, lueur de la
-couleur de la source qui court sur le contour du triangle (ShapePath en pointillés, `dashOffset` animé), ondes ;
-ombre portée sous les textes ; fondu à l'entrée et à la sortie. Avec mpv seul
-(`vo` ≠ libmpv) : message « Chargement de … » à l'écran. Titre et image viennent de remote.py (historique, Jellyfin)
-ou de la requête (`POST /api/play` accepte `title`, `thumb` : le menu QML les envoie).
-Bandeau et barre de lecture (InfoBar.qml) : dégradé plus sombre plus haut et ombre portée sous l'en-tête, pour lire le
-titre sur une image claire.
+stream-box.lua (`set_loading`) publishes `user-data/streambox/loading` {title, thumb} when a video starts
+(`play_media url start forced_title image shown_title`) or a channel starts (`start_channel`), and clears it at the first
+frame (`playback-restart`), on error, on the home screen or after 45 s. `qml/LoadingOverlay.qml` (relay
+`osd.loading`, `kind`: twitch, youtube, jellyfin, video): blurred thumbnail, box logo that breathes, glow in the
+source's color running along the triangle's outline (dashed ShapePath, animated `dashOffset`), ripples;
+drop shadow under the texts; fade in and out. With mpv alone
+(`vo` ≠ libmpv): "Loading {title}…" message on screen. Title and image come from remote.py (history, Jellyfin)
+or from the request (`POST /api/play` accepts `title`, `thumb`: the QML menu sends them).
+Banner and playback bar (InfoBar.qml): darker gradient reaching higher and drop shadow under the header, to read the
+title over a light image.
 
-### Barre de lecture d'une vidéo (appli Qt)
+### Video playback bar (Qt app)
 
-- Avance rapide qui accélère (stream-box.lua `media_seek`) : appuis rapprochés (< 0,8 s) ou touche maintenue (au plus
-  8 sauts/s) → 10 s ×3, puis 30 s, puis 1 min ; total publié dans `user-data/streambox/seekfx` {text, n}, bulle
-  « +2 min 30 » au-dessus du curseur (InfoBar.qml). Marche aussi avec mpv seul (sans la bulle).
-- Rangée de boutons : ↓ y descend (focus sur Pause/Lecture), ← → et OK, ↑ choisit le titre, Retour remonte ;
-  Sous-titres, −10 s, Pause/Lecture, +10 s, Qualité (YouTube), Chapitre suivant (s'il y a des chapitres), Épisode
-  suivant (Jellyfin). Rangée centrée sur Pause/Lecture (InfoBar.qml `playIndex`). `ctrl_focus`,
-  `user-data/streambox/controls` {items, focus} ; disparaît avec la barre. Boutons ronds centrés, icônes dessinées
-  (`qml/PlayerIcon.qml`, QtQuick.Shapes : pas de caractères Unicode, dont le rendu dépend des polices), Lecture / Pause
-  plus grand, nom du bouton choisi dessous.
-- Disposition (InfoBar.qml) : titre et ligne d'infos juste au-dessus de la barre ; l'aperçu YouTube (planche de
-  miniatures) et la bulle de saut n'apparaissent que pendant qu'on avance ou recule (`seeking`, 1,5 s après le dernier
-  saut), au plus près de la barre ; le titre glisse alors vers le haut, la bulle se pose sur le bord de l'aperçu.
-- Infos : `user-data/streambox/meta` publié par remote.py (YouTube : chaîne, date, vues, description, depuis le
-  `yt-dlp -J` de l'aperçu ; Jellyfin : série, épisode, année, note, résumé) ; chapitres (`chapter-list`, `chapter`)
-  relevés par ui.py avec la position : repères sur la barre, chapitre en cours dans la ligne d'infos. Temps restant
-  et heure de fin (« −21:26 · fin à 02:30 »).
-- Écran de pause (`qml/PauseScreen.qml`) : image assombrie, icône pause au centre de l'écran (plus de résumé ici).
-- Épisode suivant (Jellyfin) : remote.py publie `user-data/streambox/next_up` {id, of, title, episode, thumb}
-  (`Shows/{série}/Episodes?AdjacentTo=`) ; dans les 20 dernières secondes, stream-box.lua publie `next_card`
-  {seconds, …} → `qml/NextUp.qml` (OK : lancer, Retour : rester) ; à la fin du fichier, l'épisode suivant part
-  (POST /api/jellyfin_play). `of` : seulement pendant l'épisode dont c'est la suite (pas pour une lecture du shim).
+- Fast-forward that speeds up (stream-box.lua `media_seek`): presses close together (< 0.8 s) or key held down (at most
+  8 jumps/s) → 10 s ×3, then 30 s, then 1 min; total published in `user-data/streambox/seekfx` {text, n}, bubble
+  "+2 min 30" above the cursor (InfoBar.qml). Also works with mpv alone (without the bubble).
+- Row of buttons: ↓ goes down to it (focus on Pause/Play), ← → and OK, ↑ selects the title, Back goes back up;
+  Subtitles, −10 s, Pause/Play, +10 s, Quality (YouTube), Next chapter (if there are chapters), Next
+  episode (Jellyfin). Row centered on Pause/Play (InfoBar.qml `playIndex`). `ctrl_focus`,
+  `user-data/streambox/controls` {items, focus}; disappears with the bar. Round centered buttons, drawn icons
+  (`qml/PlayerIcon.qml`, QtQuick.Shapes: no Unicode characters, whose rendering depends on the fonts), Play / Pause
+  larger, name of the selected button below.
+- Layout (InfoBar.qml): title and info line right above the bar; the YouTube preview (thumbnail
+  sheet) and the jump bubble only appear while seeking forward or backward (`seeking`, 1.5 s after the last
+  jump), as close as possible to the bar; the title then slides up, the bubble sits on the edge of the preview.
+- Info: `user-data/streambox/meta` published by remote.py (YouTube: channel, date, views, description, from the
+  preview's `yt-dlp -J`; Jellyfin: series, episode, year, rating, overview); chapters (`chapter-list`, `chapter`)
+  read by ui.py with the position: marks on the bar, current chapter in the info line. Time left
+  and end time ("−21:26 · ends at 02:30").
+- Pause screen (`qml/PauseScreen.qml`): dimmed image, pause icon in the center of the screen (no more overview here).
+- Next episode (Jellyfin): remote.py publishes `user-data/streambox/next_up` {id, of, title, episode, thumb}
+  (`Shows/{series}/Episodes?AdjacentTo=`); in the last 20 seconds, stream-box.lua publishes `next_card`
+  {seconds, …} → `qml/NextUp.qml` (OK: play, Back: stay); at the end of the file, the next episode starts
+  (POST /api/jellyfin_play). `of`: only during the episode it follows (not for a playback from the shim).
 
-### Home Assistant : état « Allumée »
+### Home Assistant: "Powered on" state
 
-mqtt_bridge.py : `binary_sensor.stream_box_allumee` sur `stream-box/power` (ON à la connexion du pont, OFF par le
-message de dernière volonté, à l'arrêt du service — SIGTERM — et juste avant « Éteindre ») ; sans `availability`,
-donc `off` et jamais `unavailable`. Les autres entités : disponibles si `status` = online (box prête) ET power = ON
-(`availability_mode: all`), sauf « Éteindre » : disponible dès power = ON et exécuté tout de suite par le pont
-(`systemctl poweroff`, polkit), même pendant le démarrage. Exemples d'automatisation (allumer et éteindre avec la TV) dans docs/home-assistant.md.
+mqtt_bridge.py: `binary_sensor.stream_box_powered_on` on `stream-box/power` (ON when the bridge connects, OFF through the
+last will message, when the service stops — SIGTERM — and right before "Turn off"); without `availability`,
+so `off` and never `unavailable`. The other entities: available if `status` = online (box ready) AND power = ON
+(`availability_mode: all`), except "Turn off": available as soon as power = ON and executed right away by the bridge
+(`systemctl poweroff`, polkit), even during boot. Example automations (turning on and off with the TV) in docs/home-assistant.md.
 
-### Image disque installable (image/, mkosi)
+### Installable disk image (image/, mkosi)
 
-`bash image/build.sh` construit `image/mkosi.output/stream-box.raw` (~3 Go, à écrire sur un disque ou une clé USB ;
-`bash image/build.sh xz` : stream-box.raw.xz, ~1,8 Go, la version à télécharger)
-dans un conteneur Docker Arch avec mkosi 27 (rien d'installé sur la machine) ; `bash image/build.sh vm` la démarre
-dans QEMU. Base Arch (pas CachyOS), UEFI, systemd-boot + UKI. greetd lance la session cage de media au démarrage
-(pas de choix clavier/écran de connexion comme boot-mode.py). `mkosi.prepare.chroot` (avec réseau) : utilisateur
-media, clone du dépôt (origin = GitHub), venvs, serveur de jetons YouTube ; `mkosi.postinst.chroot` : config SSH,
-services utilisateur, jellyfin-mpv-shim, lecteur Qt ; `mkosi.finalize.chroot` : activation des services système et
-graphical.target (après le `systemctl preset-all` de mkosi, qui annulerait des `enable` faits plus tôt).
-`/usr/lib/repart.d/10-root.conf` agrandit la partition système à tout le disque au premier démarrage. Aucun réglage
-personnel dans l'image : tout passe par la télécommande web. Testé dans QEMU (écran d'accueil de l'appli Qt, API).
-Piège : `pkill -f motif` dans une commande dont le texte contient ce motif se tue lui-même (`[q]emu…`).
+`bash image/build.sh` builds `image/mkosi.output/stream-box.raw` (~3 GB, to write to a disk or a USB stick;
+`bash image/build.sh xz`: stream-box.raw.xz, ~1.8 GB, the version to download)
+in an Arch Docker container with mkosi 27 (nothing installed on the machine); `bash image/build.sh vm` boots it
+in QEMU. Arch base (not CachyOS), UEFI, systemd-boot + UKI. greetd starts media's cage session at boot
+(no keyboard/login screen choice like boot-mode.py). `mkosi.prepare.chroot` (with network): user
+media, repository clone (origin = GitHub), venvs, YouTube token server; `mkosi.postinst.chroot`: SSH config,
+user services, jellyfin-mpv-shim, Qt player; `mkosi.finalize.chroot`: enabling system services and
+graphical.target (after mkosi's `systemctl preset-all`, which would undo `enable`s done earlier).
+`/usr/lib/repart.d/10-root.conf` grows the system partition to the whole disk at first boot. No personal
+settings in the image: everything goes through the companion app. Tested in QEMU (Qt app home screen, API).
+Pitfall: `pkill -f pattern` in a command whose text contains this pattern kills itself (`[q]emu…`).
 
-### Mise en veille
+### Standby
 
-Menu de la TV (Système) : « Mettre en veille » (`POST /api/poweroff {"mode": "suspend"}`) et « Éteindre la box »
-(`{"mode": "full"}`), plus le réglage « Bouton d'arrêt (téléphone, Home Assistant) » : `~/.config/stream-box/power-action`
-(`suspend` ou `poweroff`, défaut), lu par remote.py (`POST /api/poweroff` sans mode, bouton de la page) et
-mqtt_bridge.py (bouton « Éteindre » ; select « Bouton d'arrêt »). Veille par `systemctl suspend` : permise d'office à
-remote.py (session locale active) ; règle polkit `login1.suspend*` ajoutée (install.sh, image) pour le pont, qui
-tourne hors session. Pendant la veille, Allumée passe à OFF : le pont prend un verrou logind « delay » et suit
-PrepareForSleep (gdbus monitor), publie OFF avant la veille et ON + status au réveil. Réveil : Wake-on-LAN (même paquet
-que pour l'allumage) ou bouton power. Au réveil, remote.py redémarre l'adaptateur Bluetooth (`bluetoothctl power off/on` : le dongle CSR restait bloqué,
-télécommande « connectée » sans périphérique d'entrée), puis (`resume_loop`, PrepareForSleep false) attend que twitch.tv réponde puis envoie
-`streambox-resume` : stream-box.lua relance la chaîne, ou la vidéo à sa position (flux morts pendant la veille, image
-figée sinon). Testé : réveil par WoL en 6 s, stream de retour 8 s après le paquet. La veille demandée par remote.py
-n'est permise d'office que s'il tourne dans la session de la TV (lancé par start.sh) ; hors session (relancé par ssh),
-il faut la règle polkit `login1.suspend*`.
-Bouton power (télécommande Bluetooth, bouton du boîtier) : remote.py tient un verrou logind `handle-power-key`
-(`hold_power_key`, permis dans la session de la TV) ; stream-box.lua lie `POWER` (mpv seul) et `0x21ff2a` (appli Qt,
-keysym XF86PowerOff) à `power_key` → `POST /api/poweroff` sans mode, donc le réglage « Bouton d'arrêt ». Ignoré 15 s
-après le démarrage et après un réveil. Lecteur arrêté : le bouton ne fait rien (logind ne reprend la main que si
-remote.py meurt).
+TV menu (System): "Put to sleep" (`POST /api/poweroff {"mode": "suspend"}`) and "Shut down the box" (Lua: "Turn off the box")
+(`{"mode": "full"}`), plus the setting "Power button" ("Sleep" or "Full shutdown"; remote, phone, Home Assistant): `~/.config/stream-box/power-action`
+(`suspend` or `poweroff`, default), read by remote.py (`POST /api/poweroff` without mode, page button) and
+mqtt_bridge.py ("Turn off" button; "Power button" select). Standby via `systemctl suspend`: allowed by default for
+remote.py (active local session); polkit rule `login1.suspend*` added (install.sh, image) for the bridge, which
+runs outside a session. During standby, Powered on switches to OFF: the bridge takes a logind "delay" lock and follows
+PrepareForSleep (gdbus monitor), publishes OFF before standby and ON + status on wake-up. Wake-up: Wake-on-LAN (same packet
+as for power on) or power button. On wake-up, remote.py restarts the Bluetooth adapter (`bluetoothctl power off/on`: the CSR dongle stayed stuck,
+remote "connected" without an input device), then (`resume_loop`, PrepareForSleep false) waits for twitch.tv to answer, then sends
+`streambox-resume`: stream-box.lua restarts the channel, or the video at its position (streams died during standby, frozen
+picture otherwise). Tested: wake-up by WoL in 6 s, stream back 8 s after the packet. Standby requested by remote.py
+is allowed by default only if it runs in the TV session (started by start.sh); outside a session (restarted over ssh),
+the polkit rule `login1.suspend*` is needed.
+Power button (Bluetooth remote, case button): remote.py holds a logind `handle-power-key` lock
+(`hold_power_key`, allowed in the TV session); stream-box.lua binds `POWER` (mpv alone) and `0x21ff2a` (Qt app,
+keysym XF86PowerOff) to `power_key` → `POST /api/poweroff` without mode, hence the "Power button" setting. Ignored for 15 s
+after boot and after a wake-up. Player stopped: the button does nothing (logind only takes over if
+remote.py dies).
 
-### Mode configuration Wi-Fi (netsetup.py)
+### Wi-Fi setup mode (netsetup.py)
 
-Sans réseau (aucune connexion Ethernet ou Wi-Fi active) et avec une carte Wi-Fi, remote.py (`netsetup.setup_loop`,
-25 s après le démarrage) crée le point d'accès NetworkManager `stream-box-setup` (« Stream Box XXXX », mot de passe
-tiré une fois, `~/.config/stream-box/hotspot.json`, adresse de la box 10.42.0.1, dnsmasq pour le DHCP). L'écran
-d'accueil (AmbientScreen.qml ; texte avec mpv seul) montre « 1. Connecte ton téléphone » (QR code WIFI:…) et « 2. Ouvre
-la configuration » (QR code http://10.42.0.1:8080/). La page, ouverte sur 10.42.0.1, s'ouvre sur la section Wi-Fi
-(liste relevée juste avant le point d'accès, une seule radio) ; `POST /api/wifi {action: connect, ssid, password}`
-arrête le point d'accès, cherche le réseau, s'y connecte ; échec → point d'accès de nouveau, erreur dans
-`GET /api/wifi`. Récupération à tout moment : Wi-Fi enregistré perdu → 60 s de grâce (NetworkManager réessaie) puis
-point d'accès ; sans téléphone dessus, il s'efface toutes les 3 min pour réessayer le Wi-Fi enregistré ; réseau revenu
-(câble…) → il s'arrête. Menu Système de la TV : ligne « Wi-Fi » (OK : mode configuration, gardé 15 min). En Ethernet,
-rien ne change. Carte choisie : celle du point d'accès, sinon la première par nom qui ne sert pas déjà de point
-d'accès. start.sh n'attend plus le réseau que 20 s. Test : `bash image/build.sh test` (mac80211_hwsim : deux cartes
-simulées, clé SSH de test gitignorée) ; testé dans QEMU : écran, recherche, mauvais puis bon mot de passe.
+Without network (no active Ethernet or Wi-Fi connection) and with a Wi-Fi card, remote.py (`netsetup.setup_loop`,
+25 s after boot) creates the NetworkManager access point `stream-box-setup` ("Stream Box XXXX", password
+generated once, `~/.config/stream-box/hotspot.json`, box address 10.42.0.1, dnsmasq for DHCP). The home
+screen (AmbientScreen.qml; text with mpv alone) shows "1. Connect your phone" (WIFI:… QR code) and "2. Open
+the setup" (QR code http://10.42.0.1:8080/). The page, opened on 10.42.0.1, opens on the Wi-Fi section
+(list scanned right before the access point, a single radio); `POST /api/wifi {action: connect, ssid, password}`
+stops the access point, looks for the network, connects to it; failure → access point again, error in
+`GET /api/wifi`. Recovery at any time: saved Wi-Fi lost → 60 s grace period (NetworkManager retries) then
+access point; with no phone on it, it goes away every 3 min to retry the saved Wi-Fi; network back
+(cable…) → it stops. TV System menu: "Wi-Fi" row (OK: setup mode, kept for 15 min). Over Ethernet,
+nothing changes. Card chosen: the access point's, otherwise the first by name that is not already used as an access
+point. start.sh now only waits 20 s for the network. Test: `bash image/build.sh test` (mac80211_hwsim: two simulated
+cards, gitignored test SSH key); tested in QEMU: screen, scan, wrong then right password.
 
-Adresse de la télécommande (QR code) : par défaut http://<IP locale>:8080 ; nom de domaine optionnel dans Réglages →
-Affichage (`POST /api/remote_url`, fichier remote-url, vide = réseau local).
+Companion app address (QR code): by default http://<local IP>:8080; optional domain name in Settings →
+Companion app address (`POST /api/remote_url`, remote-url file, empty = local network).
 
-### Télécommande virtuelle (page)
+### Virtual remote (page)
 
-Section « Télécommande » en haut de l'onglet Télécommande : pavé ▲▼◀▶ + OK, Retour, Menu (menu de la TV), Options (≡),
-Lecture (`cycle pause` : la touche lecture Xiaomi, elle, change le coin du chat). `POST /api/key {key}` → `keypress` mpv avec les noms que lie stream-box.lua (UP… ENTER, GO_BACK, HOMEPAGE,
-0x2111a0, PLAYPAUSE ; liste blanche dans remote.py) : même effet que la télécommande Bluetooth, menu de la TV compris.
-Flèches répétées tant qu'on reste appuyé (400 ms puis toutes les 120 ms), petite vibration à chaque appui.
+"Remote" section at the top of the Remote tab: ▲▼◀▶ pad + OK, Back, Menu (TV menu), Options (≡),
+Play (`cycle pause`: the Xiaomi play key, for its part, changes the chat corner). `POST /api/key {key}` → mpv `keypress` with the names stream-box.lua binds (UP… ENTER, GO_BACK, HOMEPAGE,
+0x2111a0, PLAYPAUSE; allowlist in remote.py): same effect as the Bluetooth remote, TV menu included.
+Arrows repeated while held down (400 ms then every 120 ms), short vibration on each press.
 
-### Page allégée (télécommande virtuelle d'abord)
+### Slimmed-down page (virtual remote first)
 
-Depuis la télécommande virtuelle, la page ne garde que ce que le téléphone fait mieux que le menu de la TV. Onglet
-Télécommande : télécommande virtuelle, En cours (titre ; vidéo : titre et « Retour au stream »), votes, Son (volume,
-couper le son), aperçu de la TV, lien à lire. Réglages : Wi-Fi,
-listes des streamers et des chaînes YouTube, adresse de la télécommande, état de la box et mises à jour, compte
-Twitch, chaînes suivies. Retirés (dans le menu de la TV) : grille des streamers et second stream, retour en arrière
-du direct, barre de lecture et sous-titres, pause, mode nuit, chat (affiché, coin, apparence), parcours YouTube
-(dernières vidéos par chaîne) et Jellyfin (rangées), rediffusions, historique, bascule auto, sondages affichés,
-sous-titres, résolution, bouton d'arrêt, QR code, lecteur. L'API garde ces actions (menu de la TV, Home Assistant).
-Banc d'essai de la page : jsdom dans Docker, fetch relayé vers l'API de la box (lecture seule), erreurs JS rapportées.
+Since the virtual remote, the page only keeps what the phone does better than the TV menu. Remote
+tab: virtual remote, "Video playing" (title; video: title and "Back to the stream"), votes, Sound (volume,
+mute), TV preview, link to play. Settings: Wi-Fi,
+streamer and YouTube channel lists, companion app address, box status and updates, Twitch
+account, followed channels. Removed (available in the TV menu): streamer grid and second stream, live
+rewind, playback bar and subtitles, pause, night mode, chat (shown, corner, appearance), YouTube browsing
+(latest videos per channel) and Jellyfin (rows), replays, history, auto switch, polls shown,
+subtitles, resolution, power button, QR code, player. The API keeps these actions (TV menu, Home Assistant).
+Page test bench: jsdom in Docker, fetch relayed to the box's API (read-only), JS errors reported.
 
-### Clavier du téléphone pour la recherche du menu de la TV
+### Phone keyboard for the TV menu search
 
-Clavier de recherche (YouTube, Jellyfin) ouvert ou fermé dans TvMenu.qml (`onKbOpenChanged`, aussi fermé avec le menu)
-→ `POST /api/keyboard {open, text, target}` ; remote.py le garde (`keyboard`, oublié après 10 min) et le publie dans
-`/api/state` (`keyboard`). La page affiche alors en tête « Recherche … (sur la TV) » : chaque frappe (120 ms après) →
-`POST /api/keyboard_input {text}` → `script-message streambox-tvmenu-text <texte> <0|1>` → ui.py `box.textInput` →
-`kbText` ; Entrée ou « Rechercher » (`submit`) lance la recherche et ferme le clavier. Les blocs de recherche
-YouTube et Jellyfin de la page sont retirés : la recherche se fait sur la TV. Appli Qt seulement (pas de recherche
-dans le menu de mpv seul).
-Allègement de l'image (5,7 → 3,0 Go) : partition système en btrfs compressé zstd, `Minimize=best` (pas de place vide
-écrite, agrandie au premier démarrage) ; pas de deno ni de nodejs-wheel dans le venv media (yt-dlp passe par le Node du
-système : `--js-runtimes node` dans player.sh, remote.py `YTDLP_JS`, update.sh, seulement si deno est absent, la box
-installée par install.sh garde deno) ; serveur de jetons sans ses dépendances de développement (`npm prune
---omit=dev`) ; `mkosi.finalize.chroot` retire /usr/include, doc, man, traductions autres que fr et en, outils de
-développement Qt du venv. Firmwares, LLVM, polices Noto et Qt gardés (compatibilité). Testé dans QEMU sur une clé de
-16 Go : partition agrandie à 16 Go, vidéo YouTube lue.
+Search keyboard (YouTube, Jellyfin) opened or closed in TvMenu.qml (`onKbOpenChanged`, also closed with the menu)
+→ `POST /api/keyboard {open, text, target}`; remote.py keeps it (`keyboard`, forgotten after 10 min) and publishes it in
+`/api/state` (`keyboard`). The page then shows at the top "Search (on the TV)" (or "Search on YouTube / in Jellyfin (on the TV)"): each keystroke (120 ms later) →
+`POST /api/keyboard_input {text}` → `script-message streambox-tvmenu-text <text> <0|1>` → ui.py `box.textInput` →
+`kbText`; Enter or "Search" (`submit`) starts the search and closes the keyboard. The page's YouTube and Jellyfin
+search blocks are removed: search is done on the TV. Qt app only (no search
+in the mpv-alone menu).
+Image slimming (5.7 → 3.0 GB): system partition in zstd-compressed btrfs, `Minimize=best` (no empty space
+written, grown at first boot); no deno or nodejs-wheel in the media venv (yt-dlp uses the system
+Node: `--js-runtimes node` in player.sh, remote.py `YTDLP_JS`, update.sh, only if deno is missing; a box
+installed by install.sh keeps deno); token server without its development dependencies (`npm prune
+--omit=dev`); `mkosi.finalize.chroot` removes /usr/include, doc, man, translations other than fr and en, Qt
+development tools from the venv. Firmware, LLVM, Noto fonts and Qt kept (compatibility). Tested in QEMU on a
+16 GB stick: partition grown to 16 GB, YouTube video played.
 
-### Sortie son (audio.py)
+### Sound output (audio.py)
 
-`audio.py watch` (lancé par start.sh, en continu) : sorties = prises HDMI / DisplayPort marquées « available » par
-PipeWire (écran ou TV qui sait jouer le son branché ; nom d'après l'EDID, `device.product.name`), appareils USB et
-Bluetooth (sinks `device.bus` usb / bluez5), sortie analogique de la carte. Choix dans `~/.config/stream-box/audio-output` :
-« auto » (Bluetooth > USB > HDMI branché ; rien de tout ça : on ne touche à rien) ou l'identifiant d'une sortie (absente
-→ automatique en attendant). Nouveau choix 1,5 s après chaque évènement sink/card de `pactl subscribe` ; changement de
-profil de carte, sortie par défaut, lectures en cours déplacées. `GET /api/audio` (sorties, choix, actuelle),
-`POST /api/audio {output}` ; ligne « Sortie son » dans Réglages de la TV (QML et Lua) et de la page. Descriptions lues
-dans le listing texte de pactl (le JSON perd les accents). no-hdmi-audio (ancien) vaut « analogique ».
+`audio.py watch` (started by start.sh, continuously): outputs = HDMI / DisplayPort jacks marked "available" by
+PipeWire (screen or TV able to play sound plugged in; name from the EDID, `device.product.name`), USB and
+Bluetooth devices (sinks `device.bus` usb / bluez5), the card's analog output. Choice in `~/.config/stream-box/audio-output`:
+"auto" (Bluetooth > USB > plugged-in HDMI; none of these: nothing is touched) or the id of an output (missing
+→ automatic in the meantime). New choice 1.5 s after each sink/card event from `pactl subscribe`; card profile
+change, default output, current playbacks moved. `GET /api/audio` (outputs, choice, current),
+`POST /api/audio {output}`; "Sound output" row in Settings on the TV (QML and Lua) and in the page. Descriptions read
+from pactl's text listing (the JSON loses accents). no-hdmi-audio (legacy) means "analog".
 
-### Touches lues à la source (input.py), appairage et apprentissage depuis le menu
+### Keys read at the source (input.py), pairing and learning from the menu
 
-`input.py` (lancé par start.sh) lit /dev/input/event* (groupe input : install.sh l'ajoute, l'image le donne) avec les
-noms de Linux (table de linux/input-event-codes.h embarquée ; KEY_SELECT = OK Xiaomi, KEY_VIDEOPHONE = ≡ Xiaomi,
-BTN_* et pavé ABS_HAT des manettes), traduit en actions (DEFAULTS, puis keymap.json) et envoie
-`script-message streambox-input <nom> <action>` ; il annonce `user-data/streambox/input` = « evdev:<heure> » toutes les
-5 s, et tant que c'est frais (15 s) stream-box.lua et ui.py ignorent les touches reçues par mpv / Qt (sinon doublées).
-Sans droits sur /dev/input, il s'arrête : ancien chemin (noms mpv et keysyms 0x21…, KEYS de stream-box.lua) en
-secours. Actions : up down left right ok back home menu homescreen corner power volume_up volume_down mute. La
-télécommande virtuelle de la page envoie aussi des actions (`streambox-input VIRTUAL <action>`, jamais apprise).
-Assistant « Configurer les touches » (menu Système, QML et Lua ; `POST /api/keymap {action: wizard|reset}`) : dans
-stream-box.lua, les actions une par une (8 s chacune, sans touche elle garde la sienne ; une touche déjà prise est
-refusée), touches apprises ajoutées à `~/.config/stream-box/keymap.json` ({nom: action}, noms Linux via input.py ou
-noms mpv en secours), état dans `user-data/streambox/learn` → `qml/KeyWizard.qml` (message à l'écran avec mpv seul).
-ui.py applique aussi keymap.json au menu QML ouvert. Bluetooth (btsetup.py, `GET/POST /api/bluetooth`) : liste des
-appareils appairés, recherche de 20 s, appairage sans code (agent NoInputNoOutput) + trust + connect, dissociation ;
-fenêtre « Télécommandes et manettes » du menu Système (QML : `btMenu`, `btScan`, relue toutes les 2 s).
-Redémarrage : `POST /api/reboot` (`systemctl reboot`, polkit login1.reboot* ajouté), « Redémarrer la box » dans le menu Système
-(QML et Lua, deuxième OK dans les 4 s), bouton dans Réglages → Système de la page, bouton « Redémarrer » dans Home Assistant.
-Power maintenu 1 s → fenêtre « Box » (veille, redémarrer, éteindre, annuler ; menu QML `powerMenu`, tv_menu.lua
-`streambox-power-menu`) au lieu de l'action du réglage « Bouton d'arrêt », qui part désormais au relâchement d'un
-appui court. input.py mesure l'appui (valeurs 1 / 0 de evdev, action `power_menu` envoyée à 1 s) ; en secours,
-stream-box.lua lie power en « complex » (down / up de mpv) et ui.py envoie keydown / keyup pour ces touches.
-La fenêtre s'affiche seule sur la vidéo, sans le menu derrière (`powerOnly` / `power_only`) ; Retour ferme tout.
+`input.py` (started by start.sh) reads /dev/input/event* (input group: install.sh adds it, the image grants it) with
+Linux names (embedded table from linux/input-event-codes.h; KEY_SELECT = Xiaomi OK, KEY_VIDEOPHONE = Xiaomi ≡,
+BTN_* and ABS_HAT pad of gamepads), translated into actions (DEFAULTS, then keymap.json) and sends
+`script-message streambox-input <name> <action>`; it announces `user-data/streambox/input` = "evdev:<time>" every
+5 s, and as long as that is fresh (15 s) stream-box.lua and ui.py ignore keys received by mpv / Qt (otherwise doubled).
+Without permissions on /dev/input, it stops: old path (mpv names and 0x21… keysyms, KEYS of stream-box.lua) as
+fallback. Actions: up down left right ok back home menu homescreen corner power volume_up volume_down mute. The
+page's virtual remote also sends actions (`streambox-input VIRTUAL <action>`, never learned).
+"Set up keys" wizard (System menu, QML and Lua; `POST /api/keymap {action: wizard|reset}`): in
+stream-box.lua, the actions one by one (8 s each, without a key it keeps its own; a key already taken is
+refused), learned keys added to `~/.config/stream-box/keymap.json` ({name: action}, Linux names via input.py or
+mpv names as fallback), state in `user-data/streambox/learn` → `qml/KeyWizard.qml` (on-screen message with mpv alone).
+ui.py also applies keymap.json to the open QML menu. Bluetooth (btsetup.py, `GET/POST /api/bluetooth`): list of
+paired devices, 20 s scan, pairing without a code (NoInputNoOutput agent) + trust + connect, unpairing;
+"Remotes and controllers" popup of the System menu (QML: `btMenu`, `btScan`, reread every 2 s).
+Reboot: `POST /api/reboot` (`systemctl reboot`, polkit login1.reboot* added), "Restart the box" in the System menu
+(QML and Lua, second OK within 4 s), button in Settings → System of the page, "Restart" button in Home Assistant.
+Power held for 1 s → "Box" popup ("☾  Sleep", "↻  Restart", "⏻  Shut down" (Lua: "⏻  Turn off"), "Cancel"; QML menu `powerMenu`, tv_menu.lua
+`streambox-power-menu`) instead of the action of the "Power button" setting, which now fires on release of a
+short press. input.py measures the press (evdev values 1 / 0, action `power_menu` sent at 1 s); as fallback,
+stream-box.lua binds power as "complex" (mpv's down / up) and ui.py sends keydown / keyup for these keys.
+The popup is shown alone over the video, without the menu behind it (`powerOnly` / `power_only`); Back closes everything.
 
 
 ### YouTube Cast
 
-`cast/cast.js` (Node, `yt-cast-receiver` 2.1.0, protocole non officiel) : la box apparaît comme « Stream Box » dans le
-bouton Caster de l'appli YouTube (découverte DIAL / SSDP sur le réseau local, port TCP 3000, UDP 1900 ; pare-feu à
-ouvrir s'il y en a un). Vidéo castée → `POST /api/play` {url, start} (position imposée par l'appli, `play(at=)`) ;
-pause, reprise, avance, volume → IPC mpv ; état changé à la télécommande renvoyé à l'appli (`notifyExternalStateChange`),
-fin de vidéo → suivante de la file ; « Arrêter la diffusion » → retour au stream (`/api/twitch`). Appairages dans
-`~/.config/stream-box/cast-receiver.json`. Lancé par start.sh si `cast/node_modules` existe ; modules installés par
-`npm ci --omit=dev` dans `cast/` (versions de `cast/package-lock.json`, ~40 Mo) par install.sh, l'image
-(mkosi.prepare.chroot) et update.sh (si le fichier de versions a changé). Titre de l'écran de chargement : l'appli ne
-donne que l'identifiant, `yt_title` le demande à l'API Google (compte connecté, 1 unité) ou à l'oEmbed public.
-Testé : découverte, lecture, pause, avance, volume, file d'attente, pause à la télécommande, arrêt.
+`cast/cast.js` (Node, `yt-cast-receiver` 2.1.0, unofficial protocol): the box appears as "Stream Box" in the
+YouTube app's Cast button (DIAL / SSDP discovery on the local network, TCP port 3000, UDP 1900; firewall to
+open if there is one). Cast video → `POST /api/play` {url, start} (position set by the app, `play(at=)`);
+pause, resume, seek, volume → mpv IPC; state changed from the remote sent back to the app (`notifyExternalStateChange`),
+end of video → next in the queue; "Stop casting" → back to the stream (`/api/twitch`). Pairings in
+`~/.config/stream-box/cast-receiver.json`. Started by start.sh if `cast/node_modules` exists; modules installed by
+`npm ci --omit=dev` in `cast/` (versions from `cast/package-lock.json`, ~40 MB) by install.sh, the image
+(mkosi.prepare.chroot) and update.sh (if the versions file has changed). Loading screen title: the app only
+gives the id, `yt_title` asks the Google API for it (connected account, 1 unit) or the public oEmbed.
+Tested: discovery, playback, pause, seek, volume, queue, pause from the remote, stop.
 
-### Progression YouTube du compte (mixte)
+### Account YouTube progress (mixed)
 
-L'API officielle ne donne ni historique ni positions : `cast/youtube_tv.js` (même processus que `cast.js`) se connecte
-comme l'appli YouTube des TV (youtubei.js, client TV, code sur google.com/device, Google affiche « YouTube on TV » ;
-jeton `~/.config/stream-box/youtube-tv-token.json`), serveur local 127.0.0.1:8091 (`/status`, `/login`, `/logout`,
-`/progress`, `/report`). Fonctionnement mixte, essayé avant de choisir :
-- la box garde ses positions (reprise exacte sur la TV) et les renvoie à YouTube (`history_loop` : toutes les
-  `YT_TV_PUSH` = 30 s, et à l'arrêt `final`) comme un lecteur : `/player` (URL de suivi, cpn), ping `playback`, puis
-  `watchtime` (segment st→et, temps réel rt). Vérifié : le téléphone reprend à la seconde près ;
-- pour une vidéo vue ailleurs, ou vue plus loin ailleurs que sur la box (la position la plus avancée gagne), le
-  pourcentage du compte (`percentDurationWatched` des cartes de FEhistory, 8 pages ≈ 120 vidéos, et de FEsubscriptions,
-  2 pages ; gardé 10 min, relu seulement quand l'onglet YouTube le demande) donne la barre de progression (`percent`) et la reprise
-  (`play()` : pourcentage × durée, durée par l'API Google). YouTube ne met ce pourcentage à jour qu'avec 15 à 20 min de
-  retard, et seulement là : aucun autre client (web, Android, iOS, /next) ne donne la position exacte avec ce jeton.
-`/api/youtube_account` → `tv` {connected, pending, error} ; `POST /api/youtube_tv_login|youtube_tv_logout`. TV :
-Système → Compte YouTube → « Synchroniser la progression » (fenêtre du code, `ytAuth.tv`). Jellyfin : le serveur reste
-la référence ; rediffusions Twitch : positions déjà renvoyées au compte Twitch (`twitch_save_position`).
+The official API gives neither history nor positions: `cast/youtube_tv.js` (same process as `cast.js`) signs in
+as the YouTube TV app (youtubei.js, TV client, code on google.com/device, Google shows "YouTube on TV";
+token `~/.config/stream-box/youtube-tv-token.json`), local server 127.0.0.1:8091 (`/status`, `/login`, `/logout`,
+`/progress`, `/report`). Mixed operation, tried before choosing:
+- the box keeps its positions (exact resume on the TV) and reports them to YouTube (`history_loop`: every
+  `YT_TV_PUSH` = 30 s, and on stop `final`) like a player: `/player` (tracking URL, cpn), `playback` ping, then
+  `watchtime` (segment st→et, real time rt). Checked: the phone resumes to the second;
+- for a video watched elsewhere, or watched further elsewhere than on the box (the furthest position wins), the
+  account's percentage (`percentDurationWatched` of the FEhistory cards, 8 pages ≈ 120 videos, and of FEsubscriptions,
+  2 pages; kept for 10 min, reread only when the YouTube tab asks for it) gives the progress bar (`percent`) and the resume
+  (`play()`: percentage × duration, duration from the Google API). YouTube only updates this percentage with a 15 to 20 min
+  delay, and only there: no other client (web, Android, iOS, /next) gives the exact position with this token.
+`/api/youtube_account` → `tv` {connected, pending, error}; `POST /api/youtube_tv_login|youtube_tv_logout`. TV:
+System → YouTube account → "Sync progress" (code popup, `ytAuth.tv`). Jellyfin: the server remains
+the reference; Twitch replays: positions already reported to the Twitch account (`twitch_save_position`).
 
-### Chargements évités (menu, page)
+### Avoided loads (menu, page)
 
-Menu QML : `/api/state` toutes les 4 s, mais `st` remplacé seulement si la réponse change (`stJson`) ; onglets cachés
-sans calcul (`rows: visible ? … : []` pour Rediffusions, YouTube/Jellyfin, Réglages, Système, tuiles d'état) ; liste
-des suivis calculée une fois (`followItems`). Page : `/api/state` en pause quand la page est en arrière-plan ; sections
-des Réglages (chaînes suivies, compte YouTube, Wi-Fi) chargées à l'ouverture de l'onglet (`settingsLoaders`).
+QML menu: `/api/state` every 4 s, but `st` replaced only if the response changes (`stJson`); hidden tabs
+not computed (`rows: visible ? … : []` for Replays, YouTube/Jellyfin, Settings, System, status tiles); following
+list computed once (`followItems`). Page: `/api/state` paused when the page is in the background; Settings
+sections (followed channels, YouTube account, Wi-Fi) loaded when the tab opens (`settingsLoaders`).
 
-### Sauvegarde et restauration (backup.py)
-Menu Système → « Sauvegarde et restauration » (QML `backupMenu`, Lua `backup_menu`, fenêtre relue toutes les 2 s) :
-par clé USB branchée, « Sauvegarder sur … » puis ses 4 dernières sauvegardes (OK → confirmation → restauration puis
-redémarrage). Page : Réglages → Sauvegarde, « Télécharger la sauvegarde » (`GET /api/backup/download`) et « Restaurer
-depuis un fichier » (`POST /api/backup_restore`, corps brut). API : `GET /api/backup` (clés, sauvegardes, busy,
-message affiché une minute), `POST /api/backup` `{action: save_usb|restore_usb, path, name}`.
-Archive au format de `backup.sh` (`home/<utilisateur>/…`, reprise par `install.sh --restore` et inversement) +
-`stream-box-backup.json` (date, nom de la box) + `stream-box-wifi.json` (Wi-Fi enregistrés dont le mot de passe est
-lisible par nmcli, recréés s'ils manquent). Pas les appairages Bluetooth (root ; `backup.sh` les garde). Restauration :
-seuls les chemins de la liste, remappés vers le dossier personnel d'ici, filtre « data » de tarfile, droits des
-dossiers remis (700) ; les réglages d'avant sont gardés dans `~/.local/state/stream-box/before-restore.tar.gz`.
-Clés : `lsblk` (USB / amovible, jamais le disque de la box), montées par `udisksctl` le temps de lire ou d'écrire puis
-démontées (retirables tout de suite) ; fichiers `stream-box-backup-AAAA-MM-JJ-HHMM.tar.gz` à la racine. Liste lue une
-fois par clé branchée. Image : udisks2, exfatprogs, dosfstools et règle polkit `52-stream-box-usb.rules` (montage pour
-media même hors de la session de la TV ; install.sh l'ajoute aussi).
+### Backup and restore (backup.py)
+System menu → "Backup and restore" (QML `backupMenu`, Lua `backup_menu`, popup reread every 2 s):
+per plugged-in USB stick, "↓  Back up to {name}" (Lua: "↓  Save to {name}") then its 4 latest backups (OK → confirmation → restore then
+reboot). Page: Settings → Backup, "Download the backup" (`GET /api/backup/download`) and "Restore
+from a file…" (`POST /api/backup_restore`, raw body). API: `GET /api/backup` (sticks, backups, busy,
+message shown for one minute), `POST /api/backup` `{action: save_usb|restore_usb, path, name}`.
+Archive in the `backup.sh` format (`home/<user>/…`, accepted by `install.sh --restore` and vice versa) +
+`stream-box-backup.json` (date, box name) + `stream-box-wifi.json` (saved Wi-Fi networks whose password is
+readable by nmcli, recreated if missing). Not the Bluetooth pairings (root; `backup.sh` keeps them). Restore:
+only the paths from the list, remapped to the local home folder, tarfile's "data" filter, folder permissions
+reset (700); the previous settings are kept in `~/.local/state/stream-box/before-restore.tar.gz`.
+Sticks: `lsblk` (USB / removable, never the box's disk), mounted by `udisksctl` just long enough to read or write, then
+unmounted (removable right away); files `stream-box-backup-YYYY-MM-DD-HHMM.tar.gz` at the root. List read once
+per plugged-in stick. Image: udisks2, exfatprogs, dosfstools and polkit rule `52-stream-box-usb.rules` (mounting for
+media even outside the TV session; install.sh adds it too).
 
-### Menu comme page principale (bouton Retour)
-Le grand menu est la page principale : au démarrage (`home_menu()` 3 s après le chargement de stream-box.lua, le temps
-que le menu se charge), à la fin d'une vidéo (`BACK_TO_MENU`) et sur Retour pendant un stream ou une vidéo, la lecture
-s'arrête (`show_home`, mode `home`) et le menu s'ouvre par-dessus l'écran d'accueil. Plus de Retour ×2 (ni
-`/api/resume_last`) : « Reprendre <streamer> » dans En direct et l'Historique font ce travail. En mode `home` (menu
-fermé par Menu ou au bout de 90 s : écran d'accueil animé), toute touche rouvre le menu. Menu ouvert sans rien en
-lecture : Retour sur les onglets ne le ferme pas (QML `st.mode`, Lua `state.mode`). Fond du menu : lueurs de la
-couleur de l'onglet qui dérivent, deux de plus sans vidéo derrière (le voile y est opaque, pour cacher l'écran
-d'accueil).
+### Menu as the main page (Back button)
+The large menu is the main page: at boot (`home_menu()` 3 s after stream-box.lua is loaded, the time
+for the menu to load), at the end of a video (`BACK_TO_MENU`) and on Back during a stream or a video, playback
+stops (`show_home`, `home` mode) and the menu opens over the home screen. No more Back ×2 (nor
+`/api/resume_last`): "▶  Resume {channel}" in Live and the History do this job. In `home` mode (menu
+closed by Menu or after 90 s: animated home screen), any key reopens the menu. Menu open with nothing
+playing: Back on the tabs does not close it (QML `st.mode`, Lua `state.mode`). Menu background: glows in the
+tab's color that drift, two more without video behind (the veil is opaque there, to hide the home
+screen).
 
-### Fonds animés (qml/Backdrop.qml)
-Écran d'accueil (AmbientScreen) et menu sans vidéo derrière (TvMenu, aux couleurs de l'onglet : `hueShift`, calque à
-60 %) partagent `Backdrop.qml` : un **fond** (`none` couleur unie, `aurora` taches floues, `fluid` bruit replié, `borealis` rideaux
-d'aurore boréale) + un **calque** (`none`, `silk` fils lumineux, `stars` étoiles sur deux plans).
-Les calques shader rendent `vec4(lumière, 0)` : mélange additif avec l'alpha prémultiplié de Qt. Fondu enchaîné à
-chaque changement (`shownBase` / `shownOverlay`). Réglages → Affichage : « Fond animé », « Par-dessus », « Couleurs de l'accueil » (`color` : violet, blue, green, sunset, pink, ice ; palettes
-dans AmbientScreen, le menu garde la couleur de ses onglets). `POST /api/backdrop {base?, overlay?, color?}`,
-`~/.config/stream-box/backdrop` (JSON ; ancienne valeur seule acceptée), `backdrop` (le choix) dans
-`/api/state` ; l'accueil prend le plus récent de son état (20 s) et de celui du menu ouvert (ui.qml). Au-dessus d'une
-vidéo, le menu n'a que son voile (plus de lueurs). Shaders dans `qml/shaders/*.frag`, compilés en `.qsb` versionnés
-par `qml/shaders/build.sh` (Docker, PySide6 de la même version que la box : Essentials n'a pas qsb), rendus à
-mi-résolution (`layer.textureSize`, composant `ShaderLayer`). Coût mesuré : ~25 % d'un cœur pour ui.py quel que soit
-le fond, menu compris.
+### Animated backgrounds (qml/Backdrop.qml)
+Home screen (AmbientScreen) and menu without video behind (TvMenu, in the tab's colors: `hueShift`, layer at
+60 %) share `Backdrop.qml`: a **background** (`none` solid color, `aurora` blurred blobs, `fluid` folded noise, `borealis`
+northern lights curtains) + a **layer** (`none`, `silk` luminous threads, `stars` stars on two planes).
+The shader layers render `vec4(light, 0)`: additive blending with Qt's premultiplied alpha. Crossfade on
+each change (`shownBase` / `shownOverlay`). Settings → Display: "Animated background", "On top", "Home colors" (`color`: violet, blue, green, sunset, pink, ice; palettes
+in AmbientScreen, the menu keeps the color of its tabs). `POST /api/backdrop {base?, overlay?, color?}`,
+`~/.config/stream-box/backdrop` (JSON; old single value accepted), `backdrop` (the choice) in
+`/api/state`; the home screen takes the most recent of its state (20 s) and that of the open menu (ui.qml). Over a
+video, the menu only has its veil (no more glows). Shaders in `qml/shaders/*.frag`, compiled to versioned `.qsb`
+by `qml/shaders/build.sh` (Docker, PySide6 of the same version as the box: Essentials has no qsb), rendered at
+half resolution (`layer.textureSize`, `ShaderLayer` component). Measured cost: ~25 % of a core for ui.py whatever
+the background, menu included.
 
-### Installateur (installer.py, image)
-L'image démarre sur une clé USB (live, tout marche, réglages compris) ; menu Système → « Installer sur ce PC »
-(QML `installMenu`, visible si `/api/install` dit `available` : disque de `/` en USB / amovible, et image avec
-l'installateur) → disques internes de 16 Go ou plus (modèle, taille, ce qu'ils contiennent) → confirmation → progression
-→ « Retire la clé USB, puis redémarre ». `POST /api/install {disk}` → `systemctl start --no-block
-stream-box-install@<disque>.service` (règle polkit `53-stream-box-install.rules` : media ne peut démarrer que ce
-service) → `/usr/local/lib/stream-box/install-to-disk` (root) : revérifie le disque (pas celui de la box, interne,
-16 Go), GPT (ESP 512 Mo + partition « root-x86-64 » btrfs zstd sur le reste), `cp -a --one-file-system /` (système en
-marche tel quel, `/home/media` compris : comptes, favoris, historique), points de montage recréés, copie de l'ESP de la
-clé, `bootctl install` (entrée du micrologiciel ; sinon chemin de secours EFI/BOOT/BOOTX64.EFI). Pas de root= : systemd
-retrouve la partition système par son type sur le disque d'où il a démarré. État : `/run/stream-box-install.json`
-(state running|done|error, step, percent, error). Testé dans QEMU (clé usb-storage + NVMe vierge, puis NVMe seul).
+### Installer (installer.py, image)
+The image boots from a USB stick (live, everything works, settings included); System menu → "Install on this PC"
+(QML `installMenu`, visible if `/api/install` says `available`: disk of `/` on USB / removable, and image with
+the installer) → internal disks of 16 GB or more (model, size, what they contain) → confirmation → progress
+→ "Remove the USB stick, then restart". `POST /api/install {disk}` → `systemctl start --no-block
+stream-box-install@<disk>.service` (polkit rule `53-stream-box-install.rules`: media can only start this
+service) → `/usr/local/lib/stream-box/install-to-disk` (root): rechecks the disk (not the box's own, internal,
+16 GB), GPT (512 MB ESP + "root-x86-64" btrfs zstd partition on the rest), `cp -a --one-file-system /` (running
+system as is, `/home/media` included: accounts, favorites, history), mount points recreated, copy of the stick's
+ESP, `bootctl install` (firmware entry; otherwise fallback path EFI/BOOT/BOOTX64.EFI). No root=: systemd
+finds the system partition by its type on the disk it booted from. State: `/run/stream-box-install.json`
+(state running|done|error, step, percent, error). Tested in QEMU (usb-storage stick + blank NVMe, then NVMe alone).
 
-### Accès SSH (menu Système)
-Ligne « Accès SSH » (interrupteur, QML `loadSsh`, visible si l'unité existe) : `GET /api/ssh` (`available`, `enabled`,
-`active` de sshd.service), `POST /api/ssh {enabled}` → `systemctl start stream-box-ssh@enable|disable.service`
-(root, `/usr/local/lib/stream-box/ssh-access` ; règle polkit `54-stream-box-ssh.rules`, media ne peut lancer que ces
-deux-là). L'image n'autorise SSH que par clé et media n'a pas de mot de passe : activer tire un mot de passe lisible
-(3 × 4 caractères), le donne à media, ajoute `sshd_config.d/10-stream-box-password.conf` (PasswordAuthentication yes)
-et le garde dans `/var/lib/stream-box/ssh-password` (root:media 640) ; le menu affiche `ssh media@<adresse>` et ce mot
-de passe (`/api/ssh` ne le donne qu'aux requêtes de 127.0.0.1). Couper : sshd désactivé, mot de passe et autorisation
-retirés (les clés restent). Image : SSH coupé par défaut (mkosi.finalize.chroot). Script, unité et règle dans `image/mkosi.extra`, copiés aussi par install.sh. Couper SSH ne ferme pas les
-sessions ouvertes (elles sont dans leur scope de session, pas dans sshd.service).
+### SSH access (System menu)
+"SSH access" row (switch, QML `loadSsh`, visible if the unit exists): `GET /api/ssh` (`available`, `enabled`,
+`active` of sshd.service), `POST /api/ssh {enabled}` → `systemctl start stream-box-ssh@enable|disable.service`
+(root, `/usr/local/lib/stream-box/ssh-access`; polkit rule `54-stream-box-ssh.rules`, media can only start these
+two). The image only allows SSH by key and media has no password: enabling generates a readable password
+(3 × 4 characters), gives it to media, adds `sshd_config.d/10-stream-box-password.conf` (PasswordAuthentication yes)
+and keeps it in `/var/lib/stream-box/ssh-password` (root:media 640); the menu shows `ssh media@<address>` and this
+password (`/api/ssh` only gives it to requests from 127.0.0.1). Turning off: sshd disabled, password and authorization
+removed (keys remain). Image: SSH off by default (mkosi.finalize.chroot). Script, unit and rule in `image/mkosi.extra`, also copied by install.sh. Turning SSH off does not close
+open sessions (they are in their session scope, not in sshd.service).
 
-### Mode développeur (menu Système)
-L'image n'a pas de mot de passe root, media n'a pas sudo, le noyau (UKI) a une ligne de commande figée : sans ce mode,
-une box installée n'offre aucun accès root. « Mode développeur » (interrupteur, confirmation à l'activation) :
-`POST /api/dev {enabled}` → `stream-box-dev@enable|disable.service` → `/usr/local/lib/stream-box/dev-mode` (root) :
-`/etc/sudoers.d/90-stream-box-dev` (`media ALL=(ALL:ALL) NOPASSWD: ALL`, vérifié par visudo) + `ssh-access enable`
-(mot de passe affiché sur la TV) ; marque lisible par media `/var/lib/stream-box/dev-mode` (`GET /api/dev`). Couper
-retire sudo, SSH garde son réglage. `POST /api/ssh` et `/api/dev` : 403 hors de 127.0.0.1 (seulement depuis le menu
-de la TV, pas depuis le réseau). Règle polkit `55-stream-box-dev.rules`.
+### Developer mode (System menu)
+The image has no root password, media has no sudo, the kernel (UKI) has a fixed command line: without this mode,
+an installed box offers no root access. "Developer mode" (switch, confirmation on enabling):
+`POST /api/dev {enabled}` → `stream-box-dev@enable|disable.service` → `/usr/local/lib/stream-box/dev-mode` (root):
+`/etc/sudoers.d/90-stream-box-dev` (`media ALL=(ALL:ALL) NOPASSWD: ALL`, checked by visudo) + `ssh-access enable`
+(password shown on the TV); marker readable by media `/var/lib/stream-box/dev-mode` (`GET /api/dev`). Turning off
+removes sudo, SSH keeps its setting. `POST /api/ssh` and `/api/dev`: 403 outside 127.0.0.1 (only from the TV
+menu, not from the network). Polkit rule `55-stream-box-dev.rules`.
 
-### Première configuration (box neuve)
-Tant que `~/.config/stream-box/setup-done` manque (et sans historique : une box qui a déjà servi compte comme
-configurée, la marque est alors posée), `/api/state` et l'état de l'écran d'accueil ont `first_run`. TV : l'écran
-d'accueil montre « Bienvenue · Continue sur ton téléphone » et le QR code de la page en grand (330 px), sans lives ni
-plannings ; stream-box.lua (`setup_pending`, même règle, lue dans les fichiers) n'ouvre pas le menu, ni au démarrage
-ni par une touche (message « Continue la configuration sur ton téléphone »). Page : écran `#setup` à la place des
-onglets (restaurer une sauvegarde ; sections Wi-Fi et streamers des Réglages déplacées dedans ; « Terminer » →
-`POST /api/setup` → marque + script-message `streambox-setup-done` → la TV ouvre le menu). Une restauration
-(`backup.restore`) pose aussi la marque.
+### First setup (new box)
+As long as `~/.config/stream-box/setup-done` is missing (and without history: a box that has already been used counts as
+configured, the marker is then set), `/api/state` and the home screen state have `first_run`. TV: the home
+screen shows "WELCOME" / "Continue on your phone" and the page's QR code large (330 px), without live streams or
+schedules; stream-box.lua (`setup_pending`, same rule, read from the files) does not open the menu, neither at boot
+nor on a key press (message "Continue the setup on your phone: scan the QR code"). Page: `#setup` screen instead of the
+tabs (restore a backup; Wi-Fi and streamers sections of Settings moved into it; "Finish" →
+`POST /api/setup` → marker + script-message `streambox-setup-done` → the TV opens the menu). A restore
+(`backup.restore`) also sets the marker.
 
-### Curseur
-cage a un thème de curseur invisible (`cursors/blank`, lien `cursors/default` : wlroots ignore `XCURSOR_THEME` et
-charge toujours le thème « default », cherché d'abord dans le `XCURSOR_PATH` donné par la session : image et install.sh) : son pointeur n'apparaît plus pendant les transitions sans fenêtre. start.sh retire ces variables pour
-les applis (une vraie souris garde son pointeur, masqué au bout de 4 s).
+### Cursor
+cage has an invisible cursor theme (`cursors/blank`, link `cursors/default`: wlroots ignores `XCURSOR_THEME` and
+always loads the "default" theme, looked up first in the `XCURSOR_PATH` given by the session: image and install.sh): its pointer no longer appears during transitions without a window. start.sh removes these variables for
+the apps (a real mouse keeps its pointer, hidden after 4 s).
 
-Assistant des touches : Retour sur la télécommande virtuelle de la page l'annule sans rien enregistrer (`learn_cancel`,
-phase `cancel` de KeyWizard.qml).
+Key wizard: Back on the page's virtual remote cancels it without saving anything (`learn_cancel`,
+`cancel` phase of KeyWizard.qml).
 
-### Agent Bluetooth (btagent.py)
-Les télécommandes Xiaomi lancent elles-mêmes l'appairage (et le refont à la reconnexion) : sans agent, BlueZ refuse
-(« No agent available »), la télécommande se reconnecte en boucle toutes les 10 s sans marcher. btagent.py (lancé par
-start.sh avec le Python de media-venv, dbus-fast) est l'agent par défaut (NoInputNoOutput) : accepte les appareils de
-confiance, et tous pendant une recherche ou un appairage du menu (btsetup.py touche
-`$XDG_RUNTIME_DIR/stream-box-bt-pairing`, fenêtre de 120 s), refuse le reste ; se réenregistre si bluetoothd redémarre.
+### Bluetooth agent (btagent.py)
+Xiaomi remotes start pairing themselves (and redo it on reconnection): without an agent, BlueZ refuses
+("No agent available"), the remote reconnects in a loop every 10 s without working. btagent.py (started by
+start.sh with media-venv's Python, dbus-fast) is the default agent (NoInputNoOutput): accepts trusted devices, and
+all of them during a scan or pairing from the menu (btsetup.py touches
+`$XDG_RUNTIME_DIR/stream-box-bt-pairing`, 120 s window), refuses the rest; re-registers if bluetoothd restarts.
 
-### Pièges de la box installée
-- Relancer la session : `sudo rm -f /run/greetd.run && sudo systemctl restart greetd` (sans retirer ce fichier, greetd
-  ne relance pas `initial_session` et tombe sur l'invite de connexion texte de tty1).
-- Dell OptiPlex en « RAID On » (Intel RST) : le SSD NVMe est caché au noyau d'Arch (« remapped NVMe », seul le noyau
-  de CachyOS a un correctif) ; BIOS → SATA Operation → AHCI. L'installateur le détecte (contrôleur de classe 0x010400,
-  `raid_mode`) et le dit.
+### Pitfalls of the installed box
+- Restarting the session: `sudo rm -f /run/greetd.run && sudo systemctl restart greetd` (without removing this file, greetd
+  does not restart `initial_session` and falls back to the text login prompt on tty1).
+- Dell OptiPlex in "RAID On" (Intel RST): the NVMe SSD is hidden from the Arch kernel ("remapped NVMe", only the
+  CachyOS kernel has a patch); BIOS → SATA Operation → AHCI. The installer detects it (class 0x010400 controller,
+  `raid_mode`) and says so.
 
-### Écran de démarrage (Plymouth, image)
-Thème `stream-box` de type script (fichiers du dépôt, `mkosi.extra/usr/share/plymouth/themes/stream-box/` : logo
-`watermark.png` (icône arrondie + « Stream Box »), roue `spinner.png` qui tourne, `stream-box.script`) : tout est mis à
-l'échelle de la hauteur de l'écran (dessiné pour 1080 lignes), même rendu en 1080p, en 4K ou en 1366 × 768 sans imposer
-de mode (pas de `video=` : un écran qui ne le prend pas resterait noir). Plymouth démarre dès l'initrd
-(`InitrdProfiles=plymouth`, thème et `/etc/plymouth` copiés par `mkosi.initrd.conf/`), i915 dans l'initrd et chargé
-d'emblée (`rd.modules-load=i915`) : animation d'un seul tenant dès ~1,7 s sur le Dell (sans `plymouth.use-simpledrm`,
-qui affiche plus tôt mais clignote au passage à i915). Cartes AMD / NVIDIA : pilotes pas dans l'initrd (firmwares trop
-lourds), l'animation y apparaît après le passage sur la partition système. Ligne de commande : `splash
-plymouth.ignore-serial-consoles vt.global_cursor_default=0` (en VM, systemd ajoute une console série : sans
-ignore-serial-consoles, Plymouth passe en texte). `plymouth-quit.service.d/10-retain-splash.conf` : `plymouth quit
---retain-splash`. Ne pas masquer plymouth-quit : greetd attend plymouth-quit-wait (démarrage bloqué « Hold until boot
-process finishes up »). Ensuite, start.sh affiche `boot-splash.png` avec mpv (même fond et même logo) pendant le
-lancement de la session, retirée par ui.py à sa première image (player.sh pour mpv seul, 30 s au plus).
+### Boot screen (Plymouth, image)
+`stream-box` theme of script type (repository files, `mkosi.extra/usr/share/plymouth/themes/stream-box/`: logo
+`watermark.png` (rounded icon + "Stream Box"), spinning wheel `spinner.png`, `stream-box.script`): everything is scaled
+to the screen height (drawn for 1080 lines), same rendering at 1080p, 4K or 1366 × 768 without forcing
+a mode (no `video=`: a screen that does not accept it would stay black). Plymouth starts from the initrd
+(`InitrdProfiles=plymouth`, theme and `/etc/plymouth` copied by `mkosi.initrd.conf/`), i915 in the initrd and loaded
+right away (`rd.modules-load=i915`): seamless animation from ~1.7 s on the Dell (without `plymouth.use-simpledrm`,
+which shows earlier but flickers when switching to i915). AMD / NVIDIA cards: drivers not in the initrd (firmware too
+heavy), the animation appears there after switching to the system partition. Command line: `splash
+plymouth.ignore-serial-consoles vt.global_cursor_default=0` (in a VM, systemd adds a serial console: without
+ignore-serial-consoles, Plymouth switches to text). `plymouth-quit.service.d/10-retain-splash.conf`: `plymouth quit
+--retain-splash`. Do not mask plymouth-quit: greetd waits for plymouth-quit-wait (boot stuck at "Hold until boot
+process finishes up"). Then start.sh shows `boot-splash.png` with mpv (same background and same logo) while the
+session starts, removed by ui.py at its first frame (player.sh for mpv alone, 30 s at most).
 
-### Essais en VM (image de test)
-`bash image/build.sh test` : image `stream-box-test.raw` avec SSH activé par la clé `image/test-key` (créée au premier
-essai, jamais publiée : `/etc/ssh/stream-box-test-keys`). QEMU dans le conteneur mkosi (KVM, OVMF), clé en
-`usb-storage` + NVMe vierge pour l'installateur, `-vga std`, moniteur QEMU pour des captures (`screendump`).
+### VM tests (test image)
+`bash image/build.sh test`: image `stream-box-test.raw` with SSH enabled by the key `image/test-key` (created on the first
+run, never published: `/etc/ssh/stream-box-test-keys`). QEMU in the mkosi container (KVM, OVMF), stick as
+`usb-storage` + blank NVMe for the installer, `-vga std`, QEMU monitor for screenshots (`screendump`).
 
-### Clavier classique
-Par défaut (input.py `DEFAULTS`, secours stream-box.lua `KEYS`) : flèches, Entrée = OK, Échap / Retour arrière =
-Retour, Windows, Début ou M = menu de la TV, O = options (≡), H = écran d'accueil, Espace = lecture / pause (action `corner`),
-+ / − (et pavé numérique) = volume, touches multimédia (suivante / précédente = → / ←, arrêt = Retour). Codes de Linux
-positionnels (QWERTY) : le M d'un AZERTY arrive en KEY_SEMICOLON, mappé aussi.
+### Regular keyboard
+By default (input.py `DEFAULTS`, stream-box.lua `KEYS` fallback): arrows, Enter = OK, Esc / Backspace =
+Back, Windows, Home or M = TV menu, O = options (≡), H = home screen, Space = play / pause (action `corner`),
++ / − (and numeric keypad) = volume, media keys (next / previous = → / ←, stop = Back). Linux codes are
+positional (QWERTY): the M of an AZERTY keyboard arrives as KEY_SEMICOLON, mapped too.
 
-### pacman (mode développeur)
-L'image officielle n'a ni miroir ni trousseau pacman (mkosi n'en laisse pas, et c'est voulu : pas de paquets
-installés à la main sur une box normale). En mode développeur, par SSH : `bash ~/stream-box/dev-pacman.sh` (miroir
-geo.mirror.pkgbuild.com, `pacman-key --init` + `--populate archlinux`). Préférer `pacman -Syu` aux mises à jour
-partielles (`pacman -Sy paquet` seul).
+### pacman (developer mode)
+The official image has neither a pacman mirror nor keyring (mkosi leaves none, and that is intended: no packages
+installed by hand on a normal box). In developer mode, over SSH: `bash ~/stream-box/dev-pacman.sh` (mirror
+geo.mirror.pkgbuild.com, `pacman-key --init` + `--populate archlinux`). Prefer `pacman -Syu` to partial
+updates (`pacman -Sy package` alone).
 
 
-### Bandeau « appareil connecté / déconnecté »
-input.py, à chaque nouvel appareil d'entrée après le premier relevé (pas ceux déjà là au démarrage) : script-message
-`streambox-notice "Appareil connecté · <nom>"` (et « déconnecté » quand sa dernière entrée disparaît), une fois par
-appareil et par sens en 10 s (nom sans « Keyboard », « Consumer
-Control »… : une télécommande Xiaomi apparaît en deux entrées). stream-box.lua → `user-data/streambox/notice`
-→ qml/Notice.qml (bandeau en haut, 4 s, par-dessus le menu) ; mpv seul : message à l'écran.
+### "Device connected / disconnected" banner
+input.py, for each new input device after the first scan (not those already there at boot): script-message
+`streambox-notice "Device connected · {name}"` (and "Device disconnected · {name}" when its last input disappears), once per
+device and per direction within 10 s (name without "Keyboard", "Consumer
+Control"…: a Xiaomi remote appears as two inputs). stream-box.lua → `user-data/streambox/notice`
+→ qml/Notice.qml (banner at the top, 4 s, over the menu); mpv alone: on-screen message.
 
-### Initrd allégé et course de D-Bus
-`KernelInitrdModules=default` + contrôleurs (mkosi.conf) : noyau unifié de 111 Mo au lieu de 491 (chargeur : ~3 s au lieu
-de ~11 sur le Dell). Effet de bord trouvé sur la vraie box (pas en VM) : l'initrd, devenu rapide, démarre D-Bus juste
-avant le passage sur la partition système et demande son arrêt une milliseconde avant qu'il annonce « Ready » ; la
-demande se perd, systemd attend 90 s puis le tue (logo du PC figé, initrd à 1 min 31). Correctif :
-`rd.systemd.mask=dbus.socket rd.systemd.mask=dbus-broker.service` (rien ne se sert de D-Bus dans l'initrd). Démarrage
-complet sur le Dell : 13,6 s. Pour essayer une option de démarrage sans reconstruire le noyau : add-on systemd-stub
-(`ukify build --cmdline "…" --output x.addon.efi`, dans `EFI/Linux/<uki>.efi.extra.d/`, Secure Boot désactivé).
+### Slimmed initrd and D-Bus race
+`KernelInitrdModules=default` + controllers (mkosi.conf): unified kernel of 111 MB instead of 491 (boot loader: ~3 s instead
+of ~11 on the Dell). Side effect found on the real box (not in a VM): the initrd, now fast, starts D-Bus right
+before switching to the system partition and asks it to stop one millisecond before it announces "Ready"; the
+request is lost, systemd waits 90 s then kills it (PC logo frozen, initrd at 1 min 31). Fix:
+`rd.systemd.mask=dbus.socket rd.systemd.mask=dbus-broker.service` (nothing uses D-Bus in the initrd). Full
+boot on the Dell: 13.6 s. To try a boot option without rebuilding the kernel: systemd-stub add-on
+(`ukify build --cmdline "…" --output x.addon.efi`, in `EFI/Linux/<uki>.efi.extra.d/`, Secure Boot disabled).
 
-### Sous-titres retenus (par vidéo)
-Le choix du panneau Sous-titres / audio (appli Qt) est gardé pour la vidéo en cours dans
-`~/.local/state/stream-box/sub_prefs.json` (clé : identifiant YouTube `v=`, identifiant Jellyfin de `/Videos/<id>/`,
-sinon le lien ; {lang, t}, 300 vidéos au plus, les plus anciennes partent ; `no` pour désactivés) et remis quand on
-la reprend (stream-box.lua `apply_sub_pref`, sur `file-loaded` en mode média, puis à chaque changement de
-`track-list` pendant 20 s : les sous-titres externes de Jellyfin arrivent après l'ouverture ; même langue sur les deux
-premières lettres, pistes « forcées » en dernier). Une vidéo sans choix garde celui de mpv.
+### Remembered subtitles (per video)
+The choice made in the Subtitles / audio panel (Qt app) is kept for the current video in
+`~/.local/state/stream-box/sub_prefs.json` (key: YouTube id `v=`, Jellyfin id from `/Videos/<id>/`,
+otherwise the link; {lang, t}, 300 videos at most, the oldest go; `no` for off) and restored when it is
+resumed (stream-box.lua `apply_sub_pref`, on `file-loaded` in media mode, then on each `track-list` change
+for 20 s: Jellyfin's external subtitles arrive after opening; same language on the first two
+letters, "forced" tracks last). A video without a choice keeps mpv's.
 
-### Menu refermé par une lecture lancée d'ailleurs
-`streambox-tvmenu-close` (script-message) : écouté par tv_menu.lua et par ui.py (→ `box.closeRequested` → TvMenu
-`close()`). Envoyé par stream-box.lua quand une vidéo arrive par `streambox-play` (téléphone, Cast, Home Assistant,
-historique…), quand jellyfin-mpv-shim charge un fichier, quand une chaîne arrive par `streambox-channel`, et par
-l'assistant des touches. Pas pour les relances automatiques du direct (bascule, direct figé).
+### Menu closed by playback started from elsewhere
+`streambox-tvmenu-close` (script-message): listened to by tv_menu.lua and by ui.py (→ `box.closeRequested` → TvMenu
+`close()`). Sent by stream-box.lua when a video arrives through `streambox-play` (phone, Cast, Home Assistant,
+history…), when jellyfin-mpv-shim loads a file, when a channel arrives through `streambox-channel`, and by
+the key wizard. Not for automatic live restarts (switch, frozen live stream).
 
-### Panneau Infos (vidéo)
-`qml/InfoPanel.qml` : glisse depuis la droite, miniature (YouTube) ou image de l'épisode (Jellyfin), titre, chaîne ou
-série, date, vues ou note, puis la description complète (`user-data/streambox/meta` : `overview` jusqu'à 3000
-caractères, `thumb`). Ouvert depuis le titre : ↑ depuis les boutons ou la barre le choisit (`title_focus`, publié dans `controls.title`,
-cadre « OK · Infos » autour du titre dans InfoBar.qml), OK ouvre le panneau, ↓ redescend aux boutons, ↑ ferme la
-barre, Retour quitte le titre sans arrêter la vidéo ; stream-box.lua `info_open` / `info_scroll` → `user-data/streambox/info` {open, scroll} ; ↑ ↓ défilent par 4 lignes (borné à la
-longueur du texte), Retour / OK / ≡ ferment ; refermé à la fin du fichier.
+### Info panel (video)
+`qml/InfoPanel.qml`: slides in from the right, thumbnail (YouTube) or episode image (Jellyfin), title, channel or
+series, date, views or rating, then the full description (`user-data/streambox/meta`: `overview` up to 3000
+characters, `thumb`). Opened from the title: ↑ from the buttons or the bar selects it (`title_focus`, published in `controls.title`,
+"OK · Info" frame around the title in InfoBar.qml), OK opens the panel, ↓ goes back down to the buttons, ↑ closes the
+bar, Back leaves the title without stopping the video; stream-box.lua `info_open` / `info_scroll` → `user-data/streambox/info` {open, scroll}; ↑ ↓ scroll by 4 lines (bounded by the
+length of the text), Back / OK / ≡ close; closed at the end of the file.
 
-### Serveur de jetons YouTube (stream-box-pot)
-`systemd/stream-box-pot.service` lance `node build/main.js` (bgutil-ytdlp-pot-provider, port 4416) avec le Node du venv
-(install.sh, nodejs-wheel) ou, à défaut, celui du système (image, paquet nodejs) : `env PATH=…/media-venv/bin:/usr/bin`.
-Sans ce serveur, yt-dlp n'a pas de PO token GVS et YouTube ne propose que le format 18 (360p) : vérifier
-`curl 127.0.0.1:4416/ping` quand une vidéo YouTube est floue (les box installées depuis l'image étaient touchées
-jusqu'au 2026-10-25).
+### YouTube token server (stream-box-pot)
+`systemd/stream-box-pot.service` runs `node build/main.js` (bgutil-ytdlp-pot-provider, port 4416) with the venv's Node
+(install.sh, nodejs-wheel) or, failing that, the system's (image, nodejs package): `env PATH=…/media-venv/bin:/usr/bin`.
+Without this server, yt-dlp has no GVS PO token and YouTube only offers format 18 (360p): check
+`curl 127.0.0.1:4416/ping` when a YouTube video is blurry (boxes installed from the image were affected
+until 2026-10-25).
 
-### Sélecteur de qualité (YouTube)
-Bouton « Qualité » (icône HD) à part, présent si YouTube propose plusieurs hauteurs : même panneau que les
-sous-titres en mode `quality` (`open_tracks("quality")`, `tracks_mode`) ; hauteurs lues dans la réponse de yt-dlp gardée par ytdl_hook (`user-data/mpv/ytdl/json-subprocess-result` : pas de
-nouvelle requête ; AV1 exclu, la puce ne le décode pas). « Auto (la meilleure) · 1440p » ou une hauteur (« 720p60 ») :
-`ytdl-format` plafonné (`bestvideo[height<=?H][vcodec!^=av01]+bestaudio/best`) et rechargement à la même seconde
-(stream-box.lua, table `quality` : une seule locale, le bloc principal est à la limite des 200 de Lua ; liste gardée
-une fois par vidéo, la rangée de boutons la redemande souvent). Vaut pour la
-vidéo en cours ; une autre vidéo repart sur le format par défaut. Jellyfin : pas de choix (fichier d'origine).
+### Quality selector (YouTube)
+Separate "Quality" button (HD icon), present if YouTube offers several heights: same panel as the
+subtitles in `quality` mode (`open_tracks("quality")`, `tracks_mode`); heights read from the yt-dlp response kept by ytdl_hook (`user-data/mpv/ytdl/json-subprocess-result`: no
+new request; AV1 excluded, the chip does not decode it). "Auto (best)  ·  1440p" or a height ("720p60"):
+capped `ytdl-format` (`bestvideo[height<=?H][vcodec!^=av01]+bestaudio/best`) and reload at the same second
+(stream-box.lua, `quality` table: a single local, the main chunk is at Lua's limit of 200; list kept
+once per video, the button row asks for it often). Applies to the
+current video; another video goes back to the default format. Jellyfin: no choice (original file).

@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# Stream Box : lecteur permanent, relancé s'il se ferme (lancé par start.sh, dans la session cage).
+# Stream Box: permanent player, restarted if it closes (started by start.sh, in the cage session).
 #
-# Lecteur : l'appli Qt Quick qui embarque mpv (ui.py, venv ui-venv) si ~/.config/stream-box/player contient « qt »,
-# sinon mpv seul. Le fichier est relu à chaque relance : pour changer, l'écrire puis quitter le lecteur (commande quit
-# par l'IPC). Filet de sécurité : si l'appli Qt s'arrête trois fois de suite en moins de 30 s, retour à mpv seul
-# jusqu'au prochain démarrage de la session.
+# Player: the Qt Quick app embedding mpv (ui.py, ui-venv venv) if ~/.config/stream-box/player contains "qt", otherwise
+# mpv alone. The file is read again on each restart: to switch, write it then quit the player (quit command through
+# the IPC). Safety net: if the Qt app stops three times in a row in less than 30 s, back to mpv alone until the next
+# session start.
 DIR="$(cd "$(dirname "$0")" && pwd)"
 export PATH="$HOME/.local/bin:$PATH"
 UI_PYTHON="$HOME/.local/share/ui-venv/bin/python"
 
-# Format des vidéos envoyées par lien (yt-dlp). Par défaut 1440p maximum et pas d'AV1, que beaucoup d'iGPU ne décodent
-# pas en matériel (tout retomberait sur le processeur) ; une autre règle peut être mise dans ce fichier.
+# Format of videos sent as a link (yt-dlp). By default 1440p at most and no AV1, which many iGPUs can't decode in
+# hardware (everything would fall back to the CPU); another rule can be put in this file.
 YTDL_FORMAT='bestvideo[height<=?1440][vcodec!^=av01]+bestaudio/best'
 [ -s "$HOME/.config/stream-box/ytdl-format" ] && YTDL_FORMAT=$(head -1 "$HOME/.config/stream-box/ytdl-format")
 
-# hwdec : décodage matériel quand il est sûr (VA-API, NVDEC…). Sous-titres français et anglais,
-# manuels et automatiques, sans les traductions automatiques (« French from Arabic »… plus de 100 pistes).
-# player_client : le client TV choisi par défaut reçoit des flux refusés (403) ; tv_simply et android_vr passent.
-# fetch_pot : jeton anti-robot (service stream-box-pot) pour chaque requête, sans quoi YouTube bloque les sous-titres
+# hwdec: hardware decoding when it is safe (VA-API, NVDEC…). French and English subtitles, manual and automatic,
+# without the automatic translations ("French from Arabic"… over 100 tracks).
+# player_client: the TV client chosen by default gets refused streams (403); tv_simply and android_vr work.
+# fetch_pot: anti-bot token (stream-box-pot service) for every request, otherwise YouTube blocks the subtitles
 MPV_ARGS=(
   --idle=yes --force-window=yes --fs --osc=no --cursor-autohide=4000
   --input-ipc-server=/tmp/stream-box-mpv.sock --script="$DIR/stream-box.lua" --script="$DIR/tv_menu.lua"
@@ -28,20 +28,20 @@ MPV_ARGS=(
   --ytdl-raw-options-append=cookies="$HOME/.config/stream-box/twitch-cookies.txt"
   --ytdl-raw-options-append='extractor-args=youtube:player_client=tv_simply,android_vr;fetch_pot=always'
 )
-# Défis JavaScript de YouTube : deno s'il est installé (install.sh), sinon le Node du système (image)
+# YouTube JavaScript challenges: deno if installed (install.sh), otherwise the system Node (image)
 [ -x "$HOME/.local/bin/deno" ] || MPV_ARGS+=(--ytdl-raw-options-append=js-runtimes=node)
 
 quick_fails=0 last_choice=""
 while true; do
   choice=$(head -1 "$HOME/.config/stream-box/player" 2>/dev/null)
-  # Lecteur choisi à la main (réglage de la télécommande, qui réécrit le fichier même sans changement) : les échecs
-  # passés de l'appli Qt sont oubliés, ce qui permet de la réessayer après un retour automatique à mpv
+  # Player chosen by hand (companion app setting, which rewrites the file even without a change): the Qt app's past
+  # failures are forgotten, which allows trying it again after an automatic fallback to mpv
   stamp="$(stat -c %Y "$HOME/.config/stream-box/player" 2>/dev/null)$choice"
   [ "$stamp" != "$last_choice" ] && quick_fails=0 && last_choice=$stamp
-  pkill -u "$USER" -f 'streamlink .*--player-external-http'   # restes d'un lecteur précédent
-  # Jellyfin : « Lire sur → Stream Box ». Le shim pilote ce lecteur par son socket (config dans
-  # ~/.config/jellyfin-mpv-shim/) et ne se raccroche pas tout seul à un lecteur relancé : on le relance avec. Il
-  # abandonne si le socket n'existe pas encore (l'appli Qt met plus de temps que mpv à l'ouvrir) : il l'attend.
+  pkill -u "$USER" -f 'streamlink .*--player-external-http'   # leftovers from a previous player
+  # Jellyfin: "Play on → Stream Box". The shim drives this player through its socket (config in
+  # ~/.config/jellyfin-mpv-shim/) and doesn't reattach on its own to a restarted player: restart it along. It gives
+  # up if the socket doesn't exist yet (the Qt app takes longer than mpv to open it): it waits for it.
   pkill -u "$USER" -f '[j]ellyfin-mpv-shim'
   rm -f /tmp/stream-box-mpv.sock
   (
@@ -54,12 +54,12 @@ while true; do
     code=$?
     if [ "$code" -ne 0 ] && [ $(( $(date +%s) - started )) -lt 30 ]; then
       quick_fails=$((quick_fails + 1))
-      echo "$(date '+%F %T') ui.py arrêté (code $code), échec rapide n°$quick_fails" >> /tmp/stream-box-ui.log
+      echo "$(date '+%F %T') ui.py stopped (code $code), quick failure #$quick_fails" >> /tmp/stream-box-ui.log
     else
       quick_fails=0
     fi
   else
-    kill "$(cat "${XDG_RUNTIME_DIR:-/tmp}/stream-box-splash.pid" 2> /dev/null)" 2> /dev/null   # image de démarrage
+    kill "$(cat "${XDG_RUNTIME_DIR:-/tmp}/stream-box-splash.pid" 2> /dev/null)" 2> /dev/null   # boot image
     mpv "${MPV_ARGS[@]}"
   fi
   sleep 2

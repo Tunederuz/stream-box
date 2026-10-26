@@ -4,8 +4,8 @@ layout(location = 0) out vec4 fragColor;
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
-    float time;      // secondes
-    float ratio;     // largeur / hauteur
+    float time;      // seconds
+    float ratio;     // width / height
     vec4 c1;
     vec4 c2;
     vec4 c3;
@@ -36,7 +36,7 @@ float vignette(vec2 uv) {
     vec2 d = uv - 0.5;
     return clamp(1.0 - dot(d, d) * 1.3, 0.0, 1.0);
 }
-// Fluide : bruit replié sur lui-même (domain warping), des nappes de couleur qui coulent lentement
+// Fluid: noise folded onto itself (domain warping), sheets of color flowing slowly
 void main() {
     vec2 uv = qt_TexCoord0 * vec2(ratio, 1.0) * 1.4;
     float t = time * 0.025;

@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
-# Stream Box : utilisateur media, code de la box et tout ce qu'il installe hors pacman (venvs Python, serveur de jetons
-# YouTube). Lancé par mkosi dans l'image, avec le réseau, juste après les paquets (« final ») ; mêmes étapes que
-# install.sh, faites une fois pour toutes à la construction.
+# Stream Box: media user, box code and everything it installs outside pacman (Python venvs, YouTube token server).
+# Run by mkosi in the image, with network, right after the packages ("final"); same steps as install.sh, done once and
+# for all at build time.
 set -euo pipefail
 [ "$1" = final ] || exit 0
 
 BOX_USER=media
 BOX_HOME=/home/$BOX_USER
-# Pas de deno ni de nodejs-wheel (300 Mo) : yt-dlp résout ses défis JavaScript avec le Node du système (player.sh,
-# remote.py : --js-runtimes node quand deno est absent)
+# No deno nor nodejs-wheel (300 MB): yt-dlp solves its JavaScript challenges with the system Node (player.sh,
+# remote.py: --js-runtimes node when deno is missing)
 MEDIA_VENV_PACKAGES="yt-dlp[default] bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt segno dbus-fast"
 POT_REPO=https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git
 as_box() { (cd "$BOX_HOME" && runuser -u "$BOX_USER" -- env HOME="$BOX_HOME" bash -c "$1"); }
 
 id "$BOX_USER" > /dev/null 2>&1 || useradd -m -s /bin/bash -G video,audio,input "$BOX_USER"
-usermod -p '*' "$BOX_USER"   # pas de mot de passe ; connexion SSH par clé possible (~media/.ssh/authorized_keys)
+usermod -p '*' "$BOX_USER"   # no password; SSH key login possible (~media/.ssh/authorized_keys)
 
-# Code de la box : une copie git du dépôt (les mises à jour de la box reprennent ensuite par git pull)
+# Box code: a git copy of the repository (box updates then go on through git pull)
 rm -rf "$BOX_HOME/stream-box"
 git -c safe.directory='*' clone -q /work/src/stream-box "$BOX_HOME/stream-box"
 git -C "$BOX_HOME/stream-box" remote set-url origin https://github.com/Tunederuz/stream-box.git
-# Les droits d'exécution posés à l'installation ne sont pas des modifications (sinon git pull refuse de mettre à jour)
+# Execute permissions set at install time are not changes (otherwise git pull refuses to update)
 git -C "$BOX_HOME/stream-box" config core.fileMode false
-# Modifications pas encore validées (git clone ne prend que le dernier commit) : copie de l'arbre de travail
+# Changes not committed yet (git clone only takes the last commit): copy of the working tree
 tar -C /work/src/stream-box --exclude=.git --exclude=image --exclude=node_modules -cf - . | tar -C "$BOX_HOME/stream-box" -xf -
 cp "$BOX_HOME/stream-box/streamers.example.txt" "$BOX_HOME/stream-box/streamers.txt"
 chown -R "$BOX_USER:$BOX_USER" "$BOX_HOME"
@@ -47,7 +47,7 @@ as_box '
   dir=~/.local/share/bgutil-pot-provider
   git clone -q --depth 1 --branch "$want" '"$POT_REPO"' "$dir"
   (cd "$dir/server" && npm ci --no-audit --no-fund --loglevel=error && npx tsc \
-     && npm prune --omit=dev --no-audit --no-fund --loglevel=error)   # outils de compilation retirés une fois compilé
-  (cd ~/stream-box/cast && npm ci --omit=dev --no-audit --no-fund --loglevel=error)   # récepteur YouTube Cast
+     && npm prune --omit=dev --no-audit --no-fund --loglevel=error)   # build tools removed once built
+  (cd ~/stream-box/cast && npm ci --omit=dev --no-audit --no-fund --loglevel=error)   # YouTube Cast receiver
   rm -rf ~/.npm
 '

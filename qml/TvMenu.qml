@@ -1,11 +1,12 @@
-// Stream Box : grand menu de la TV en QML (rendu par la puce graphique), à la place de tv_menu.lua quand le lecteur est
-// l'appli Qt (ui.py). Mêmes onglets et mêmes actions : tout passe par l'API de remote.py, comme la page web.
-// Les touches arrivent de ui.py (box.keyPressed) déjà traduites : up, down, left, right, ok, back, home (bouton Menu,
-// ferme), homescreen (WWW), corner (Play), menu (≡ : options de la carte choisie, dont le second stream). Coordonnées
-// en 1920x1080, mises à l'échelle par ui.qml. Second stream : objet « pip » de ui.py.
+// Stream Box: the full TV menu in QML (rendered by the GPU), replacing tv_menu.lua when the player is the Qt app
+// (ui.py). Same tabs and same actions: everything goes through the remote.py API, like the companion app.
+// Keys arrive from ui.py (box.keyPressed) already translated: up, down, left, right, ok, back, home (Menu button,
+// closes), homescreen (WWW), corner (Play), menu (≡: options of the chosen card, including the second stream).
+// Coordinates in 1920x1080, scaled by ui.qml. Second stream: "pip" object from ui.py.
 import QtQuick
 import QtQuick.Effects
 import "fmt.js" as Fmt
+import "i18n.js" as I18n
 
 Item {
     id: menu
@@ -15,19 +16,20 @@ Item {
     opacity: isOpen ? 1 : 0
     visible: opacity > 0
     Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+    function tr(s, a) { return I18n.t(i18n.dict, s, a) }
 
     readonly property string api: "http://127.0.0.1:8080"
     readonly property var tabs: [
-        { id: "live", label: "En direct" }, { id: "follows", label: "Suivis" },
-        { id: "replays", label: "Rediffusions" }, { id: "youtube", label: "YouTube" },
+        { id: "live", label: "Live" }, { id: "follows", label: "Following" },
+        { id: "replays", label: "Replays" }, { id: "youtube", label: "YouTube" },
         { id: "jellyfin", label: "Jellyfin" },
-        { id: "history", label: "Historique" },
-        { id: "settings", label: "Réglages" }, { id: "system", label: "Système" }]
-    readonly property var corners: ({ tl: "↖ haut gauche", tr: "↗ haut droite", br: "↘ bas droite", bl: "↙ bas gauche" })
-    readonly property var qrModes: [["always", "Toujours"], ["timed", "30 secondes"], ["never", "Jamais"]]
-    readonly property var kinds: ({ youtube: "YouTube", "twitch-vod": "Rediffusion Twitch", "twitch-clip": "Clip Twitch", link: "Lien", jellyfin: "Jellyfin" })
+        { id: "history", label: "History" },
+        { id: "settings", label: "Settings" }, { id: "system", label: "System" }]
+    readonly property var corners: ({ tl: "↖ top left", tr: "↗ top right", br: "↘ bottom right", bl: "↙ bottom left" })
+    readonly property var qrModes: [["always", "Always"], ["timed", "30 seconds"], ["never", "Never"]]
+    readonly property var kinds: ({ youtube: "YouTube", "twitch-vod": "Twitch replay", "twitch-clip": "Twitch clip", link: "Link", jellyfin: "Jellyfin" })
 
-    // Données (relues à l'ouverture ; réaffectées en entier pour que les liaisons suivent)
+    // Data (reloaded on open; reassigned as a whole so bindings follow)
     property var st: ({})
     property var follows: null
     property var replays: ({})
@@ -35,23 +37,23 @@ Item {
     property var display: null
     property var account: null
     property var followsQr: null
-    property var health: null                // /api/health, relu toutes les 5 s sur l'onglet Système
+    property var health: null                // /api/health, reloaded every 5 s on the System tab
     property var wifi: null
     property var audioOut: null
-    // Bluetooth (menu Système) : /api/bluetooth, et étape en cours de la fenêtre (« », scan, pair)
+    // Bluetooth (System menu): /api/bluetooth, and current step of the dialog ("", scan, pair)
     property var bt: null
-    property var ssh: null                   // /api/ssh : accès SSH (maintenance) activé ou coupé
-    property var dev: null                   // /api/dev : mode développeur (sudo pour media, SSH)
-    property var install: null               // /api/install : box démarrée sur sa clé USB, disques internes, progression
-    property string btPhase: ""              // /api/audio : sorties son, choix (« auto » ou une sortie), sortie actuelle                  // /api/wifi, idem (ligne « Wi-Fi » : mode configuration)
-    // YouTube : chaînes de la liste (/api/youtube), résultats de recherche, rangée et choix par rangée
+    property var ssh: null                   // /api/ssh: SSH access (maintenance) on or off
+    property var dev: null                   // /api/dev: developer mode (sudo for media, SSH)
+    property var install: null               // /api/install: box booted from its USB stick, internal disks, progress
+    property string btPhase: ""              // /api/audio: audio outputs, choice ("auto" or an output), current output                  // /api/wifi, same ("Wi-Fi" row: setup mode)
+    // YouTube: channels of the list (/api/youtube), search results, row and choice per row
     property var yt: null
-    // Compte YouTube : fenêtre du code à taper sur google.com/device (/api/youtube_account), et son QR code
+    // YouTube account: dialog with the code to enter on google.com/device (/api/youtube_account), and its QR code
     property var ytAuth: null
     property var ytAuthQr: null
-    property var ytAccount: null             // même état, pour la ligne « Compte YouTube » du menu Système
-    // Couleurs selon l'onglet : violet pour Twitch (direct, suivis, rediffusions), rouge pour YouTube, neutre
-    // (anthracite, halo blanc) pour ce qui n'appartient à aucun service (historique, réglages, système), bleu Jellyfin
+    property var ytAccount: null             // same state, for the "YouTube account" row of the System menu
+    // Colors per tab: purple for Twitch (live, following, replays), red for YouTube, neutral (charcoal, white glow)
+    // for what belongs to no service (history, settings, system), blue for Jellyfin
     readonly property string theme: tabId === "youtube" || tabId === "jellyfin" ? tabId
         : ["live", "follows", "replays"].indexOf(tabId) >= 0 ? "twitch" : "neutral"
     readonly property var pal: theme === "youtube"
@@ -66,60 +68,60 @@ Item {
         : { accent: "#e8e8ee", veil: "#0b0b0d", rail: "#121214", sheet: "#1e1e22", key: "#2f2f35",
             surface: "#232327", surfaceFocus: "#35353c", label: "#a3a3ad" }
     readonly property color accent: pal.accent
-    property var ytResults: null             // { query, results, channels } ou null
-    property var ytPreview: null             // chaîne trouvée ouverte : { id, name, avatar, followers, videos, saved }
+    property var ytResults: null             // { query, results, channels } or null
+    property var ytPreview: null             // found channel, opened: { id, name, avatar, followers, videos, saved }
     property bool ytSearching: false
-    property int ytRow: 0                    // 0 : ligne de recherche, puis résultats (s'il y en a) et chaînes
+    property int ytRow: 0                    // 0: search row, then results (if any) and channels
     property var ytSel: ({})
-    // Jellyfin : accueil (/api/jellyfin), recherche, épisodes d'une série ouverte, rangée et choix par rangée
+    // Jellyfin: home (/api/jellyfin), search, episodes of an opened series, row and choice per row
     property var jf: null
-    property var jfResults: null             // { query, results } ou null
-    property var jfPreview: null             // série ouverte : { id, name, episodes, first }
+    property var jfResults: null             // { query, results } or null
+    property var jfPreview: null             // opened series: { id, name, episodes, first }
     property bool jfSearching: false
     property int jfRow: 0
     property var jfSel: ({})
-    // Onglets à rangées (YouTube, Jellyfin) : même page, même clavier, état propre à chacun
+    // Row-based tabs (YouTube, Jellyfin): same page, same keyboard, separate state for each
     readonly property bool jfTab: tabId === "jellyfin"
     readonly property int mRow: jfTab ? jfRow : ytRow
     readonly property var mSel: jfTab ? jfSel : ytSel
     readonly property bool mSearching: jfTab ? jfSearching : ytSearching
     readonly property var mResults: jfTab ? jfResults : ytResults
-    // Clavier à l'écran (recherche) : texte, ligne et colonne choisies
+    // On-screen keyboard (search): text, chosen row and column
     property bool kbOpen: false
     property string kbText: ""
-    // Clavier ouvert ou fermé : signalé à la box, la page du téléphone propose alors de taper le texte
+    // Keyboard opened or closed: reported to the box, the companion app then offers to type the text
     onKbOpenChanged: call("POST", "/api/keyboard", { open: kbOpen, text: kbText, target: jfTab ? "Jellyfin" : "YouTube" })
     property int kbRow: 0
     property int kbCol: 0
     readonly property var kbKeys: [
         "abcdefghij".split(""), "klmnopqrst".split(""), "uvwxyz-'.?".split(""), "0123456789".split(""),
-        "éèàçùêô".split("").concat(["Espace"]), ["Effacer", "Tout effacer", "Rechercher"]]
+        "éèàçùêô".split("").concat(["Space"]), ["Delete", "Clear all", "Search"]]
     readonly property var ambient: { try { return JSON.parse(box.ambient || "{}") } catch (e) { return {} } }
 
     // Focus
     property int tab: 0
     readonly property string tabId: tabs[tab].id
-    property string area: "content"          // rail ou content
-    property int shortcut: -1                // En direct : raccourci choisi au-dessus de la grille, -1 = grille
+    property string area: "content"          // rail or content
+    property int shortcut: -1                // Live: shortcut chosen above the grid, -1 = grid
     property int liveSel: 0
     property int followSel: 0
     property int histSel: 0
-    property int setSel: 0                   // index dans settingsRows (lignes sélectionnables seulement)
+    property int setSel: 0                   // index in settingsRows (selectable rows only)
     property int sysSel: 0
-    property int rpRow: 0                    // 0 puces, 1 rediffusions, 2 clips (s'ils existent)
+    property int rpRow: 0                    // 0 chips, 1 replays, 2 clips (if any)
     property var rpSel: [0, 0, 0]
     property string rpLogin: ""
     property string pendingDisplay: ""
-    property string pendingPlayer: ""        // lecteur choisi aux flèches, appliqué par OK (le lecteur redémarre)
+    property string pendingPlayer: ""        // player chosen with the arrows, applied by OK (the player restarts)
     property real poweroffUntil: 0
-    property real rebootUntil: 0             // « Redémarrer la box » : deuxième OK dans les 4 s
-    property bool powerOnly: false           // fenêtre « Box » seule, sans le menu derrière (power maintenu)
+    property real rebootUntil: 0             // "Restart the box": second OK within 4 s
+    property bool powerOnly: false           // "Box" dialog alone, without the menu behind (power held)
     property var modal: null                 // { title, items: [{ label, danger, ok }] }
     property int modalSel: 0
     property date now: new Date()
-    property bool startFocus: false          // à l'ouverture : focus à recaler sur le streamer regardé
+    property bool startFocus: false          // on open: focus to move onto the watched streamer
 
-    // API de remote.py
+    // remote.py API
 
     function call(method, path, body, cb) {
         var x = new XMLHttpRequest()
@@ -138,8 +140,8 @@ Item {
         call("GET", "/api/state", undefined, function (d) {
             if (!d || !d.streamers) return
             var j = JSON.stringify(d)
-            if (j !== stJson) { stJson = j; st = d }   // même état : rien à recalculer
-            if (startFocus) {   // à l'ouverture, avant toute touche : onglet du média en cours
+            if (j !== stJson) { stJson = j; st = d }   // same state: nothing to recompute
+            if (startFocus) {   // on open, before any key: tab of the current media
                 liveSel = Math.max(0, d.streamers.indexOf(d.channel))
                 var t = mediaTab(d)
                 for (var i = 0; i < tabs.length; i++) if (tabs[i].id === t && tab !== i) { tab = i; area = "content" }
@@ -156,7 +158,7 @@ Item {
                     call("GET", "/api/qr?text=" + encodeURIComponent(p.verification_uri), undefined, function (q) {
                         followsQr = q ? { text: p.verification_uri, rows: q.rows } : null
                     })
-                followsPoll.restart()   // en attente du code tapé sur twitch.tv/activate
+                followsPoll.restart()   // waiting for the code entered on twitch.tv/activate
             }
         })
     }
@@ -173,7 +175,7 @@ Item {
     function ytSearch(q) {
         q = q.trim()
         if (!q) return
-        ytResults = { query: q, results: [], channels: [] }   // avant ytSearching : le texte de la ligne de recherche lit query
+        ytResults = { query: q, results: [], channels: [] }   // before ytSearching: the search row text reads query
         ytSearching = true
         ytPreview = null
         call("GET", "/api/youtube_search?q=" + encodeURIComponent(q), undefined, function (d) {
@@ -182,46 +184,46 @@ Item {
             ytRow = 1; var s = Object.assign({}, ytSel); s["search"] = 0; ytSel = s
         })
     }
-    // Rangées de l'onglet YouTube : recherche, résultats, une par chaîne
+    // Rows of the YouTube tab: search, results, one per channel
     function ytRows() {
         var rows = [{ kind: "search" }]
         if (ytResults && ytResults.channels.length)
-            rows.push({ kind: "chans", key: "chans", title: "Chaînes", items: ytResults.channels })
+            rows.push({ kind: "chans", key: "chans", title: tr("Channels"), items: ytResults.channels })
         if (ytPreview)
-            rows.push({ kind: "preview", key: "preview", title: ytPreview.name + " · dernières vidéos", avatar: ytPreview.avatar,
+            rows.push({ kind: "preview", key: "preview", title: tr("{name} · latest videos", { name: ytPreview.name }), avatar: ytPreview.avatar,
                         items: ytPreview.videos || [], loading: ytPreview.videos === null })
-        if (ytResults) rows.push({ kind: "results", key: "search", title: "Résultats pour « " + ytResults.query + " »", items: ytResults.results })
+        if (ytResults) rows.push({ kind: "results", key: "search", title: tr("Results for \"{query}\"", { query: ytResults.query }), items: ytResults.results })
         var subs = yt && yt.subs
         if (subs && subs.authorized)
-            rows.push({ kind: "subs", key: "subs", title: "Abonnements", items: subs.videos || [], loading: subs.videos === null })
+            rows.push({ kind: "subs", key: "subs", title: tr("Subscriptions"), items: subs.videos || [], loading: subs.videos === null })
         else if (subs && subs.configured)
-            rows.push({ kind: "connect", key: "connect", title: "Abonnements",
-                        items: [{ title: "Connecter mon compte", connect: true }] })
+            rows.push({ kind: "connect", key: "connect", title: tr("Subscriptions"),
+                        items: [{ title: tr("Connect my account"), connect: true }] })
         var chans = yt ? yt.channels : []
         for (var i = 0; i < chans.length; i++)
             rows.push({ kind: "channel", key: chans[i].id, title: chans[i].name, avatar: chans[i].avatar, items: chans[i].videos || [] })
         return rows
     }
-    // Chaîne trouvée par la recherche : voir ses vidéos (rangée juste sous les chaînes), l'ajouter ou la retirer
+    // Channel found by the search: see its videos (row just below the channels), add or remove it
     function ytChannelMenu(c) {
-        openModal(c.name + (c.followers ? " · " + Fmt.big(c.followers) + " abonnés" : ""), [
-            { label: "▶  Voir ses dernières vidéos", ok: function () { ytOpenChannel(c) } },
-            { label: c.saved ? "✕  Retirer des favoris" : "★  Ajouter aux favoris", ok: function () { ytToggleSaved(c) } }])
+        openModal(c.name + (c.followers ? " · " + tr("{n} subscribers", { n: Fmt.big(c.followers, tr) }) : ""), [
+            { label: tr("▶  See latest videos"), ok: function () { ytOpenChannel(c) } },
+            { label: tr(c.saved ? "✕  Remove from favorites" : "★  Add to favorites"), ok: function () { ytToggleSaved(c) } }])
     }
     function ytOpenChannel(c) {
         ytPreview = { id: c.id, name: c.name, avatar: c.avatar, videos: null }
         var s = Object.assign({}, ytSel); s["preview"] = 0; ytSel = s
-        ytRow = Math.max(1, ytRows().findIndex(function (r) { return r.kind === "preview" }))   // juste sous les chaînes trouvées
+        ytRow = Math.max(1, ytRows().findIndex(function (r) { return r.kind === "preview" }))   // just below the found channels
         call("GET", "/api/youtube_channel?id=" + encodeURIComponent(c.id), undefined, function (d) {
             if (ytPreview && ytPreview.id === c.id) ytPreview = Object.assign({}, ytPreview, { videos: d ? d.videos : [] })
         })
     }
-    // Compte YouTube : code à taper sur google.com/device ; la fenêtre se relit toutes les 3 s jusqu'à l'autorisation
-    // tv : progression par l'accès « appli YouTube TV » (cast/youtube_tv.js), sinon abonnements (appli Google à soi)
+    // YouTube account: code to enter on google.com/device; the dialog reloads every 3 s until authorized
+    // tv: progress through the "YouTube TV app" access (cast/youtube_tv.js), otherwise subscriptions (own Google app)
     function ytConnect(tv) {
         ytAuth = { tv: !!tv, pending: null }
         call("POST", tv ? "/api/youtube_tv_login" : "/api/youtube_login", {}, function (d) {
-            if (!d) ytAuth = { tv: !!tv, pending: { error: tv ? "YouTube injoignable" : "Google injoignable, ou appli mal configurée" } }
+            if (!d) ytAuth = { tv: !!tv, pending: { error: tv ? tr("YouTube unreachable") : tr("Google unreachable, or app misconfigured") } }
             else loadYtAuth()
         })
     }
@@ -249,29 +251,29 @@ Item {
         if (!a) return
         var items = []
         if (a.configured && !a.authorized)
-            items.push({ label: "+  Connecter mes abonnements", ok: function () { ytConnect(false) } })
+            items.push({ label: tr("+  Connect my subscriptions"), ok: function () { ytConnect(false) } })
         if (a.authorized) {
-            items.push({ label: "↻  Relire mes abonnements", ok: function () {
+            items.push({ label: tr("↻  Reload my subscriptions"), ok: function () {
                 call("POST", "/api/youtube_sync", {}, function () { yt = null; loadYoutube() }) } })
         }
         if (a.tv && !a.tv.unavailable)
             items.push(a.tv.connected
-                ? { label: "✕  Ne plus synchroniser la progression", danger: true, ok: function () {
+                ? { label: tr("✕  Stop syncing progress"), danger: true, ok: function () {
                     call("POST", "/api/youtube_tv_logout", {}, function () { yt = null; loadYtAccount() }) } }
-                : { label: "⟳  Synchroniser la progression", ok: function () { ytConnect(true) } })
+                : { label: tr("⟳  Sync progress"), ok: function () { ytConnect(true) } })
         if (a.authorized)
-            items.push({ label: "✕  Déconnecter les abonnements", danger: true, ok: function () {
+            items.push({ label: tr("✕  Disconnect subscriptions"), danger: true, ok: function () {
                 call("POST", "/api/youtube_logout", {}, function () { yt = null; loadYtAccount() }) } })
-        openModal("Compte YouTube" + (a.channels !== null ? " · " + a.channels + " abonnements" : ""), items)
+        openModal(tr("YouTube account") + (a.channels !== null ? " · " + tr("{n} subscriptions", { n: a.channels }) : ""), items)
     }
-    // Options sur une vidéo des abonnements : lire, chaîne en favori (une rangée à elle)
+    // Options on a subscription video: play, channel as favorite (a row of its own)
     function ytSubOptions(v) {
         var fav = (yt ? yt.channels : []).some(function (c) { return c.id === v.channel_id })
         var c = { id: v.channel_id, name: v.channel, avatar: v.avatar, saved: fav }
         openModal(v.channel, [
-            { label: "▶  Lire la vidéo", ok: function () { chooseVideo(v) } },
-            { label: "▶  Voir ses dernières vidéos", ok: function () { ytOpenChannel(c) } },
-            { label: fav ? "✕  Retirer des favoris" : "★  Ajouter aux favoris", ok: function () { ytToggleSaved(c) } }])
+            { label: tr("▶  Play the video"), ok: function () { chooseVideo(v) } },
+            { label: tr("▶  See latest videos"), ok: function () { ytOpenChannel(c) } },
+            { label: tr(fav ? "✕  Remove from favorites" : "★  Add to favorites"), ok: function () { ytToggleSaved(c) } }])
     }
     function ytToggleSaved(c) {
         call("POST", "/api/youtube_channels", { action: c.saved ? "remove" : "add", channel: c.id }, function (d) {
@@ -283,8 +285,9 @@ Item {
     }
     function ago(iso) {
         var days = Math.floor((Date.now() - new Date(iso)) / 86400000)
-        return days <= 0 ? "aujourd'hui" : days === 1 ? "hier" : days < 7 ? "il y a " + days + " j"
-            : days < 31 ? "il y a " + Math.floor(days / 7) + " sem." : new Date(iso).toLocaleDateString(Qt.locale("fr_FR"), "d MMM")
+        return days <= 0 ? tr("today") : days === 1 ? tr("yesterday") : days < 7 ? tr("{n} d ago", { n: days })
+            : days < 31 ? tr("{n} wk ago", { n: Math.floor(days / 7) })
+            : new Date(iso).toLocaleDateString(Qt.locale(i18n.lang === "fr" ? "fr_FR" : "en_US"), "d MMM")
     }
     function loadJellyfin() {
         call("GET", "/api/jellyfin", undefined, function (d) { jf = d || { error: true } })
@@ -292,7 +295,7 @@ Item {
     function jfSearch(q) {
         q = q.trim()
         if (!q) return
-        jfResults = { query: q, results: [] }   // avant jfSearching : le texte de la ligne de recherche lit query
+        jfResults = { query: q, results: [] }   // before jfSearching: the search row text reads query
         jfSearching = true
         jfPreview = null
         call("GET", "/api/jellyfin_search?q=" + encodeURIComponent(q), undefined, function (d) {
@@ -301,23 +304,23 @@ Item {
             jfRow = 1; var s = Object.assign({}, jfSel); s["search"] = 0; jfSel = s
         })
     }
-    // Rangées de l'onglet Jellyfin : recherche, série ouverte, résultats, reprendre, prochains épisodes, ajouts récents
+    // Rows of the Jellyfin tab: search, opened series, results, resume, next episodes, recently added
     function jfRows() {
         var rows = [{ kind: "search" }]
         if (jfPreview)
-            rows.push({ kind: "preview", key: "preview", title: jfPreview.name + " · épisodes", items: jfPreview.episodes || [],
+            rows.push({ kind: "preview", key: "preview", title: tr("{name} · episodes", { name: jfPreview.name }), items: jfPreview.episodes || [],
                         loading: jfPreview.episodes === null })
-        if (jfResults) rows.push({ kind: "results", key: "search", title: "Résultats pour « " + jfResults.query + " »", items: jfResults.results })
+        if (jfResults) rows.push({ kind: "results", key: "search", title: tr("Results for \"{query}\"", { query: jfResults.query }), items: jfResults.results })
         if (jf && jf.configured) {
-            if (jf.resume.length) rows.push({ kind: "jf", key: "resume", title: "Reprendre", items: jf.resume })
-            if (jf.nextup.length) rows.push({ kind: "jf", key: "nextup", title: "Prochains épisodes", items: jf.nextup })
+            if (jf.resume.length) rows.push({ kind: "jf", key: "resume", title: tr("Resume"), items: jf.resume })
+            if (jf.nextup.length) rows.push({ kind: "jf", key: "nextup", title: tr("Next episodes"), items: jf.nextup })
             for (var i = 0; i < jf.libraries.length; i++)
-                rows.push({ kind: "jf", key: "lib:" + jf.libraries[i].id, title: jf.libraries[i].name + " · ajouts récents", items: jf.libraries[i].items })
+                rows.push({ kind: "jf", key: "lib:" + jf.libraries[i].id, title: tr("{name} · recently added", { name: jf.libraries[i].name }), items: jf.libraries[i].items })
         }
         return rows
     }
     function mediaRows() { return jfTab ? jfRows() : ytRows() }
-    // Série (ou saison) choisie : ses épisodes dans une rangée juste sous la recherche, focus sur le premier pas vu
+    // Chosen series (or season): its episodes in a row just below the search, focus on the first unwatched
     function jfOpenSeries(item) {
         jfPreview = { id: item.series, name: item.title, episodes: null }
         jfRow = 1
@@ -336,14 +339,14 @@ Item {
         var name = item.episode ? item.title + " · " + item.episode : item.title
         var items = []
         if (Fmt.resumable(item.position, item.seconds, item.finished)) {
-            items.push({ label: "▶  Reprendre à " + Fmt.clock(item.position), ok: function () { jfPlay(item) } })
-            items.push({ label: "↺  Depuis le début", ok: function () { jfPlay(item, true) } })
-        } else items.push({ label: item.finished ? "↺  Revoir" : "▶  Lire", ok: function () { jfPlay(item, true) } })
+            items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(item.position) }), ok: function () { jfPlay(item) } })
+            items.push({ label: tr("↺  From the beginning"), ok: function () { jfPlay(item, true) } })
+        } else items.push({ label: tr(item.finished ? "↺  Watch again" : "▶  Play"), ok: function () { jfPlay(item, true) } })
         if (item.type === "Episode" && item.series && !(jfPreview && jfPreview.id === item.series))
-            items.push({ label: "☰  Tous les épisodes", ok: function () { jfOpenSeries({ series: item.series, title: item.title }) } })
+            items.push({ label: tr("☰  All episodes"), ok: function () { jfOpenSeries({ series: item.series, title: item.title }) } })
         openModal(name, items)
     }
-    // Ligne d'infos d'une carte des onglets à rangées
+    // Info line of a card in the row-based tabs
     function hm(t) {
         var h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60
         return h > 0 ? h + " h " + (m < 10 ? "0" : "") + m : m + " min"
@@ -351,25 +354,26 @@ Item {
     function cardMeta(row, it) {
         var parts
         if (jfTab)
-            parts = it.type === "Series" ? [it.unplayed ? it.unplayed + " à voir" : "Série", it.year]
+            parts = it.type === "Series" ? [it.unplayed ? tr("{n} unwatched", { n: it.unplayed }) : tr("Series"), it.year]
                 : it.episode ? [it.episode] : [it.year, it.seconds ? hm(it.seconds) : ""]
         else if (row.kind === "subs")
             parts = [it.channel, ago(it.date), it.seconds ? Fmt.clock(it.seconds) : ""]
         else if (row.kind === "connect")
-            parts = ["Tes abonnements YouTube"]
+            parts = [tr("Your YouTube subscriptions")]
         else if (row.kind === "results")
-            parts = [it.channel, it.seconds ? Fmt.clock(it.seconds) : "", it.views ? Fmt.big(it.views) + " vues" : ""]
+            parts = [it.channel, it.seconds ? Fmt.clock(it.seconds) : "", it.views ? tr("{n} views", { n: Fmt.big(it.views, tr) }) : ""]
         else
-            parts = [ago(it.date), it.views ? Fmt.big(it.views) + " vues" : ""]
-        return parts.filter(function (t) { return !!t }).join(" · ") + (it.finished ? " · vu" : "")
+            parts = [ago(it.date), it.views ? tr("{n} views", { n: Fmt.big(it.views, tr) }) : ""]
+        return parts.filter(function (t) { return !!t }).join(" · ") + (it.finished ? " · " + tr("watched") : "")
     }
     function searchLabel() {
         var r = mResults
-        return mSearching ? "Recherche de « " + r.query + " »…" : r ? "Nouvelle recherche  (« " + r.query + " »)"
-            : jfTab ? "Rechercher dans Jellyfin" : "Rechercher sur YouTube"
+        return mSearching ? tr("Searching for \"{query}\"…", { query: r.query })
+            : r ? tr("New search  (\"{query}\")", { query: r.query })
+            : jfTab ? tr("Search Jellyfin") : tr("Search YouTube")
     }
     function loadHistory() { call("GET", "/api/history", undefined, function (d) { history = d || [] }) }
-    function play(url, fromStart, item) {   // item : titre et image pour l'écran de chargement et l'historique
+    function play(url, fromStart, item) {   // item: title and image for the loading screen and the history
         call("POST", "/api/play", { url: url, from_start: !!fromStart, title: item ? item.title : undefined,
                                     thumb: item ? item.thumb : undefined }, function () { refreshSoon.restart() })
         close()
@@ -388,14 +392,14 @@ Item {
     Timer { id: ytAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadYtAuth() }
     Timer { id: followsPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadFollows() }
     Timer { interval: 10000; repeat: true; running: menu.isOpen; triggeredOnStart: true; onTriggered: menu.now = new Date() }
-    Timer { id: idleClose; interval: 90000; onTriggered: menu.close() }   // écran de TV : pas d'image fixe
+    Timer { id: idleClose; interval: 90000; onTriggered: menu.close() }   // TV screen: no still image
     Timer { id: poweroffReset; interval: 4100; onTriggered: menu.poweroffUntil = 0 }
     Timer { id: rebootReset; interval: 4100; onTriggered: menu.rebootUntil = 0 }
 
-    // Ouverture, fermeture
+    // Opening, closing
 
-    // Onglet relatif au média en cours : direct → En direct, vidéo YouTube → YouTube, Jellyfin → Jellyfin, rediffusion
-    // ou clip Twitch → Rediffusions, autre lien → Historique
+    // Tab matching the current media: live → Live, YouTube video → YouTube, Jellyfin → Jellyfin, Twitch replay or
+    // clip → Replays, other link → History
     function mediaTab(d) {
         if (d.mode !== "media") return "live"
         return { youtube: "youtube", jellyfin: "jellyfin", "twitch-vod": "replays", "twitch-clip": "replays" }[d.media_kind] || "history"
@@ -403,14 +407,14 @@ Item {
     function open() {
         powerOnly = false
         if (isOpen) return
-        // Onglet du média en cours (mediaTab, recalé quand l'état arrive) ; YouTube et Jellyfin gardent leur rangée et
-        // leur carte ; les données sont relues
+        // Tab of the current media (mediaTab, adjusted when the state arrives); YouTube and Jellyfin keep their row and
+        // their card; the data is reloaded
         var t = mediaTab(st)
         for (var i = 0; i < tabs.length; i++) if (tabs[i].id === t) tab = i
         area = "content"
         shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0; rebootUntil = 0
         follows = null; replays = ({}); history = null; rpLogin = ""; rpRow = 0; rpSel = [0, 0, 0]
-        jf = null; kbOpen = false   // les résultats de recherche restent d'une ouverture à l'autre ; yt aussi (relu en fond)
+        jf = null; kbOpen = false   // search results stay from one opening to the next; yt too (reloaded in the background)
         var list = st.streamers || []
         liveSel = Math.max(0, list.indexOf(st.channel))
         startFocus = true
@@ -436,7 +440,7 @@ Item {
         function onPowerMenuRequested() { menu.open(); menu.powerMenu() }
         function onCloseRequested() { menu.close() }
         function onKeyPressed(k) { menu.key(k) }
-        // Texte tapé sur le téléphone pendant que le clavier de recherche est ouvert
+        // Text typed on the phone while the search keyboard is open
         function onTextInput(text, submit) {
             if (!menu.kbOpen) return
             menu.kbText = text.slice(0, 80)
@@ -445,33 +449,33 @@ Item {
     }
     Component.onCompleted: refresh()
 
-    // Contenu calculé
+    // Computed content
 
     function shortcuts() {
-        var l = [{ label: "⌂  Écran d'accueil", current: st.mode === "home", ok: function () { act("home"); close() } }]
+        var l = [{ label: tr("⌂  Home screen"), current: st.mode === "home", ok: function () { act("home"); close() } }]
         if (st.mode !== "twitch" && st.channel)
-            l.push({ label: "▶  Reprendre " + st.channel, ok: function () { act("twitch"); close() } })
-        if (pip.channel) {   // second stream en cours
-            l.push({ label: "Inverser avec " + pip.channel, ok: function () { pip.swap(); close() } })
-            l.push(pip.layout === "split" ? { label: "Incrustation", ok: function () { pip.setLayout("pip") } }
-                                          : { label: "Côte à côte", ok: function () { pip.setLayout("split") } })
-            l.push({ label: "Fermer " + pip.channel, ok: function () { pip.close() } })
+            l.push({ label: tr("▶  Resume {channel}", { channel: st.channel }), ok: function () { act("twitch"); close() } })
+        if (pip.channel) {   // second stream running
+            l.push({ label: tr("Swap with {channel}", { channel: pip.channel }), ok: function () { pip.swap(); close() } })
+            l.push(pip.layout === "split" ? { label: tr("Picture-in-picture"), ok: function () { pip.setLayout("pip") } }
+                                          : { label: tr("Side by side"), ok: function () { pip.setLayout("split") } })
+            l.push({ label: tr("Close {channel}", { channel: pip.channel }), ok: function () { pip.close() } })
         }
         return l
     }
-    // Menu ≡ sur un streamer : le regarder, ou l'ajouter en second stream à côté de celui en cours
+    // ≡ menu on a streamer: watch it, or add it as a second stream next to the current one
     function streamerOptions(name, addToList, isLive) {
         var watch = function () { act("channel", { name: name }); close() }
-        var items = [{ label: "▶  Regarder", ok: watch }]
-        // Second stream : seulement une chaîne en live (sinon un cadre noir qui attend), à côté d'un direct
+        var items = [{ label: tr("▶  Watch"), ok: watch }]
+        // Second stream: only a live channel (otherwise a black frame that waits), next to a live stream
         if (isLive && st.mode === "twitch" && st.channel && name !== st.channel) {
-            items.push({ label: "En incrustation", ok: function () { pip.open(name, "pip"); close() } })
-            items.push({ label: "Côte à côte", ok: function () { pip.open(name, "split"); close() } })
+            items.push({ label: tr("As picture-in-picture"), ok: function () { pip.open(name, "pip"); close() } })
+            items.push({ label: tr("Side by side"), ok: function () { pip.open(name, "split"); close() } })
         }
-        if (addToList) items.push({ label: "+  Ajouter à ma liste", ok: function () { act("streamers", { action: "add", login: name }) } })
+        if (addToList) items.push({ label: tr("+  Add to my list"), ok: function () { act("streamers", { action: "add", login: name }) } })
         openModal(name, items)
     }
-    // Suivis : en live puis hors ligne, calculée une fois (et pas par carte)
+    // Following: live then offline, computed once (and not per card)
     readonly property var followItems: !follows || !follows.authorized ? [] : (follows.live || []).concat(follows.offline || [])
     function followList() { return followItems }
     function inList(name) { return (st.streamers || []).indexOf(name) >= 0 }
@@ -479,8 +483,8 @@ Item {
         var rows = [{ kind: "chips", items: st.streamers || [] }]
         var d = replays[rpLogin]
         if (d && d.vods) {
-            if (d.vods.length) rows.push({ kind: "vods", title: "Rediffusions", items: d.vods })
-            if (d.clips.length) rows.push({ kind: "clips", title: "Clips de la semaine", items: d.clips })
+            if (d.vods.length) rows.push({ kind: "vods", title: tr("Replays"), items: d.vods })
+            if (d.clips.length) rows.push({ kind: "clips", title: tr("Clips of the week"), items: d.clips })
         }
         return rows
     }
@@ -491,33 +495,40 @@ Item {
         var cur = pendingDisplay || (display ? display.setting : "auto")
         var qi = 0
         for (var i = 0; i < qrModes.length; i++) if (qrModes[i][0] === s.qr) qi = i
+        var langs = Object.keys(s.languages || { en: "English" })
         return [
-            { header: "Chat" },
-            { label: "Chat sur la TV", toggle: !!s.chat_visible, ok: function () { act("chat") } },
-            { label: "Coin du chat", value: corners[s.corner] || "", step: function (d) {
-                // l'API ne sait qu'avancer d'un coin : trois pas en avant valent un pas en arrière
+            { header: tr("Language") },
+            // names in their own language; the TV and the companion app switch right away (streambox-language)
+            { label: tr("Interface language"), value: (s.languages || {})[s.lang] || "English", step: function (d) {
+                var i = Math.max(0, langs.indexOf(s.lang))
+                act("language", { lang: langs[(i + d + langs.length) % langs.length] })
+            } },
+            { header: tr("Chat") },
+            { label: tr("Chat on the TV"), toggle: !!s.chat_visible, ok: function () { act("chat") } },
+            { label: tr("Chat corner"), value: tr(corners[s.corner] || ""), step: function (d) {
+                // the API can only move forward one corner: three steps forward make one step back
                 for (var n = 0; n < (d > 0 ? 1 : 3); n++) act("corner")
             } },
-            { label: "Fond du chat", value: (s.chat_bg || 0) + " %", step: function (d) {
+            { label: tr("Chat background"), value: (s.chat_bg || 0) + " %", step: function (d) {
                 act("set", { key: "chat_bg", value: Math.max(0, Math.min(100, (s.chat_bg || 0) + 10 * d)) })
             } },
-            { label: "Taille du texte", value: (s.chat_size || 0) + " px", step: function (d) {
+            { label: tr("Text size"), value: (s.chat_size || 0) + " px", step: function (d) {
                 act("set", { key: "chat_size", value: Math.max(20, Math.min(60, (s.chat_size || 0) + 2 * d)) })
             } },
-            { header: "Sous-titres" },
-            { label: "Taille des sous-titres", value: (s.sub_size || 100) + " %", step: function (d) {
+            { header: tr("Subtitles") },
+            { label: tr("Subtitle size"), value: (s.sub_size || 100) + " %", step: function (d) {
                 act("set", { key: "sub_size", value: Math.max(50, Math.min(200, (s.sub_size || 100) + 10 * d)) })
             } },
-            { label: "Fond des sous-titres", hint: "Bandeau noir derrière le texte, plus lisible sur une image claire",
-              value: s.sub_bg ? s.sub_bg + " %" : "Aucun", step: function (d) {
+            { label: tr("Subtitle background"), hint: tr("Black band behind the text, easier to read on a bright picture"),
+              value: s.sub_bg ? s.sub_bg + " %" : tr("None"), step: function (d) {
                 act("set", { key: "sub_bg", value: Math.max(0, Math.min(100, (s.sub_bg || 0) + 10 * d)) })
             } },
-            { header: "Son" },
-            { label: "Sortie son",
-              // automatique : appareil USB ou Bluetooth branché, sinon la TV (audio.py)
-              hint: audioOut && audioCurrentLabel() ? "En ce moment : " + audioCurrentLabel() : undefined,
-              value: !audioOut ? "…" : audioOut.choice === "auto" ? "Automatique"
-                   : (audioOut.outputs.filter(function (o) { return o.id === audioOut.choice })[0] || { label: "absente" }).label,
+            { header: tr("Sound") },
+            { label: tr("Audio output"),
+              // automatic: USB or Bluetooth device plugged in, otherwise the TV (audio.py)
+              hint: audioOut && audioCurrentLabel() ? tr("Right now: {output}", { output: audioCurrentLabel() }) : undefined,
+              value: !audioOut ? "…" : audioOut.choice === "auto" ? tr("Automatic")
+                   : (audioOut.outputs.filter(function (o) { return o.id === audioOut.choice })[0] || { label: tr("missing") }).label,
               step: function (d) {
                   if (!audioOut) return
                   var ids = ["auto"].concat(audioOut.outputs.map(function (o) { return o.id }))
@@ -526,24 +537,24 @@ Item {
                   audioOut = Object.assign({}, audioOut, { choice: next })
                   call("POST", "/api/audio", { output: next }, function () { loadAudio() })
               } },
-            { header: "Lecture" },
-            { label: "Bascule automatique", hint: "Passer sur un streamer en live si le sien est hors ligne",
+            { header: tr("Playback") },
+            { label: tr("Auto switch"), hint: tr("Switch to a live streamer if yours is offline"),
               toggle: !!s.auto_switch, ok: function () { act("auto_switch", { enabled: !s.auto_switch }) } },
-            { label: "Sondages et prédictions", hint: "En haut de la TV pendant un direct", toggle: !!s.events,
+            { label: tr("Polls and predictions"), hint: tr("At the top of the TV during a live stream"), toggle: !!s.events,
               ok: function () { act("flag", { key: "events", enabled: !s.events }) } },
-            { label: "Mode nuit", hint: "Sons forts atténués, voix remontées", toggle: !!s.night,
+            { label: tr("Night mode"), hint: tr("Loud sounds softened, voices boosted"), toggle: !!s.night,
               ok: function () { act("flag", { key: "night", enabled: !s.night }) } },
-            { label: "Volume", value: s.mute ? "muet" : (s.volume || 0) + " %", step: function (d) { act("volume", { delta: 5 * d }) } },
-            { header: "Affichage" },
-            { label: "Fond animé", hint: "Écran d'accueil et menu sans vidéo derrière",
-              value: backdropNames.base[bd.base] || "", step: function (d) { stepBackdrop("base", d) } },
-            { label: "Par-dessus", hint: "Un calque ajouté au fond",
-              value: backdropNames.overlay[bd.overlay] || "", step: function (d) { stepBackdrop("overlay", d) } },
-            { label: "Couleurs de l'accueil", hint: "Le menu, lui, prend la couleur de chaque onglet",
-              value: backdropNames.color[bd.color || "violet"] || "", step: function (d) { stepBackdrop("color", d) } },
-            { label: "Résolution de la TV",
-              value: !display ? "…" : cur === "auto" ? "Auto (" + prettyMode(display.auto) + ")" : prettyMode(cur),
-              hint: pendingDisplay && display && pendingDisplay !== display.setting ? "OK pour appliquer" : undefined,
+            { label: tr("Volume"), value: s.mute ? tr("muted") : (s.volume || 0) + " %", step: function (d) { act("volume", { delta: 5 * d }) } },
+            { header: tr("Display") },
+            { label: tr("Animated background"), hint: tr("Home screen and menu with no video behind"),
+              value: tr(backdropNames.base[bd.base] || ""), step: function (d) { stepBackdrop("base", d) } },
+            { label: tr("Overlay"), hint: tr("A layer added over the background"),
+              value: tr(backdropNames.overlay[bd.overlay] || ""), step: function (d) { stepBackdrop("overlay", d) } },
+            { label: tr("Home screen colors"), hint: tr("The menu itself takes the color of each tab"),
+              value: tr(backdropNames.color[bd.color || "violet"] || ""), step: function (d) { stepBackdrop("color", d) } },
+            { label: tr("TV resolution"),
+              value: !display ? "…" : cur === "auto" ? tr("Auto ({mode})", { mode: prettyMode(display.auto) }) : prettyMode(cur),
+              hint: pendingDisplay && display && pendingDisplay !== display.setting ? tr("OK to apply") : undefined,
               step: function (d) {
                   if (!display) return
                   var i = Math.max(0, modes.indexOf(cur))
@@ -555,7 +566,7 @@ Item {
                   pendingDisplay = ""
                   displayReload.restart()
               } },
-            { label: "QR code de la télécommande", value: qrModes[qi][1], step: function (d) {
+            { label: tr("Companion app QR code"), value: tr(qrModes[qi][1]), step: function (d) {
                 act("qr", { mode: qrModes[Math.max(0, Math.min(qrModes.length - 1, qi + d))][0] })
             } },
         ]
@@ -573,16 +584,17 @@ Item {
     function systemRows() {
         var login = account && account.login
         return [
-            { label: "Compte Twitch", value: login ? "Connecté : " + login : "Non connecté",
-              hint: login ? "Pas de pub sur les chaînes où tu es abonné" : "Se connecte depuis la télécommande du téléphone" },
-            { label: "Compte YouTube", visible: !!(ytAccount && (ytAccount.configured || (ytAccount.tv && !ytAccount.tv.unavailable))),
+            { label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
+              hint: login ? tr("No ads on the channels you're subscribed to") : tr("Sign in from the companion app on your phone") },
+            { label: tr("YouTube account"), visible: !!(ytAccount && (ytAccount.configured || (ytAccount.tv && !ytAccount.tv.unavailable))),
               value: ytAccount && ytAccount.authorized
-                   ? "Connecté" + (ytAccount.channels !== null ? " · " + ytAccount.channels + " abonnements" : "") : "Non connecté",
-              hint: ytAccount && ytAccount.tv && ytAccount.tv.connected ? "Progression synchronisée avec ton compte (téléphone, ordinateur)"
-                  : "Abonnements, et progression synchronisée avec ton compte",
+                   ? tr("Connected") + (ytAccount.channels !== null ? " · " + tr("{n} subscriptions", { n: ytAccount.channels }) : "")
+                   : tr("Not connected"),
+              hint: ytAccount && ytAccount.tv && ytAccount.tv.connected ? tr("Progress synced with your account (phone, computer)")
+                  : tr("Subscriptions, and progress synced with your account"),
               ok: function () { ytAccountMenu() } },
-            { label: "Lecteur", value: (pendingPlayer || st.player) === "mpv" ? "mpv seul" : "Appli Qt (menu animé)",
-              hint: pendingPlayer && pendingPlayer !== st.player ? "OK pour appliquer : le lecteur redémarre" : undefined,
+            { label: tr("Player"), value: (pendingPlayer || st.player) === "mpv" ? tr("mpv only") : tr("Qt app (animated menu)"),
+              hint: pendingPlayer && pendingPlayer !== st.player ? tr("OK to apply: the player restarts") : undefined,
               step: function (d) { pendingPlayer = (pendingPlayer || st.player) === "qt" ? "mpv" : "qt" },
               ok: function () {
                   if (!pendingPlayer || pendingPlayer === st.player) return
@@ -591,127 +603,134 @@ Item {
                   close()
               } },
             { label: "Wi-Fi", visible: !!(wifi && wifi.device),
-              value: !wifi ? "" : wifi.connecting ? "connexion…" : wifi.mode === "hotspot" ? "mode configuration"
-                   : wifi.network ? (wifi.wired ? "câble" : wifi.network) : "aucun réseau",
-              hint: wifi && wifi.mode === "hotspot" ? "Wi-Fi « " + wifi.hotspot.ssid + " », mot de passe " + wifi.hotspot.password
-                  + ", puis " + String(wifi.hotspot.url).replace(/^http:\/\//, "").replace(/\/$/, "")
-                  : "OK : mode configuration, pour choisir un autre réseau depuis le téléphone",
+              value: !wifi ? "" : wifi.connecting ? tr("connecting…") : wifi.mode === "hotspot" ? tr("setup mode")
+                   : wifi.network ? (wifi.wired ? tr("cable") : wifi.network) : tr("no network"),
+              hint: wifi && wifi.mode === "hotspot" ? tr("Wi-Fi \"{ssid}\", password {password}, then {url}", {
+                      ssid: wifi.hotspot.ssid, password: wifi.hotspot.password,
+                      url: String(wifi.hotspot.url).replace(/^http:\/\//, "").replace(/\/$/, "") })
+                  : tr("OK: setup mode, to choose another network from the phone"),
               ok: function () { if (wifi && wifi.mode !== "hotspot") act("wifi", { action: "hotspot" }) } },
-            { label: "Télécommandes et manettes", value: bt ? (bt.paired.length + (bt.paired.length > 1 ? " appairées" : " appairée")) : "",
-              hint: "Appairer, dissocier", ok: function () { btMenu() } },
-            { label: "Configurer les touches", hint: "Apprendre les touches d'une télécommande ou d'une manette, une par une",
+            { label: tr("Remotes and controllers"),
+              value: bt ? tr(bt.paired.length > 1 ? "{n} devices paired" : "{n} device paired", { n: bt.paired.length }) : "",
+              hint: tr("Pair, unpair"), ok: function () { btMenu() } },
+            { label: tr("Set up keys"), hint: tr("Learn the keys of a remote or a controller, one by one"),
               ok: function () { act("keymap", { action: "wizard" }); close() } },
-            { label: "Touches par défaut", ok: function () { act("keymap", { action: "reset" }) } },
-            { label: "Accès SSH", visible: !!(ssh && ssh.available), toggle: !!(ssh && ssh.enabled),
-              hint: !(ssh && ssh.enabled) ? "Coupé : plus de connexion à distance en ligne de commande"
-                  : "ssh " + (ssh.address || "media@<adresse de la box>")
-                    + (ssh.password ? "  ·  mot de passe : " + ssh.password : "  ·  par clé"),
+            { label: tr("Default keys"), ok: function () { act("keymap", { action: "reset" }) } },
+            { label: tr("SSH access"), visible: !!(ssh && ssh.available), toggle: !!(ssh && ssh.enabled),
+              hint: !(ssh && ssh.enabled) ? tr("Off: no more remote command-line access")
+                  : "ssh " + (ssh.address || tr("media@<box address>"))
+                    + "  ·  " + (ssh.password ? tr("password: {password}", { password: ssh.password }) : tr("by key")),
               ok: function () {
                   var on = !ssh.enabled
-                  ssh = Object.assign({}, ssh, { enabled: on })   // tout de suite à l'écran
+                  ssh = Object.assign({}, ssh, { enabled: on })   // on screen right away
                   call("POST", "/api/ssh", { enabled: on }, function () { loadSsh() })
               } },
-            { label: "Mode développeur", visible: !!(dev && dev.available), toggle: !!(dev && dev.enabled),
-              hint: dev && dev.enabled ? "sudo sans mot de passe pour media, par SSH (mot de passe ci-dessus)"
-                                       : "Accès root pour développer et tester la box",
+            { label: tr("Developer mode"), visible: !!(dev && dev.available), toggle: !!(dev && dev.enabled),
+              hint: dev && dev.enabled ? tr("Passwordless sudo for media, over SSH (password above)")
+                                       : tr("Root access to develop and test the box"),
               ok: function () {
                   if (dev.enabled) { call("POST", "/api/dev", { enabled: false }, function () { loadSsh() }); dev = Object.assign({}, dev, { enabled: false }); return }
-                  openModal("Activer le mode développeur ? media aura sudo sans mot de passe, et SSH s'active", [
-                      { label: "Activer", danger: true, ok: function () {
+                  openModal(tr("Enable developer mode? media will get passwordless sudo, and SSH turns on"), [
+                      { label: tr("Enable"), danger: true, ok: function () {
                           call("POST", "/api/dev", { enabled: true }, function () { loadSsh() }) } },
-                      { label: "Annuler", ok: function () {} }])
+                      { label: tr("Cancel"), ok: function () {} }])
               } },
-            { label: "Installer sur ce PC", visible: !!(install && install.available),
+            { label: tr("Install on this PC"), visible: !!(install && install.available),
               value: install && install.progress && install.progress.state === "running" ? install.progress.percent + " %" : "",
-              hint: "La box tourne sur sa clé USB : la copier, réglages compris, sur le disque interne",
+              hint: tr("The box runs from its USB stick: copy it, settings included, to the internal disk"),
               ok: function () { installMenu() } },
-            { label: "Sauvegarde et restauration", hint: "Sur une clé USB, ou en fichier depuis la page du téléphone",
+            { label: tr("Backup and restore"), hint: tr("On a USB stick, or as a file from the companion app"),
               ok: function () { backupMenu() } },
-            { label: "Mettre à jour maintenant",
-              hint: health && health.update ? (health.update.running ? "Mise à jour en cours…"
-                    : (health.update.last ? (health.update.last.ok ? "Dernière : " : "Échec : ") + frDate(health.update.last.date) : "Jamais")
-                      + (health.update.next ? "  ·  prochaine : " + frDate(health.update.next) : "")) : undefined,
+            { label: tr("Update now"),
+              hint: health && health.update ? (health.update.running ? tr("Update in progress…")
+                    : (health.update.last ? tr(health.update.last.ok ? "Last: {date}" : "Failed: {date}",
+                                               { date: frDate(health.update.last.date) }) : tr("Never"))
+                      + (health.update.next ? "  ·  " + tr("next: {date}", { date: frDate(health.update.next) }) : "")) : undefined,
               ok: function () { if (!(health && health.update && health.update.running)) act("update") } },
-            { label: "Bouton d'arrêt", hint: "Télécommande, téléphone et Home Assistant",
-              value: st.power_action === "suspend" ? "Mise en veille" : "Arrêt complet",
+            { label: tr("Power button"), hint: tr("Remote, phone and Home Assistant"),
+              value: st.power_action === "suspend" ? tr("Sleep") : tr("Full shutdown"),
               step: function (d) { act("power_action", { mode: st.power_action === "suspend" ? "poweroff" : "suspend" }) } },
-            { label: "Mettre en veille", hint: "Réveil par la télécommande, Home Assistant ou le bouton power",
+            { label: tr("Put to sleep"), hint: tr("Wake up with the remote, Home Assistant or the power button"),
               ok: function () { act("poweroff", { mode: "suspend" }); close() } },
-            { label: "Redémarrer la box",
-              hint: rebootUntil > 0 ? "Appuie encore sur OK pour redémarrer" : undefined,
+            { label: tr("Restart the box"),
+              hint: rebootUntil > 0 ? tr("Press OK again to restart") : undefined,
               ok: function () {
                   if (rebootUntil > 0) { act("reboot"); close() }
                   else { rebootUntil = 1; rebootReset.restart() }
               } },
-            { label: "Éteindre la box", danger: true,
-              hint: poweroffUntil > 0 ? "Appuie encore sur OK pour éteindre" : undefined,
+            { label: tr("Shut down the box"), danger: true,
+              hint: poweroffUntil > 0 ? tr("Press OK again to shut down") : undefined,
               ok: function () {
                   if (poweroffUntil > 0) { act("poweroff", { mode: "full" }); close() }
                   else { poweroffUntil = 1; poweroffReset.restart() }
               } },
-        ].filter(function (r) { return r.visible !== false })   // Wi-Fi : seulement avec une carte Wi-Fi
+        ].filter(function (r) { return r.visible !== false })   // Wi-Fi: only with a Wi-Fi card
     }
-    // « 2026-10-23 11:48:14 » ou « Mon 2026-10-26 05:07:37 CET » → « ven. 23 oct. à 11:48 »
+    // "2026-10-23 11:48:14" or "Mon 2026-10-26 05:07:37 CET" → "Fri 23 Oct at 11:48"
     function frDate(text) {
         var m = /(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d)/.exec(text || "")
         if (!m) return text || ""
         var d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])
-        return d.toLocaleDateString(Qt.locale("fr_FR"), "ddd d MMM") + " à " + m[4] + ":" + m[5]
+        return tr("{date} at {time}", { date: d.toLocaleDateString(Qt.locale(i18n.lang === "fr" ? "fr_FR" : "en_US"), "ddd d MMM"),
+                                        time: m[4] + ":" + m[5] })
     }
-    function bytes(n) { return n >= 1e9 ? (n / 1e9).toFixed(1).replace(".", ",") + " Go" : Math.round(n / 1e6) + " Mo" }
+    // One decimal, with the separator of the language ("{int}.{dec}")
+    function dec1(x) { var p = x.toFixed(1).split("."); return tr("{int}.{dec}", { int: p[0], dec: p[1] }) }
+    function bytes(n) { return n >= 1e9 ? tr("{n} GB", { n: dec1(n / 1e9) }) : tr("{n} MB", { n: Math.round(n / 1e6) }) }
     function bits(n) {
-        return n === null || n === undefined ? "…" : n >= 1e6 ? (n / 1e6).toFixed(1).replace(".", ",") + " Mbit/s" : Math.round(n / 1e3) + " kbit/s"
+        return n === null || n === undefined ? "…" : n >= 1e6 ? dec1(n / 1e6) + " Mbit/s" : Math.round(n / 1e3) + " kbit/s"
     }
     function since(s) {
         var h = Math.floor(s / 3600), d = Math.floor(h / 24)
-        return d ? d + " j " + (h % 24) + " h" : h ? h + " h " + (Math.floor(s / 60) % 60 < 10 ? "0" : "") + Math.floor(s / 60) % 60 : Math.floor(s / 60) + " min"
+        return d ? tr("{d} d {h} h", { d: d, h: h % 24 }) : h ? h + " h " + (Math.floor(s / 60) % 60 < 10 ? "0" : "") + Math.floor(s / 60) % 60 : Math.floor(s / 60) + " min"
     }
-    // Tuiles de l'état de la box : [titre, valeur, détail, niveau (""|"warn"|"bad")]
+    // Box status tiles: [title, value, detail, level (""|"warn"|"bad")]
     function healthTiles() {
         var h = health
         if (!h) return []
         var t = h.temps.cpu, p = h.player, ok = function (v) { return v === "active" ? "✓" : "✕" }
         var net = h.network
         return [
-            ["Température", t !== undefined ? t + " °C" : "–", h.temps.disk !== undefined ? "disque " + h.temps.disk + " °C" : "",
+            [tr("Temperature"), t !== undefined ? t + " °C" : "–", h.temps.disk !== undefined ? tr("disk {n} °C", { n: h.temps.disk }) : "",
              t >= 85 ? "bad" : t >= 70 ? "warn" : ""],
-            ["Processeur", h.cpu !== null ? Math.round(h.cpu) + " %" : "…", "charge " + h.load.toFixed(1).replace(".", ",") + " · " + h.cores + " cœurs",
+            [tr("Processor"), h.cpu !== null ? Math.round(h.cpu) + " %" : "…", tr("load {load} · {n} cores", { load: dec1(h.load), n: h.cores }),
              h.cpu >= 85 ? "warn" : ""],
-            ["Mémoire", bytes(h.memory.total - h.memory.available), "sur " + bytes(h.memory.total), h.memory.available < 5e8 ? "warn" : ""],
-            ["Disque", bytes(h.disk.free) + " libres", "sur " + bytes(h.disk.total), h.disk.free < 5e9 ? "warn" : ""],
-            ["Réseau", "↓ " + bits(net.rx), "↑ " + bits(net.tx) + (net.speed > 0 ? " · lien " + (net.speed >= 1000 ? net.speed / 1000 + " Gbit/s" : net.speed + " Mbit/s") : ""), ""],
-            ["Allumée depuis", since(h.uptime), "MQTT " + ok(h.services.mqtt) + " · jetons YouTube " + ok(h.services.youtube_tokens),
+            [tr("Memory"), bytes(h.memory.total - h.memory.available), tr("of {total}", { total: bytes(h.memory.total) }), h.memory.available < 5e8 ? "warn" : ""],
+            [tr("Disk"), tr("{n} free", { n: bytes(h.disk.free) }), tr("of {total}", { total: bytes(h.disk.total) }), h.disk.free < 5e9 ? "warn" : ""],
+            [tr("Network"), "↓ " + bits(net.rx), "↑ " + bits(net.tx) + (net.speed > 0 ? " · " + tr("link {speed}", { speed: net.speed >= 1000 ? net.speed / 1000 + " Gbit/s" : net.speed + " Mbit/s" }) : ""), ""],
+            [tr("Up for"), since(h.uptime), "MQTT " + ok(h.services.mqtt) + " · " + tr("YouTube tokens {ok}", { ok: ok(h.services.youtube_tokens) }),
              h.services.mqtt !== "active" || h.services.youtube_tokens !== "active" ? "warn" : ""],
-            ["Lecture", (p.running === "qt" ? "Appli Qt" : "mpv seul") + (p.hwdec && p.hwdec !== "no" ? " · " + p.hwdec : p.size ? " · processeur" : ""),
-             p.size ? p.size.replace("x", " × ") + " · " + Math.round(p.fps || 0) + " im/s · " + (p.dropped || 0) + " perdues" : "rien en lecture",
+            [tr("Playback"), (p.running === "qt" ? tr("Qt app") : tr("mpv only")) + (p.hwdec && p.hwdec !== "no" ? " · " + p.hwdec : p.size ? " · " + tr("CPU") : ""),
+             p.size ? tr("{size} · {fps} fps · {dropped} dropped", { size: p.size.replace("x", " × "), fps: Math.round(p.fps || 0), dropped: p.dropped || 0 })
+                    : tr("nothing playing"),
              p.size && (!p.hwdec || p.hwdec === "no") ? "warn" : ""],
         ]
     }
-    // Power maintenu 1 s : veille, redémarrage, extinction (sans deuxième confirmation : le geste est volontaire)
+    // Power held 1 s: sleep, restart, shutdown (no second confirmation: the gesture is deliberate)
     function powerMenu() {
         powerOnly = true
         openModal("Box", [
-            { label: "☾  Mettre en veille", ok: function () { act("poweroff", { mode: "suspend" }); close() } },
-            { label: "↻  Redémarrer", ok: function () { act("reboot"); close() } },
-            { label: "⏻  Éteindre", danger: true, ok: function () { act("poweroff", { mode: "full" }); close() } },
-            { label: "Annuler", ok: function () { close() } }])
+            { label: tr("☾  Sleep"), ok: function () { act("poweroff", { mode: "suspend" }); close() } },
+            { label: tr("↻  Restart"), ok: function () { act("reboot"); close() } },
+            { label: tr("⏻  Shut down"), danger: true, ok: function () { act("poweroff", { mode: "full" }); close() } },
+            { label: tr("Cancel"), ok: function () { close() } }])
     }
     readonly property var backdropNames: ({
-        base: { none: "Rien", aurora: "Taches floues", fluid: "Fluide", borealis: "Aurore boréale" },
-        overlay: { none: "Rien", silk: "Soie", stars: "Étoiles" },
-        color: { violet: "Violet", blue: "Bleu", green: "Vert", sunset: "Coucher de soleil", pink: "Rose", ice: "Glacier" }
+        base: { none: "Nothing", aurora: "Blurry blobs", fluid: "Fluid", borealis: "Northern lights" },
+        overlay: { none: "Nothing", silk: "Silk", stars: "Stars" },
+        color: { violet: "Purple", blue: "Blue", green: "Green", sunset: "Sunset", pink: "Pink", ice: "Glacier" }
     })
     readonly property var bd: st.backdrop || ({ base: "aurora", overlay: "none", color: "violet" })
-    // Réglages « Fond animé », « Par-dessus », « Couleurs de l'accueil »
+    // "Animated background", "Overlay", "Home screen colors" settings
     function stepBackdrop(key, d) {
         var ids = Object.keys(backdropNames[key])
         var next = ids[(Math.max(0, ids.indexOf(bd[key])) + d + ids.length) % ids.length]
         var change = {}
         change[key] = next
-        st = Object.assign({}, st, { backdrop: Object.assign({}, bd, change) })   // tout de suite à l'écran
+        st = Object.assign({}, st, { backdrop: Object.assign({}, bd, change) })   // on screen right away
         call("POST", "/api/backdrop", change, function () { refreshSoon.restart() })
     }
-    // Couleur voisine sur le cercle des teintes (fond animé aux couleurs de l'onglet) ; gris pour les onglets neutres
+    // Neighboring color on the hue circle (animated background in the tab's colors); gray for neutral tabs
     function hueShift(c, dh, light) {
         if (c.hslHue < 0) return Qt.darker(c, 2.5)
         return Qt.hsla((c.hslHue + dh + 1) % 1, c.hslSaturation, c.hslLightness * light, 1)
@@ -720,8 +739,8 @@ Item {
     function chooseVideo(item) {
         if (Fmt.resumable(item.position, item.seconds, item.finished))
             openModal(item.title, [
-                { label: "▶  Reprendre à " + Fmt.clock(item.position), ok: function () { play(item.url, false, item) } },
-                { label: "↺  Depuis le début", ok: function () { play(item.url, true, item) } }])
+                { label: tr("▶  Resume at {time}", { time: Fmt.clock(item.position) }), ok: function () { play(item.url, false, item) } },
+                { label: tr("↺  From the beginning"), ok: function () { play(item.url, true, item) } }])
         else
             play(item.url, true, item)
     }
@@ -730,64 +749,68 @@ Item {
         switch (tabId) {
         case "live":
             var n = (st.streamers || []).filter(function (s) { return !!live[s] }).length
-            return n === 0 ? "Aucun streamer de la liste n'est en live" : n === 1 ? "1 streamer en live" : n + " streamers en live"
+            return n === 0 ? tr("No streamer from the list is live") : n === 1 ? tr("1 streamer live") : tr("{n} streamers live", { n: n })
         case "follows":
-            if (!follows) return "Chargement…"
-            if (follows.error) return "Twitch injoignable pour l'instant"
-            if (!follows.configured) return "Tes chaînes suivies sur Twitch"
-            if (!follows.authorized) return "Autorise la box à lire tes chaînes suivies (lecture seule)"
-            return (follows.live.length ? follows.live.length + " en live" : "Personne en live") + "  ·  " + followList().length + " chaînes suivies"
+            if (!follows) return tr("Loading…")
+            if (follows.error) return tr("Twitch unreachable for now")
+            if (!follows.configured) return tr("Your followed channels on Twitch")
+            if (!follows.authorized) return tr("Allow the box to read your followed channels (read-only)")
+            return (follows.live.length ? tr("{n} live", { n: follows.live.length }) : tr("Nobody live")) + "  ·  "
+                + tr("{n} followed channels", { n: followList().length })
         case "replays":
             var d = replays[rpLogin]
-            return d === "loading" ? rpLogin + " · chargement…" : d === false ? "Twitch injoignable pour l'instant"
-                : (d && replayRows().length === 1) ? rpLogin + " : rien cette semaine" : rpLogin + " · rediffusions et clips de la semaine"
+            return d === "loading" ? tr("{login} · loading…", { login: rpLogin }) : d === false ? tr("Twitch unreachable for now")
+                : (d && replayRows().length === 1) ? tr("{login}: nothing this week", { login: rpLogin })
+                : tr("{login} · replays and clips of the week", { login: rpLogin })
         case "history":
-            return history === null ? "Chargement…" : history.length === 0 ? "Les vidéos lancées sur la TV s'afficheront ici"
-                : (history.length === 1 ? "1 vidéo" : history.length + " vidéos") + " · OK pour reprendre ou retirer"
+            return history === null ? tr("Loading…") : history.length === 0 ? tr("Videos played on the TV will show up here")
+                : (history.length === 1 ? tr("1 video") : tr("{n} videos", { n: history.length })) + " · " + tr("OK to resume or remove")
         case "youtube":
-            if (!yt) return "Chargement…"
-            if (yt.subs && yt.subs.authorized) return "Tes abonnements" + (yt.channels.length ? " et " + yt.channels.length
-                + (yt.channels.length === 1 ? " chaîne" : " chaînes") : "") + " · dernières vidéos"
-            return yt.channels.length ? yt.channels.length + (yt.channels.length === 1 ? " chaîne" : " chaînes") + " · dernières vidéos"
-                : "Recherche une vidéo, ou ajoute des chaînes depuis la télécommande"
+            if (!yt) return tr("Loading…")
+            var nc = yt.channels.length
+            if (yt.subs && yt.subs.authorized)
+                return !nc ? tr("Your subscriptions · latest videos")
+                    : tr(nc === 1 ? "Your subscriptions and 1 channel · latest videos" : "Your subscriptions and {n} channels · latest videos", { n: nc })
+            return nc ? tr(nc === 1 ? "1 channel · latest videos" : "{n} channels · latest videos", { n: nc })
+                : tr("Search for a video, or add channels from the companion app")
         case "jellyfin":
-            if (!jf) return "Chargement…"
-            if (jf.error) return "Jellyfin injoignable pour l'instant"
-            if (!jf.configured) return "Ta bibliothèque Jellyfin"
-            return jf.server + " · la progression suit sur tous tes appareils"
-        case "settings": return "◀ ▶ pour changer une valeur"
+            if (!jf) return tr("Loading…")
+            if (jf.error) return tr("Jellyfin unreachable for now")
+            if (!jf.configured) return tr("Your Jellyfin library")
+            return tr("{server} · progress follows on all your devices", { server: jf.server })
+        case "settings": return tr("◀ ▶ to change a value")
         }
         return ""
     }
 
-    // Onglet affiché : données chargées à la première visite
+    // Displayed tab: data loaded on the first visit
     onTabChanged: {
         tabEnter.restart()
-        loadTab(tabs[tab].id)   // tabs[tab] et pas tabId : la liaison de tabId n'est pas encore recalculée ici
+        loadTab(tabs[tab].id)   // tabs[tab] and not tabId: the tabId binding is not recomputed yet here
     }
     function loadBt(cb) { call("GET", "/api/bluetooth", undefined, function (d) { if (d) { bt = d; if (cb) cb(d) } }) }
-    // Fenêtre « Télécommandes et manettes » : appareils appairés (OK : dissocier), « Appairer un appareil »
+    // "Remotes and controllers" dialog: paired devices (OK: unpair), "Pair a device"
     function btMenu() {
         btPhase = ""
         loadBt(function (d) {
             var items = d.paired.map(function (p) {
-                return { label: p.name + (p.connected ? "  ·  connectée" : ""), ok: function () {
-                    openModal("Dissocier " + p.name + " ?", [
-                        { label: "✕  Dissocier", danger: true, ok: function () {
+                return { label: p.name + (p.connected ? "  ·  " + tr("connected") : ""), ok: function () {
+                    openModal(tr("Unpair {name}?", { name: p.name }), [
+                        { label: tr("✕  Unpair"), danger: true, ok: function () {
                             call("POST", "/api/bluetooth", { action: "remove", mac: p.mac }, function () { btMenu() }) } },
-                        { label: "Annuler", ok: function () { btMenu() } }])
+                        { label: tr("Cancel"), ok: function () { btMenu() } }])
                 } }
             })
-            items.push({ label: "+  Appairer un appareil", ok: btScan })
-            openModal(d.paired.length ? "Télécommandes et manettes" : "Aucun appareil appairé", items)
+            items.push({ label: tr("+  Pair a device"), ok: btScan })
+            openModal(d.paired.length ? tr("Remotes and controllers") : tr("No paired device"), items)
             if (d.message) modal = Object.assign({}, modal, { title: d.message })
         })
     }
-    // Recherche : la fenêtre se remplit pendant 20 s (télécommandes et manettes d'abord) ; OK sur un appareil l'appaire
+    // Search: the dialog fills up for 20 s (remotes and controllers first); OK on a device pairs it
     function btScan() {
         btPhase = "scan"
         call("POST", "/api/bluetooth", { action: "scan" })
-        openModal("Recherche… mets la télécommande en mode appairage", [{ label: "Annuler", ok: function () { btPhase = "" } }])
+        openModal(tr("Searching… put the remote in pairing mode"), [{ label: tr("Cancel"), ok: function () { btPhase = "" } }])
     }
     function btRefresh() {
         loadBt(function (d) {
@@ -796,44 +819,44 @@ Item {
                     return { label: f.name, ok: function () {
                         btPhase = "pair"
                         call("POST", "/api/bluetooth", { action: "pair", mac: f.mac })
-                        openModal("Appairage de " + f.name + "…", [{ label: "Fermer", ok: function () { btPhase = "" } }])
+                        openModal(tr("Pairing {name}…", { name: f.name }), [{ label: tr("Close"), ok: function () { btPhase = "" } }])
                     } }
                 })
-                if (!d.scanning) items.push({ label: "↻  Chercher à nouveau", ok: btScan })
-                items.push({ label: "Annuler", ok: function () { btPhase = "" } })
-                var title = d.scanning ? "Recherche… mets la télécommande en mode appairage"
-                          : d.found.length ? "Appareils trouvés" : "Aucun appareil trouvé"
+                if (!d.scanning) items.push({ label: tr("↻  Search again"), ok: btScan })
+                items.push({ label: tr("Cancel"), ok: function () { btPhase = "" } })
+                var title = d.scanning ? tr("Searching… put the remote in pairing mode")
+                          : d.found.length ? tr("Devices found") : tr("No device found")
                 var sel = modalSel
                 modal = { title: title, items: items }
                 modalSel = Math.min(sel, items.length - 1)
             } else if (btPhase === "pair" && !d.busy) {
                 btPhase = ""
-                openModal(d.message || "Appairage terminé", [{ label: "OK", ok: btMenu }])
+                openModal(d.message || tr("Pairing finished"), [{ label: "OK", ok: btMenu }])
             }
         })
     }
     Timer { interval: 2000; repeat: true; running: menu.btPhase !== "" && !!menu.modal; onTriggered: menu.btRefresh() }
-    // Fenêtre « Sauvegarde et restauration » : par clé USB branchée, « Sauvegarder » puis ses dernières sauvegardes
-    // (OK : restaurer, après confirmation) ; relue toutes les 2 s (clé branchée, sauvegarde finie)
+    // "Backup and restore" dialog: per plugged-in USB stick, "Back up" then its latest backups
+    // (OK: restore, after confirmation); reloaded every 2 s (stick plugged in, backup finished)
     function backupMenu(again) {
         call("GET", "/api/backup", undefined, function (d) {
-            if (!d || (again && !(modal && modal.kind === "backup"))) return   // fermée, ou confirmation ouverte entre-temps
+            if (!d || (again && !(modal && modal.kind === "backup"))) return   // closed, or confirmation opened in the meantime
             var items = []
             if (!d.busy) d.usb.forEach(function (u) {
-                items.push({ label: "↓  Sauvegarder sur " + u.name, ok: function () {
+                items.push({ label: tr("↓  Back up to {name}", { name: u.name }), ok: function () {
                     call("POST", "/api/backup", { action: "save_usb", path: u.path }, function () { backupMenu() }) } })
                 u.backups.forEach(function (b) {
-                    items.push({ label: "↺  Restaurer celle du " + frDate(b.date), ok: function () {
-                        openModal("Remplacer les réglages par ceux du " + frDate(b.date) + " ? La box redémarre ensuite", [
-                            { label: "↺  Restaurer et redémarrer", danger: true, ok: function () {
+                    items.push({ label: tr("↺  Restore the one from {date}", { date: frDate(b.date) }), ok: function () {
+                        openModal(tr("Replace the settings with those from {date}? The box restarts afterwards", { date: frDate(b.date) }), [
+                            { label: tr("↺  Restore and restart"), danger: true, ok: function () {
                                 call("POST", "/api/backup", { action: "restore_usb", path: u.path, name: b.name }, function () { backupMenu() }) } },
-                            { label: "Annuler", ok: function () { backupMenu() } }])
+                            { label: tr("Cancel"), ok: function () { backupMenu() } }])
                     } })
                 })
             })
-            if (d.busy !== "reboot") items.push({ label: "Fermer", ok: function () {} })
-            var title = d.message || (d.usb.length ? "Sauvegarde et restauration"
-                                                    : "Branche une clé USB pour sauvegarder")
+            if (d.busy !== "reboot") items.push({ label: tr("Close"), ok: function () {} })
+            var title = d.message || (d.usb.length ? tr("Backup and restore")
+                                                    : tr("Plug in a USB stick to back up"))
             var same = modal && modal.kind === "backup"
             var sel = modalSel
             modal = { title: title, items: items, kind: "backup" }
@@ -841,33 +864,33 @@ Item {
         })
     }
     Timer { interval: 2000; repeat: true; running: !!menu.modal && menu.modal.kind === "backup"; onTriggered: menu.backupMenu(true) }
-    // Fenêtre « Installer sur ce PC » : disques internes (OK : confirmation, tout est effacé), puis progression relue
-    // toutes les 2 s, et à la fin « retire la clé, redémarre »
+    // "Install on this PC" dialog: internal disks (OK: confirmation, everything is erased), then progress reloaded
+    // every 2 s, and at the end "remove the stick, restart"
     function installMenu(again) {
         call("GET", "/api/install", undefined, function (d) {
             if (!d || (again && !(modal && modal.kind === "install"))) return
             install = d
             var p = d.progress, title, items = []
             if (p && p.state === "running") {
-                title = "Installation… " + p.percent + " %  ·  " + p.step
-                items.push({ label: "Masquer (l'installation continue)", ok: function () {} })
+                title = tr("Installing… {percent} %  ·  {step}", { percent: p.percent, step: p.step })
+                items.push({ label: tr("Hide (the installation continues)"), ok: function () {} })
             } else if (p && p.state === "done") {
-                title = "Installée ! Retire la clé USB, puis redémarre"
-                items.push({ label: "↻  Redémarrer", ok: function () { act("reboot"); close() } })
-                items.push({ label: "Plus tard", ok: function () {} })
+                title = tr("Installed! Remove the USB stick, then restart")
+                items.push({ label: tr("↻  Restart"), ok: function () { act("reboot"); close() } })
+                items.push({ label: tr("Later"), ok: function () {} })
             } else {
-                title = p && p.state === "error" ? "Échec : " + p.error : d.disks.length ? "Installer sur quel disque ?"
-                      : d.raid_mode ? "Disque caché par le mode RAID du BIOS : passe « SATA Operation » en AHCI, puis réessaie"
-                      : "Aucun disque interne de 16 Go ou plus"
+                title = p && p.state === "error" ? tr("Failed: {error}", { error: p.error }) : d.disks.length ? tr("Install on which disk?")
+                      : d.raid_mode ? tr("Disk hidden by the BIOS RAID mode: set \"SATA Operation\" to AHCI, then try again")
+                      : tr("No internal disk of 16 GB or more")
                 d.disks.forEach(function (k) {
-                    items.push({ label: k.label + (k.data ? "  ·  contient : " + k.data : ""), ok: function () {
-                        openModal("Tout effacer sur " + k.label + " et y installer la box ?", [
-                            { label: "Oui, effacer et installer", danger: true, ok: function () {
+                    items.push({ label: k.label + (k.data ? "  ·  " + tr("contains: {data}", { data: k.data }) : ""), ok: function () {
+                        openModal(tr("Erase everything on {disk} and install the box on it?", { disk: k.label }), [
+                            { label: tr("Yes, erase and install"), danger: true, ok: function () {
                                 call("POST", "/api/install", { disk: k.name }, function () { installMenu() }) } },
-                            { label: "Annuler", ok: function () { installMenu() } }])
+                            { label: tr("Cancel"), ok: function () { installMenu() } }])
                     } })
                 })
-                items.push({ label: "Fermer", ok: function () {} })
+                items.push({ label: tr("Close"), ok: function () {} })
             }
             var same = modal && modal.kind === "install"
             var sel = modalSel
@@ -886,7 +909,7 @@ Item {
         if (id === "system") { loadBt(); loadYtAccount(); loadSsh(); call("GET", "/api/install", undefined, function (d) { if (d) install = d }) }
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
-        if (id === "youtube") loadYoutube()   // rangées précédentes affichées en attendant
+        if (id === "youtube") loadYoutube()   // previous rows shown in the meantime
         if (id === "jellyfin" && jf === null) loadJellyfin()
         if (id === "replays") {
             if (!rpLogin) rpLogin = st.channel || (st.streamers || [])[0] || ""
@@ -894,9 +917,9 @@ Item {
         }
     }
 
-    // Touches
+    // Keys
 
-    function grid(sel, count, cols, k) {   // déplacement dans une grille : nouvelle position, ou -1 pour sortir à gauche
+    function grid(sel, count, cols, k) {   // move in a grid: new position, or -1 to exit on the left
         var col = sel % cols
         if (k === "left") return col === 0 ? -1 : sel - 1
         if (k === "right") return col < cols - 1 && sel < count - 1 ? sel + 1 : sel
@@ -921,7 +944,7 @@ Item {
         if (area === "rail") {
             if (k === "up" || k === "down") tab = Math.max(0, Math.min(tabs.length - 1, tab + (k === "down" ? 1 : -1)))
             else if (k === "right" || k === "ok") enterContent()
-            else if (k === "back" && st.mode !== "home") close()   // rien en lecture : le menu reste la page principale
+            else if (k === "back" && st.mode !== "home") close()   // nothing playing: the menu stays the main page
             return
         }
         if (k === "back") { area = "rail"; pendingDisplay = ""; pendingPlayer = ""; return }
@@ -993,7 +1016,7 @@ Item {
         }
     }
     function setRow(v) { if (jfTab) jfRow = v; else ytRow = v }
-    function setMediaSel(s) { if (jfTab) jfSel = s; else ytSel = s }   // (setSel est la ligne choisie des Réglages)
+    function setMediaSel(s) { if (jfTab) jfSel = s; else ytSel = s }   // (setSel is the chosen row of Settings)
     function keyMedia(k) {
         var rows = mediaRows()
         var r = Math.min(mRow, rows.length - 1)
@@ -1026,10 +1049,10 @@ Item {
         else if (k === "back") kbOpen = false
         else if (k === "ok") {
             var key = rows[kbRow][kbCol]
-            if (key === "Espace") kbText += " "
-            else if (key === "Effacer") kbText = kbText.slice(0, -1)
-            else if (key === "Tout effacer") kbText = ""
-            else if (key === "Rechercher") { if (kbText.trim()) { kbOpen = false; if (jfTab) jfSearch(kbText); else ytSearch(kbText) } }
+            if (key === "Space") kbText += " "
+            else if (key === "Delete") kbText = kbText.slice(0, -1)
+            else if (key === "Clear all") kbText = ""
+            else if (key === "Search") { if (kbText.trim()) { kbOpen = false; if (jfTab) jfSearch(kbText); else ytSearch(kbText) } }
             else if (kbText.length < 80) kbText += key
         }
     }
@@ -1038,10 +1061,10 @@ Item {
         if (k === "ok" && list[histSel]) {
             var e = list[histSel], items = []
             if (Fmt.resumable(e.position, e.duration, e.finished)) {
-                items.push({ label: "▶  Reprendre à " + Fmt.clock(e.position), ok: function () { play(e.url) } })
-                items.push({ label: "↺  Depuis le début", ok: function () { play(e.url, true) } })
-            } else items.push({ label: e.finished ? "↺  Revoir" : "▶  Lire", ok: function () { play(e.url, true) } })
-            items.push({ label: "✕  Retirer de l'historique", danger: true, ok: function () {
+                items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(e.position) }), ok: function () { play(e.url) } })
+                items.push({ label: tr("↺  From the beginning"), ok: function () { play(e.url, true) } })
+            } else items.push({ label: tr(e.finished ? "↺  Watch again" : "▶  Play"), ok: function () { play(e.url, true) } })
+            items.push({ label: tr("✕  Remove from history"), danger: true, ok: function () {
                 call("POST", "/api/history", { action: "remove", key: e.key }, function () { loadHistory() })
                 var h = history.slice(); h.splice(histSel, 1); history = h
                 histSel = Math.max(0, Math.min(histSel, h.length - 1))
@@ -1065,18 +1088,18 @@ Item {
         else if (k === "ok" && row) { if (row.ok) row.ok(); else if (row.step) row.step(1) }
     }
 
-    // Dessin
+    // Drawing
 
-    Item {   // tout le menu ; caché quand seule la fenêtre « Box » (power maintenu) est montrée
+    Item {   // the whole menu; hidden when only the "Box" dialog (power held) is shown
         anchors.fill: parent
         visible: !menu.powerOnly
-    Rectangle {   // voile sur la vidéo ; opaque sans vidéo, pour cacher l'écran d'ambiance
+    Rectangle {   // veil over the video; opaque without video, to hide the ambient screen
         anchors.fill: parent
         color: menu.pal.veil
         opacity: box.videoActive ? 0.89 : 1
         Behavior on color { ColorAnimation { duration: 400 } }
     }
-    // Sans vidéo derrière (le menu est alors la page principale) : fond animé aux couleurs de l'onglet, adouci
+    // Without video behind (the menu is then the main page): animated background in the tab's colors, softened
     Backdrop {
         anchors.fill: parent
         visible: opacity > 0
@@ -1092,14 +1115,14 @@ Item {
         c3: menu.hueShift(menu.accent, -0.12, 0.9)
     }
     Rectangle { anchors.fill: parent; color: menu.pal.veil; opacity: box.videoActive ? 0 : 0.30 }
-    // Rail des onglets
+    // Tab rail
     Rectangle { width: 400; height: parent.height; color: menu.pal.rail; opacity: 0.55
                 Behavior on color { ColorAnimation { duration: 400 } } }
     Logo { x: 56; y: 62 }
     Text { x: 126; y: 88 - height / 2; text: "Stream Box"; color: "white"; font.pixelSize: 28; font.bold: true }
-    Rectangle {   // pastille de l'onglet : glisse d'un onglet à l'autre
+    Rectangle {   // tab pill: slides from one tab to the other
         x: 40; width: 320; height: 64; radius: 32
-        y: 206 + menu.tab * 76   // 9 onglets entre le logo et « En cours sur la TV »
+        y: 206 + menu.tab * 76   // 9 tabs between the logo and "Now on the TV"
         color: "white"
         opacity: menu.area === "rail" ? 1 : 0.10
         Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
@@ -1110,7 +1133,7 @@ Item {
         Item {
             x: 40; y: 206 + index * 76; width: 320; height: 64
             readonly property bool cur: index === menu.tab
-            Rectangle {   // onglet en cours, focus dans le contenu : point de la couleur de l'onglet
+            Rectangle {   // current tab, focus in the content: dot in the tab's color
                 visible: cur && menu.area !== "rail"
                 x: 20; anchors.verticalCenter: parent.verticalCenter
                 width: 12; height: 12; radius: 6; color: menu.accent
@@ -1118,7 +1141,7 @@ Item {
             Text {
                 x: cur && menu.area !== "rail" ? 48 : 38
                 anchors.verticalCenter: parent.verticalCenter
-                text: menu.tabs[index].label
+                text: menu.tr(menu.tabs[index].label)
                 color: cur && menu.area === "rail" ? "#1a1020" : (cur ? "white" : "#b4afc2")
                 font.pixelSize: 25
                 font.bold: cur
@@ -1126,26 +1149,26 @@ Item {
             }
         }
     }
-    Column {   // ce qui joue sur la TV
+    Column {   // what plays on the TV
         x: 56; y: menu.height - 190; width: 310; spacing: 8
         visible: (menu.st.mode === "twitch" && !!menu.st.channel) || menu.st.mode === "media"
-        Text { text: "EN COURS SUR LA TV"; color: "#a99fc0"; font.pixelSize: 16; font.bold: true; font.letterSpacing: 2 }
+        Text { text: menu.tr("NOW ON THE TV"); color: "#a99fc0"; font.pixelSize: 16; font.bold: true; font.letterSpacing: 2 }
         Marquee {
             width: parent.width; pixelSize: 22; running: menu.isOpen
-            // Chaîne hors de la liste (suivie, second stream inversé) : pas de relevé du live, juste son nom
+            // Channel outside the list (followed, swapped second stream): no live info, just its name
             readonly property var info: (menu.st.live || {})[menu.st.channel]
-            text: menu.st.mode === "media" ? (menu.st.title || "Vidéo")
+            text: menu.st.mode === "media" ? (menu.st.title || menu.tr("Video"))
                 : (menu.st.channel || "") + (info ? "  ·  " + info.title : "")
         }
     }
     Text {
         x: 56; y: menu.height - 75
-        text: "▲▼◀▶ se déplacer   ·   OK valider   ·   ≡ options   ·   Retour revenir   ·   Menu fermer"
+        text: menu.tr("▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back go back   ·   Menu close")
         color: "#8a85a0"; font.pixelSize: 19
     }
 
-    // En-tête
-    Text { x: 460; y: 100 - height / 2; text: menu.tabs[menu.tab].label; color: "white"; font.pixelSize: 41; font.bold: true }
+    // Header
+    Text { x: 460; y: 100 - height / 2; text: menu.tr(menu.tabs[menu.tab].label); color: "white"; font.pixelSize: 41; font.bold: true }
     Text { x: 460; y: 158 - height / 2; text: menu.subtitle(); color: "#b4afc2"; font.pixelSize: 25 }
     Row {
         anchors.right: parent.right; anchors.rightMargin: 80; y: 100 - height / 2; spacing: 28
@@ -1158,7 +1181,7 @@ Item {
         Text { text: Qt.formatTime(menu.now, "hh:mm"); color: "white"; font.pixelSize: 31 }
     }
 
-    // Contenu de l'onglet : arrive en glissant à chaque changement
+    // Tab content: slides in on each change
     Item {
         id: content
         x: 460; y: 0; width: 1460; height: parent.height
@@ -1168,7 +1191,7 @@ Item {
             NumberAnimation { target: content; property: "opacity"; from: 0; to: 1; duration: 220 }
         }
 
-        // --- En direct
+        // --- Live
         Item {
             anchors.fill: parent
             visible: menu.tabId === "live"
@@ -1187,7 +1210,7 @@ Item {
                     }
                 }
             }
-            Item {   // découpe : ce qui défile s'arrête au bord de la zone (ni sur le titre, ni sur l'aide en bas)
+            Item {   // clip: what scrolls stops at the edge of the area (neither over the title nor over the help at the bottom)
                 x: -53; y: 255; width: 1540; height: 3 * 176 + 60 + 30; clip: true
                 GridView {
                     id: liveGrid
@@ -1219,7 +1242,7 @@ Item {
                     }
                 }
             }
-            Marquee {   // titre du live choisi, en entier
+            Marquee {   // title of the chosen live, in full
                 y: 290 + 3 * 176 + 40; width: 1400; pixelSize: 24; color: "#d0c8e0"; running: true
                 readonly property string login: (menu.st.streamers || [])[menu.liveSel] || ""
                 readonly property var info: (menu.st.live || {})[login]
@@ -1228,12 +1251,12 @@ Item {
             }
             Text {
                 visible: !(menu.st.streamers || []).length
-                y: 280; text: "La liste est vide : ajoute des streamers depuis la télécommande web."
+                y: 280; text: menu.tr("The list is empty: add streamers from the companion app.")
                 color: "#b4afc2"; font.pixelSize: 27
             }
         }
 
-        // --- Suivis
+        // --- Following
         Item {
             id: followsPage
             anchors.fill: parent
@@ -1244,8 +1267,8 @@ Item {
             Column {
                 visible: !!menu.follows && !menu.follows.error && !followsPage.f.configured
                 y: 260; spacing: 20
-                Text { text: "Pour les afficher, la box a besoin de ta propre appli Twitch."; color: "white"; font.pixelSize: 27 }
-                Text { text: "Télécommande web → Réglages → Chaînes suivies : tout y est expliqué."; color: "#b4afc2"; font.pixelSize: 22 }
+                Text { text: menu.tr("To show them, the box needs your own Twitch app."); color: "white"; font.pixelSize: 27 }
+                Text { text: menu.tr("Companion app → Settings → Followed channels: everything is explained there."); color: "#b4afc2"; font.pixelSize: 22 }
             }
             Item {
                 visible: !!followsPage.f.configured && !followsPage.f.authorized
@@ -1253,9 +1276,9 @@ Item {
                 Column {
                     visible: followsPage.waiting
                     y: 260; spacing: 26
-                    Text { text: "Sur ton téléphone, ouvre twitch.tv/activate et tape :"; color: "white"; font.pixelSize: 27 }
+                    Text { text: menu.tr("On your phone, open twitch.tv/activate and enter:"); color: "white"; font.pixelSize: 27 }
                     Text { text: followsPage.pend ? followsPage.pend.user_code || "" : ""; color: "white"; font.pixelSize: 75; font.bold: true; font.letterSpacing: 12 }
-                    Text { text: "ou scanne le QR code. La TV se met à jour toute seule."; color: "#b4afc2"; font.pixelSize: 22 }
+                    Text { text: menu.tr("or scan the QR code. The TV updates by itself."); color: "#b4afc2"; font.pixelSize: 22 }
                 }
                 QrCode { visible: followsPage.waiting && n > 0; x: 940; y: 240; size: 360; rows: menu.followsQr ? menu.followsQr.rows : [] }
                 Item {
@@ -1266,15 +1289,15 @@ Item {
                     Behavior on scale { NumberAnimation { duration: 160 } }
                     FocusFrame { active: parent.foc; radius: 37 }
                     Rectangle { anchors.fill: parent; radius: 37; color: "#9146ff" }
-                    Text { anchors.centerIn: parent; text: "Autoriser la box"; color: "white"; font.pixelSize: 25; font.bold: true }
+                    Text { anchors.centerIn: parent; text: menu.tr("Authorize the box"); color: "white"; font.pixelSize: 25; font.bold: true }
                 }
                 Text {
                     visible: !!(followsPage.pend && followsPage.pend.error)
-                    y: 230; text: visible ? "Autorisation refusée : " + followsPage.pend.error : ""
+                    y: 230; text: visible ? menu.tr("Authorization denied: {error}", { error: followsPage.pend.error }) : ""
                     color: "#ff8f8f"; font.pixelSize: 22
                 }
             }
-            Item {   // découpe : ce qui défile s'arrête au bord de la zone (ni sur le titre, ni sur l'aide en bas)
+            Item {   // clip: what scrolls stops at the edge of the area (neither over the title nor over the help at the bottom)
                 x: -53; y: 161; width: 1540; height: 4 * 176 + 60 + 30; clip: true
                 GridView {
                     visible: !!followsPage.f.authorized
@@ -1306,13 +1329,13 @@ Item {
             }
         }
 
-        // --- Rediffusions
+        // --- Replays
         Item {
             anchors.fill: parent
             visible: menu.tabId === "replays"
-            readonly property var rows: visible ? menu.replayRows() : []   // onglet caché : rien à recalculer
-            ListView {   // puces des streamers
-                y: 196; x: -40; width: 1440; height: 64   // s'arrête avant le bord de l'écran
+            readonly property var rows: visible ? menu.replayRows() : []   // hidden tab: nothing to recompute
+            ListView {   // streamer chips
+                y: 196; x: -40; width: 1440; height: 64   // stops before the edge of the screen
                 orientation: ListView.Horizontal; spacing: 16; interactive: false; clip: false
                 leftMargin: 40
                 model: (menu.st.streamers || []).length
@@ -1323,11 +1346,11 @@ Item {
                     readonly property string login: (menu.st.streamers || [])[index] || ""
                     readonly property bool foc: menu.area === "content" && menu.rpRow === 0 && index === menu.rpSel[0]
                     readonly property bool cur: login === menu.rpLogin
-                    // largeur mesurée en gras (le streamer affiché l'est) : la puce ne change pas de taille en le devenant
+                    // width measured in bold (the displayed streamer is bold): the chip doesn't change size when it becomes so
                     TextMetrics { id: chipMetrics; text: login; font.pixelSize: chipText.font.pixelSize; font.bold: true }
                     width: Math.ceil(chipMetrics.advanceWidth) + 100; height: 64
                     readonly property real rel: x - ListView.view.contentX
-                    // puces de largeurs variables : cachées si elles sortent de la ligne (pas de fenêtre first/fits ici)
+                    // chips of variable widths: hidden if they go past the row (no first/fits window here)
                     opacity: rel > -20 && rel + width < ListView.view.width + 20 ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 90 } }
                     scale: foc ? 1.05 : 1
@@ -1345,20 +1368,20 @@ Item {
                     readonly property var row: parent.rows[r]
                     y: 300 + index * 366; width: 1460; height: 350
                     Text { x: 2; text: row ? row.title.toUpperCase() : ""; color: "#a99fc0"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 2 }
-                    Item {   // découpe à gauche, au bord du contenu : une carte qui défile ne passe pas sous le rail
+                    Item {   // clip on the left, at the edge of the content: a scrolling card doesn't slide under the rail
                         x: -28; y: 0; width: 1512; height: 302 + 80; clip: true
                         ListView {
-                            y: 40; x: -12; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
+                            y: 40; x: -12; width: 1460; height: 302   // 4 cards up to 40 px from the right edge
                             orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
                             leftMargin: 40
                             model: row ? row.items.length : 0
                             currentIndex: menu.rpSel[r] || 0
-                            // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
-                            // qui laissait des cartes coupées au bord du rail ou de l'écran)
+                            // Card-by-card scrolling, the row staying left-aligned (and not the minimal scroll,
+                            // which left cards cut at the edge of the rail or the screen)
                             property int first: 0
                             readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
                             onCurrentIndexChanged: {
-                                // -1 pendant que la rangée se recharge (liste vide) : ignoré, sinon la rangée restait décalée d'une carte
+                                // -1 while the row reloads (empty list): ignored, otherwise the row stayed shifted by one card
                                 if (currentIndex < 0 || fits <= 0) return
                                 if (currentIndex < first) first = currentIndex
                                 else if (currentIndex >= first + fits) first = currentIndex - fits + 1
@@ -1367,12 +1390,13 @@ Item {
                             Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                             delegate: VideoCard {
                                 readonly property var it: row.items[index] || {}
-                                opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0   // fenêtre visée
+                                opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0   // target window
                                 Behavior on opacity { NumberAnimation { duration: 90 } }
                                 title: it.title || ""
                                 thumb: it.thumb || ""
-                                meta: (row.kind === "vods" ? Fmt.dateFr(it.date) + " · " + Fmt.clock(it.seconds)
-                                       : Fmt.clock(it.seconds) + " · " + Fmt.viewers(it.views) + " vues") + (it.finished ? " · vu" : "")
+                                meta: (row.kind === "vods" ? Fmt.dateFr(it.date, menu.tr) + " · " + Fmt.clock(it.seconds)
+                                       : Fmt.clock(it.seconds) + " · " + menu.tr("{n} views", { n: Fmt.viewers(it.views, menu.tr) }))
+                                      + (it.finished ? " · " + menu.tr("watched") : "")
                                 progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
                                 focused: menu.area === "content" && menu.rpRow === r && index === (menu.rpSel[r] || 0)
                             }
@@ -1382,16 +1406,16 @@ Item {
             }
         }
 
-        // --- YouTube et Jellyfin : ligne de recherche, puis rangées horizontales de cartes
+        // --- YouTube and Jellyfin: search row, then horizontal rows of cards
         Item {
             id: ytPage
             anchors.fill: parent
             visible: menu.tabId === "youtube" || menu.tabId === "jellyfin"
             readonly property var rows: visible ? menu.mediaRows() : []
-            // Rangées de hauteur fixe ; défilement vertical pour garder la rangée choisie à l'écran
-            readonly property real rowH: 360   // deux rangées entières au-dessus de l'aide en bas
+            // Fixed-height rows; vertical scrolling to keep the chosen row on screen
+            readonly property real rowH: 360   // two full rows above the help at the bottom
             readonly property real scrollY: Math.max(0, (menu.mRow - 1) * rowH)
-            Item {   // ligne de recherche
+            Item {   // search row
                 y: 200; width: 760; height: 66
                 readonly property bool foc: menu.area === "content" && menu.mRow === 0 && !menu.kbOpen
                 scale: foc ? 1.03 : 1
@@ -1407,13 +1431,13 @@ Item {
             Text {
                 visible: menu.jfTab ? !!menu.jf && !menu.jf.configured && !menu.jf.error
                                     : !!menu.yt && menu.yt.channels.length === 0 && !menu.ytResults && !(menu.yt.subs && menu.yt.subs.configured)
-                y: 320; text: menu.jfTab ? "Jellyfin n'est pas associé à la box : dans l'appli Jellyfin, « Lire sur… » → la box."
-                                         : "Ajoute des chaînes favorites : Options sur une vidéo, ou recherche."
+                y: 320; text: menu.jfTab ? menu.tr("Jellyfin isn't linked to the box: in the Jellyfin app, \"Play on…\" → the box.")
+                                         : menu.tr("Add favorite channels: Options on a video, or search.")
                 color: "#b4afc2"; font.pixelSize: 27
             }
-            Item {   // découpe : ce qui défile s'arrête au bord de la zone (ni sur le titre, ni sur l'aide en bas)
+            Item {   // clip: what scrolls stops at the edge of the area (neither over the title nor over the help at the bottom)
                 x: -40; y: 276; width: parent.width + 80; height: 995 - 276; clip: true
-                Item {   // rangées, sous la ligne de recherche
+                Item {   // rows, below the search row
                     x: 40; y: 10; width: parent.width - 80; height: menu.height - 286
                     Repeater {
                         model: Math.max(0, ytPage.rows.length - 1)
@@ -1422,8 +1446,8 @@ Item {
                             readonly property var row: ytPage.rows[r]
                             y: index * ytPage.rowH - ytPage.scrollY
                             Behavior on y { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
-                            opacity: index >= Math.max(0, menu.mRow - 1) && index < Math.max(0, menu.mRow - 1) + 2 ? 1 : 0   // rangées visées
-                            // Cartes créées (et miniatures chargées) seulement pour les rangées visées et leurs voisines
+                            opacity: index >= Math.max(0, menu.mRow - 1) && index < Math.max(0, menu.mRow - 1) + 2 ? 1 : 0   // target rows
+                            // Cards created (and thumbnails loaded) only for the target rows and their neighbors
                             readonly property bool near: index >= Math.max(0, menu.mRow - 1) - 1 && index < Math.max(0, menu.mRow - 1) + 3
                             Behavior on opacity { NumberAnimation { duration: 180 } }
                             width: 1460; height: ytPage.rowH
@@ -1434,25 +1458,26 @@ Item {
                             }
                             Text {
                                 visible: !!row && row.items.length === 0
-                                y: 70; text: row && row.kind === "results" ? (menu.mSearching ? "Recherche…" : "Aucun résultat")
-                                           : row && row.loading ? "Chargement…" : menu.jfTab ? "Rien ici" : "YouTube injoignable pour l'instant"
+                                y: 70; text: row && row.kind === "results" ? (menu.mSearching ? menu.tr("Searching…") : menu.tr("No results"))
+                                           : row && row.loading ? menu.tr("Loading…") : menu.jfTab ? menu.tr("Nothing here")
+                                           : menu.tr("YouTube unreachable for now")
                                 color: "#8a85a0"; font.pixelSize: 24
                             }
-                            Item {   // découpe à gauche, au bord du contenu : une carte qui défile ne passe pas sous le rail
+                            Item {   // clip on the left, at the edge of the content: a scrolling card doesn't slide under the rail
                                 x: -28; y: 10; width: 1512; height: 302 + 80; clip: true
-                                ListView {   // chaînes trouvées : photo ronde, nom, abonnés, « dans ta liste »
+                                ListView {   // found channels: round picture, name, subscribers, "in your list"
                                     visible: !!row && row.kind === "chans"
-                                    y: 40; x: -12; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
+                                    y: 40; x: -12; width: 1460; height: 302   // 4 cards up to 40 px from the right edge
                                     orientation: ListView.Horizontal; spacing: 30; interactive: false; clip: false
                                     leftMargin: 40
                                     model: visible && near ? row.items.length : 0
                                     currentIndex: visible ? (menu.mSel["chans"] || 0) : 0
-                                    // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
-                                    // qui laissait des cartes coupées au bord du rail ou de l'écran)
+                                    // Card-by-card scrolling, the row staying left-aligned (and not the minimal scroll,
+                                    // which left cards cut at the edge of the rail or the screen)
                                     property int first: 0
                                     readonly property int fits: Math.floor((width - leftMargin + spacing) / 270)
                                     onCurrentIndexChanged: {
-                                        // -1 pendant que la rangée se recharge (liste vide) : ignoré, sinon la rangée restait décalée d'une carte
+                                        // -1 while the row reloads (empty list): ignored, otherwise the row stayed shifted by one card
                                         if (currentIndex < 0 || fits <= 0) return
                                         if (currentIndex < first) first = currentIndex
                                         else if (currentIndex >= first + fits) first = currentIndex - fits + 1
@@ -1482,27 +1507,28 @@ Item {
                                         }
                                         Text {
                                             y: 242; width: parent.width; horizontalAlignment: Text.AlignHCenter
-                                            text: (c.followers ? Fmt.big(c.followers) + " abonnés" : "") + (c.saved ? (c.followers ? " · " : "") + "★ favorite" : "")
+                                            text: (c.followers ? menu.tr("{n} subscribers", { n: Fmt.big(c.followers, menu.tr) }) : "")
+                                                  + (c.saved ? (c.followers ? " · " : "") + menu.tr("★ favorite") : "")
                                             color: c.saved ? "#ff6b7f" : "#b4afc2"; font.pixelSize: 20
                                         }
                                     }
                                 }
                             }
-                            Item {   // découpe à gauche, au bord du contenu : une carte qui défile ne passe pas sous le rail
+                            Item {   // clip on the left, at the edge of the content: a scrolling card doesn't slide under the rail
                                 x: -28; y: 10; width: 1512; height: 302 + 80; clip: true
                                 ListView {
                                     visible: !!row && row.kind !== "chans"
-                                    y: 40; x: -12; width: 1460; height: 302   // 4 cartes jusqu'à 40 px du bord droit
+                                    y: 40; x: -12; width: 1460; height: 302   // 4 cards up to 40 px from the right edge
                                     orientation: ListView.Horizontal; spacing: 26; interactive: false; clip: false
                                     leftMargin: 40
                                     model: visible && near ? row.items.length : 0
                                     currentIndex: visible ? (menu.mSel[row.key] || 0) : 0
-                                    // Défilement carte par carte, la rangée restant alignée à gauche (et pas au plus juste,
-                                    // qui laissait des cartes coupées au bord du rail ou de l'écran)
+                                    // Card-by-card scrolling, the row staying left-aligned (and not the minimal scroll,
+                                    // which left cards cut at the edge of the rail or the screen)
                                     property int first: 0
                                     readonly property int fits: Math.floor((width - leftMargin + spacing) / 356)
                                     onCurrentIndexChanged: {
-                                        // -1 pendant que la rangée se recharge (liste vide) : ignoré, sinon la rangée restait décalée d'une carte
+                                        // -1 while the row reloads (empty list): ignored, otherwise the row stayed shifted by one card
                                         if (currentIndex < 0 || fits <= 0) return
                                         if (currentIndex < first) first = currentIndex
                                         else if (currentIndex >= first + fits) first = currentIndex - fits + 1
@@ -1511,7 +1537,7 @@ Item {
                                     Behavior on contentX { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                                     delegate: VideoCard {
                                         readonly property var it: row.items[index] || {}
-                                        opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0   // fenêtre visée
+                                        opacity: index >= ListView.view.first && index < ListView.view.first + ListView.view.fits ? 1 : 0   // target window
                                         Behavior on opacity { NumberAnimation { duration: 90 } }
                                         title: it.title || ""
                                         thumb: it.thumb || ""
@@ -1529,8 +1555,8 @@ Item {
             }
         }
 
-        // --- Historique
-        Item {   // découpe : ce qui défile s'arrête au bord de la zone (ni sur le titre, ni sur l'aide en bas)
+        // --- History
+        Item {   // clip: what scrolls stops at the edge of the area (neither over the title nor over the help at the bottom)
             x: -53; y: 161; width: 1540; height: 2 * 340 + 60 + 30; clip: true
             GridView {
                 visible: menu.tabId === "history"
@@ -1551,7 +1577,7 @@ Item {
                         x: 13; y: 13
                         title: e.title || ""
                         thumb: e.thumb || ""
-                        meta: (menu.kinds[e.kind] || "") + (e.finished ? " · vu"
+                        meta: menu.tr(menu.kinds[e.kind] || "") + (e.finished ? " · " + menu.tr("watched")
                               : e.duration > 0 ? " · " + Fmt.clock(e.position) + " / " + Fmt.clock(e.duration) : "")
                         progress: e.finished ? 1 : (Fmt.resumable(e.position, e.duration, e.finished) && e.duration > 0 ? e.position / e.duration : 0)
                         accent: menu.accent
@@ -1561,10 +1587,10 @@ Item {
             }
         }
 
-        // --- Réglages et Système : listes de lignes
+        // --- Settings and System: lists of rows
         Repeater {
             model: ["settings", "system"]
-            Item {   // découpe : ce qui défile s'arrête au bord de la zone (ni sur le titre, ni sur l'aide en bas)
+            Item {   // clip: what scrolls stops at the edge of the area (neither over the title nor over the help at the bottom)
                 visible: menu.tabId === modelData
                 x: -40; y: 165; width: (modelData === "settings" ? 980 : 810) + 80; height: 830; clip: true
                 ListView {
@@ -1573,7 +1599,7 @@ Item {
                     readonly property var rows: !visible ? [] : modelData === "settings" ? menu.settingsRows() : menu.systemRows()
                     readonly property var sel: menu.selectable(rows)
                     readonly property int focusedRow: menu.area === "content" ? (sel[modelData === "settings" ? menu.setSel : menu.sysSel] ?? -1) : -1
-                    y: 15; x: 40; width: modelData === "settings" ? 980 : 810; height: 800   // s'arrête au-dessus de l'aide en bas
+                    y: 15; x: 40; width: modelData === "settings" ? 980 : 810; height: 800   // stops above the help at the bottom
                     spacing: 10; interactive: false; clip: false; topMargin: 30
                     model: rows.length
                     onFocusedRowChanged: if (focusedRow >= 0) positionViewAtIndex(focusedRow, ListView.Contain)
@@ -1590,9 +1616,9 @@ Item {
                 }
             }
         }
-        Flow {   // Système : état de la box, à droite des lignes, sous le QR code (« Lecture » prend deux tuiles de large)
+        Flow {   // System: box status, right of the rows, below the QR code ("Playback" is two tiles wide)
             visible: menu.tabId === "system"
-            x: 860; y: 430; width: 520   // s'arrête à 80 px du bord de l'écran
+            x: 860; y: 430; width: 520   // stops 80 px from the edge of the screen
             spacing: 10
             Repeater {
                 model: parent.visible ? menu.healthTiles() : []
@@ -1609,21 +1635,21 @@ Item {
                 }
             }
         }
-        Row {   // Système : QR code de la télécommande web, pour tout ce qui demande de taper du texte
+        Row {   // System: QR code of the companion app, for everything that requires typing text
             visible: menu.tabId === "system" && !!(menu.ambient.qr && menu.ambient.qr.rows)
             x: 860; y: 210; spacing: 24
             QrCode { size: 190; rows: menu.ambient.qr ? menu.ambient.qr.rows : [] }
             Column {
                 anchors.verticalCenter: parent.verticalCenter; spacing: 10
-                Text { text: "Télécommande sur le téléphone"; color: "white"; font.pixelSize: 23; font.bold: true }
-                Text { text: "Lien, streamer, compte Twitch…"; color: "#b4afc2"; font.pixelSize: 20 }
+                Text { text: menu.tr("Companion app on your phone"); color: "white"; font.pixelSize: 23; font.bold: true }
+                Text { text: menu.tr("Link, streamer, Twitch account…"); color: "#b4afc2"; font.pixelSize: 20 }
                 Text { text: menu.ambient.qr ? String(menu.ambient.qr.url).replace(/^https?:\/\//, "").replace(/\/$/, "") : ""; color: "#b4afc2"; font.pixelSize: 20 }
             }
         }
     }
 
     }
-    // Clavier à l'écran (recherche YouTube)
+    // On-screen keyboard (YouTube search)
     Item {
         anchors.fill: parent
         opacity: menu.kbOpen ? 1 : 0
@@ -1636,8 +1662,8 @@ Item {
             color: menu.pal.sheet
             scale: menu.kbOpen ? 1 : 0.95
             Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-            Text { x: 48; y: 36; text: menu.jfTab ? "Rechercher dans Jellyfin" : "Rechercher sur YouTube"; color: menu.pal.label; font.pixelSize: 22; font.bold: true }
-            Rectangle {   // texte tapé
+            Text { x: 48; y: 36; text: menu.jfTab ? menu.tr("Search Jellyfin") : menu.tr("Search YouTube"); color: menu.pal.label; font.pixelSize: 22; font.bold: true }
+            Rectangle {   // typed text
                 x: 44; y: 78; width: parent.width - 88; height: 76; radius: 18
                 color: Qt.darker(menu.pal.sheet, 1.8); border.color: menu.pal.surfaceFocus; border.width: 2
                 Text {
@@ -1658,12 +1684,12 @@ Item {
                                 readonly property string label: menu.kbKeys[r][index]
                                 readonly property bool foc: menu.kbRow === r && menu.kbCol === index
                                 readonly property bool wide: label.length > 1
-                                width: wide ? (r === 5 ? 348 : 312) : 96; height: 72; radius: 16   // 10 touches de large : 1068
-                                color: foc ? "white" : label === "Rechercher" ? menu.accent : menu.pal.key
+                                width: wide ? (r === 5 ? 348 : 312) : 96; height: 72; radius: 16   // 10 keys wide: 1068
+                                color: foc ? "white" : label === "Search" ? menu.accent : menu.pal.key
                                 scale: foc ? 1.06 : 1
                                 Behavior on scale { NumberAnimation { duration: 120 } }
                                 Text {
-                                    anchors.centerIn: parent; text: label
+                                    anchors.centerIn: parent; text: menu.tr(label)
                                     color: parent.foc ? "#1a1020" : "white"; font.pixelSize: wide ? 26 : 32; font.bold: parent.foc
                                 }
                             }
@@ -1674,7 +1700,7 @@ Item {
         }
     }
 
-    // Compte YouTube : code à taper sur google.com/device (ou QR code), mis à jour tout seul
+    // YouTube account: code to enter on google.com/device (or QR code), updated by itself
     Item {
         id: ytAuthBox
         anchors.fill: parent
@@ -1691,14 +1717,14 @@ Item {
             Column {
                 x: 60; y: 60; spacing: 26; width: 700
                 Text {
-                    text: menu.ytAuth && menu.ytAuth.tv ? "Synchroniser la progression YouTube" : "Connecter mon compte YouTube"
+                    text: menu.ytAuth && menu.ytAuth.tv ? menu.tr("Sync YouTube progress") : menu.tr("Connect my YouTube account")
                     color: "white"; font.pixelSize: 30; font.bold: true
                 }
                 Text {
                     width: parent.width; wrapMode: Text.WordWrap; color: "white"; font.pixelSize: 25
-                    text: ytAuthBox.waiting ? "Sur ton téléphone, ouvre google.com/device et tape :"
-                        : ytAuthBox.pend && ytAuthBox.pend.error ? "Autorisation refusée : " + ytAuthBox.pend.error
-                        : "Demande du code…"
+                    text: ytAuthBox.waiting ? menu.tr("On your phone, open google.com/device and enter:")
+                        : ytAuthBox.pend && ytAuthBox.pend.error ? menu.tr("Authorization denied: {error}", { error: ytAuthBox.pend.error })
+                        : menu.tr("Requesting the code…")
                 }
                 Text {
                     visible: ytAuthBox.waiting
@@ -1708,9 +1734,9 @@ Item {
                 Text {
                     width: parent.width; wrapMode: Text.WordWrap; color: "#b4afc2"; font.pixelSize: 21
                     text: (menu.ytAuth && menu.ytAuth.tv
-                        ? "Google affiche « YouTube on TV » : la box se présente comme l'appli YouTube des TV, pour lire et renvoyer la progression. "
-                        : "Google prévient que l'appli n'est pas vérifiée : « Paramètres avancés », puis « Accéder à Stream Box ». Lecture seule. ")
-                        + "La TV se met à jour toute seule ; Retour pour fermer."
+                        ? menu.tr("Google shows \"YouTube on TV\": the box presents itself as the YouTube app for TVs, to read and send back progress.")
+                        : menu.tr("Google warns that the app isn't verified: \"Advanced\", then \"Go to Stream Box\". Read-only."))
+                        + " " + menu.tr("The TV updates by itself; Back to close.")
                 }
             }
             QrCode {
@@ -1720,7 +1746,7 @@ Item {
         }
     }
 
-    // Fenêtre d'actions
+    // Action dialog
     Item {
         anchors.fill: parent
         opacity: menu.modal ? 1 : 0

@@ -1,20 +1,20 @@
-"""Stream Box : chat Twitch avec émotes pour l'appli Qt (ui.py), affiché en QML (qml/ChatOverlay.qml).
+"""Stream Box: Twitch chat with emotes for the Qt app (ui.py), shown in QML (qml/ChatOverlay.qml).
 
-Même lecture que chat_overlay.py (IRC anonyme, lecture seule), mais chaque message est découpé en morceaux : mots et
-émotes. Émotes Twitch : positions données par le tag « emotes » du message. Émotes 7TV, BTTV et FFZ : par leur nom,
-listes globales chargées une fois, listes de la chaîne chargées dès que le chat donne son identifiant (ROOMSTATE).
-Les images sont chargées et animées par Qt (GIF, WebP).
+Same reading as chat_overlay.py (anonymous IRC, read-only), but each message is split into pieces: words and
+emotes. Twitch emotes: positions given by the "emotes" tag of the message. 7TV, BTTV and FFZ emotes: by their name,
+global lists loaded once, channel lists loaded as soon as the chat gives its id (ROOMSTATE).
+Images are loaded and animated by Qt (GIF, WebP).
 
-Le lecteur seul (mpv sans l'appli) garde chat_overlay.py, en texte ; quand l'appli tourne, elle écrit
-user-data/streambox/chat_ui = « qml » et chat_overlay.py se tait.
+The player alone (mpv without the app) keeps chat_overlay.py, as text; when the app runs, it writes
+user-data/streambox/chat_ui = "qml" and chat_overlay.py stays quiet.
 """
 import json, random, socket, ssl, threading, time, urllib.request
 from collections import deque
 
 MAX_MESSAGES = 10
-LIFETIME = 45      # secondes avant qu'un message disparaisse (comme chat_overlay.py)
-MAX_CHARS = 90     # tronque les pavés
-TWITCH_EMOTE = "https://static-cdn.jtvnw.net/emoticons/v2/{}/default/dark/2.0"   # « default » : animée si elle l'est
+LIFETIME = 45      # seconds before a message disappears (like chat_overlay.py)
+MAX_CHARS = 90     # truncates walls of text
+TWITCH_EMOTE = "https://static-cdn.jtvnw.net/emoticons/v2/{}/default/dark/2.0"   # "default": animated if it is
 
 
 def fetch_json(url):
@@ -42,7 +42,7 @@ def ffz(emotes):
 
 
 def global_emotes():
-    """Émotes globales des trois services ; un service injoignable est simplement ignoré"""
+    """Global emotes of the three services; an unreachable service is simply ignored"""
     out = {}
     for url, conv in (("https://api.betterttv.net/3/cached/frankerfacez/emotes/global", ffz),
                       ("https://api.betterttv.net/3/cached/emotes/global", bttv),
@@ -55,7 +55,7 @@ def global_emotes():
 
 
 def channel_emotes(room_id):
-    """Émotes de la chaîne ; priorité 7TV > BTTV > FFZ (les dernières écrasent les premières)"""
+    """Channel emotes; priority 7TV > BTTV > FFZ (the last ones override the first ones)"""
     out = {}
     try:
         out.update(ffz(fetch_json(f"https://api.betterttv.net/3/cached/frankerfacez/users/twitch/{room_id}")))
@@ -75,7 +75,7 @@ def channel_emotes(room_id):
 
 
 def color(hex_color):
-    """Couleur du pseudo ; les trop sombres deviennent lavande (illisibles sur la vidéo)"""
+    """Username color; colors too dark become lavender (unreadable on the video)"""
     if not (hex_color and len(hex_color) == 7):
         return "#c9b8ff"
     r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
@@ -87,7 +87,7 @@ def parse_tags(raw):
 
 
 class Chat:
-    """Chat de la chaîne en cours ; on_change(liste des messages) appelé à chaque changement, depuis un autre fil"""
+    """Chat of the current channel; on_change(list of messages) called on each change, from another thread"""
 
     def __init__(self, on_change):
         self.on_change = on_change
@@ -120,8 +120,8 @@ class Chat:
                 self.local = emotes
 
     def _parts(self, text, emotes_tag):
-        """Mots et émotes : [{"t": "x", "v": mot} | {"t": "e", "u": url, "n": nom}]"""
-        twitch = {}   # position de début → (fin, id)
+        """Words and emotes: [{"t": "x", "v": word} | {"t": "e", "u": url, "n": name}]"""
+        twitch = {}   # start position → (end, id)
         for spec in (emotes_tag or "").split("/"):
             if ":" not in spec:
                 continue
@@ -220,19 +220,19 @@ class Chat:
             try:
                 raw = socket.create_connection(("irc.chat.twitch.tv", 6697), timeout=10)
                 with ctx.wrap_socket(raw, server_hostname="irc.chat.twitch.tv") as s:
-                    nick = f"justinfan{random.randint(1000, 80000)}"   # connexion anonyme, lecture seule
+                    nick = f"justinfan{random.randint(1000, 80000)}"   # anonymous connection, read-only
                     s.sendall(f"CAP REQ :twitch.tv/tags twitch.tv/commands\r\nNICK {nick}\r\nJOIN #{channel}\r\n".encode())
-                    s.settimeout(1)   # pour remarquer vite un changement de chaîne
+                    s.settimeout(1)   # to notice a channel change quickly
                     buf, last_data = b"", time.time()
                     while self.channel == channel:
                         try:
                             data = s.recv(65536)
                         except TimeoutError:
-                            if time.time() - last_data > 360:   # Twitch envoie un PING toutes les ~5 min
-                                raise OSError("plus de nouvelles du serveur")
+                            if time.time() - last_data > 360:   # Twitch sends a PING every ~5 min
+                                raise OSError("no news from the server")
                             continue
                         if not data:
-                            raise OSError("connexion fermée")
+                            raise OSError("connection closed")
                         last_data = time.time()
                         *lines, buf = (buf + data).split(b"\r\n")
                         for line in lines:

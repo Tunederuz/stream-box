@@ -1,5 +1,5 @@
-// Choix des sous-titres et de la piste audio pendant une vidéo (touche ≡), au-dessus de la barre de lecture, à droite.
-// stream-box.lua tient la liste, le choix et les touches (user-data/streambox/tracks) ; ici, seulement le dessin.
+// Choice of subtitles and audio track during a video (≡ key), above the playback bar, on the right.
+// stream-box.lua holds the list, the choice and the keys (user-data/streambox/tracks); here, only the drawing.
 import QtQuick
 import QtQuick.Effects
 
@@ -8,7 +8,7 @@ Item {
     anchors.fill: parent
     readonly property var t: { try { return JSON.parse(osd.tracks || "{}") } catch (e) { return {} } }
     readonly property bool shown: !!t.open
-    property var last: ({ items: [], sel: 0 })   // dernier état, gardé pendant la sortie
+    property var last: ({ items: [], sel: 0 })   // last state, kept while fading out
     onTChanged: if (t.open) last = t
     readonly property var items: last.items || []
 
@@ -17,7 +17,7 @@ Item {
         width: 600
         height: Math.min(list.contentHeight, 520) + 56
         x: parent.width - width - 96
-        y: parent.height - 360 - height   // au-dessus du titre de la barre de lecture
+        y: parent.height - 360 - height   // above the title of the playback bar
         opacity: root.shown ? 1 : 0
         scale: root.shown ? 1 : 0.96
         transformOrigin: Item.BottomRight
@@ -56,7 +56,7 @@ Item {
                         text: it.label || ""
                         color: foc ? "#17151c" : "white"; font.pixelSize: 24; font.bold: foc
                     }
-                    Text {   // choix en cours
+                    Text {   // current choice
                         visible: !!it.selected
                         anchors.right: parent.right; anchors.rightMargin: 24; anchors.verticalCenter: parent.verticalCenter
                         text: "✓"; color: foc ? "#17151c" : "white"; font.pixelSize: 26; font.bold: true

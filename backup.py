@@ -1,23 +1,24 @@
-"""Stream Box : sauvegarde et restauration des réglages et connexions, sans ligne de commande.
+"""Stream Box: backup and restore of settings and connections, without a command line.
 
-Menu Système de la TV → « Sauvegarde et restauration » : sauvegarde sur une clé USB, ou restauration d'une sauvegarde
-trouvée dessus. Page web (Réglages → Système) : téléchargement du fichier sur le téléphone, et restauration d'un
-fichier envoyé. Utilisé par remote.py (GET /api/backup, /api/backup/download ; POST /api/backup, /api/backup_restore).
+TV System menu → "Backup and restore": backup to a USB drive, or restore of a backup found on it. Companion app
+(Settings → System): download of the file to the phone, and restore of an uploaded file. Used by remote.py
+(GET /api/backup, /api/backup/download; POST /api/backup, /api/backup_restore).
 
-Contenu, le même que backup.sh (archive au même format : install.sh --restore la reprend, et inversement) : liste des
-streamers, réglages et historique de la box, comptes Twitch / YouTube, connexion Jellyfin, MQTT, réglages du son, plus
-les Wi-Fi enregistrés (nom et mot de passe, recréés par NetworkManager). Pas les appairages Bluetooth (réservés à
-root : backup.sh les garde). Ce sont des secrets : le fichier est à garder pour soi.
+Contents, the same as backup.sh (archive in the same format: install.sh --restore takes it, and vice versa): streamer
+list, box settings and history, Twitch / YouTube accounts, Jellyfin connection, MQTT, sound settings, plus the saved
+Wi-Fi networks (name and password, recreated by NetworkManager). Not the Bluetooth pairings (root only: backup.sh
+keeps them). These are secrets: the file is for your eyes only.
 
-Clé USB : montée par udisks le temps de lire ou d'écrire (règle polkit pour media), démontée aussitôt : elle peut être
-retirée dès la fin. Après une restauration, la box redémarre pour que tout reparte des fichiers remis.
+USB drive: mounted by udisks while reading or writing (polkit rule for media), unmounted right after: it can be
+removed as soon as it's done. After a restore, the box reboots so that everything starts again from the restored files.
 """
 import io, json, os, re, socket, subprocess, tarfile, threading, time
 
-import netsetup   # netsetup.py : nmcli (Wi-Fi enregistrés)
+import netsetup   # netsetup.py: nmcli (saved Wi-Fi networks)
+from i18n import tr
 
 HOME = os.path.expanduser("~")
-# Relatifs au dossier personnel ; dans l'archive : home/<utilisateur>/… comme backup.sh
+# Relative to the home directory; in the archive: home/<user>/… like backup.sh
 PATHS = ("stream-box/streamers.txt", ".local/state/stream-box", ".config/stream-box", ".config/streamlink/config.twitch",
          ".config/jellyfin-mpv-shim", ".local/state/wireplumber")
 SKIP = re.compile(r"(^|/)(fonts|scripts|offline)(/|$)|\.lock|\.bak$|(^|/)update\.log$|(^|/)before-restore\.tar\.gz$")
@@ -25,20 +26,20 @@ MANIFEST = "stream-box-backup.json"
 WIFI = "stream-box-wifi.json"
 NAME = re.compile(r"stream-box-backup-[\w.-]{1,60}\.tar\.gz")
 SAFETY = os.path.join(HOME, ".local/state/stream-box/before-restore.tar.gz")
-SETUP_DONE = os.path.join(HOME, ".config/stream-box/setup-done")   # restaurée : plus de première configuration   # réglages d'avant la dernière restauration
+SETUP_DONE = os.path.join(HOME, ".config/stream-box/setup-done")   # restored: no more first-time setup   # settings from before the last restore
 MAX_SIZE = 64 << 20
-SHOWN = 4   # sauvegardes proposées par clé, les plus récentes
+SHOWN = 4   # backups offered per drive, the most recent
 
 state = {"busy": None, "message": None}
 lock = threading.Lock()
-listing = {}   # (périphérique, uuid) → sauvegardes trouvées sur la clé
-shown = {"text": None, "at": 0}   # dernier message : affiché une minute, puis la fenêtre revient à son titre
+listing = {}   # (device, uuid) → backups found on the drive
+shown = {"text": None, "at": 0}   # last message: shown for a minute, then the window goes back to its title
 
 
 # Archive
 
 def wifi_profiles():
-    """Wi-Fi enregistrés dans NetworkManager (pas le point d'accès de configuration) : [{ssid, psk}]"""
+    """Wi-Fi networks saved in NetworkManager (not the setup hotspot): [{ssid, psk}]"""
     out = []
     try:
         for line in netsetup.nmcli("-t", "-f", "NAME,TYPE", "connection", "show").splitlines():
@@ -49,7 +50,7 @@ def wifi_profiles():
             if get("802-11-wireless.mode") == "ap":
                 continue
             ssid, psk = get("802-11-wireless.ssid"), get("802-11-wireless-security.psk")
-            # Réseau protégé dont le mot de passe n'est pas lisible ici : pas recréé comme un réseau ouvert
+            # Protected network whose password can't be read here: not recreated as an open network
             if ssid and (psk or not get("802-11-wireless-security.key-mgmt")):
                 out.append({"ssid": ssid, "psk": psk})
     except (OSError, RuntimeError, subprocess.SubprocessError, ValueError):
@@ -65,7 +66,7 @@ def add_json(tar, name, data):
 
 
 def create():
-    """Archive .tar.gz des réglages, en mémoire (moins d'un Mo)"""
+    """Settings .tar.gz archive, in memory (less than a MB)"""
     buf = io.BytesIO()
     home = HOME.lstrip("/")
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
@@ -85,12 +86,12 @@ def file_name():
 
 
 def restore(data):
-    """Remet les fichiers d'une archive (de ce module ou de backup.sh) et ses Wi-Fi ; les réglages d'avant sont gardés
-    dans SAFETY. Renvoie le nombre d'éléments remis ; ValueError si ce n'est pas une sauvegarde."""
+    """Puts back the files of an archive (from this module or from backup.sh) and its Wi-Fi networks; the previous
+    settings are kept in SAFETY. Returns the number of restored items; ValueError if it isn't a backup."""
     try:
         tar = tarfile.open(fileobj=io.BytesIO(data), mode="r:*")
     except (tarfile.TarError, EOFError, OSError):
-        raise ValueError("Ce fichier n'est pas une sauvegarde de Stream Box.")
+        raise ValueError(tr("This file is not a Stream Box backup."))
     with tar:
         members, wifi = [], []
         for m in tar.getmembers():
@@ -100,7 +101,7 @@ def restore(data):
                 except ValueError:
                     pass
                 continue
-            # home/<utilisateur de la box sauvegardée>/… → dossier personnel d'ici
+            # home/<user of the backed-up box>/… → home directory here
             rel = re.match(r"home/[^/]+/(.+)$", m.name)
             rel = rel and rel.group(1)
             if not rel or SKIP.search(rel) or not (m.isfile() or m.isdir()) \
@@ -109,12 +110,12 @@ def restore(data):
             m.name = f"{HOME.lstrip('/')}/{rel}"
             members.append(m)
         if not members:
-            raise ValueError("Ce fichier n'est pas une sauvegarde de Stream Box.")
+            raise ValueError(tr("This file is not a Stream Box backup."))
         os.makedirs(os.path.dirname(SAFETY), exist_ok=True)
         with open(os.open(SAFETY, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as f:
             f.write(create())
         tar.extractall("/", members=members, filter="data")
-        for m in members:   # dossiers : le filtre « data » ne garde pas leurs droits (700 pour ceux des secrets)
+        for m in members:   # directories: the "data" filter doesn't keep their permissions (700 for the secret ones)
             if m.isdir():
                 os.chmod("/" + m.name, m.mode & 0o755)
     open(SETUP_DONE, "a").close()
@@ -123,7 +124,7 @@ def restore(data):
 
 
 def restore_wifi(profiles):
-    """Wi-Fi sauvegardés absents d'ici : profils NetworkManager recréés (connexion automatique à portée)"""
+    """Backed-up Wi-Fi networks missing here: NetworkManager profiles recreated (automatic connection when in range)"""
     if not profiles or not netsetup.wifi_device():
         return
     try:
@@ -142,30 +143,30 @@ def restore_wifi(profiles):
 
 
 def reboot_soon():
-    """Redémarrage quelques secondes après la restauration : la TV et la page ont le temps d'afficher le message"""
+    """Reboot a few seconds after the restore: the TV and the page have time to show the message"""
     threading.Timer(4, lambda: subprocess.run(["systemctl", "reboot"], capture_output=True, timeout=10)).start()
 
 
 def restore_upload(data):
-    """Fichier envoyé par la page web"""
+    """File uploaded from the companion app"""
     if len(data) > MAX_SIZE:
-        raise ValueError("Fichier trop gros pour une sauvegarde.")
+        raise ValueError(tr("File too large for a backup."))
     with lock:
         if state["busy"]:
-            raise ValueError("Une sauvegarde ou une restauration est déjà en cours.")
+            raise ValueError(tr("A backup or a restore is already in progress."))
         restore(data)
-        state.update(busy="reboot", message="Sauvegarde restaurée : la box redémarre…")
+        state.update(busy="reboot", message=tr("Backup restored: the box is restarting…"))
     reboot_soon()
 
 
-# Clés USB
+# USB drives
 
 def flag(v):
     return v in (True, 1, "1")
 
 
 def usb_partitions():
-    """Partitions lisibles des clés et disques USB (pas le disque de la box) : [{path, uuid, name, mountpoint}]"""
+    """Readable partitions of USB drives and disks (not the box's own disk): [{path, uuid, name, mountpoint}]"""
     r = subprocess.run(["lsblk", "-J", "-b", "-o", "NAME,PATH,RM,HOTPLUG,TRAN,TYPE,FSTYPE,UUID,MOUNTPOINT,MOUNTPOINTS,LABEL,SIZE,MODEL"],
                        capture_output=True, text=True, timeout=10)
     try:
@@ -173,21 +174,22 @@ def usb_partitions():
     except ValueError:
         return []
 
-    def mounts(d):   # tous les points de montage (un btrfs en sous-volumes en a plusieurs)
+    def mounts(d):   # all mount points (a btrfs with subvolumes has several)
         return (d.get("mountpoints") or []) + [m for c in d.get("children") or [] for m in mounts(c)]
     out = []
     for d in disks:
         if d.get("type") != "disk" or not (d.get("tran") == "usb" or flag(d.get("rm")) or flag(d.get("hotplug"))):
             continue
         if any(m in ("/", "/boot", "/home", "/var/log") for m in mounts(d)):
-            continue   # box démarrée sur une clé : son propre disque
-        parts = d.get("children") or [d]   # clé formatée sans table de partitions
+            continue   # box booted from a USB drive: its own disk
+        parts = d.get("children") or [d]   # drive formatted without a partition table
         for p in parts:
             if p.get("fstype") not in ("vfat", "exfat", "ntfs", "ntfs3", "ext4", "btrfs", "f2fs"):
                 continue
             size = int(p.get("size") or 0)
-            name = (p.get("label") or (d.get("model") or "").strip() or "Clé USB") + \
-                   (f" ({size / 1e9:.0f} Go)" if size >= 1e9 else f" ({size / 1e6:.0f} Mo)" if size else "")
+            name = (p.get("label") or (d.get("model") or "").strip() or tr("USB drive")) + \
+                   (" (" + tr("{size} GB", size=f"{size / 1e9:.0f}") + ")" if size >= 1e9 else
+                    " (" + tr("{size} MB", size=f"{size / 1e6:.0f}") + ")" if size else "")
             out.append({"path": p["path"], "uuid": p.get("uuid") or "", "name": name, "mountpoint": p.get("mountpoint")})
     return out
 
@@ -195,12 +197,12 @@ def usb_partitions():
 def udisks(*args):
     r = subprocess.run(["udisksctl", *args, "--no-user-interaction"], capture_output=True, text=True, timeout=30)
     if r.returncode != 0:
-        raise OSError((r.stderr or r.stdout).strip() or f"udisksctl : code {r.returncode}")
+        raise OSError((r.stderr or r.stdout).strip() or f"udisksctl: code {r.returncode}")
     return r.stdout
 
 
 class Mounted:
-    """Clé montée le temps d'un bloc with (si elle ne l'était pas déjà), puis démontée"""
+    """Drive mounted for the duration of a with block (if it wasn't already), then unmounted"""
     def __init__(self, part):
         self.part, self.ours = part, False
 
@@ -209,7 +211,7 @@ class Mounted:
             return self.part["mountpoint"]
         m = re.search(r" at (.+?)\.?$", udisks("mount", "-b", self.part["path"]).strip())
         if not m:
-            raise OSError("clé USB non montée")
+            raise OSError(tr("USB drive not mounted"))
         self.ours = True
         return m.group(1)
 
@@ -224,7 +226,7 @@ class Mounted:
 
 
 def backups_on(part):
-    """Sauvegardes à la racine de la clé, les plus récentes d'abord : [{name, date, size}]"""
+    """Backups at the root of the drive, most recent first: [{name, date, size}]"""
     found = []
     with Mounted(part) as root:
         for entry in os.scandir(root):
@@ -237,7 +239,7 @@ def backups_on(part):
 
 
 def status():
-    """Clés branchées et leurs sauvegardes (lues une fois par clé), travail en cours, dernier message"""
+    """Plugged-in drives and their backups (read once per drive), job in progress, last message"""
     parts = usb_partitions()
     keys = {(p["path"], p["uuid"]) for p in parts}
     for k in list(listing):
@@ -251,7 +253,7 @@ def status():
                 listing[k] = backups_on(p)
             except (OSError, subprocess.SubprocessError) as e:
                 listing[k] = None
-                print(f"backup.py : {p['path']} illisible : {e}", flush=True)
+                print(f"backup.py: {p['path']} unreadable: {e}", flush=True)
             finally:
                 lock.release()
         usb.append({"path": p["path"], "name": p["name"], "backups": listing.get(k) or [],
@@ -265,14 +267,14 @@ def status():
 def find_part(path):
     part = next((p for p in usb_partitions() if p["path"] == path), None)
     if not part:
-        raise ValueError("Clé USB introuvable : est-elle toujours branchée ?")
+        raise ValueError(tr("USB drive not found: is it still plugged in?"))
     return part
 
 
 def start(job, busy, message):
     with lock:
         if state["busy"]:
-            raise ValueError("Une sauvegarde ou une restauration est déjà en cours.")
+            raise ValueError(tr("A backup or a restore is already in progress."))
         state.update(busy=busy, message=message)
     threading.Thread(target=job, daemon=True).start()
 
@@ -291,18 +293,18 @@ def save_usb(path):
                         f.flush()
                         os.fsync(f.fileno())
                     os.replace(tmp, os.path.join(root, name))
-                state["message"] = f"Sauvegarde enregistrée sur {part['name']} : tu peux retirer la clé."
+                state["message"] = tr("Backup saved to {drive}: you can remove the drive.", drive=part["name"])
             except (OSError, subprocess.SubprocessError) as e:
-                state["message"] = f"Sauvegarde impossible sur {part['name']} : {e}"
+                state["message"] = tr("Couldn't back up to {drive}: {error}", drive=part["name"], error=e)
             finally:
-                listing.pop((part["path"], part["uuid"]), None)   # relue au prochain état
+                listing.pop((part["path"], part["uuid"]), None)   # read again at the next status
                 state["busy"] = None
-    start(run, "save", f"Sauvegarde sur {part['name']}…")
+    start(run, "save", tr("Backing up to {drive}…", drive=part["name"]))
 
 
 def restore_usb(path, name):
     if not NAME.fullmatch(name or ""):
-        raise ValueError("sauvegarde inconnue")
+        raise ValueError(tr("unknown backup"))
     part = find_part(path)
 
     def run():
@@ -312,11 +314,11 @@ def restore_usb(path, name):
                     with open(os.path.join(root, name), "rb") as f:
                         data = f.read(MAX_SIZE + 1)
                 if len(data) > MAX_SIZE:
-                    raise ValueError("Fichier trop gros pour une sauvegarde.")
+                    raise ValueError(tr("File too large for a backup."))
                 restore(data)
             except (OSError, ValueError, subprocess.SubprocessError) as e:
-                state.update(busy=None, message=f"Restauration impossible : {e}")
+                state.update(busy=None, message=tr("Couldn't restore: {error}", error=e))
                 return
-            state.update(busy="reboot", message="Sauvegarde restaurée : la box redémarre…")
+            state.update(busy="reboot", message=tr("Backup restored: the box is restarting…"))
         reboot_soon()
-    start(run, "restore", "Restauration…")
+    start(run, "restore", tr("Restoring…"))

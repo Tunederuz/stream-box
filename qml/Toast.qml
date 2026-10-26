@@ -1,16 +1,18 @@
-// Notification « X est en live » (appli Qt), en haut à droite : glisse depuis le bord, photo, titre, jeu, et une ligne
-// qui se vide pendant les secondes où OK permet d'y aller (géré par stream-box.lua)
+// "X is live" notification (Qt app), top right: slides in from the edge, photo, title, game, and a line
+// that empties during the seconds when OK lets you go there (handled by stream-box.lua)
 import QtQuick
 import QtQuick.Effects
 import "fmt.js" as Fmt
+import "i18n.js" as I18n
 
 Item {
     id: root
     anchors.fill: parent
+    function tr(s, a) { return I18n.t(i18n.dict, s, a) }
     readonly property var t: { try { return JSON.parse(osd.toast || "{}") } catch (e) { return {} } }
     readonly property bool shown: !!t.name
     property var avatars: ({})
-    property var last: ({})   // dernière notification, gardée pendant la sortie
+    property var last: ({})   // last notification, kept while sliding out
     onTChanged: if (t.name) { last = t; loadAvatars(); countdown.restart() }
 
     function loadAvatars() {
@@ -25,7 +27,7 @@ Item {
 
     Item {
         id: card
-        width: 560; height: 170   // étroite : ne couvre pas l'encart des sondages, centré
+        width: 560; height: 170   // narrow: does not cover the polls box, centered
         y: 44
         x: root.shown ? root.width - width - 44 : root.width + 40
         opacity: root.shown ? 1 : 0
@@ -46,16 +48,16 @@ Item {
             Row {
                 spacing: 10
                 Text { text: "●"; color: "#ff4f5e"; font.pixelSize: 26 }
-                Text { text: (root.last.name || "") + " est en live"; color: "white"; font.pixelSize: 28; font.bold: true }
+                Text { text: root.tr("{name} is live", { name: root.last.name || "" }); color: "white"; font.pixelSize: 28; font.bold: true }
             }
             Text {
                 width: parent.width; elide: Text.ElideRight
                 text: [root.last.title, root.last.game].filter(function (s) { return !!s }).join("  ·  ")
                 color: "#d0c8e0"; font.pixelSize: 21
             }
-            Text { text: "OK pour regarder"; color: "#b67bff"; font.pixelSize: 21; font.bold: true }
+            Text { text: root.tr("OK to watch"); color: "#b67bff"; font.pixelSize: 21; font.bold: true }
         }
-        Rectangle {   // temps restant pour appuyer sur OK
+        Rectangle {   // remaining time to press OK
             id: bar
             x: 26; y: card.height - 12; height: 4; radius: 2
             width: card.width - 52

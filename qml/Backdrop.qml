@@ -1,9 +1,9 @@
-// Fond animé de l'écran d'accueil et du menu sans vidéo derrière : un fond (rien, taches floues, nappes de couleur fluides,
-// aurore boréale) et un calque par-dessus (fils de soie, étoiles), au choix dans les Réglages
-// (/api/state backdrop). Shaders compilés dans shaders/ (voir build.sh), calculés à
-// mi-résolution (layer.textureSize) puis agrandis : le flou ne se voit pas, la puce graphique travaille quatre fois
-// moins. Les calques ajoutent leur lumière au fond (alpha 0 : mélange additif). Fondu enchaîné à chaque changement.
-// Rien de fixe : pas de marquage de la TV. Coordonnées en 1920x1080.
+// Animated background of the home screen and of the menu with no video behind: a base (nothing, blurry blobs, fluid
+// color sheets, northern lights) and a layer on top (silk threads, stars), chosen in Settings
+// (/api/state backdrop). Shaders compiled in shaders/ (see build.sh), computed at
+// half resolution (layer.textureSize) then scaled up: the blur hides it, the GPU works four times
+// less. Layers add their light to the base (alpha 0: additive blending). Crossfade on each change.
+// Nothing still: no burn-in on the TV. Coordinates in 1920x1080.
 import QtQuick
 import QtQuick.Effects
 
@@ -11,13 +11,13 @@ Item {
     id: root
     property string base: "aurora"
     property string overlay: "none"
-    property real overlayOpacity: 1     // menu : calque adouci, pour garder les cartes lisibles
+    property real overlayOpacity: 1     // menu: softened layer, to keep the cards readable
     property color c1: "#9146ff"
     property color c2: "#2b4bdc"
     property color c3: "#b03a7a"
     property color bg: "#0b0710"
     property bool running: visible
-    // Combinaison affichée : suit base / overlay après un fondu au noir
+    // Combination shown: follows base / overlay after a fade to black
     property string shownBase: base
     property string shownOverlay: overlay
     readonly property string wanted: base + "/" + overlay
@@ -47,7 +47,7 @@ Item {
         NumberAnimation { target: layers; property: "opacity"; to: 1; duration: 900; easing.type: Easing.InOutQuad }
     }
 
-    // Taches de couleur très floues qui dérivent lentement (ombres rectangulaires arrondies en disque)
+    // Very blurry color blobs drifting slowly (rectangular shadows rounded into discs)
     Component {
         id: blobsBg
         Item {
@@ -78,7 +78,7 @@ Item {
 
     Component { id: baseShader; ShaderLayer { shader: root.shownBase } }
     Component { id: overlayShader; ShaderLayer { shader: root.shownOverlay } }
-    // Shader plein écran (fond ou calque), rendu à mi-résolution puis agrandi en douceur
+    // Full-screen shader (base or layer), rendered at half resolution then smoothly scaled up
     component ShaderLayer: Item {
         property string shader
         layer.enabled: true

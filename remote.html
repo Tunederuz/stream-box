@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -17,7 +17,7 @@
     --bg: #0a0812; --surface: rgba(255, 255, 255, .07); --surface-2: rgba(255, 255, 255, .08);
     --surface-3: rgba(255, 255, 255, .16); --line: rgba(255, 255, 255, .12);
     --text: #f6f4fb; --muted: #c2bdd3; --faint: #8a85a0;
-    /* Verre : fond translucide flouté, reflet en haut, bord clair, ombre portée */
+    /* Glass: blurred translucent background, highlight at the top, light edge, drop shadow */
     --glass: linear-gradient(160deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, .035) 60%);
     --glass-edge: rgba(255, 255, 255, .12);
     --glass-blur: blur(22px) saturate(115%);
@@ -33,8 +33,8 @@
     font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     padding: max(14px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom));
   }
-  /* Taches de couleur qui dérivent lentement derrière le verre : sans elles, il n'y a rien à flouter. Le fond de la
-     page est sur html : celui de body passerait par-dessus les pseudo-éléments en z-index négatif. */
+  /* Color blobs drifting slowly behind the glass: without them, there is nothing to blur. The page background is
+     on html: the body one would be drawn over the pseudo-elements with a negative z-index. */
   body::before, body::after {
     content: ""; position: fixed; inset: -20%; z-index: -1; pointer-events: none;
   }
@@ -58,7 +58,7 @@
   main { max-width: 520px; margin: 0 auto; display: grid; gap: 14px; }
   svg { flex: 0 0 auto; }
 
-  /* En-tête : logo, nom, état de la TV, bouton d'extinction */
+  /* Header: logo, name, TV state, power-off button */
   .top { display: flex; align-items: center; gap: 12px; padding: 4px 2px; }
   .logo { width: 42px; height: 42px; border-radius: 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); }
   .top h1 { font-size: 19px; margin: 0; letter-spacing: -.01em; }
@@ -73,8 +73,8 @@
   }
   .power:active { color: var(--error); }
 
-  /* Onglets : contrôle segmenté */
-  /* Onglets collés en haut pendant le défilement, en verre comme les cartes */
+  /* Tabs: segmented control */
+  /* Tabs stuck to the top while scrolling, in glass like the cards */
   .tabs { display: flex; gap: 4px; padding: 4px; border-radius: 18px; position: sticky; z-index: 5;
           top: max(8px, env(safe-area-inset-top)); }
   .tabs button { flex: 1; min-height: 42px; background: transparent; border: 0; color: var(--muted); font-weight: 600;
@@ -113,7 +113,7 @@
   .on > .icon-alt { display: inline; }
 
 
-  /* Carte « Sur la TV » */
+  /* "On the TV" card */
   .hero { padding: 0; overflow: hidden; }
   .hero-media { position: relative; aspect-ratio: 16 / 9; background:
       radial-gradient(80% 90% at 30% 20%, rgba(145, 70, 255, .45), transparent 70%),
@@ -143,7 +143,7 @@
   .hero-body[hidden] { display: none; }
   #now-avatar.home { background: var(--grad); color: #fff; font-size: 24px; }
 
-  /* Avatars des streamers */
+  /* Streamer avatars */
   .avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: var(--surface-3);
             flex: 0 0 auto; display: grid; place-items: center; font-weight: 700; color: var(--muted); }
   .avatar.live { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--live); }
@@ -164,14 +164,14 @@
   .status { color: var(--muted); font-size: 14px; min-height: 20px; }
   .status:empty { min-height: 0; }
   .status.error { color: var(--error); }
-  /* Message général (erreurs, extinction) : bulle en bas de l'écran */
+  /* General message (errors, power-off): bubble at the bottom of the screen */
   #status { position: fixed; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); z-index: 10;
             max-width: 488px; margin: 0 auto; padding: 12px 16px; border-radius: 14px; text-align: center;
             background: rgba(30, 22, 48, .72); color: var(--text); }
   #status.error { color: #ffd0d0; border-color: rgba(255, 107, 107, .4); }
   #status:empty { display: none; }
 
-  /* Blocs repliables */
+  /* Collapsible blocks */
   details > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
                       font-weight: 600; color: var(--text); min-height: 28px; }
   details > summary::-webkit-details-marker { display: none; }
@@ -206,7 +206,7 @@
   .manage-row button:active { color: var(--error); }
   #manage-list { margin-top: 10px; }
 
-  /* Télécommande virtuelle */
+  /* Virtual remote */
   .dpad { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 8px;
           width: min(100%, 300px); aspect-ratio: 1; margin: 4px auto 14px; touch-action: manipulation; }
   .dpad button { font-size: 22px; border-radius: 18px; min-height: 0; padding: 0; user-select: none; -webkit-user-select: none; }
@@ -225,7 +225,7 @@
   #media-status:empty { display: none; }
 
   .setting { display: block; margin: 16px 0 6px; font-size: 14px; color: var(--muted); }
-  /* Sondage et prédiction de la chaîne regardée */
+  /* Poll and prediction of the watched channel */
   .vote-choice { width: 100%; position: relative; overflow: hidden; justify-content: space-between; margin-top: 8px;
                  padding: 10px 16px; }
   .vote-choice .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); opacity: .28; }
@@ -238,7 +238,7 @@
   .stakes[hidden] { display: none; }
   .stakes button { flex: 1; min-height: 40px; font-size: 14px; }
   .stakes input { flex: 1.4; min-height: 40px; }
-  /* État de la box */
+  /* Box status */
   .health { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
   .tile { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }
   .tile.wide { grid-column: span 2; }
@@ -256,74 +256,74 @@
     <img class="logo" src="/icon-192.png" alt="">
     <div>
       <h1>Stream Box</h1>
-      <div class="tv-state"><span class="dot" id="dot"></span><span id="tv-state">Connexion…</span></div>
+      <div class="tv-state"><span class="dot" id="dot"></span><span id="tv-state">Connecting…</span></div>
     </div>
-    <button class="power ghost" id="poweroff" aria-label="Éteindre la box" title="Éteindre la box">
+    <button class="power ghost" id="poweroff" aria-label="Turn off the box" title="Turn off the box">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
            stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></svg>
     </button>
   </header>
 
-  <!-- Première configuration (box neuve, /api/state first_run) : à la place des onglets ; la TV attend sur l'écran
-       d'accueil (QR code en grand) jusqu'à « Terminer » ou une restauration -->
+  <!-- First setup (new box, /api/state first_run): replaces the tabs; the TV waits on the home screen (large QR
+       code) until "Finish" or a restore -->
   <div id="setup" hidden>
   <section>
-    <h2>Bienvenue sur ta Stream Box</h2>
-    <p style="margin-bottom: 0">Quelques réglages ici, puis la TV passe au menu. Tout se change ensuite dans les
-      Réglages.</p>
+    <h2>Welcome to your Stream Box</h2>
+    <p style="margin-bottom: 0">A few settings here, then the TV switches to the menu. Everything can be changed later in
+      Settings.</p>
   </section>
   <section>
-    <h2>Déjà une sauvegarde ?</h2>
-    <p>Elle remet tout : comptes, favoris, historique, réglages. La box redémarre ensuite, prête.</p>
-    <button id="setup-restore" style="width: 100%">Restaurer une sauvegarde…</button>
+    <h2>Already have a backup?</h2>
+    <p>It restores everything: accounts, favorites, history, settings. The box then restarts, ready to go.</p>
+    <button id="setup-restore" style="width: 100%">Restore a backup…</button>
     <div class="status" id="setup-restore-status"></div>
   </section>
   <div id="setup-slot"></div>
   <section>
-    <h2>C'est tout</h2>
-    <p>Comptes Twitch, YouTube et Jellyfin, Home Assistant, son, chat : dans les Réglages, quand tu veux.</p>
-    <button id="setup-done" class="current" style="width: 100%">Terminer</button>
+    <h2>That's it</h2>
+    <p>Twitch, YouTube and Jellyfin accounts, Home Assistant, sound, chat: in Settings, whenever you like.</p>
+    <button id="setup-done" class="current" style="width: 100%">Finish</button>
   </section>
   </div>
 
   <nav class="tabs" role="tablist">
-    <button role="tab" data-tab="remote">Télécommande</button>
-    <button role="tab" data-tab="settings">Réglages</button>
+    <button role="tab" data-tab="remote">Remote</button>
+    <button role="tab" data-tab="settings">Settings</button>
   </nav>
 
   <div class="tab" id="tab-remote">
 
-  <!-- Clavier du téléphone pour le menu de la TV : affiché tant que le clavier de recherche est ouvert sur la TV -->
+  <!-- Phone keyboard for the TV menu: shown while the search keyboard is open on the TV -->
   <section id="tv-keyboard" hidden>
-    <h2 id="tv-keyboard-title">Recherche sur la TV</h2>
+    <h2 id="tv-keyboard-title">Search on the TV</h2>
     <div class="field">
-      <input id="tv-keyboard-text" type="search" autocomplete="off" enterkeyhint="search" placeholder="Tape ici, ça s'écrit sur la TV">
-      <button id="tv-keyboard-go" class="current">Rechercher</button>
+      <input id="tv-keyboard-text" type="search" autocomplete="off" enterkeyhint="search" placeholder="Type here, it shows up on the TV">
+      <button id="tv-keyboard-go" class="current">Search</button>
     </div>
   </section>
 
-  <!-- Télécommande virtuelle : mêmes touches que la télécommande Bluetooth (flèches répétées si on reste appuyé) -->
+  <!-- Virtual remote: same keys as the Bluetooth remote (arrows repeat while held down) -->
   <section>
     <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="5"/>
-      <circle cx="12" cy="9" r="2"/></svg>Télécommande</h2>
+      <circle cx="12" cy="9" r="2"/></svg>Remote</h2>
     <div class="dpad">
-      <button data-key="up" class="up" aria-label="Haut">▲</button>
-      <button data-key="left" class="left" aria-label="Gauche">◀</button>
+      <button data-key="up" class="up" aria-label="Up">▲</button>
+      <button data-key="left" class="left" aria-label="Left">◀</button>
       <button data-key="ok" class="ok" aria-label="OK">OK</button>
-      <button data-key="right" class="right" aria-label="Droite">▶</button>
-      <button data-key="down" class="down" aria-label="Bas">▼</button>
+      <button data-key="right" class="right" aria-label="Right">▶</button>
+      <button data-key="down" class="down" aria-label="Down">▼</button>
     </div>
     <div class="keys">
       <button data-key="menu" aria-label="Options">≡<small>Options</small></button>
-      <button data-key="home" aria-label="Menu de la TV">☰<small>Menu</small></button>
-      <button data-key="back" aria-label="Retour">↩<small>Retour</small></button>
-      <button data-key="playpause" aria-label="Lecture ou pause">⏯<small>Lecture</small></button>
+      <button data-key="home" aria-label="TV menu">☰<small>Menu</small></button>
+      <button data-key="back" aria-label="Back">↩<small>Back</small></button>
+      <button data-key="playpause" aria-label="Play or pause">⏯<small>Play/Pause</small></button>
     </div>
     <button data-action="home" id="home" style="width: 100%; margin-top: 8px">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
-      Écran d'accueil</button>
+      Home screen</button>
   </section>
 
   <section class="hero" id="now" hidden>
@@ -347,15 +347,15 @@
   </section>
 
   <section id="vote-section" hidden>
-    <h2 id="vote-kind">Sondage</h2>
+    <h2 id="vote-kind">Poll</h2>
     <p class="account-name" id="vote-title" style="font-size: 17px"></p>
     <div id="vote-choices"></div>
     <div class="stakes" id="vote-stakes" hidden>
       <button data-stake="10">10</button>
       <button data-stake="100">100</button>
       <button data-stake="1000">1000</button>
-      <button data-stake="all">Tout</button>
-      <input id="vote-points" type="number" inputmode="numeric" min="1" placeholder="points" aria-label="Points à parier">
+      <button data-stake="all">All</button>
+      <input id="vote-points" type="number" inputmode="numeric" min="1" placeholder="points" aria-label="Points to bet">
     </div>
     <div class="vote-meta"><span id="vote-left"></span><span id="vote-balance"></span></div>
     <div class="status" id="vote-status"></div>
@@ -364,25 +364,25 @@
   <section class="hero" id="media-section" hidden>
     <div class="hero-body">
       <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <path d="M8 5v14l11-7z"/></svg>Vidéo en cours</h2>
+        <path d="M8 5v14l11-7z"/></svg>Video playing</h2>
       <p class="account-name" id="media-title" style="font-size: 17px"></p>
       <button data-action="twitch" style="width: 100%; margin-top: 8px">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/>
-          <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Retour au stream</button>
+          <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Back to the stream</button>
     </div>
   </section>
 
   <section>
     <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/>
-      <path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>Son</h2>
+      <path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>Sound</h2>
     <div class="row" style="justify-content: space-between">
-      <button class="round" data-action="volume" data-delta="-5" aria-label="Baisser le volume">
+      <button class="round" data-action="volume" data-delta="-5" aria-label="Volume down">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
              stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
       <div class="volume"><b id="volume">–</b><span class="meter"><i id="volume-meter"></i></span></div>
-      <button class="round" data-action="volume" data-delta="5" aria-label="Monter le volume">
+      <button class="round" data-action="volume" data-delta="5" aria-label="Volume up">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
              stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
     </div>
@@ -394,7 +394,7 @@
         <svg class="icon-alt" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/>
           <path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
-        <span>Couper le son</span></button>
+        <span>Mute</span></button>
     </div>
   </section>
 
@@ -402,10 +402,10 @@
     <details id="preview">
       <summary><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
-          <circle cx="12" cy="12" r="3"/></svg>Aperçu de la TV</summary>
+          <circle cx="12" cy="12" r="3"/></svg>TV preview</summary>
       <div id="preview-box">
-        <img id="preview-img" alt="Aperçu de l'écran de la TV" hidden>
-        <div id="preview-note">Chargement…</div>
+        <img id="preview-img" alt="Preview of the TV screen" hidden>
+        <div id="preview-note">Loading…</div>
       </div>
     </details>
   </section>
@@ -415,12 +415,12 @@
     <details id="send-link">
       <summary><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/>
-          <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>Lire un lien sur la TV</summary>
-      <p>YouTube, clip Twitch… Sur Android, le plus simple : <b>Partager → Stream Box</b>
-        depuis l'appli. Pour Jellyfin : <b>Lire sur → Stream Box</b>.</p>
+          <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>Play a link on the TV</summary>
+      <p>YouTube, Twitch clip… On Android, the easiest way: <b>Share → Stream Box</b>
+        from the app. For Jellyfin: <b>Play on → Stream Box</b>.</p>
       <div class="field">
-        <input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://…" aria-label="Lien de la vidéo">
-        <button id="play" class="current">Lire</button>
+        <input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://…" aria-label="Video link">
+        <button id="play" class="current">Watch</button>
       </div>
     </details>
     <div class="status" id="media-status"></div>
@@ -430,195 +430,201 @@
 
   <div class="tab" id="tab-settings" hidden>
 
-  <!-- Wi-Fi : mode configuration (point d'accès de la box, netsetup.py) ou changement de réseau -->
+  <!-- Interface language (TV and companion app); first section of the first setup -->
+  <section id="language-section">
+    <h2>Language</h2>
+    <select id="language" aria-label="Language"></select>
+  </section>
+
+  <!-- Wi-Fi: setup mode (the box's access point, netsetup.py) or network change -->
   <section id="wifi" hidden>
     <h2>Wi-Fi</h2>
     <p id="wifi-state">…</p>
-    <label class="setting" for="wifi-ssid" style="margin-top: 0">Réseau</label>
+    <label class="setting" for="wifi-ssid" style="margin-top: 0">Network</label>
     <select id="wifi-ssid"></select>
-    <label class="setting" for="wifi-password">Mot de passe</label>
+    <label class="setting" for="wifi-password">Password</label>
     <div class="field">
-      <input id="wifi-password" type="password" autocomplete="off" placeholder="Mot de passe du Wi-Fi">
-      <button id="wifi-connect" class="current">Connecter</button>
+      <input id="wifi-password" type="password" autocomplete="off" placeholder="Wi-Fi password">
+      <button id="wifi-connect" class="current">Connect</button>
     </div>
     <div class="status" id="wifi-status"></div>
   </section>
 
   <section id="streamers-section">
-    <h2>Liste des streamers</h2>
-    <p>L'ordre compte : c'est celui du menu de la TV, du zapping (haut / bas) et de la bascule automatique vers
-      un streamer en live.</p>
+    <h2>Streamer list</h2>
+    <p>Order matters: it is the order of the TV menu, of channel zapping (up / down) and of the automatic switch to
+      a streamer who goes live.</p>
     <div class="field">
-      <input id="new-streamer" autocomplete="off" autocapitalize="none" placeholder="Pseudo ou lien Twitch"
-             aria-label="Streamer à ajouter">
-      <button id="add-streamer" class="current">Ajouter</button>
+      <input id="new-streamer" autocomplete="off" autocapitalize="none" placeholder="Twitch username or link"
+             aria-label="Streamer to add">
+      <button id="add-streamer" class="current">Add</button>
     </div>
     <div class="status" id="manage-status"></div>
     <div id="manage-list"></div>
   </section>
 
   <section>
-    <h2>Favoris YouTube</h2>
-    <p>Leurs dernières vidéos s'affichent dans le bloc YouTube de la télécommande et dans le menu de la TV.</p>
+    <h2>YouTube favorites</h2>
+    <p>Their latest videos show up in the YouTube block of the companion app and in the TV menu.</p>
     <div class="field">
-      <input id="new-yt" autocomplete="off" autocapitalize="none" placeholder="@nom de la chaîne ou lien"
-             aria-label="Chaîne YouTube à ajouter">
-      <button id="add-yt" class="current">Ajouter</button>
+      <input id="new-yt" autocomplete="off" autocapitalize="none" placeholder="@channel name or link"
+             aria-label="YouTube channel to add">
+      <button id="add-yt" class="current">Add</button>
     </div>
     <div class="status" id="yt-manage-status"></div>
     <div id="yt-manage-list"></div>
   </section>
 
   <section>
-    <h2>Compte YouTube</h2>
-    <!-- Abonnements du compte : appli Google à soi, autorisation par code (lecture seule) -->
+    <h2>YouTube account</h2>
+    <!-- Account subscriptions: your own Google app, authorization by code (read-only) -->
     <div id="ytacc-setup" hidden>
-      <p>Pour la rangée <b>Abonnements</b> du menu de la TV, la box a besoin de ta propre appli Google (gratuit, une fois).</p>
+      <p>For the TV menu's <b>Subscriptions</b> row, the box needs your own Google app (free, one time).</p>
       <details>
-        <summary>Créer l'appli</summary>
+        <summary>Create the app</summary>
         <ol>
-          <li>Sur <code>console.cloud.google.com</code>, crée un projet, puis active <b>YouTube Data API v3</b>
-            (API et services → Bibliothèque).</li>
-          <li><b>Google Auth Platform</b> : audience <b>Externe</b>, niveau d'accès <code>youtube.readonly</code>, puis
-            <b>Publier l'application</b> (sinon Google déconnecte la box tous les 7 jours).</li>
-          <li><b>Clients → Créer un client</b>, type <b>TV et appareils à saisie limitée</b>.</li>
-          <li>Colle ici l'<b>ID client</b> et le <b>code secret</b>.</li>
+          <li>On <code>console.cloud.google.com</code>, create a project, then enable <b>YouTube Data API v3</b>
+            (APIs &amp; Services → Library).</li>
+          <li><b>Google Auth Platform</b>: audience <b>External</b>, data access scope <code>youtube.readonly</code>, then
+            <b>Publish app</b> (otherwise Google disconnects the box every 7 days).</li>
+          <li><b>Clients → Create client</b>, type <b>TVs and Limited Input devices</b>.</li>
+          <li>Paste the <b>Client ID</b> and the <b>Client secret</b> into the fields below.</li>
         </ol>
       </details>
       <div class="stack">
-        <input id="ytapp-id" autocomplete="off" autocapitalize="none" placeholder="ID client (….apps.googleusercontent.com)"
-               aria-label="ID client Google">
-        <input id="ytapp-secret" type="password" autocomplete="off" placeholder="Code secret du client"
-               aria-label="Code secret du client Google">
-        <button id="ytapp-save" class="current">Enregistrer</button>
+        <input id="ytapp-id" autocomplete="off" autocapitalize="none" placeholder="Client ID (….apps.googleusercontent.com)"
+               aria-label="Google client ID">
+        <input id="ytapp-secret" type="password" autocomplete="off" placeholder="Client secret code"
+               aria-label="Google client secret">
+        <button id="ytapp-save" class="current">Save</button>
       </div>
     </div>
     <div id="ytacc-auth" hidden>
-      <p>Appli enregistrée. Autorise la box à lire tes abonnements (lecture seule).</p>
-      <button id="ytacc-login" class="current" style="width: 100%">Autoriser la box</button>
+      <p>App saved. Allow the box to read your subscriptions (read-only).</p>
+      <button id="ytacc-login" class="current" style="width: 100%">Authorize the box</button>
       <div id="ytacc-code" hidden style="margin-top: 12px; text-align: center">
-        <p style="margin-bottom: 6px">Sur <b>google.com/device</b>, tape ce code :</p>
+        <p style="margin-bottom: 6px">On <b>google.com/device</b>, enter this code:</p>
         <div id="ytacc-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
-        <a id="ytacc-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Ouvrir la page d'activation</a>
-        <p>« Appli non vérifiée » : <b>Paramètres avancés</b>, puis <b>Accéder à …</b></p>
+        <a id="ytacc-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the activation page</a>
+        <p>"Google hasn't verified this app": <b>Advanced</b>, then <b>Go to …</b></p>
       </div>
     </div>
     <div id="ytacc-ok" hidden>
       <p id="ytacc-summary"></p>
       <div class="row">
-        <button id="ytacc-sync">Relire mes abonnements</button>
-        <button id="ytacc-logout">Déconnecter</button>
-        <button id="ytapp-change">Changer d'appli</button>
+        <button id="ytacc-sync">Reload my subscriptions</button>
+        <button id="ytacc-logout">Disconnect</button>
+        <button id="ytapp-change">Change app</button>
       </div>
     </div>
     <div class="status" id="ytacc-status"></div>
   </section>
 
   <section>
-    <h2>Sortie son</h2>
-    <select id="audio-out" aria-label="Sortie son"><option>Chargement…</option></select>
-    <p id="audio-hint">Automatique : un casque ou une enceinte USB ou Bluetooth passe en premier, sinon la TV branchée en
+    <h2>Sound output</h2>
+    <select id="audio-out" aria-label="Sound output"><option>Loading…</option></select>
+    <p id="audio-hint">Automatic: USB or Bluetooth headphones or speakers come first, otherwise the TV connected over
       HDMI / DisplayPort.</p>
   </section>
 
   <section>
-    <h2>Adresse de la télécommande</h2>
-    <label class="setting" for="remote-url" style="margin-top: 0">Adresse montrée en QR code sur la TV</label>
+    <h2>Companion app address</h2>
+    <label class="setting" for="remote-url" style="margin-top: 0">Address shown as a QR code on the TV</label>
     <div class="field">
-      <input id="remote-url" type="url" autocomplete="off" placeholder="Réseau local (par défaut)">
-      <button id="remote-url-save">Enregistrer</button>
+      <input id="remote-url" type="url" autocomplete="off" placeholder="Local network (default)">
+      <button id="remote-url-save">Save</button>
     </div>
-    <p>Vide : adresse de la box sur le réseau local. Nom de domaine (https://…, derrière un reverse proxy)
-      : nécessaire pour installer la télécommande comme une appli sur le téléphone.</p>
+    <p>Empty: the box's address on the local network. Domain name (https://…, behind a reverse proxy):
+      required to install the companion app as an app on the phone.</p>
   </section>
 
   <section>
-    <h2>Système</h2>
-    <div class="setting" style="margin-top: 0">État de la box</div>
+    <h2>System</h2>
+    <div class="setting" style="margin-top: 0">Box status</div>
     <div class="health" id="health"></div>
-    <button id="update-now" style="width: 100%; margin-top: 10px">Mettre à jour maintenant</button>
-    <button id="reboot" style="width: 100%; margin-top: 8px">Redémarrer la box</button>
+    <button id="update-now" style="width: 100%; margin-top: 10px">Update now</button>
+    <button id="reboot" style="width: 100%; margin-top: 8px">Restart the box</button>
     <details style="margin-top: 10px">
-      <summary>Journal de la dernière mise à jour</summary>
+      <summary>Last update log</summary>
       <pre id="update-log"></pre>
     </details>
   </section>
 
   <section>
-    <h2>Sauvegarde</h2>
-    <p style="margin-top: 0">Réglages, historique, favoris, comptes (Twitch, YouTube, Jellyfin, MQTT) et Wi-Fi, pour
-      les remettre après une réinstallation. Le fichier contient tes connexions : garde-le pour toi. Aussi dans le menu
-      Système de la TV, sur une clé USB.</p>
-    <button id="backup-download" style="width: 100%">Télécharger la sauvegarde</button>
-    <button id="backup-restore" style="width: 100%; margin-top: 8px">Restaurer depuis un fichier…</button>
+    <h2>Backup</h2>
+    <p style="margin-top: 0">Settings, history, favorites, accounts (Twitch, YouTube, Jellyfin, MQTT) and Wi-Fi, to
+      restore them after a reinstall. The file contains your logins: keep it to yourself. Also in the TV's System
+      menu, on a USB stick.</p>
+    <button id="backup-download" style="width: 100%">Download the backup</button>
+    <button id="backup-restore" style="width: 100%; margin-top: 8px">Restore from a file…</button>
     <input id="backup-file" type="file" accept=".gz,.tgz,application/gzip" hidden>
     <div class="status" id="backup-status"></div>
   </section>
 
   <section>
-    <h2>Compte Twitch</h2>
+    <h2>Twitch account</h2>
     <div id="account-on" hidden>
-      <p>Connecté : <span class="account-name" id="account-name"></span>. Pas de pub sur les chaînes où tu es abonné.</p>
-      <button id="logout" style="width: 100%">Se déconnecter</button>
+      <p>Connected: <span class="account-name" id="account-name"></span>. No ads on the channels you're subscribed to.</p>
+      <button id="logout" style="width: 100%">Log out</button>
     </div>
     <div id="account-off" hidden>
-      <p id="account-intro">Connecte ton compte pour profiter de tes abonnements sans pub.</p>
+      <p id="account-intro">Connect your account to enjoy your subscriptions without ads.</p>
       <details>
-        <summary>Où trouver le jeton ?</summary>
+        <summary>Where to find the token?</summary>
         <ol>
-          <li>Sur un ordinateur, ouvre <code>twitch.tv</code> en étant connecté.</li>
-          <li>Appuie sur <code>F12</code>, onglet <b>Application</b> (Chrome, Edge) ou <b>Stockage</b> (Firefox).</li>
-          <li>Cookies → <code>https://www.twitch.tv</code> → ligne <code>auth-token</code>.</li>
-          <li>Copie sa valeur (30 lettres et chiffres) et colle-la ici.</li>
+          <li>On a computer, open <code>twitch.tv</code> while logged in.</li>
+          <li>Press <code>F12</code>, then the <b>Application</b> tab (Chrome, Edge) or the <b>Storage</b> tab (Firefox).</li>
+          <li>Cookies → <code>https://www.twitch.tv</code> → row <code>auth-token</code>.</li>
+          <li>Copy its value (30 letters and digits) and paste it here.</li>
         </ol>
-        <p style="margin-top: 8px">Ce jeton donne accès à ton compte : il reste sur la box et n'est jamais réaffiché.
-          Il cesse de marcher si tu te déconnectes de Twitch sur ce navigateur.</p>
+        <p style="margin-top: 8px">This token gives access to your account: it stays on the box and is never shown again.
+          It stops working if you log out of Twitch in that browser.</p>
       </details>
       <div class="field">
-        <input id="token" type="password" autocomplete="off" placeholder="Jeton auth-token" aria-label="Jeton Twitch">
-        <button id="login" class="current">Connecter</button>
+        <input id="token" type="password" autocomplete="off" placeholder="auth-token value" aria-label="Twitch token">
+        <button id="login" class="current">Connect</button>
       </div>
     </div>
     <div class="status" id="account-status"></div>
   </section>
 
   <section>
-    <h2>Chaînes suivies</h2>
-    <!-- Twitch ne donne pas cette liste au jeton du site : il faut une appli Twitch à soi et une autorisation par code -->
+    <h2>Followed channels</h2>
+    <!-- Twitch does not give this list to the website's token: it takes your own Twitch app and an authorization by code -->
     <div id="follows-setup" hidden>
-      <p>Pour l'onglet <b>Suivis</b> du menu de la TV, la box a besoin de ta propre appli Twitch (gratuit, une fois).</p>
+      <p>For the <b>Following</b> tab of the TV menu, the box needs your own Twitch app (free, one time).</p>
       <details>
-        <summary>Créer l'appli</summary>
+        <summary>Create the app</summary>
         <ol>
-          <li>Ouvre <code>dev.twitch.tv/console/apps</code> → <b>Register Your Application</b> (la double
-            authentification doit être active sur ton compte).</li>
-          <li>Nom au choix (unique sur Twitch), OAuth Redirect URL <code>http://localhost</code>, catégorie
+          <li>Go to <code>dev.twitch.tv/console/apps</code> → <b>Register Your Application</b> (two-factor
+            authentication must be enabled on your account).</li>
+          <li>Any name (unique on Twitch), OAuth Redirect URL <code>http://localhost</code>, category
             <b>Other</b>.</li>
-          <li>Type de client <b>Public</b> : seul le Client ID est utile. En <b>Confidentiel</b>, colle aussi le secret.</li>
-          <li>Copie le <b>Client ID</b> ici.</li>
+          <li>Client type <b>Public</b>: only the Client ID is needed. With <b>Confidential</b>, also paste the secret.</li>
+          <li>Copy the <b>Client ID</b> here.</li>
         </ol>
       </details>
       <div class="stack">
         <input id="app-id" autocomplete="off" autocapitalize="none" placeholder="Client ID" aria-label="Client ID">
-        <input id="app-secret" type="password" autocomplete="off" placeholder="Secret (appli confidentielle seulement)"
-               aria-label="Secret de l'appli">
-        <button id="app-save" class="current">Enregistrer</button>
+        <input id="app-secret" type="password" autocomplete="off" placeholder="Secret (confidential app only)"
+               aria-label="App secret">
+        <button id="app-save" class="current">Save</button>
       </div>
     </div>
     <div id="follows-auth" hidden>
-      <p>Appli enregistrée. Autorise la box à lire tes chaînes suivies (lecture seule).</p>
-      <button id="follows-login" class="current" style="width: 100%">Autoriser la box</button>
+      <p>App saved. Allow the box to read your followed channels (read-only).</p>
+      <button id="follows-login" class="current" style="width: 100%">Authorize the box</button>
       <div id="follows-code" hidden style="margin-top: 12px; text-align: center">
-        <p style="margin-bottom: 6px">Sur <b>twitch.tv/activate</b>, tape ce code :</p>
+        <p style="margin-bottom: 6px">On <b>twitch.tv/activate</b>, enter this code:</p>
         <div id="follows-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
-        <a id="follows-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Ouvrir la page d'activation</a>
+        <a id="follows-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the activation page</a>
       </div>
     </div>
     <div id="follows-ok" hidden>
       <p id="follows-summary"></p>
       <div class="row">
-        <button id="follows-logout">Retirer l'autorisation</button>
-        <button id="app-change">Changer d'appli</button>
+        <button id="follows-logout">Remove authorization</button>
+        <button id="app-change">Change app</button>
       </div>
     </div>
     <div class="status" id="follows-status"></div>
@@ -631,11 +637,55 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+
+// Interface language (see i18n.py): texts are written in English; I18N holds the translations of the current language
+// (/locales/<lang>.json). Texts built by the script go through tr(); the page's own static texts (and their
+// placeholder / title / aria-label) are recorded once, before the script changes anything, and translated again when
+// the language changes, unless the script has changed them since.
+let I18N = {}, LANG = "en";
+function tr(s, a) {
+  let out = I18N[s] || s;
+  if (a) for (const k in a) out = out.split(`{${k}}`).join(a[k]);
+  return out;
+}
+const I18N_STATIC = [];   // [node or element, attribute or null, English source, text shown]
+(function recordStaticTexts() {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n; (n = walker.nextNode());) {
+    if (/^(SCRIPT|STYLE)$/.test(n.parentElement?.tagName || "") || !n.nodeValue.trim()) continue;
+    I18N_STATIC.push([n, null, n.nodeValue, n.nodeValue]);
+  }
+  for (const el of document.body.querySelectorAll("[placeholder], [title], [aria-label]"))
+    for (const at of ["placeholder", "title", "aria-label"])
+      if (el.hasAttribute(at)) I18N_STATIC.push([el, at, el.getAttribute(at), el.getAttribute(at)]);
+})();
+function translateStaticTexts() {
+  for (const entry of I18N_STATIC) {
+    const [target, at, source, shown] = entry;
+    const current = at ? target.getAttribute(at) : target.nodeValue;
+    if (current !== shown) continue;   // changed by the script since: its own code translates it
+    const key = source.trim(), text = source.replace(key, tr(key));
+    if (at) target.setAttribute(at, text); else target.nodeValue = text;
+    entry[3] = text;
+  }
+}
+async function setLanguage(lang) {
+  if (lang === LANG) return;
+  try {
+    I18N = lang === "en" ? {} : await (await fetch(`/locales/${lang}.json`)).json();
+  } catch (e) { return; }
+  LANG = lang;
+  document.documentElement.lang = lang;
+  try { localStorage.setItem("lang", lang); } catch (e) { /* storage unavailable */ }
+  translateStaticTexts();
+  if (typeof refresh === "function") refresh();   // texts built by the script, in the new language
+}
+try { const saved = localStorage.getItem("lang"); if (saved) setLanguage(saved); } catch (e) { /* idem */ }
 let refreshTimer;
-let previewTimer = null, previewUrl = null;   // aperçu de la TV (voir previewTick)
+let previewTimer = null, previewUrl = null;   // TV preview (see previewTick)
 let lastState = null;
 
-// Photo de profil du streamer, ou son initiale ; anneau rouge en live, grisée hors ligne
+// Streamer's profile picture, or their initial; red ring when live, greyed out when offline
 function avatar(s, name, extra = "") {
   const url = s.avatars?.[name];
   const el = document.createElement(url ? "img" : "span");
@@ -645,7 +695,7 @@ function avatar(s, name, extra = "") {
   return el;
 }
 
-// Carte « Sur la TV » : le live en cours (miniature, streamer, titre), la chaîne hors ligne ou l'écran d'accueil
+// "On the TV" card: the current live (thumbnail, streamer, title), the offline channel or the home screen
 function renderNow(s) {
   const home = s.mode === "home", info = s.live?.[s.channel];
   $("now").hidden = s.mode === "media" || (!home && !s.channel);
@@ -658,38 +708,40 @@ function renderNow(s) {
   badge.hidden = home;
   badge.className = "badge";
   if (!home && s.playing && s.delay != null && s.delay >= 4) badge.textContent = `−${clock(s.delay)}`;
-  else if (!home && s.playing && info) { badge.textContent = "● EN DIRECT"; badge.classList.add("live"); }
-  else if (!home) badge.textContent = info ? "CHARGEMENT…" : "HORS LIGNE";
+  else if (!home && s.playing && info) { badge.textContent = tr("● LIVE"); badge.classList.add("live"); }
+  else if (!home) badge.textContent = info ? tr("LOADING…") : tr("OFFLINE");
   $("now-avatar").replaceWith(Object.assign(home ? Object.assign(document.createElement("span"), { className: "avatar home", textContent: "⌂" })
     : avatar(s, s.channel, info ? "live" : ""), { id: "now-avatar" }));
-  $("now-name").textContent = home ? "Écran d'accueil" : s.channel;
-  $("now-meta").textContent = home ? "Choisis un streamer pour lancer un live"
-    : info ? [info.game, `${viewers(info.viewers)} spectateurs`].filter(Boolean).join(" · ")
-    : s.auto_switch ? "Hors ligne · bascule automatique vers un live" : "Hors ligne";
+  $("now-name").textContent = home ? tr("Home screen") : s.channel;
+  $("now-meta").textContent = home ? tr("Pick a streamer to start a live stream")
+    : info ? [info.game, tr("{n} viewers", { n: viewers(info.viewers) })].filter(Boolean).join(" · ")
+    : s.auto_switch ? tr("Offline · automatic switch to a live stream") : tr("Offline");
   $("now-title").textContent = home ? "" : info?.title ?? "";
 }
 
 function render(s) {
   lastState = s;
+  if (s.lang && s.lang !== LANG) setLanguage(s.lang);   // language chosen on the TV or another phone
+  renderLanguages(s);
   if (s.first_run && !setupMode) enterSetup();
-  else if (!s.first_run && setupMode) location.reload();   // configuration terminée (ici ou sur un autre téléphone)
+  else if (!s.first_run && setupMode) location.reload();   // setup finished (here or on another phone)
   if (!$("tab-settings").hidden || setupMode) renderManage();
   const media = s.mode === "media";
   $("dot").className = `dot${s.playing && !media ? " on" : ""}`;
-  $("tv-state").textContent = media ? "Vidéo en cours sur la TV" : s.mode === "home" ? "Écran d'accueil"
-    : s.playing ? `En direct sur la TV · ${s.channel}` : "Rien ne joue pour l'instant";
+  $("tv-state").textContent = media ? tr("Video playing on the TV") : s.mode === "home" ? tr("Home screen")
+    : s.playing ? tr("Live on the TV · {channel}", { channel: s.channel }) : tr("Nothing playing right now");
   $("status").className = "status";
   $("status").textContent = "";
   renderNow(s);
 
   $("media-section").hidden = !media;
   if (media) {
-    $("media-title").textContent = s.title ?? "Vidéo";
+    $("media-title").textContent = s.title ?? tr("Video");
   }
 
-  $("volume").textContent = s.mute ? "muet" : `${s.volume} %`;
+  $("volume").textContent = s.mute ? tr("muted") : tr("{n}%", { n: s.volume });
   $("volume-meter").style.width = s.mute ? "0" : `${Math.min(100, s.volume / 1.3)}%`;
-  $("mute").lastElementChild.textContent = s.mute ? "Remettre le son" : "Couper le son";
+  $("mute").lastElementChild.textContent = s.mute ? tr("Unmute") : tr("Mute");
   $("mute").classList.toggle("on", s.mute);
   $("home").classList.toggle("current", s.mode === "home");
   powerAction = s.power_action;
@@ -701,8 +753,8 @@ function render(s) {
 
 
 function viewers(n) {
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(".", ",")} M`;
-  return n >= 1000 ? `${(n / 1000).toFixed(1).replace(".", ",")} k` : String(n);
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(".", LANG === "fr" ? "," : ".")} M`;
+  return n >= 1000 ? `${(n / 1000).toFixed(1).replace(".", LANG === "fr" ? "," : ".")} k` : String(n);
 }
 
 function clock(seconds) {
@@ -714,7 +766,7 @@ function clock(seconds) {
 
 function showError(message) {
   $("dot").className = "dot error";
-  $("tv-state").textContent = "Box injoignable";
+  $("tv-state").textContent = tr("Box unreachable");
   $("status").className = "status error";
   $("status").textContent = message;
 }
@@ -727,9 +779,9 @@ async function refresh() {
     if (!r.ok) throw new Error(s.error);
     render(s);
   } catch (e) {
-    showError(e.message || "Box injoignable");
+    showError(e.message || tr("Box unreachable"));
   }
-  if (!document.hidden) refreshTimer = setTimeout(refresh, 3000);   // page en arrière-plan : reprise par visibilitychange
+  if (!document.hidden) refreshTimer = setTimeout(refresh, 3000);   // page in the background: resumed by visibilitychange
 }
 
 async function send(action, body = {}) {
@@ -739,9 +791,9 @@ async function send(action, body = {}) {
     });
     if (!r.ok) throw new Error((await r.json()).error);
   } catch (e) {
-    showError(e.message || "Box injoignable");
+    showError(e.message || tr("Box unreachable"));
   }
-  setTimeout(refresh, 300);   // mpv applique les script-messages de façon asynchrone
+  setTimeout(refresh, 300);   // mpv applies script-messages asynchronously
 }
 
 document.querySelectorAll("button[data-action]").forEach((b) => {
@@ -755,25 +807,25 @@ async function refreshAccount() {
     $("account-off").hidden = !!a.login;
     $("account-name").textContent = a.login ?? "";
     $("account-intro").textContent = a.expired
-      ? "La connexion a expiré : colle un nouveau jeton pour retrouver tes abonnements sans pub."
-      : "Connecte ton compte pour profiter de tes abonnements sans pub.";
-  } catch (e) { /* l'état de la box affiche déjà l'erreur */ }
+      ? tr("The login has expired: paste a new token to get your subscriptions without ads back.")
+      : tr("Connect your account to enjoy your subscriptions without ads.");
+  } catch (e) { /* the box status already shows the error */ }
 }
 
 async function accountAction(action, body = {}) {
   const status = $("account-status");
   status.className = "status";
-  status.textContent = action === "login" ? "Vérification auprès de Twitch…" : "";
+  status.textContent = action === "login" ? tr("Checking with Twitch…") : "";
   try {
     const r = await fetch(`/api/${action}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     });
     if (!r.ok) throw new Error((await r.json()).error);
-    status.textContent = action === "login" ? "Connecté. Le stream redémarre." : "Déconnecté. Le stream redémarre.";
+    status.textContent = action === "login" ? tr("Connected. The stream restarts.") : tr("Logged out. The stream restarts.");
     $("token").value = "";
   } catch (e) {
     status.className = "status error";
-    status.textContent = e.message || "Box injoignable";
+    status.textContent = e.message || tr("Box unreachable");
   }
   refreshAccount();
   setTimeout(refresh, 300);
@@ -784,17 +836,17 @@ $("token").onkeydown = (e) => { if (e.key === "Enter") $("login").click(); };
 $("logout").onclick = () => accountAction("logout");
 $("play").onclick = async () => {
   $("media-status").className = "status";
-  $("media-status").textContent = "Chargement sur la TV…";
+  $("media-status").textContent = tr("Loading on the TV…");
   await send("play", { url: $("url").value.trim() });
   $("url").value = "";
   $("send-link").open = false;
   setTimeout(() => { $("media-status").textContent = ""; }, 4000);
 };
 $("url").onkeydown = (e) => { if (e.key === "Enter") $("play").click(); };
-let managed = "";   // liste affichée dans les réglages, pour ne la refaire que si elle change
+let managed = "";   // list shown in Settings, to rebuild it only when it changes
 function renderManage() {
   const names = lastState?.streamers ?? [];
-  const key = JSON.stringify([names, Object.keys(lastState?.avatars ?? {}).length]);   // refaite quand les photos arrivent
+  const key = JSON.stringify([names, Object.keys(lastState?.avatars ?? {}).length]);   // rebuilt when the pictures arrive
   if (key === managed && $("manage-list").childElementCount) return;
   managed = key;
   const btn = (text, label, onclick, disabled = false) => {
@@ -808,9 +860,10 @@ function renderManage() {
       Object.assign(document.createElement("span"), { className: "rank", textContent: i + 1 }),
       avatar(lastState, name),
       Object.assign(document.createElement("span"), { className: "name", textContent: name }),
-      btn("▲", `Monter ${name}`, () => editStreamers("move", name, -1), i === 0),
-      btn("▼", `Descendre ${name}`, () => editStreamers("move", name, 1), i === names.length - 1),
-      btn("✕", `Retirer ${name}`, () => { if (confirm(`Retirer ${name} de la liste ?`)) editStreamers("remove", name); }));
+      btn("▲", tr("Move {name} up", { name }), () => editStreamers("move", name, -1), i === 0),
+      btn("▼", tr("Move {name} down", { name }), () => editStreamers("move", name, 1), i === names.length - 1),
+      btn("✕", tr("Remove {name}", { name }),
+          () => { if (confirm(tr("Remove {name} from the list?", { name }))) editStreamers("remove", name); }));
     return row;
   }));
 }
@@ -818,30 +871,44 @@ function renderManage() {
 async function editStreamers(action, login, delta = 0) {
   const status = $("manage-status");
   status.className = "status";
-  status.textContent = action === "add" ? "Vérification sur Twitch…" : "";
+  status.textContent = action === "add" ? tr("Checking on Twitch…") : "";
   try {
     const r = await fetch("/api/streamers", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, login, delta }),
     });
     if (!r.ok) throw new Error((await r.json()).error);
-    status.textContent = action === "add" ? `${login.trim()} ajouté. Le point « en live » apparaît sous une minute.`
-      : action === "remove" ? `${login} retiré.` : "";
+    status.textContent = action === "add" ? tr("{login} added. The \"live\" dot shows up within a minute.", { login: login.trim() })
+      : action === "remove" ? tr("{login} removed.", { login }) : "";
     if (action === "add") $("new-streamer").value = "";
   } catch (e) {
     status.className = "status error";
-    status.textContent = e.message || "Box injoignable";
+    status.textContent = e.message || tr("Box unreachable");
   }
   await refresh();
   renderManage();
 }
 
-// Première configuration : écran à part, avec les sections Wi-Fi et streamers des Réglages déplacées dedans
-var setupMode = false;   // var : lu par render(), qui peut tourner avant cette ligne
+// Interface language: names in their own language (/api/state languages), applied to the TV and to this page
+function renderLanguages(s) {
+  const sel = $("language");
+  if (!s.languages || sel.options.length === Object.keys(s.languages).length) { if (s.lang) sel.value = s.lang; return; }
+  sel.replaceChildren(...Object.entries(s.languages).map(([code, name]) => new Option(name, code)));
+  sel.value = s.lang || "en";
+}
+$("language").onchange = async () => {
+  const lang = $("language").value;
+  await send("language", { lang });
+  setLanguage(lang);
+};
+
+// First setup: separate screen, with the Wi-Fi and streamers sections of Settings moved into it
+var setupMode = false;   // var: read by render(), which can run before this line
 function enterSetup() {
   setupMode = true;
   $("setup").hidden = false;
   document.querySelector(".tabs").hidden = true;
   $("tab-remote").hidden = $("tab-settings").hidden = true;
+  $("setup").prepend($("language-section"));   // the language first
   $("setup-slot").append($("wifi"), $("streamers-section"));
   if (typeof refreshWifi === "function") { refreshWifi(); setInterval(refreshWifi, 5000); }
   renderManage();
@@ -853,23 +920,23 @@ $("setup-done").onclick = async () => {
   location.reload();
 };
 
-var settingsLoaders = [];   // sections des Réglages chargées seulement quand l'onglet s'affiche (enregistrées plus bas)
+var settingsLoaders = [];   // Settings sections loaded only when the tab is shown (registered below)
 function showTab(name) {
   for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === name));
   $("tab-remote").hidden = name !== "remote";
   $("tab-settings").hidden = name !== "settings";
-  try { localStorage.setItem("tab", name); } catch (e) { /* stockage indisponible : on oublie l'onglet */ }
+  try { localStorage.setItem("tab", name); } catch (e) { /* storage unavailable: the tab is forgotten */ }
   if (name === "settings") { renderManage(); if (typeof refreshAudio === "function") refreshAudio(); if (typeof refreshHealth === "function") refreshHealth(); if (typeof loadYoutube === "function") loadYoutube(); settingsLoaders.forEach((f) => f()); }
   if (typeof previewTick === "function") previewTick();
 }
 document.querySelectorAll(".tabs button").forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
 let savedTab = "remote";
 try { savedTab = localStorage.getItem("tab") || "remote"; } catch (e) { /* idem */ }
-showTab(location.hash === "#reglages" ? "settings" : savedTab);   // #reglages : lien direct vers les réglages
+showTab(location.hash === "#reglages" ? "settings" : savedTab);   // #reglages: direct link to Settings
 $("add-streamer").onclick = () => { if ($("new-streamer").value.trim()) editStreamers("add", $("new-streamer").value); };
 $("new-streamer").onkeydown = (e) => { if (e.key === "Enter") $("add-streamer").click(); };
-// Aperçu : une capture à la fois, la suivante 1,5 s après la réponse ; rien ne tourne quand le bloc est fermé,
-// l'onglet changé ou la page cachée
+// Preview: one capture at a time, the next one 1.5 s after the response; nothing runs when the block is closed,
+// the tab changed or the page hidden
 function previewActive() {
   return $("preview").open && !$("tab-remote").hidden && !document.hidden;
 }
@@ -877,11 +944,11 @@ async function previewTick() {
   clearTimeout(previewTimer);
   if (!previewActive()) return;
   try {
-    const r = await fetch("/api/preview", { cache: "no-store" });   // écran entier, comme sur la TV
+    const r = await fetch("/api/preview", { cache: "no-store" });   // whole screen, as on the TV
     if (r.status === 204) {
       $("preview-img").hidden = true;
       $("preview-note").hidden = false;
-      $("preview-note").textContent = "Rien à capturer pour l'instant (écran d'ambiance)";
+      $("preview-note").textContent = tr("Nothing to capture right now (ambient screen)");
     } else if (r.ok) {
       const url = URL.createObjectURL(await r.blob());
       $("preview-img").src = url;
@@ -895,19 +962,20 @@ async function previewTick() {
   } catch (e) {
     $("preview-img").hidden = true;
     $("preview-note").hidden = false;
-    $("preview-note").textContent = "Aperçu indisponible";
+    $("preview-note").textContent = tr("Preview unavailable");
   }
   if (previewActive()) previewTimer = setTimeout(previewTick, 1500);
 }
 $("preview").ontoggle = () => previewTick();
 document.addEventListener("visibilitychange", () => previewTick());
-// Clavier du téléphone pour le menu de la TV : le champ apparaît quand le clavier de recherche s'ouvre sur la TV ;
-// chaque frappe envoie le texte entier (le dernier envoi gagne), Entrée ou « Rechercher » lance la recherche
+// Phone keyboard for the TV menu: the field appears when the search keyboard opens on the TV;
+// each keystroke sends the whole text (the last send wins), Enter or "Search" starts the search
 let kbShown = false, kbTimer = null;
 function renderKeyboard(k) {
   $("tv-keyboard").hidden = !k;
   if (k && !kbShown) {
-    $("tv-keyboard-title").textContent = `Recherche ${k.target ? (k.target === "Jellyfin" ? "dans Jellyfin" : "sur YouTube") : ""} (sur la TV)`;
+    $("tv-keyboard-title").textContent = !k.target ? tr("Search (on the TV)")
+      : k.target === "Jellyfin" ? tr("Search in Jellyfin (on the TV)") : tr("Search on YouTube (on the TV)");
     $("tv-keyboard-text").value = k.text || "";
     $("tv-keyboard").scrollIntoView({ block: "start" });
     $("tv-keyboard-text").focus();
@@ -923,8 +991,8 @@ $("tv-keyboard-text").oninput = () => { clearTimeout(kbTimer); kbTimer = setTime
 $("tv-keyboard-text").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); sendKeyboard(true); } };
 $("tv-keyboard-go").onclick = () => sendKeyboard(true);
 
-// Télécommande virtuelle : la touche part au relâchement, si le doigt n'a pas bougé (un défilement de la page qui
-// commence sur un bouton ne déclenche rien) ; flèches maintenues : répétition après 400 ms, toutes les 120 ms
+// Virtual remote: the key is sent on release, if the finger has not moved (a page scroll that starts on a
+// button triggers nothing); held arrows: repeat after 400 ms, every 120 ms
 document.querySelectorAll("[data-key]").forEach((b) => {
   let repeat = null, delay = null, start = null, repeated = false;
   const press = () => {
@@ -941,7 +1009,7 @@ document.querySelectorAll("[data-key]").forEach((b) => {
     }
   });
   b.addEventListener("pointermove", (e) => {
-    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) stop();   // c'est un défilement
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) stop();   // it is a scroll
   });
   b.addEventListener("pointerup", () => {
     if (start && !repeated) press();
@@ -951,7 +1019,7 @@ document.querySelectorAll("[data-key]").forEach((b) => {
   b.addEventListener("contextmenu", (e) => e.preventDefault());
 });
 $("remote-url-save").onclick = () => send("remote_url", { url: $("remote-url").value.trim() });
-// Sondage et prédiction : relevés toutes les 3 s tant que la page montre un direct
+// Poll and prediction: fetched every 3 s while the page shows a live stream
 let events = null, eventsTimer = null;
 async function refreshEvents() {
   clearTimeout(eventsTimer);
@@ -963,7 +1031,7 @@ async function refreshEvents() {
   try {
     const r = await fetch("/api/events");
     if (r.ok) { events = await r.json(); renderEvents(); }
-  } catch (e) { /* la page affiche déjà l'état de la box */ }
+  } catch (e) { /* the page already shows the box status */ }
   eventsTimer = setTimeout(refreshEvents, 3000);
 }
 function renderEvents() {
@@ -972,26 +1040,27 @@ function renderEvents() {
   if (!poll && !pred) return;
   const el = (tag, props, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
   const left = (endsAt) => Math.max(0, Math.round(endsAt - Date.now() / 1000));
-  if (poll) {   // un sondage passe avant une prédiction (plus court)
-    $("vote-kind").textContent = "Sondage";
+  if (poll) {   // a poll comes before a prediction (shorter)
+    $("vote-kind").textContent = tr("Poll");
     $("vote-title").textContent = poll.title;
     const total = poll.choices.reduce((n, c) => n + c.votes, 0) || 1;
     $("vote-choices").replaceChildren(...poll.choices.map((c) => {
       const pct = Math.round(100 * c.votes / total);
       const b = el("button", { className: "vote-choice" + (poll.mine === c.id ? " mine" : ""), disabled: poll.ended },
         el("i", { className: "fill" }), el("span", { textContent: (poll.mine === c.id ? "✓ " : "") + c.title }),
-        el("span", { textContent: `${pct} %` }));
+        el("span", { textContent: tr("{n}%", { n: pct }) }));
       b.firstChild.style.width = `${pct}%`;
       b.onclick = () => castVote({ poll: poll.id, choice: c.id });
       return b;
     }));
     $("vote-stakes").hidden = true;
-    $("vote-left").textContent = poll.ended ? "Résultats" : `${clock(left(poll.ends_at))} restantes · ${poll.voters} votants`;
+    $("vote-left").textContent = poll.ended ? tr("Results")
+      : tr("{time} left · {voters} voters", { time: clock(left(poll.ends_at)), voters: poll.voters });
     $("vote-balance").textContent = "";
     return;
   }
   const open = pred.status === "ACTIVE" && left(pred.ends_at) > 0;
-  $("vote-kind").textContent = "Prédiction";
+  $("vote-kind").textContent = tr("Prediction");
   $("vote-title").textContent = pred.title;
   const total = pred.outcomes.reduce((n, o) => n + o.points, 0) || 1;
   $("vote-choices").replaceChildren(...pred.outcomes.map((o) => {
@@ -1001,21 +1070,21 @@ function renderEvents() {
                              disabled: !open || (pred.mine && !mine) },
       el("i", { className: "fill" }),
       el("span", { textContent: (o.winner ? "★ " : mine ? "✓ " : "") + o.title }),
-      el("span", { textContent: `${pct} % · ${viewers(o.points)} pts · ${o.users}` }));
+      el("span", { textContent: tr("{pct}% · {points} pts · {users}", { pct, points: viewers(o.points), users: o.users }) }));
     b.firstChild.style.width = `${pct}%`;
     b.onclick = () => {
       const points = stake();
-      if (!points) { $("vote-status").className = "status error"; $("vote-status").textContent = "Choisis une mise."; return; }
-      if (confirm(`Parier ${points} points sur « ${o.title} » ?`)) castVote({ event: pred.id, outcome: o.id, points }, "predict");
+      if (!points) { $("vote-status").className = "status error"; $("vote-status").textContent = tr("Pick a stake."); return; }
+      if (confirm(tr("Bet {points} points on \"{outcome}\"?", { points, outcome: o.title }))) castVote({ event: pred.id, outcome: o.id, points }, "predict");
     };
     return b;
   }));
   $("vote-stakes").hidden = !open || !events.logged_in;
-  $("vote-left").textContent = pred.status === "RESOLVED" ? "Résultat" : pred.status === "CANCELED" ? "Annulée"
-    : open ? `Paris : ${clock(left(pred.ends_at))}` : "Paris fermés";
-  $("vote-balance").textContent = pred.mine ? `Ton pari : ${viewers(pred.mine.points)} points`
-    : events.balance != null ? `${viewers(events.balance)} points` : "";
-  if (!events.logged_in) $("vote-balance").textContent = "Connecte ton compte Twitch pour parier";
+  $("vote-left").textContent = pred.status === "RESOLVED" ? tr("Result") : pred.status === "CANCELED" ? tr("Canceled")
+    : open ? tr("Betting: {time}", { time: clock(left(pred.ends_at)) }) : tr("Betting closed");
+  $("vote-balance").textContent = pred.mine ? tr("Your bet: {points} points", { points: viewers(pred.mine.points) })
+    : events.balance != null ? tr("{points} points", { points: viewers(events.balance) }) : "";
+  if (!events.logged_in) $("vote-balance").textContent = tr("Connect your Twitch account to bet");
 }
 let chosenStake = null;
 function stake() {
@@ -1031,14 +1100,14 @@ document.querySelectorAll("[data-stake]").forEach((b) => b.onclick = () => {
 });
 async function castVote(body, action = "vote") {
   $("vote-status").className = "status";
-  $("vote-status").textContent = "Envoi à Twitch…";
+  $("vote-status").textContent = tr("Sending to Twitch…");
   try {
     const r = await fetch(`/api/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!r.ok) throw new Error((await r.json()).error);
-    $("vote-status").textContent = action === "vote" ? "Vote envoyé." : "Pari enregistré.";
+    $("vote-status").textContent = action === "vote" ? tr("Vote sent.") : tr("Bet placed.");
   } catch (e) {
     $("vote-status").className = "status error";
-    $("vote-status").textContent = e.message || "Box injoignable";
+    $("vote-status").textContent = e.message || tr("Box unreachable");
   }
   refreshEvents();
 }
@@ -1046,55 +1115,56 @@ refreshEvents();
 
 if (new URLSearchParams(location.search).has("partage")) {
   $("media-status").className = "status error";
-  $("media-status").textContent = "Aucun lien vidéo dans ce partage.";
+  $("media-status").textContent = tr("No video link in this share.");
   history.replaceState(null, "", "/");
 }
 $("reboot").onclick = async () => {
-  if (!confirm("Redémarrer la box ?")) return;
+  if (!confirm(tr("Restart the box?"))) return;
   await send("reboot");
   $("status").className = "status";
-  $("status").textContent = "La box redémarre (environ une minute)…";
+  $("status").textContent = tr("The box is restarting (about a minute)…");
 };
-// Sauvegarde : restauration d'un fichier téléchargé plus tôt (la box remet tout et redémarre)
+// Backup: restore of a file downloaded earlier (the box restores everything and restarts)
 $("backup-download").onclick = () => { location.href = "/api/backup/download"; };
 $("backup-restore").onclick = () => $("backup-file").click();
 $("backup-file").onchange = async () => {
   const file = $("backup-file").files[0];
   $("backup-file").value = "";
-  if (!file || !confirm(`Remplacer les réglages de la box par ceux de « ${file.name} » ? Elle redémarre ensuite.`)) return;
+  if (!file || !confirm(tr("Replace the box settings with those of \"{file}\"? It restarts afterwards.",
+                            { file: file.name }))) return;
   const st = setupMode ? $("setup-restore-status") : $("backup-status");
   st.className = "status";
-  st.textContent = "Restauration…";
+  st.textContent = tr("Restoring…");
   try {
     const r = await fetch("/api/backup_restore", { method: "POST", body: file, headers: { "Content-Type": "application/gzip" } });
     if (!r.ok) throw new Error((await r.json()).error);
-    st.textContent = "Sauvegarde restaurée : la box redémarre (environ une minute)…";
+    st.textContent = tr("Backup restored: the box is restarting (about a minute)…");
   } catch (e) {
     st.className = "status error";
-    st.textContent = e.message || "Restauration impossible.";
+    st.textContent = e.message || tr("Restore failed.");
   }
 };
-let powerAction = "poweroff";   // réglage « Bouton d'arrêt » : mise en veille ou arrêt complet
+let powerAction = "poweroff";   // "Power button" setting: sleep or full shutdown
 $("poweroff").onclick = async () => {
   const sleep = powerAction === "suspend";
-  if (!confirm(sleep ? "Mettre la box en veille ?" : "Éteindre la box ?")) return;
+  if (!confirm(sleep ? tr("Put the box to sleep?") : tr("Turn off the box?"))) return;
   try {
     const r = await fetch("/api/poweroff", { method: "POST" });
     if (!r.ok) throw new Error((await r.json()).error);
     clearTimeout(refreshTimer);
     $("dot").className = "dot";
-    $("tv-state").textContent = sleep ? "Box en veille" : "Box éteinte";
+    $("tv-state").textContent = sleep ? tr("Box asleep") : tr("Box turned off");
     $("status").className = "status";
-    $("status").textContent = sleep ? "Box en veille. Réveil par Home Assistant (réseau) ou son bouton power."
-                                    : "Box éteinte. Rallume-la avec son bouton power.";
+    $("status").textContent = sleep ? tr("Box asleep. Wake it up with Home Assistant (network) or its power button.")
+                                    : tr("Box turned off. Turn it back on with its power button.");
   } catch (e) {
-    showError(e.message || "Box injoignable");
+    showError(e.message || tr("Box unreachable"));
   }
 };
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); refreshAccount(); } });
 refreshAccount();
 
-// Chaînes suivies : appli Twitch, autorisation par code, état
+// Followed channels: Twitch app, authorization by code, status
 let followsTimer = null, followsChanging = false;
 async function refreshFollows() {
   clearTimeout(followsTimer);
@@ -1112,14 +1182,15 @@ async function refreshFollows() {
       $("follows-link").href = f.pending.verification_uri;
     }
     $("follows-status").className = f.pending?.error ? "status error" : "status";
-    $("follows-status").textContent = f.pending?.error ? `Autorisation refusée : ${f.pending.error}` : "";
+    $("follows-status").textContent = f.pending?.error ? tr("Authorization denied: {error}", { error: f.pending.error }) : "";
     if (f.authorized) {
-      $("follows-summary").textContent = `Autorisé · ${f.live.length + f.offline.length} chaînes suivies, ${f.live.length} en live.`;
+      $("follows-summary").textContent = tr("Authorized · {total} followed channels, {live} live.",
+                                            { total: f.live.length + f.offline.length, live: f.live.length });
     }
-    if (pending && !f.pending.error) followsTimer = setTimeout(refreshFollows, 3000);   // en attente du code
+    if (pending && !f.pending.error) followsTimer = setTimeout(refreshFollows, 3000);   // waiting for the code
   } catch (e) {
     $("follows-status").className = "status error";
-    $("follows-status").textContent = e.message || "Box injoignable";
+    $("follows-status").textContent = e.message || tr("Box unreachable");
   }
 }
 async function followsAction(action, body = {}) {
@@ -1132,7 +1203,7 @@ async function followsAction(action, body = {}) {
     if (!r.ok) throw new Error((await r.json()).error);
   } catch (e) {
     $("follows-status").className = "status error";
-    $("follows-status").textContent = e.message || "Box injoignable";
+    $("follows-status").textContent = e.message || tr("Box unreachable");
   }
   refreshFollows();
 }
@@ -1142,12 +1213,12 @@ $("app-save").onclick = async () => {
   $("app-secret").value = "";
 };
 $("follows-login").onclick = () => followsAction("follows_login");
-$("follows-logout").onclick = () => { if (confirm("Retirer l'autorisation des chaînes suivies ?")) followsAction("follows_logout"); };
+$("follows-logout").onclick = () => { if (confirm(tr("Remove the authorization for followed channels?"))) followsAction("follows_logout"); };
 $("app-change").onclick = () => { followsChanging = true; refreshFollows(); };
 settingsLoaders.push(refreshFollows);
 if (!$("tab-settings").hidden) refreshFollows();
 
-// Compte YouTube : appli Google, autorisation par code, état
+// YouTube account: Google app, authorization by code, status
 let ytaccTimer = null, ytaccChanging = false;
 async function refreshYtAccount() {
   clearTimeout(ytaccTimer);
@@ -1165,15 +1236,17 @@ async function refreshYtAccount() {
       $("ytacc-link").href = a.pending.verification_uri;
     }
     $("ytacc-status").className = a.pending?.error ? "status error" : "status";
-    $("ytacc-status").textContent = a.pending?.error ? `Autorisation refusée : ${a.pending.error}` : "";
+    $("ytacc-status").textContent = a.pending?.error ? tr("Authorization denied: {error}", { error: a.pending.error }) : "";
     if (a.authorized) {
-      $("ytacc-summary").textContent = a.channels === null ? "Connecté · abonnements relus à la prochaine ouverture de l'onglet YouTube."
-        : `Connecté · ${a.channels} abonnements, relus le ${new Date(a.synced * 1000).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}.`;
+      $("ytacc-summary").textContent = a.channels === null
+        ? tr("Connected · subscriptions reloaded the next time the YouTube tab is opened.")
+        : tr("Connected · {count} subscriptions, reloaded on {date}.", { count: a.channels,
+            date: new Date(a.synced * 1000).toLocaleString(LANG, { dateStyle: "short", timeStyle: "short" }) });
     }
-    if (pending && !a.pending.error) ytaccTimer = setTimeout(refreshYtAccount, 3000);   // en attente du code
+    if (pending && !a.pending.error) ytaccTimer = setTimeout(refreshYtAccount, 3000);   // waiting for the code
   } catch (e) {
     $("ytacc-status").className = "status error";
-    $("ytacc-status").textContent = e.message || "Box injoignable";
+    $("ytacc-status").textContent = e.message || tr("Box unreachable");
   }
 }
 async function ytaccAction(action, body = {}) {
@@ -1186,7 +1259,7 @@ async function ytaccAction(action, body = {}) {
     if (!r.ok) throw new Error((await r.json()).error);
   } catch (e) {
     $("ytacc-status").className = "status error";
-    $("ytacc-status").textContent = e.message || "Box injoignable";
+    $("ytacc-status").textContent = e.message || tr("Box unreachable");
   }
   refreshYtAccount();
 }
@@ -1197,17 +1270,17 @@ $("ytapp-save").onclick = async () => {
 };
 $("ytacc-login").onclick = () => ytaccAction("youtube_login");
 $("ytacc-sync").onclick = () => ytaccAction("youtube_sync");
-$("ytacc-logout").onclick = () => { if (confirm("Déconnecter le compte YouTube ?")) ytaccAction("youtube_logout"); };
+$("ytacc-logout").onclick = () => { if (confirm(tr("Disconnect the YouTube account?"))) ytaccAction("youtube_logout"); };
 $("ytapp-change").onclick = () => { ytaccChanging = true; refreshYtAccount(); };
 settingsLoaders.push(refreshYtAccount);
 if (!$("tab-settings").hidden) refreshYtAccount();
 
-// YouTube : recherche (vidéos et chaînes), gestion de la liste des chaînes (Réglages). Les dernières vidéos des chaînes
-// se parcourent sur la TV
+// YouTube: search (videos and channels), management of the channel list (Settings). The channels' latest videos
+// are browsed on the TV
 let ytHome = null;
-async function loadYoutube() {   // liste des chaînes, pour les Réglages
+async function loadYoutube() {   // channel list, for Settings
   try {
-    ytHome = await (await fetch("/api/youtube_channels")).json();   // la liste seule, sans les vidéos
+    ytHome = await (await fetch("/api/youtube_channels")).json();   // the list only, without the videos
   } catch (e) { return; }
   renderYoutubeManage();
 }
@@ -1224,40 +1297,42 @@ function renderYoutubeManage() {
     if (c.avatar) Object.assign(pic, { src: c.avatar, alt: "", loading: "lazy" }); else pic.textContent = c.name.charAt(0).toUpperCase();
     row.append(Object.assign(document.createElement("span"), { className: "rank", textContent: i + 1 }), pic,
       Object.assign(document.createElement("span"), { className: "name", textContent: c.name }),
-      btn("▲", `Monter ${c.name}`, () => editYoutube("move", c.id, -1), i === 0),
-      btn("▼", `Descendre ${c.name}`, () => editYoutube("move", c.id, 1), i === chans.length - 1),
-      btn("✕", `Retirer ${c.name}`, () => { if (confirm(`Retirer ${c.name} de la liste ?`)) editYoutube("remove", c.id); }));
+      btn("▲", tr("Move {name} up", { name: c.name }), () => editYoutube("move", c.id, -1), i === 0),
+      btn("▼", tr("Move {name} down", { name: c.name }), () => editYoutube("move", c.id, 1), i === chans.length - 1),
+      btn("✕", tr("Remove {name}", { name: c.name }),
+          () => { if (confirm(tr("Remove {name} from the list?", { name: c.name }))) editYoutube("remove", c.id); }));
     return row;
   }));
 }
 async function editYoutube(action, channel, delta = 0) {
   const status = $("yt-manage-status");
   status.className = "status";
-  status.textContent = action === "add" ? "Recherche de la chaîne…" : "";
+  status.textContent = action === "add" ? tr("Looking up the channel…") : "";
   try {
     const r = await fetch("/api/youtube_channels", { method: "POST", headers: { "Content-Type": "application/json" },
                                                      body: JSON.stringify({ action, channel, delta }) });
     if (!r.ok) throw new Error((await r.json()).error);
-    if (action === "add") { status.textContent = "Chaîne ajoutée."; $("new-yt").value = ""; }
+    if (action === "add") { status.textContent = tr("Channel added."); $("new-yt").value = ""; }
   } catch (e) {
     status.className = "status error";
-    status.textContent = e.message || "Box injoignable";
+    status.textContent = e.message || tr("Box unreachable");
   }
   loadYoutube();
 }
 $("add-yt").onclick = () => { if ($("new-yt").value.trim()) editYoutube("add", $("new-yt").value); };
 $("new-yt").onkeydown = (e) => { if (e.key === "Enter") $("add-yt").click(); };
 
-// Sortie son : automatique ou une sortie précise (audio.py) ; relue à l'ouverture des Réglages
+// Sound output: automatic or a specific output (audio.py); reloaded when Settings opens
 async function refreshAudio() {
   let a;
   try { a = await (await fetch("/api/audio")).json(); } catch (e) { return; }
   if (!a.outputs) return;
   const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
   const now = a.outputs.find((o) => o.id === a.current);
-  const opts = [option("auto", "Automatique" + (a.choice === "auto" && now ? ` (en ce moment : ${now.label})` : "")),
+  const opts = [option("auto", a.choice === "auto" && now ? tr("Automatic (currently: {output})", { output: now.label })
+                                                          : tr("Automatic")),
                 ...a.outputs.map((o) => option(o.id, o.label))];
-  if (a.choice !== "auto" && !a.outputs.some((o) => o.id === a.choice)) opts.push(option(a.choice, "Sortie choisie (absente pour l'instant)"));
+  if (a.choice !== "auto" && !a.outputs.some((o) => o.id === a.choice)) opts.push(option(a.choice, tr("Chosen output (missing for now)")));
   $("audio-out").replaceChildren(...opts);
   $("audio-out").value = a.choice;
 }
@@ -1266,18 +1341,19 @@ $("audio-out").onchange = async () => {
   setTimeout(refreshAudio, 1500);
 };
 
-// Wi-Fi : affiché si la box a une carte Wi-Fi. Sur le point d'accès de configuration (10.42.0.1), la page s'ouvre
-// sur cette section : après la connexion, le téléphone perd la box (elle quitte son point d'accès)
+// Wi-Fi: shown if the box has a Wi-Fi card. On the setup access point (10.42.0.1), the page opens on this
+// section: after connecting, the phone loses the box (it leaves its access point)
 const onSetupHotspot = location.hostname === "10.42.0.1";
 async function refreshWifi() {
   let w;
   try { w = await (await fetch("/api/wifi")).json(); } catch (e) { return; }
   $("wifi").hidden = !w.device;
   if (!w.device) return;
-  $("wifi-state").textContent = w.connecting ? `Connexion à « ${w.connecting} »…`
-    : w.mode === "hotspot" ? "Mode configuration : choisis le Wi-Fi de la maison."
-    : w.mode === "connected" ? (w.wired ? `Connectée par câble (${w.network}).` : `Connectée au Wi-Fi « ${w.network} ».`)
-    : "Pas de réseau.";
+  $("wifi-state").textContent = w.connecting ? tr("Connecting to \"{network}\"…", { network: w.connecting })
+    : w.mode === "hotspot" ? tr("Setup mode: pick your home Wi-Fi.")
+    : w.mode === "connected" ? (w.wired ? tr("Connected by cable ({network}).", { network: w.network })
+                                        : tr("Connected to the Wi-Fi \"{network}\".", { network: w.network }))
+    : tr("No network.");
   if (w.error) { $("wifi-status").className = "status error"; $("wifi-status").textContent = w.error; }
   const current = $("wifi-ssid").value;
   const bars = (n) => n >= 70 ? "▂▄▆█" : n >= 45 ? "▂▄▆" : n >= 20 ? "▂▄" : "▂";
@@ -1290,15 +1366,16 @@ $("wifi-connect").onclick = async () => {
   if (!ssid) return;
   $("wifi-status").className = "status";
   $("wifi-status").textContent = onSetupHotspot
-    ? `La box se connecte à « ${ssid} ». Reconnecte ton téléphone à ce Wi-Fi, puis scanne le QR code affiché sur la TV.`
-    : `Connexion à « ${ssid} »…`;
+    ? tr("The box is connecting to \"{network}\". Reconnect your phone to this Wi-Fi, then scan the QR code shown on the TV.",
+         { network: ssid })
+    : tr("Connecting to \"{network}\"…", { network: ssid });
   try {
     const r = await fetch("/api/wifi", { method: "POST", headers: { "Content-Type": "application/json" },
                                          body: JSON.stringify({ action: "connect", ssid, password: $("wifi-password").value }) });
     if (!r.ok) throw new Error((await r.json()).error);
     $("wifi-password").value = "";
   } catch (e) {
-    if (!onSetupHotspot) { $("wifi-status").className = "status error"; $("wifi-status").textContent = e.message || "Box injoignable"; }
+    if (!onSetupHotspot) { $("wifi-status").className = "status error"; $("wifi-status").textContent = e.message || tr("Box unreachable"); }
   }
   setTimeout(refreshWifi, 4000);
 };
@@ -1309,18 +1386,19 @@ if (onSetupHotspot) {
   $("wifi").scrollIntoView();
 }
 
-// État de la box (Réglages → Système), relu toutes les 5 s tant que l'onglet est affiché
+// Box status (Settings → System), reloaded every 5 s while the tab is shown
 let healthTimer = null;
-const bytes = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1).replace(".", ",")} Go` : `${Math.round(n / 1e6)} Mo`;
-const bits = (n) => n == null ? "…" : n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} Mbit/s` : `${Math.round(n / 1e3)} kbit/s`;
+const bytes = (n) => n >= 1e9 ? tr("{n} GB", { n: (n / 1e9).toFixed(1).replace(".", LANG === "fr" ? "," : ".") }) : tr("{n} MB", { n: Math.round(n / 1e6) });
+const bits = (n) => n == null ? "…" : n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", LANG === "fr" ? "," : ".")} Mbit/s` : `${Math.round(n / 1e3)} kbit/s`;
 const since = (s) => { const h = Math.floor(s / 3600), d = Math.floor(h / 24);
-  return d ? `${d} j ${h % 24} h` : h ? `${h} h ${String(Math.floor(s / 60) % 60).padStart(2, "0")}` : `${Math.floor(s / 60)} min`; };
-// « 2026-10-23 11:48:14 » ou « Mon 2026-10-26 05:07:37 CET » → « ven. 23 oct. à 11:48 »
+  return d ? tr("{d} d {h} h", { d, h: h % 24 }) : h ? `${h} h ${String(Math.floor(s / 60) % 60).padStart(2, "0")}` : `${Math.floor(s / 60)} min`; };
+// "2026-10-23 11:48:14" or "Mon 2026-10-26 05:07:37 CET" → "Fri, Oct 23 at 11:48"
 const frDate = (text) => {
   const m = /(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d)/.exec(text || "");
   if (!m) return text || "";
   const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
-  return `${d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} à ${m[4]}:${m[5]}`;
+  return tr("{date} at {time}", { date: d.toLocaleDateString(LANG, { weekday: "short", day: "numeric", month: "short" }),
+                                  time: `${m[4]}:${m[5]}` });
 };
 async function refreshHealth() {
   clearTimeout(healthTimer);
@@ -1336,24 +1414,33 @@ async function refreshHealth() {
     };
     const t = h.temps.cpu, used = h.memory.total - h.memory.available;
     const p = h.player, u = h.update, ok = (v) => v === "active" ? "✓" : "✕";
+    const player = p.running === "qt" ? tr("Qt app") : tr("mpv only");
     $("health").replaceChildren(
-      tile("Température", t != null ? `${t} °C` : "–", h.temps.disk != null ? `disque ${h.temps.disk} °C` : "", t >= 85 ? "bad" : t >= 70 ? "warn" : ""),
-      tile("Processeur", h.cpu != null ? `${Math.round(h.cpu)} %` : "…", `charge ${h.load.toFixed(1).replace(".", ",")} · ${h.cores} cœurs`, h.cpu >= 85 ? "warn" : ""),
-      tile("Mémoire", bytes(used), `sur ${bytes(h.memory.total)}`, h.memory.available < 5e8 ? "warn" : ""),
-      tile("Disque", `${bytes(h.disk.free)} libres`, `sur ${bytes(h.disk.total)}`, h.disk.free < 5e9 ? "warn" : ""),
-      tile("Réseau", `↓ ${bits(h.network.rx)}`, `↑ ${bits(h.network.tx)} · ${h.network.iface || "?"}${h.network.speed > 0 ? ` à ${h.network.speed >= 1000 ? h.network.speed / 1000 + " Gbit/s" : h.network.speed + " Mbit/s"}` : ""}`),
-      tile("Allumée depuis", since(h.uptime), `services : MQTT ${ok(h.services.mqtt)} · jetons YouTube ${ok(h.services.youtube_tokens)}`,
+      tile(tr("Temperature"), t != null ? `${t} °C` : "–", h.temps.disk != null ? tr("disk {t} °C", { t: h.temps.disk }) : "", t >= 85 ? "bad" : t >= 70 ? "warn" : ""),
+      tile(tr("Processor"), h.cpu != null ? tr("{n}%", { n: Math.round(h.cpu) }) : "…",
+           tr("load {load} · {cores} cores", { load: h.load.toFixed(1).replace(".", LANG === "fr" ? "," : "."), cores: h.cores }), h.cpu >= 85 ? "warn" : ""),
+      tile(tr("Memory"), bytes(used), tr("of {total}", { total: bytes(h.memory.total) }), h.memory.available < 5e8 ? "warn" : ""),
+      tile(tr("Disk"), tr("{n} free", { n: bytes(h.disk.free) }), tr("of {total}", { total: bytes(h.disk.total) }), h.disk.free < 5e9 ? "warn" : ""),
+      tile(tr("Network"), `↓ ${bits(h.network.rx)}`, h.network.speed > 0
+        ? tr("↑ {tx} · {iface} at {speed}", { tx: bits(h.network.tx), iface: h.network.iface || "?",
+            speed: h.network.speed >= 1000 ? h.network.speed / 1000 + " Gbit/s" : h.network.speed + " Mbit/s" })
+        : `↑ ${bits(h.network.tx)} · ${h.network.iface || "?"}`),
+      tile(tr("Up for"), since(h.uptime),
+           tr("services: MQTT {mqtt} · YouTube tokens {tokens}", { mqtt: ok(h.services.mqtt), tokens: ok(h.services.youtube_tokens) }),
            h.services.mqtt !== "active" || h.services.youtube_tokens !== "active" ? "warn" : ""),
-      tile("Lecture", `${p.running === "qt" ? "Appli Qt" : "mpv seul"}${p.hwdec && p.hwdec !== "no" ? " · décodage " + p.hwdec : p.size ? " · décodage processeur" : ""}`,
-           p.size ? `${p.size.replace("x", " × ")} · ${Math.round(p.fps || 0)} im/s · ${p.dropped ?? 0} images perdues` : "rien en lecture",
+      tile(tr("Playback"), p.hwdec && p.hwdec !== "no" ? tr("{player} · {hwdec} decoding", { player, hwdec: p.hwdec })
+                             : p.size ? tr("{player} · CPU decoding", { player }) : player,
+           p.size ? tr("{size} · {fps} fps · {dropped} dropped frames",
+                       { size: p.size.replace("x", " × "), fps: Math.round(p.fps || 0), dropped: p.dropped ?? 0 })
+                  : tr("nothing playing"),
            p.size && (!p.hwdec || p.hwdec === "no") ? "warn" : "", true),
-      tile("Mises à jour", u.running ? "En cours…" : u.last ? `${u.last.ok ? "✓" : "✕"} ${frDate(u.last.date)}` : "jamais",
-           u.next ? `prochaine : ${frDate(u.next)}` : "", u.last && !u.last.ok ? "bad" : "", true),
+      tile(tr("Updates"), u.running ? tr("In progress…") : u.last ? `${u.last.ok ? "✓" : "✕"} ${frDate(u.last.date)}` : tr("never"),
+           u.next ? tr("next: {date}", { date: frDate(u.next) }) : "", u.last && !u.last.ok ? "bad" : "", true),
     );
     $("update-now").disabled = u.running;
-    $("update-now").textContent = u.running ? "Mise à jour en cours…" : "Mettre à jour maintenant";
-    $("update-log").textContent = u.last ? u.last.lines.join("\n") : "Aucune mise à jour enregistrée.";
-  } catch (e) { /* la page affiche déjà l'état de la box */ }
+    $("update-now").textContent = u.running ? tr("Update in progress…") : tr("Update now");
+    $("update-log").textContent = u.last ? u.last.lines.join("\n") : tr("No update recorded.");
+  } catch (e) { /* the page already shows the box status */ }
   healthTimer = setTimeout(refreshHealth, 5000);
 }
 $("update-now").onclick = async () => {
@@ -1362,7 +1449,7 @@ $("update-now").onclick = async () => {
   setTimeout(refreshHealth, 1500);
 };
 refreshHealth();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});   // HTTPS seulement
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});   // HTTPS only
 refresh();
 </script>
 </body>

@@ -1,30 +1,28 @@
-# Règles de confidentialité de Stream Box
+# Stream Box Privacy Policy
 
-Stream Box est un logiciel libre qui transforme un mini PC branché sur une TV en lecteur Twitch, YouTube et Jellyfin.
-Chaque box est installée et utilisée par son propriétaire, chez lui : il n'existe aucun serveur Stream Box.
+Stream Box is free software that turns a mini PC plugged into a TV into a Twitch, YouTube and Jellyfin player.
+Each box is installed and used by its owner, at home: there is no Stream Box server.
 
-## Compte YouTube (API YouTube Data)
+## YouTube account (YouTube Data API)
 
-Quand le propriétaire connecte son compte YouTube, la box obtient un accès en **lecture seule**
-(`youtube.readonly`) pour afficher, sur sa TV, les dernières vidéos des chaînes auxquelles il est abonné.
+When the owner connects their YouTube account, the box gets **read-only** access (`youtube.readonly`) to show, on
+their TV, the latest videos of the channels they are subscribed to.
 
-- Données lues : la liste des abonnements du compte (nom, identifiant et photo des chaînes), puis les dernières vidéos
-  publiques de ces chaînes (titre, miniature, date, durée, nombre de vues).
-- Où elles vont : nulle part ailleurs que sur la box elle-même. Elles sont gardées dans le dossier de configuration de
-  l'utilisateur de la box, lisibles par lui seul, et ne sont ni transmises, ni vendues, ni partagées avec qui que ce
-  soit.
-- Rien n'est modifié sur le compte : la box ne publie, ne commente, ne s'abonne ni ne se désabonne de rien.
-- Retirer l'accès : « Déconnecter le compte » dans le menu de la box (Système → Compte YouTube) ou sur sa page de
-  télécommande efface les jetons de la box. L'accès peut aussi être retiré à tout moment depuis
-  https://myaccount.google.com/permissions.
+- Data read: the account's subscription list (name, identifier and picture of the channels), then the latest public
+  videos of these channels (title, thumbnail, date, duration, view count).
+- Where it goes: nowhere other than the box itself. It is kept in the configuration folder of the box's user,
+  readable by that user only, and is not transmitted, sold or shared with anyone.
+- Nothing is changed on the account: the box does not post, comment, subscribe or unsubscribe from anything.
+- Removing access: "✕  Disconnect subscriptions" in the box menu (System → YouTube account) or "Disconnect" in its
+  companion app (Settings → YouTube account) deletes the box's tokens. Access can also be revoked at any time from https://myaccount.google.com/permissions.
 
-L'utilisation des données obtenues par les API Google respecte les
-[règles relatives aux données utilisateur des services d'API Google](https://developers.google.com/terms/api-services-user-data-policy),
-y compris les exigences d'utilisation limitée.
+The use of data obtained through Google APIs complies with the
+[Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy),
+including the Limited Use requirements.
 
-Voir aussi les [conditions d'utilisation de YouTube](https://www.youtube.com/t/terms) et les
-[règles de confidentialité de Google](https://policies.google.com/privacy).
+See also the [YouTube Terms of Service](https://www.youtube.com/t/terms) and the
+[Google Privacy Policy](https://policies.google.com/privacy).
 
 ## Contact
 
-Questions : ouvrir une issue sur le dépôt du projet.
+Questions: open an issue on the project repository.

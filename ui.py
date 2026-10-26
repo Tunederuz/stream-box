@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Stream Box : appli plein écran (Qt Quick) qui embarque mpv (libmpv).
+"""Stream Box: full-screen app (Qt Quick) embedding mpv (libmpv).
 
-Remplace la fenêtre de mpv dans la session cage : la vidéo est dessinée par libmpv dans la scène Qt Quick (OpenGL,
-puce graphique), et les éléments d'interface en QML pourront se poser par-dessus avec de vraies animations. Le
-lecteur garde tout ce qu'il faisait : mêmes options que la ligne de commande de mpv (passées telles quelles par
-start.sh), scripts Lua, socket IPC (télécommande web, Jellyfin, Home Assistant). Les touches et la souris reçues par la
-fenêtre sont transmises à mpv (keypress, mouse), là où stream-box.lua les attend.
+Replaces the mpv window in the cage session: the video is drawn by libmpv in the Qt Quick scene (OpenGL,
+GPU), and QML interface elements can sit on top of it with real animations. The
+player keeps doing everything it did: same options as the mpv command line (passed as is by
+start.sh), Lua scripts, IPC socket (companion app, Jellyfin, Home Assistant). Keys and mouse received by the
+window are forwarded to mpv (keypress, mouse), where stream-box.lua expects them.
 
-Deux streams à la fois : un second lecteur libmpv (pip_player) avec son propre streamlink, dessiné en incrustation dans
-un coin ou côte à côte avec le principal (ui.qml, transitions animées). Commandé par le menu QML (objet « pip ») et par
-l'IPC (script-message streambox-pip <open|close|swap|layout> [chaîne] [pip|split], /api/pip de remote.py) ; état publié
-dans user-data/streambox/pip. Son coupé : le son est celui du stream principal (Inverser échange les deux).
+Two streams at once: a second libmpv player (pip_player) with its own streamlink, drawn as an inset in
+a corner or side by side with the main one (ui.qml, animated transitions). Driven by the QML menu ("pip" object) and by
+IPC (script-message streambox-pip <open|close|swap|layout> [channel] [pip|split], /api/pip of remote.py); state published
+in user-data/streambox/pip. Sound muted: the sound is the main stream's (Swap exchanges the two).
 
-Le grand menu de la TV est en QML (qml/TvMenu.qml) : quand il se charge, tv_menu.lua n'est pas chargé ; le bouton Menu
-(script-message streambox-tvmenu-open de stream-box.lua) l'ouvre, et tant qu'il est ouvert les touches lui vont, pas à
-mpv. Il lit et agit par l'API de remote.py, comme la page web.
+The big TV menu is in QML (qml/TvMenu.qml): when it loads, tv_menu.lua is not loaded; the Menu button
+(script-message streambox-tvmenu-open from stream-box.lua) opens it, and while it is open keys go to it, not to
+mpv. It reads and acts through the remote.py API, like the companion app.
 
-Lancé avec le Python du venv ui-venv (PySide6, python-mpv) : ui.py --input-ipc-server=… --script=… <autres options>
+Run with the Python of the ui-venv venv (PySide6, python-mpv): ui.py --input-ipc-server=… --script=… <other options>
 """
 import ctypes, faulthandler, json, locale, os, queue, re, signal, subprocess, sys, threading, time
 
@@ -28,13 +28,13 @@ from PySide6.QtQuick import QQuickFramebufferObject, QQuickView, QQuickWindow, Q
 
 import mpv
 
-import chat_qt   # chat avec émotes (même dossier)
+import chat_qt   # chat with emotes (same folder)
 
 DIR = os.path.dirname(os.path.abspath(__file__))
-CURSOR_HIDE_MS = 4000   # comme --cursor-autohide=4000 de mpv
+CURSOR_HIDE_MS = 4000   # like mpv's --cursor-autohide=4000
 
-# Touches Qt → noms de touches de mpv (ceux que stream-box.lua lie). Les touches sans nom chez Qt (OK et Menu de la
-# télécommande Xiaomi) sont transmises par leur keysym, sous le nom que mpv leur donnait (voir key_name).
+# Qt keys → mpv key names (those stream-box.lua binds). Keys with no name in Qt (OK and Menu of the
+# Xiaomi remote control) are forwarded by their keysym, under the name mpv gave them (see key_name).
 KEYS = {
     Qt.Key_Up: "UP", Qt.Key_Down: "DOWN", Qt.Key_Left: "LEFT", Qt.Key_Right: "RIGHT",
     Qt.Key_Return: "ENTER", Qt.Key_Enter: "KP_ENTER", Qt.Key_Escape: "ESC", Qt.Key_Space: "SPACE",
@@ -48,19 +48,19 @@ KEYS = {
 for n in range(1, 13):
     KEYS[getattr(Qt, f"Key_F{n}")] = f"F{n}"
 
-# Touches sans nom chez Qt, relevées sur la télécommande Xiaomi : keysym → nom que mpv leur donnait (stream-box.lua les lie)
+# Keys with no name in Qt, recorded on the Xiaomi remote control: keysym → name mpv gave them (stream-box.lua binds them)
 SPECIAL_KEYSYMS = {0x1008ffa0: "0x21ffa0",   # OK
                    0x10081246: "0x2111a0"}   # Menu ≡
 
-# Touches pour le grand menu, mêmes rôles que KEYS dans stream-box.lua
+# Keys for the big menu, same roles as KEYS in stream-box.lua
 MENU_KEYS = {"UP": "up", "DOWN": "down", "LEFT": "left", "RIGHT": "right", "ENTER": "ok", "KP_ENTER": "ok",
              "0x21ffa0": "ok", "HOMEPAGE": "home", "GO_BACK": "back", "ESC": "back", "0x2111a0": "menu",
              "WWW": "homescreen", "PLAY": "corner", "PLAYPAUSE": "corner"}
 
 
-# Touches apprises (assistant du menu Système, écrites par stream-box.lua) : relues quand le fichier change
+# Learned keys (wizard of the System menu, written by stream-box.lua): re-read when the file changes
 KEYMAP_FILE = os.path.expanduser("~/.config/stream-box/keymap.json")
-input_service = {"beat": 0}   # dernier « je tourne » d'input.py (user-data/streambox/input)
+input_service = {"beat": 0}   # last "I'm running" from input.py (user-data/streambox/input)
 keymap_cache = {"mtime": None, "map": {}}
 
 
@@ -79,27 +79,27 @@ def learned_keys():
 
 
 def key_name(event):
-    """Nom mpv de la touche, ou None pour l'ignorer."""
+    """mpv name of the key, or None to ignore it."""
     name = KEYS.get(event.key())
     if name:
         return name
     text = event.text()
     if text and text.isprintable():
         return text
-    # Touche spéciale sans nom chez mpv : il la nommait « 0x21 » suivi des 4 derniers chiffres de son keysym XF86
-    # (OK de la télécommande Xiaomi : keysym 0x1008ffa0 = XF86Select → « 0x21ffa0 », que stream-box.lua lie)
+    # Special key with no name in mpv: it named it "0x21" followed by the last 4 digits of its XF86 keysym
+    # (OK of the Xiaomi remote control: keysym 0x1008ffa0 = XF86Select → "0x21ffa0", which stream-box.lua binds)
     sym = event.nativeVirtualKey()
     if sym in SPECIAL_KEYSYMS:
         return SPECIAL_KEYSYMS[sym]
     if sym:
         name = f"0x{0x210000 | (sym & 0xffff):x}" if sym >> 16 == 0x1008 else f"0x{sym:x}"
-        print(f"touche sans nom : keysym 0x{sym:x}, scancode {event.nativeScanCode()} → {name}", flush=True)
+        print(f"unnamed key: keysym 0x{sym:x}, scancode {event.nativeScanCode()} → {name}", flush=True)
         return name
     return None
 
 
 def parse_args(argv):
-    """Options façon ligne de commande de mpv : (options avant initialisation, listes à compléter, fichiers)."""
+    """mpv command-line style options: (options before initialization, lists to append to, files)."""
     opts, appends, files, scripts = {}, [], [], []
     for arg in argv:
         if not arg.startswith("--"):
@@ -111,46 +111,46 @@ def parse_args(argv):
         elif key.endswith("-append"):
             appends.append((key[:-len("-append")], value))
         elif key in ("fs", "fullscreen", "cursor-autohide"):
-            continue   # sans objet : c'est la fenêtre Qt qui est en plein écran
+            continue   # not applicable: the Qt window is the one in full screen
         elif key == "force-window":
-            # Activé seulement une fois le rendu prêt (Bridge.ready) : passé au démarrage, mpv ne peut pas encore ouvrir
-            # sa sortie vidéo et le désactive. Sans lui, rien ne se dessine quand aucune vidéo ne joue : écran
-            # d'ambiance et chaîne hors ligne restaient figés sur la dernière image
+            # Enabled only once rendering is ready (Bridge.ready): passed at startup, mpv cannot open its video
+            # output yet and disables it. Without it, nothing is drawn when no video is playing: home
+            # screen and offline channel stayed frozen on the last frame
             opts["__force_window"] = value if _ else "yes"
         else:
             opts[key] = value if _ else "yes"
     if scripts:
-        opts["scripts"] = scripts   # assemblés dans main(), une fois connu le menu à utiliser
+        opts["scripts"] = scripts   # assembled in main(), once the menu to use is known
     return opts, appends, files
 
 
 class Bridge(QObject):
-    """Événements du fil de mpv → fil de Qt"""
+    """Events from the mpv thread → Qt thread"""
     frame = Signal()
     shutdown = Signal()
-    ready = Signal()   # contexte de rendu créé
+    ready = Signal()   # render context created
 
 
 def set_flag(name, value):
-    """Booléen dans une propriété mpv (user-data) : python-mpv écrirait la chaîne « yes », que le chat et stream-box.lua
-    ne prennent pas pour un vrai."""
+    """Boolean in an mpv property (user-data): python-mpv would write the string "yes", which the chat and stream-box.lua
+    do not take as true."""
     flag = ctypes.c_int(1 if value else 0)
     mpv._mpv_set_property(player.handle, name.encode(), mpv.MpvFormat.FLAG, ctypes.byref(flag))
 
 
 class Box(QObject):
-    """Ce que voit le QML (« box ») : ouverture du menu, touches, données de mpv utiles au menu"""
+    """What the QML sees ("box"): menu opening, keys, mpv data useful to the menu"""
     openRequested = Signal()
-    closeRequested = Signal()      # vidéo lancée d'ailleurs (téléphone, Cast…), assistant des touches : menu refermé
+    closeRequested = Signal()      # video started from elsewhere (phone, Cast…), keys wizard: menu closed
     keyPressed = Signal(str)
     textInput = Signal(str, bool)
-    powerMenuRequested = Signal()   # power maintenu (stream-box.lua) : fenêtre « veille, redémarrer, éteindre »    # texte tapé sur le téléphone pour le clavier du menu (texte, lancer la recherche)
+    powerMenuRequested = Signal()   # power held (stream-box.lua): "sleep, restart, shut down" window    # text typed on the phone for the menu keyboard (text, start the search)
     ambientChanged = Signal()
     videoActiveChanged = Signal()
     homeChanged = Signal()
-    _ambient_in = Signal(str)        # depuis le fil de mpv
+    _ambient_in = Signal(str)        # from the mpv thread
     _video_in = Signal(bool)
-    _home_in = Signal(str, str)      # écran d'accueil : clé (ambient_on, status, qr), valeur en JSON
+    _home_in = Signal(str, str)      # home screen: key (ambient_on, status, qr), value as JSON
 
     def __init__(self):
         super().__init__()
@@ -170,7 +170,7 @@ class Box(QObject):
         self._home[key] = json.loads(value)
         self.homeChanged.emit()
 
-    # Écran d'accueil (qml/AmbientScreen.qml) : affiché quand stream-box.lua le décide, avec son message d'état
+    # Home screen (qml/AmbientScreen.qml): shown when stream-box.lua decides so, with its status message
     ambientOn = Property(bool, lambda self: bool(self._home["ambient_on"]), notify=homeChanged)
     statusText = Property(str, lambda self: self._home["status"] or "", notify=homeChanged)
     qrMode = Property(str, lambda self: self._home["qr"] or "always", notify=homeChanged)
@@ -180,7 +180,7 @@ class Box(QObject):
             self._video = value
             self.videoActiveChanged.emit()
 
-    ambient = Property(str, lambda self: self._ambient, notify=ambientChanged)   # météo, QR code (JSON)
+    ambient = Property(str, lambda self: self._ambient, notify=ambientChanged)   # weather, QR code (JSON)
     videoActive = Property(bool, lambda self: self._video, notify=videoActiveChanged)
 
     @Slot(bool)
@@ -188,18 +188,18 @@ class Box(QObject):
         self.menu_open = value
         if chat:
             chat.set_menu_open(value)
-        to_mpv(set_flag, "user-data/streambox/tvmenu", value)   # le chat se masque, la souris n'ouvre pas le petit menu
+        to_mpv(set_flag, "user-data/streambox/tvmenu", value)   # the chat hides, the mouse does not open the small menu
 
 
 box = Box()
 
 
 bridge = Bridge()
-player = None   # créé dans main(), avant la fenêtre
+player = None   # created in main(), before the window
 
-# Appels à mpv depuis le fil de Qt : jamais en direct. Un appel synchrone peut attendre la sortie vidéo de mpv, qui
-# attend le fil de rendu de Qt, lui-même bloqué par le fil principal : tout se fige (vu en relançant le lecteur, menu
-# ouvert : socket IPC coupé, image figée). Un fil à part les exécute dans l'ordre.
+# Calls to mpv from the Qt thread: never directly. A synchronous call can wait for mpv's video output, which
+# waits for Qt's render thread, itself blocked by the main thread: everything freezes (seen when restarting the player,
+# menu open: IPC socket cut, frozen picture). A separate thread runs them in order.
 mpv_calls = queue.Queue()
 
 
@@ -208,20 +208,20 @@ def mpv_worker():
         fn, args = mpv_calls.get()
         try:
             fn(*args)
-        except Exception as e:   # mpv arrêté, propriété refusée… : on continue
-            print(f"appel à mpv refusé : {e}", flush=True)
+        except Exception as e:   # mpv stopped, property refused…: carry on
+            print(f"mpv call refused: {e}", flush=True)
 
 
 def to_mpv(fn, *args):
     mpv_calls.put((fn, args))
-# Tampons d'image donnés à Qt : PySide les libérerait sinon pendant que Qt s'en sert encore (plantage dans texture()).
-# Qt les détruit lui-même quand la taille change ; on garde juste la référence Python.
+# Frame buffers given to Qt: otherwise PySide would free them while Qt still uses them (crash in texture()).
+# Qt destroys them itself when the size changes; we just keep the Python reference.
 framebuffers = []
 
 
 def wayland_display():
-    """Connexion Wayland à donner à libmpv pour le décodage matériel (VA-API) : sans elle, pas de VADisplay et
-    décodage par le processeur. Connexion à part de celle de Qt, qui suffit à VA-API pour trouver la puce."""
+    """Wayland connection to give libmpv for hardware decoding (VA-API): without it, no VADisplay and
+    decoding on the CPU. A connection separate from Qt's, which is enough for VA-API to find the GPU."""
     try:
         lib = ctypes.CDLL("libwayland-client.so.0")
         lib.wl_display_connect.restype = ctypes.c_void_p
@@ -243,10 +243,10 @@ class MpvRenderer(QQuickFramebufferObject.Renderer):
         super().__init__()
         self.item = item
         self.ctx = None
-        self.proc = egl_get_proc_address()   # gardé : mpv l'appelle depuis le C
+        self.proc = egl_get_proc_address()   # kept: mpv calls it from C
 
     def createFramebufferObject(self, size):
-        if self.ctx is None:   # contexte OpenGL de Qt actif ici, dans le fil de rendu
+        if self.ctx is None:   # Qt's OpenGL context active here, in the render thread
             params = {"opengl_init_params": {"get_proc_address": self.proc}}
             display = wayland_display()
             if display:
@@ -261,8 +261,8 @@ class MpvRenderer(QQuickFramebufferObject.Renderer):
         return fbo
 
     def render(self):
-        # update() accuse réception de la notification de mpv ; sans attente de l'heure d'affichage de l'image : bloqué
-        # là-dedans, le fil de rendu de Qt figeait tout au démarrage (une relance sur deux ou trois)
+        # update() acknowledges mpv's notification; no waiting for the frame's display time: blocked
+        # in there, Qt's render thread froze everything at startup (one restart out of two or three)
         self.ctx.update()
         fbo = self.framebufferObject()
         self.ctx.render(flip_y=False, block_for_target_time=False,
@@ -271,8 +271,8 @@ class MpvRenderer(QQuickFramebufferObject.Renderer):
 
 
 class MpvVideo(QQuickFramebufferObject):
-    """Vidéo d'un lecteur libmpv : which = « main » (par défaut) ou « pip » (second stream)"""
-    frameReady = Signal()   # depuis mpv, n'importe quel fil
+    """Video of a libmpv player: which = "main" (default) or "pip" (second stream)"""
+    frameReady = Signal()   # from mpv, any thread
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -291,21 +291,21 @@ class MpvVideo(QQuickFramebufferObject):
         return MpvRenderer(self)
 
 
-PIP_PORT = 34590   # streamlink du second stream (le principal prend 34501 à 34550, voir stream-box.lua)
-pip_player = None  # second lecteur libmpv, créé dans main()
+PIP_PORT = 34590   # streamlink of the second stream (the main one takes 34501 to 34550, see stream-box.lua)
+pip_player = None  # second libmpv player, created in main()
 
 
 def set_node(name, value):
-    """Valeur structurée (dict) dans une propriété mpv du lecteur principal"""
+    """Structured value (dict) in an mpv property of the main player"""
     player._set_property(name, value)
 
 
 class Pip(QObject):
-    """Second stream : streamlink à part, lecteur pip_player, disposition « pip » (incrustation) ou « split »"""
+    """Second stream: separate streamlink, pip_player player, "pip" (inset) or "split" layout"""
     changed = Signal()
-    _request = Signal(str, str, str)   # depuis le fil de mpv (IPC) : action, chaîne, disposition
-    _main = Signal(str, str, str)      # chaîne, mode et coin du chat du lecteur principal
-    _idle = Signal()                   # le second lecteur n'a plus rien à lire
+    _request = Signal(str, str, str)   # from the mpv thread (IPC): action, channel, layout
+    _main = Signal(str, str, str)      # channel, mode and chat corner of the main player
+    _idle = Signal()                   # the second player has nothing left to play
 
     def __init__(self):
         super().__init__()
@@ -339,13 +339,13 @@ class Pip(QObject):
             return
         self.stop_stream()
         self._channel, self._layout = name, layout if layout in ("pip", "split") else "pip"
-        # En incrustation, 720p suffit et ménage le réseau ; côte à côte, la meilleure qualité
+        # As an inset, 720p is enough and spares the network; side by side, the best quality
         quality = "best" if self._layout == "split" else "720p60,720p,best"
         self.proc = subprocess.Popen(
             ["streamlink", "--twitch-low-latency", "--retry-streams", "30", "--player-external-http",
              "--player-external-http-interface", "127.0.0.1", "--player-external-http-port", str(PIP_PORT),
              f"twitch.tv/{name}", quality], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.retry.start(2500)   # le temps que streamlink ouvre son serveur
+        self.retry.start(2500)   # time for streamlink to open its server
         self.publish()
 
     def load(self):
@@ -369,7 +369,7 @@ class Pip(QObject):
 
     @Slot()
     def swap(self):
-        """Échange les deux streams (et donc le son)"""
+        """Swaps the two streams (and so the sound)"""
         if not self._channel or not self.main_channel:
             return
         new_main, new_pip, layout = self._channel, self.main_channel, self._layout
@@ -389,7 +389,7 @@ class Pip(QObject):
         if corner != self._corner:
             self._corner = corner
             self.changed.emit()
-        # Écran d'accueil, vidéo, ou même streamer que le second : le second stream n'a plus lieu d'être
+        # Home screen, video, or same streamer as the second one: the second stream is no longer needed
         if self._channel and (mode != "twitch" or channel == self._channel):
             self.close()
 
@@ -402,11 +402,11 @@ pip = Pip()
 
 
 class ChatBridge(QObject):
-    """Chat avec émotes pour qml/ChatOverlay.qml : messages de chat_qt.py, réglages du lecteur principal"""
+    """Chat with emotes for qml/ChatOverlay.qml: messages from chat_qt.py, settings of the main player"""
     changed = Signal()
     messagesChanged = Signal()
-    _messages_in = Signal(str)     # depuis les fils de chat_qt
-    _settings_in = Signal(str)     # depuis le fil de mpv (JSON des réglages)
+    _messages_in = Signal(str)     # from the chat_qt threads
+    _settings_in = Signal(str)     # from the mpv thread (settings JSON)
 
     def __init__(self):
         super().__init__()
@@ -435,20 +435,20 @@ class ChatBridge(QObject):
     corner = Property(str, lambda self: self.settings["corner"] or "bl", notify=changed)
     bg = Property(int, lambda self: int(self.settings["chat_bg"] or 0), notify=changed)
     size = Property(int, lambda self: int(self.settings["chat_size"] or 32), notify=changed)
-    # Masqué : case décochée, vidéo ou écran d'accueil, grand menu ouvert (comme chat_overlay.py)
+    # Hidden: box unchecked, video or home screen, big menu open (like chat_overlay.py)
     visible = Property(bool, lambda self: bool(self.settings["chat_visible"]) and self.settings["mode"] == "twitch"
                        and not self.menu_open, notify=changed)
 
 
-chat = None   # créé dans main(), avec l'application Qt
+chat = None   # created in main(), with the Qt application
 
 
 class Osd(QObject):
-    """Bandeau et barre de lecture, notification de live, encart des sondages, choix des sous-titres (qml/InfoBar.qml,
-    Toast.qml, PollsOverlay.qml, TracksPanel.qml). stream-box.lua décide quand ils s'affichent (user-data/streambox/bar, toast) ; la position de
-    lecture est lue ici, depuis un fil à part, 4 fois par seconde tant que la barre est visible."""
+    """Info bar and playback bar, live notification, polls box, subtitles choice (qml/InfoBar.qml,
+    Toast.qml, PollsOverlay.qml, TracksPanel.qml). stream-box.lua decides when they show (user-data/streambox/bar, toast); the playback
+    position is read here, from a separate thread, 4 times per second while the bar is visible."""
     changed = Signal()
-    _in = Signal(str, str)   # depuis les fils de mpv : clé, valeur JSON
+    _in = Signal(str, str)   # from the mpv threads: key, JSON value
 
     def __init__(self):
         super().__init__()
@@ -478,7 +478,7 @@ class Osd(QObject):
                          "window": [ranges[0]["start"], ranges[0]["end"]] if ranges else None,
                          "chapters": [{"time": c.get("time", 0), "title": c.get("title") or ""}
                                       for c in get("chapter-list") or []], "chapter": get("chapter")}
-            except Exception:   # rien en lecture, mpv qui redémarre…
+            except Exception:   # nothing playing, mpv restarting…
                 continue
             self._in.emit("playback", json.dumps(state))
 
@@ -490,7 +490,7 @@ class Osd(QObject):
     tracks = Property(str, lambda self: json.dumps(self.data["tracks"] or {}), notify=changed)   # TracksPanel.qml
     loading = Property(str, lambda self: json.dumps(self.data["loading"] or {}), notify=changed)   # LoadingOverlay.qml
     learn = Property(str, lambda self: json.dumps(self.data["learn"] or {}), notify=changed)   # KeyWizard.qml
-    # Barre de lecture : infos de la vidéo, rangée de boutons, saut affiché ; carte « Épisode suivant » (NextUp.qml)
+    # Playback bar: video info, row of buttons, seek shown; "Next episode" card (NextUp.qml)
     meta = Property(str, lambda self: json.dumps(self.data["meta"] or {}), notify=changed)
     controls = Property(str, lambda self: json.dumps(self.data["controls"] or {}), notify=changed)
     seekfx = Property(str, lambda self: json.dumps(self.data["seekfx"] or {}), notify=changed)
@@ -503,8 +503,34 @@ class Osd(QObject):
 osd = Osd()
 
 
+class I18n(QObject):
+    """Interface language for QML (see i18n.py): `dict` maps English texts to the current language; QML texts call
+    tr("English text"), which reads i18n.dict, so they update by themselves when the language changes
+    (script-message streambox-language from remote.py)"""
+    changed = Signal()
+    _reload = Signal()   # from the mpv thread
+
+    def __init__(self):
+        super().__init__()
+        self._dict, self._lang = {}, "en"
+        self._reload.connect(self.load, Qt.QueuedConnection)
+        self.load()
+
+    def load(self):
+        import i18n
+        self._lang = i18n.language()
+        self._dict = i18n.catalog(self._lang)
+        self.changed.emit()
+
+    dict = Property("QVariantMap", lambda self: self._dict, notify=changed)
+    lang = Property(str, lambda self: self._lang, notify=changed)
+
+
+tr_dict = I18n()
+
+
 class View(QQuickView):
-    """Fenêtre plein écran : transmet touches et souris à mpv, masque le curseur après 4 s sans mouvement."""
+    """Full-screen window: forwards keys and mouse to mpv, hides the cursor after 4 s without movement."""
 
     def __init__(self):
         super().__init__()
@@ -515,21 +541,21 @@ class View(QQuickView):
         self.setCursor(QCursor(Qt.BlankCursor))
 
     def keyPressEvent(self, event):
-        if time.time() - input_service["beat"] < 15:   # input.py lit les touches à la source : rien à faire ici
+        if time.time() - input_service["beat"] < 15:   # input.py reads the keys at the source: nothing to do here
             return
         name = key_name(event)
         if not name:
             return
         if (learned_keys().get(name) or MENU_KEYS.get(name)) == "power" or name in ("POWER", "0x21ff2a"):
-            # power : appui et relâchement séparés, pour l'appui long (stream-box.lua : fenêtre après 1 s)
+            # power: separate press and release, for the long press (stream-box.lua: window after 1 s)
             if not event.isAutoRepeat():
                 to_mpv(player.command, "keydown", name)
             return
         menu_key = learned_keys().get(name) or MENU_KEYS.get(name)
-        if box.menu_open and menu_key and menu_key != "power":   # menu QML ouvert : la touche est pour lui
+        if box.menu_open and menu_key and menu_key != "power":   # QML menu open: the key is for it
             box.keyPressed.emit(menu_key)
             return
-        # Répétition : un keypress par événement, comme mpv le fait pour une touche maintenue
+        # Repeat: one keypress per event, as mpv does for a held key
         to_mpv(player.command, "keypress", name)
 
     def keyReleaseEvent(self, event):
@@ -563,13 +589,13 @@ class View(QQuickView):
 
 def main():
     global player
-    # kill -USR1 <pid> : pile de chaque fil dans le journal (diagnostic d'un blocage)
+    # kill -USR1 <pid>: stack of each thread in the journal (diagnosing a hang)
     faulthandler.register(signal.SIGUSR1, all_threads=True)
     opts, appends, files = parse_args(sys.argv[1:])
     force_window = opts.pop("__force_window", None)
     QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
     app = QGuiApplication(sys.argv[:1])
-    locale.setlocale(locale.LC_NUMERIC, "C")   # exigé par libmpv, après Qt qui applique la locale du système
+    locale.setlocale(locale.LC_NUMERIC, "C")   # required by libmpv, after Qt which applies the system locale
     qmlRegisterType(MpvVideo, "StreamBox", 1, 0, "MpvVideo")
     view = View()
     view.rootContext().setContextProperty("box", box)
@@ -578,18 +604,19 @@ def main():
     chat = ChatBridge()
     view.rootContext().setContextProperty("chat", chat)
     view.rootContext().setContextProperty("osd", osd)
+    view.rootContext().setContextProperty("i18n", tr_dict)
     view.setSource(QUrl.fromLocalFile(os.path.join(DIR, "ui.qml")))
     qml_menu = view.status() == QQuickView.Ready and view.rootObject().findChild(QObject, "tvMenu") is not None
     if not qml_menu:
-        print("menu QML indisponible : menu de tv_menu.lua", [e.toString() for e in view.errors()], flush=True)
+        print("QML menu unavailable: tv_menu.lua menu", [e.toString() for e in view.errors()], flush=True)
     scripts = opts.pop("scripts", [])
-    if qml_menu:   # deux menus répondraient au bouton Menu
+    if qml_menu:   # two menus would answer the Menu button
         scripts = [s for s in scripts if os.path.basename(s) != "tv_menu.lua"]
     if scripts:
         opts["scripts"] = ":".join(scripts)
     player = mpv.MPV(vo="libmpv", **{k.replace("-", "_"): v for k, v in opts.items()})
     global pip_player
-    # Second stream : direct à faible latence comme le principal (petit tampon), sans son ni interface
+    # Second stream: low-latency live like the main one (small buffer), without sound or interface
     pip_player = mpv.MPV(vo="libmpv", hwdec=opts.get("hwdec", "auto-safe"), mute="yes", idle="yes", ytdl="no",
                          osd_level="0", input_default_bindings="no", cache="yes", demuxer_max_bytes="750KiB",
                          demuxer_max_back_bytes="0")
@@ -625,10 +652,11 @@ def main():
         player.register_message_handler("streambox-tvmenu-open", lambda *_: box.openRequested.emit())
         player.register_message_handler("streambox-power-menu", lambda *_: box.powerMenuRequested.emit())
         player.register_message_handler("streambox-tvmenu-close", lambda *_: box.closeRequested.emit())
-        # Touches envoyées par l'IPC (keypress → stream-box.lua → streambox-tvmenu-key) : tests, Home Assistant
+        player.register_message_handler("streambox-language", lambda *_: tr_dict._reload.emit())
+        # Keys sent through IPC (keypress → stream-box.lua → streambox-tvmenu-key): tests, Home Assistant
         player.register_message_handler(
             "streambox-tvmenu-key", lambda k, *_: box.keyPressed.emit(k.decode() if isinstance(k, bytes) else k))
-        # Clavier du menu tenu par la page (remote.py, /api/keyboard_input) : texte en entier, et « 1 » pour lancer
+        # Menu keyboard held by the companion app (remote.py, /api/keyboard_input): whole text, and "1" to submit
         player.register_message_handler(
             "streambox-tvmenu-text", lambda t, submit="0", *_: box.textInput.emit(dec(t), dec(submit) == "1"))
         player.observe_property("user-data/streambox/ambient",
@@ -642,9 +670,9 @@ def main():
 
     @player.event_callback("shutdown")
     def _(_event):
-        # mpv quitté (commande quit par l'IPC…) : l'appli aussi, la boucle de player.sh la relance. Tout de suite, depuis
-        # ce fil : juste après, python-mpv détruit sa connexion, ce qui attend la libération du contexte de rendu tenu
-        # par le fil de rendu de Qt, et tout restait figé (socket IPC qui coupe les connexions, pas de relance).
+        # mpv quit (quit command through IPC…): the app too, the player.sh loop restarts it. Right away, from
+        # this thread: just after, python-mpv destroys its connection, which waits for the release of the render
+        # context held by Qt's render thread, and everything stayed frozen (IPC socket dropping connections, no restart).
         if pip.proc:
             pip.proc.terminate()
         os._exit(0)
@@ -652,12 +680,12 @@ def main():
         bridge.ready.connect(lambda: to_mpv(player.command, "set", "force-window", force_window), Qt.QueuedConnection)
     if qml_menu:
         bridge.ready.connect(lambda: to_mpv(set_flag, "user-data/streambox/tvmenu", False), Qt.QueuedConnection)
-        # Le chat est dessiné ici (avec émotes) : chat_overlay.py, qui le dessine en texte dans mpv, se tait
+        # The chat is drawn here (with emotes): chat_overlay.py, which draws it as text in mpv, stays quiet
         bridge.ready.connect(lambda: to_mpv(player._set_property, "user-data/streambox/chat_ui", "qml"),
                              Qt.QueuedConnection)
     view.showFullScreen()
-    # Image de démarrage de start.sh (mpv, même image que l'écran de Plymouth) : retirée une fois la première image de
-    # l'appli à l'écran (petit délai : cage passe à la fenêtre la plus récente)
+    # Boot image from start.sh (mpv, same image as the Plymouth screen): removed once the app's first frame is
+    # on screen (short delay: cage switches to the most recent window)
     def drop_splash():
         path = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "stream-box-splash.pid")
         try:
@@ -676,8 +704,8 @@ def main():
     for f in files:
         to_mpv(player.command, "loadfile", f, "append-play")
     code = app.exec()
-    # Fenêtre fermée sans que mpv ait quitté (rare). Pas de player.terminate() : libmpv s'arrête net (abort, code 134)
-    # si son contexte de rendu, tenu par le fil de rendu de Qt, existe encore.
+    # Window closed without mpv having quit (rare). No player.terminate(): libmpv stops dead (abort, code 134)
+    # if its render context, held by Qt's render thread, still exists.
     os._exit(code)
 
 

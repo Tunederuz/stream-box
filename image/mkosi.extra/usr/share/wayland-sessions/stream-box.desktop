@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Stream Box
-Comment=Stream Twitch en plein écran (cage + mpv), sans bureau
+Comment=Full-screen Twitch stream (cage + mpv), without a desktop
 Exec=cage -s -- /home/media/stream-box/start.sh
 Type=Application
 DesktopNames=StreamBox

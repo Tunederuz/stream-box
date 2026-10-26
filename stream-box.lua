@@ -1,53 +1,79 @@
--- Stream Box : menu affiché quand la souris bouge (choix du streamer, coin du chat),
--- et gestion de streamlink, qui sert le flux de la chaîne choisie en HTTP local à ce mpv.
--- La chaîne, le coin et la visibilité du chat sont publiés dans user-data/streambox/* pour chat_overlay.py.
--- Deux modes : « twitch » (stream de la chaîne choisie) et « media » (vidéo envoyée depuis la télécommande ou
--- Jellyfin). Tout fichier qui n'est pas le flux streamlink fait passer en « media » ; quand il se termine et que
--- mpv reste vide, on revient au stream.
+-- Stream Box: menu shown when the mouse moves (streamer choice, chat corner),
+-- and management of streamlink, which serves the chosen channel's stream over local HTTP to this mpv.
+-- The channel, corner and chat visibility are published in user-data/streambox/* for chat_overlay.py.
+-- Two modes: "twitch" (stream of the chosen channel) and "media" (video sent from the companion app or
+-- Jellyfin). Any file that is not the streamlink stream switches to "media"; when it ends and
+-- mpv stays empty, we go back to the stream.
 local mp = require "mp"
+
+-- Interface language (see i18n.py): texts written in English, translated from locales/<lang>.json next to this script;
+-- the language is in ~/.config/stream-box/language ("en" when missing), reloaded on script-message streambox-language
+local I18N = { dict = {} }
+function I18N.load()
+    local home = os.getenv("HOME") or ""
+    local f, lang = io.open(home .. "/.config/stream-box/language"), "en"
+    if f then lang = (f:read("*l") or "en"):match("^%s*(%a+)") or "en" f:close() end
+    I18N.dict, I18N.lang = {}, lang
+    if lang == "en" then return end
+    local dir = (mp.get_script_file() or ""):match("^(.*)/[^/]*$") or "."
+    local lf = io.open(dir .. "/locales/" .. lang .. ".json")
+    if lf then
+        I18N.dict = require("mp.utils").parse_json(lf:read("*a") or "") or {}
+        lf:close()
+    end
+end
+-- tr("Connected: {login}", { login = name })
+local function tr(s, a)
+    local out = I18N.dict[s] or s
+    if a then for k, v in pairs(a) do out = out:gsub("{" .. k .. "}", (tostring(v):gsub("%%", "%%%%"))) end end
+    return out
+end
+-- decimal separator of the interface language: "4.6 k" in English, "4,6 k" in French
+function I18N.dec(s) return I18N.lang == "fr" and (s:gsub("%.", ",")) or s end
+I18N.load()
 
 local DIR = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$")
 local STREAMERS_FILE = DIR .. "/streamers.txt"
 local STATE_DIR = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")) .. "/stream-box"
 
-local CORNERS = { "tl", "tr", "br", "bl" }   -- ordre du toggle (sens horaire)
-local CORNER_LABELS = { tl = "↖ haut gauche", tr = "↗ haut droite", br = "↘ bas droite", bl = "↙ bas gauche" }
-local MENU_TIMEOUT = 4    -- secondes sans bouger la souris avant de masquer le menu
-local MENU_TIMEOUT_KEYS = 10   -- idem quand on le pilote avec la télécommande
-local RETRY = 15          -- secondes entre deux essais quand la chaîne n'est pas en live
-local BACK_TO_MENU = 3    -- secondes à vide après une vidéo avant de revenir au menu (laisse Jellyfin enchaîner)
-local AUTO_SWITCH = 60    -- secondes hors ligne (après un changement de chaîne) avant de passer à un streamer en live
-local FROZEN = 20         -- secondes d'image figée, sans pause, avant de relancer le direct
-local LIVE_BACK = "400MiB" -- direct gardé en mémoire pour revenir en arrière (≈ 7-8 min en 1080p60)
-local LIVE_EDGE = 4       -- secondes de retard en dessous desquelles on considère être « en direct »
+local CORNERS = { "tl", "tr", "br", "bl" }   -- toggle order (clockwise)
+local CORNER_LABELS = { tl = "↖ top left", tr = "↗ top right", br = "↘ bottom right", bl = "↙ bottom left" }
+local MENU_TIMEOUT = 4    -- seconds without moving the mouse before hiding the menu
+local MENU_TIMEOUT_KEYS = 10   -- same when driven with the remote
+local RETRY = 15          -- seconds between two attempts when the channel is not live
+local BACK_TO_MENU = 3    -- seconds idle after a video before going back to the menu (lets Jellyfin chain the next one)
+local AUTO_SWITCH = 60    -- seconds offline (after a channel change) before switching to a live streamer
+local FROZEN = 20         -- seconds of frozen picture, not paused, before restarting the live stream
+local LIVE_BACK = "400MiB" -- live stream kept in memory to go back in time (≈ 7-8 min in 1080p60)
+local LIVE_EDGE = 4       -- delay in seconds below which we count as "live"
 local BASE_PORT = 34500
 
 local streamers, channel, corner, chat_visible
 local server, port_n = nil, os.time() % 50
 local attempts, retry_timer = 0, nil
 local mode, back_timer = "twitch", nil
-local live, offline, channel_since = {}, false, 0   -- live : relevé de remote.py (user-data/streambox/live)
-local ambient_visible, status_text = false, ""    -- écran d'ambiance affiché ; dernier message d'état
-local auto_switch_on = true   -- bascule automatique vers un streamer en live (réglage de la télécommande)
-local qr_data = nil           -- QR code de la télécommande web, publié par remote.py avec l'écran d'ambiance
-local ambient_data = {}       -- user-data/streambox/ambient (météo, plannings, QR code, mode configuration)
-local QR_MODES = { always = true, timed = true, never = true }   -- toujours, QR_SECONDS secondes, jamais
+local live, offline, channel_since = {}, false, 0   -- live: report from remote.py (user-data/streambox/live)
+local ambient_visible, status_text = false, ""    -- ambient screen shown; last status message
+local auto_switch_on = true   -- automatic switch to a live streamer (companion app setting)
+local qr_data = nil           -- companion app QR code, published by remote.py with the ambient screen
+local ambient_data = {}       -- user-data/streambox/ambient (weather, schedules, QR code, setup mode)
+local QR_MODES = { always = true, timed = true, never = true }   -- always, QR_SECONDS seconds, never
 local QR_SECONDS = 30
-local qr_mode, qr_until = "always", 0   -- en mode « timed », affiché jusqu'à qr_until (mp.get_time)
+local qr_mode, qr_until = "always", 0   -- in "timed" mode, shown until qr_until (mp.get_time)
 local menu = mp.create_osd_overlay("ass-events")
 local status = mp.create_osd_overlay("ass-events")
 local menu_visible, hide_timer, items = false, nil, {}
-local sel, keyboard_nav = nil, false   -- bouton sélectionné à la télécommande (index dans items)
+local sel, keyboard_nav = nil, false   -- button selected with the remote (index in items)
 local started = mp.get_time()
 
 
 local function ass_escape(s)
-    -- Même échappement que les scripts intégrés de mpv
+    -- Same escaping as mpv's built-in scripts
     return (s:gsub("\\", "\\\239\187\191"):gsub("{", "\\{"))
 end
 
--- Appli Qt (ui.py) : bandeau, barre de lecture, notifications, encart des sondages et écran d'accueil sont dessinés en
--- QML ; ce script garde la logique (quand, combien de temps, touches) et publie l'état dans user-data/streambox/*
+-- Qt app (ui.py): banner, playback bar, notifications, polls box and home screen are drawn in
+-- QML; this script keeps the logic (when, how long, keys) and publishes the state in user-data/streambox/*
 local function qt_ui()
     return mp.get_property_native("user-data/streambox/chat_ui") == "qml"
 end
@@ -66,7 +92,7 @@ local function read_streamers()
     return list
 end
 
--- Réglages (chaîne, chat) gardés d'un démarrage à l'autre, un fichier par réglage dans STATE_DIR
+-- Settings (channel, chat) kept from one start to the next, one file per setting in STATE_DIR
 local function read_state(name)
     local f = io.open(STATE_DIR .. "/" .. name)
     local v = f and f:read("*l")
@@ -82,17 +108,17 @@ local function write_state(name, value)
     end
 end
 
--- Écran de chargement entre deux vidéos ou deux chaînes (sinon l'image reste figée et ça ressemble à un blocage) :
--- user-data/streambox/loading { title, thumb } jusqu'à la première image (playback-restart), une erreur ou 45 s au plus ;
--- dessiné par qml/LoadingOverlay.qml, ou simple message à l'écran avec mpv seul
+-- Loading screen between two videos or two channels (otherwise the picture stays frozen and looks like a hang):
+-- user-data/streambox/loading { title, thumb } until the first frame (playback-restart), an error or 45 s at most;
+-- drawn by qml/LoadingOverlay.qml, or a simple on-screen message with mpv alone
 local loading_timer, loading_osd = nil, false
-local function set_loading(title, thumb, kind)   -- kind : twitch, youtube, jellyfin ou video (couleur de l'animation)
+local function set_loading(title, thumb, kind)   -- kind: twitch, youtube, jellyfin or video (animation color)
     if loading_timer then loading_timer:kill() loading_timer = nil end
     if title then
         mp.set_property_native("user-data/streambox/loading", { title = title, thumb = thumb or "", kind = kind or "video" })
-        -- appli Qt (vo=libmpv, connu dès le démarrage, contrairement à chat_ui) : l'écran QML suffit
+        -- Qt app (vo=libmpv, known from startup, unlike chat_ui): the QML screen is enough
         loading_osd = mp.get_property("vo") ~= "libmpv"
-        if loading_osd then mp.osd_message("Chargement de " .. title .. "…", 45) end
+        if loading_osd then mp.osd_message(tr("Loading {title}…", { title = title }), 45) end
         loading_timer = mp.add_timeout(45, function() set_loading(nil) end)
     else
         mp.set_property_native("user-data/streambox/loading", {})
@@ -105,8 +131,8 @@ mp.register_event("end-file", function(e) if e.reason == "error" then set_loadin
 
 local function set_status(text)
     status_text = text
-    mp.set_property_native("user-data/streambox/status", text)   -- pour l'écran d'accueil en QML (appli Qt)
-    if text == "" or ambient_visible then   -- l'écran d'ambiance affiche lui-même ce message, en petit
+    mp.set_property_native("user-data/streambox/status", text)   -- for the QML home screen (Qt app)
+    if text == "" or ambient_visible then   -- the ambient screen shows this message itself, small
         status:remove()
         return
     end
@@ -116,7 +142,7 @@ local function set_status(text)
 end
 
 
--- Lecture : streamlink tourne en serveur HTTP local, mpv lit http://127.0.0.1:<port>/
+-- Playback: streamlink runs as a local HTTP server, mpv plays http://127.0.0.1:<port>/
 
 local function stream_url()
     return ("http://127.0.0.1:%d/"):format(BASE_PORT + port_n)
@@ -125,13 +151,13 @@ end
 local function load_stream()
     retry_timer = nil
     attempts = attempts + 1
-    -- La pause survit au changement de fichier dans mpv : une vidéo laissée en pause figerait le direct
+    -- Pause survives a file change in mpv: a video left paused would freeze the live stream
     mp.set_property_native("pause", false)
     mp.commandv("loadfile", stream_url())
 end
 
 local function start_server(name)
-    port_n = port_n % 50 + 1   -- nouveau port : l'ancien peut rester occupé quelques secondes
+    port_n = port_n % 50 + 1   -- new port: the old one can stay busy for a few seconds
     local handle
     handle = mp.command_native_async({
         name = "subprocess", playback_only = false,
@@ -141,7 +167,7 @@ local function start_server(name)
                  "twitch.tv/" .. name, "best" },
     }, function(_, res)
         if server == handle and not (res and res.killed_by_us) then
-            -- streamlink s'est arrêté tout seul : on le relance
+            -- streamlink stopped on its own: restart it
             mp.add_timeout(5, function() if server == handle then start_server(name) end end)
         end
     end)
@@ -170,32 +196,32 @@ local function start_channel(name)
     channel = name
     write_state("channel", name)
     mp.set_property_native("user-data/streambox/channel", name)
-    set_mode("twitch")   -- avant le « stop » ci-dessous, pour que sa fin de fichier soit lue comme un changement de chaîne
+    set_mode("twitch")   -- before the "stop" below, so its end of file is read as a channel change
     set_loading(name, nil, "twitch")
-    mp.set_property_bool("pause", false)   -- mpv garde la pause d'un fichier à l'autre
+    mp.set_property_bool("pause", false)   -- mpv keeps pause from one file to the next
     offline, channel_since = false, mp.get_time()
     stop_twitch()
     start_server(name)
     mp.commandv("stop")
     attempts = 0
-    set_status("Chargement de " .. name .. "…")
+    set_status(tr("Loading {title}…", { title = name }))
     retry_timer = mp.add_timeout(2, load_stream)
 end
 
--- start : position de reprise en secondes (historique de remote.py), donnée à mpv comme option du fichier pour ne pas
--- voir un saut après le chargement
--- title : titre à afficher (Jellyfin : le lien du flux n'en donne pas), passé en option du fichier (%n% : longueur
--- en octets, pour que virgules et signes égal du titre passent tels quels)
--- thumb, label : image et titre de l'écran de chargement (label : titre connu, sans l'imposer à mpv)
+-- start: resume position in seconds (remote.py history), given to mpv as a file option so no jump is
+-- seen after loading
+-- title: title to display (Jellyfin: the stream link does not give one), passed as a file option (%n%: length
+-- in bytes, so commas and equal signs in the title go through as is)
+-- thumb, label: loading screen picture and title (label: known title, without forcing it on mpv)
 local function play_media(url, start, title, thumb, label)
-    -- Lancée d'ailleurs (téléphone, Cast, Home Assistant…) pendant que le menu est ouvert : il se referme sur la vidéo
+    -- Started from elsewhere (phone, Cast, Home Assistant…) while the menu is open: it closes over the video
     mp.commandv("script-message", "streambox-tvmenu-close")
     stop_twitch()
     set_mode("media")
     local kind = (url:find("youtube%.com/") or url:find("youtu%.be/")) and "youtube"
         or url:find("/Videos/%x+/stream") and "jellyfin" or url:find("twitch%.tv/") and "twitch" or "video"
-    set_loading((label and label ~= "" and label) or (title and title ~= "" and title) or "la vidéo", thumb, kind)
-    mp.set_property_bool("pause", false)   -- mpv garde la pause d'un fichier à l'autre
+    set_loading((label and label ~= "" and label) or (title and title ~= "" and title) or tr("the video"), thumb, kind)
+    mp.set_property_bool("pause", false)   -- mpv keeps pause from one file to the next
     local at = tonumber(start) or 0
     local opts = title and title ~= "" and ("force-media-title=%%%d%%%s"):format(#title, title) or nil
     if at > 0 or opts then
@@ -205,35 +231,36 @@ local function play_media(url, start, title, thumb, label)
         mp.commandv("loadfile", url, "replace", "-1", table.concat(all, ","))
         local h, m, sec = math.floor(at / 3600), math.floor(at / 60) % 60, at % 60
         if at > 0 then
-            mp.osd_message(h > 0 and ("Reprise à %d:%02d:%02d"):format(h, m, sec) or ("Reprise à %d:%02d"):format(m, sec), 4)
+            mp.osd_message(tr("Resuming at {time}", { time = h > 0 and ("%d:%02d:%02d"):format(h, m, sec)
+                or ("%d:%02d"):format(m, sec) }), 4)
         end
     else
         mp.commandv("loadfile", url)
     end
 end
 
--- Juste avant l'ouverture de chaque fichier, y compris ceux que charge Jellyfin : petit tampon pour le direct
--- (latence), tampon normal pour les vidéos. Et décodage par l'iGPU, que le shim Jellyfin peut avoir désactivé.
+-- Right before each file opens, including those loaded by Jellyfin: small buffer for the live stream
+-- (latency), normal buffer for videos. And decoding on the iGPU, which the Jellyfin shim may have disabled.
 mp.add_hook("on_load", 50, function()
     local is_live = mp.get_property("stream-open-filename") == stream_url()
     mp.set_property("demuxer-max-bytes", is_live and "750KiB" or "150MiB")
-    -- Direct : on garde les dernières minutes et on autorise à s'y déplacer (le flux lui-même n'est pas « seekable »)
+    -- Live: keep the last minutes and allow seeking in them (the stream itself is not "seekable")
     mp.set_property("demuxer-max-back-bytes", is_live and LIVE_BACK or "50MiB")
     mp.set_property("demuxer-seekable-cache", is_live and "yes" or "auto")
     mp.set_property("hwdec", "auto-safe")
 end)
 
--- Écran d'accueil à la demande : plus de stream, ni de bascule automatique, jusqu'au choix d'un streamer ou d'une vidéo
+-- Home screen on demand: no more stream nor automatic switch, until a streamer or a video is chosen
 local function show_home()
     stop_twitch()
     set_mode("home")
     mp.commandv("stop")
 end
 
--- Le grand menu est la page principale : au démarrage, à la fin d'une vidéo et sur Retour, plus rien en lecture et le
--- menu par-dessus l'écran d'accueil (fond animé)
--- Première configuration pas encore faite depuis le téléphone (remote.py : setup-done, ou une box qui a déjà servi) :
--- la TV reste sur l'écran d'accueil, QR code en grand, et le menu ne s'ouvre pas
+-- The big menu is the main page: at startup, at the end of a video and on Back, nothing playing anymore and the
+-- menu over the home screen (animated background)
+-- First setup not done yet from the phone (remote.py: setup-done, or a box that has already been used):
+-- the TV stays on the home screen, big QR code, and the menu does not open
 local function setup_pending()
     local home = os.getenv("HOME") or ""
     for _, path in ipairs({ home .. "/.config/stream-box/setup-done", STATE_DIR .. "/history.json" }) do
@@ -251,46 +278,39 @@ end
 mp.register_event("start-file", function()
     if mp.get_property("path") == stream_url() then return end
     if mode == "twitch" or mode == "home" then
-        -- Fichier chargé par quelqu'un d'autre (Jellyfin) : on lui laisse la place, menu refermé
+        -- File loaded by someone else (Jellyfin): make way for it, menu closed
         mp.commandv("script-message", "streambox-tvmenu-close")
         stop_twitch()
         set_mode("media")
     elseif back_timer then
-        back_timer:kill()   -- vidéo suivante : on reste en mode média
+        back_timer:kill()   -- next video: stay in media mode
         back_timer = nil
     end
 end)
 
-local function url_encode(s)
-    return (s:gsub("[^%w%-_%.~]", function(c) return ("%%%02X"):format(c:byte()) end))
-end
-
--- Sous-titres automatiques de YouTube (kind=asr) : leurs répliques se chevauchent, deux restent toujours à l'écran.
--- On les recharge via remote.py, qui coupe chaque réplique au début de la suivante. En EDL « delay_open », comme
--- ytdl_hook : une piste n'est téléchargée que si on la choisit (YouTube répond vite « 429 » aux rafales).
+-- YouTube automatic subtitles (kind=asr): their lines overlap, two always stay on screen.
+-- We reload them through remote.py, which cuts each line at the start of the next one. As EDL "delay_open", like
+-- ytdl_hook: a track is only downloaded if it is chosen (YouTube quickly answers "429" to bursts).
 local function fix_auto_subs()
     for _, t in ipairs(mp.get_property_native("track-list") or {}) do
         local edl = t.type == "sub" and t["external-filename"] or ""
-        local len, rest = edl:match("%%(%d+)%%(.*)$")   -- ytdl_hook les ajoute en EDL : %longueur%url
+        local len, rest = edl:match("%%(%d+)%%(.*)$")   -- ytdl_hook adds them as EDL: %length%url
         local url = len and rest:sub(1, tonumber(len)) or ""
         if url:match("^https://www%.youtube%.com/api/timedtext") and url:match("[?&]kind=asr") then
             mp.commandv("sub-remove", tostring(t.id))
-            local fixed = "http://127.0.0.1:8080/subs?u=" .. url_encode(url)
+            local fixed = "http://127.0.0.1:8080/subs?u=" .. url:gsub("[^%w%-_%.~]", function(c) return ("%%%02X"):format(c:byte()) end)
             mp.commandv("sub-add", ("edl://!no_clip;!delay_open,media_type=sub;%%%d%%%s"):format(#fixed, fixed),
                         t.selected and "select" or "auto", t.title or "", t.lang or "")
         end
     end
 end
 
--- Sous-titres retenus par vidéo : le choix fait dans le panneau Sous-titres / audio (langue, ou « no » pour désactivés)
--- est gardé pour cette vidéo (~/.local/state/stream-box/sub_prefs.json, clé : identifiant YouTube ou Jellyfin, sinon
--- le lien ; 300 vidéos au plus) et remis quand on la reprend. Une vidéo sans choix garde celui de mpv
+-- Subtitles remembered per video: the choice made in the Subtitles / audio panel (language, or "no" for off)
+-- is kept for this video (~/.local/state/stream-box/sub_prefs.json, key: YouTube or Jellyfin id, otherwise
+-- the link; 300 videos at most) and restored when it is resumed. A video without a choice keeps mpv's
+-- choice
 local SUB_PREFS = STATE_DIR .. "/sub_prefs.json"
-local json = require "mp.utils"   -- (utils est déclaré plus bas dans ce fichier)
-local function same_lang(a, b)
-    a, b = (a or ""):lower(), (b or ""):lower()
-    return a ~= "" and b ~= "" and (a == b or a:sub(1, 2) == b:sub(1, 2))
-end
+local json = require "mp.utils"   -- (utils is declared further down in this file)
 local function video_key()
     local path = mp.get_property("path") or ""
     return path:match("[?&]v=([%w_-]+)") or path:match("youtu%.be/([%w_-]+)") or path:match("/[Vv]ideos/(%x+)/")
@@ -310,7 +330,7 @@ local function save_sub_pref(lang)
     prefs[key] = { lang = lang, t = os.time() }
     local keys = {}
     for k in pairs(prefs) do keys[#keys + 1] = k end
-    if #keys > 300 then   -- les plus anciennes partent
+    if #keys > 300 then   -- the oldest ones go
         table.sort(keys, function(a, b) return (prefs[a].t or 0) < (prefs[b].t or 0) end)
         for n = 1, #keys - 300 do prefs[keys[n]] = nil end
     end
@@ -322,6 +342,10 @@ local function apply_sub_pref()
     local pref = key and (read_sub_prefs()[key] or {}).lang
     if not pref or pref == "" then return end
     local current = mp.get_property("sid")
+    local function same_lang(a, b)
+        a, b = (a or ""):lower(), (b or ""):lower()
+        return a ~= "" and b ~= "" and (a == b or a:sub(1, 2) == b:sub(1, 2))
+    end
     if pref == "no" then
         if current ~= "no" then mp.set_property("sid", "no") end
         return
@@ -332,8 +356,8 @@ local function apply_sub_pref()
     end
     if best and current ~= tostring(best.id) then mp.set_property("sid", tostring(best.id)) end
 end
--- Pistes ajoutées après l'ouverture (sous-titres externes de Jellyfin : remote.py jf_add_subtitles, jusqu'à 15 s
--- après ; sous-titres auto de YouTube) : le choix retenu est réappliqué pendant les premières secondes de la vidéo
+-- Tracks added after opening (Jellyfin external subtitles: remote.py jf_add_subtitles, up to 15 s
+-- later; YouTube auto subtitles): the remembered choice is reapplied during the first seconds of the video
 local sub_pref_until = 0
 mp.observe_property("track-list", "native", function()
     if mode == "media" and mp.get_time() < sub_pref_until then apply_sub_pref() end
@@ -350,13 +374,13 @@ mp.register_event("file-loaded", function()
     end
 end)
 
--- Chaîne hors ligne depuis plus d'AUTO_SWITCH secondes : on passe au premier streamer en live, dans l'ordre de
--- streamers.txt. Le délai laisse le temps de choisir exprès une chaîne hors ligne (le temps de vérifier).
+-- Channel offline for more than AUTO_SWITCH seconds: switch to the first live streamer, in the order of
+-- streamers.txt. The delay leaves time to deliberately pick an offline channel (time to check).
 local function auto_switch()
     if not auto_switch_on or mode ~= "twitch" or not offline or mp.get_time() - channel_since < AUTO_SWITCH then return end
     for _, name in ipairs(read_streamers()) do
         if name ~= channel and live[name] then
-            mp.osd_message(channel .. " n'est pas en live : on passe sur " .. name, 6)
+            mp.osd_message(tr("{channel} is not live: switching to {name}", { channel = channel, name = name }), 6)
             start_channel(name)
             return
         end
@@ -366,7 +390,7 @@ end
 mp.register_event("end-file", function(e)
     if mode == "home" then return end
     if mode == "media" then
-        if e.reason == "error" then mp.osd_message("Impossible de lire cette vidéo", 5) end
+        if e.reason == "error" then mp.osd_message(tr("Can't play this video"), 5) end
         if back_timer then back_timer:kill() end
         back_timer = mp.add_timeout(BACK_TO_MENU, function()
             back_timer = nil
@@ -374,14 +398,14 @@ mp.register_event("end-file", function(e)
         end)
         return
     end
-    if e.reason ~= "eof" and e.reason ~= "error" then return end   -- "stop" : changement de chaîne
+    if e.reason ~= "eof" and e.reason ~= "error" then return end   -- "stop": channel change
     if retry_timer then retry_timer:kill() end
     if attempts < 5 then
-        -- streamlink démarre encore, ou vient de perdre le flux : on réessaie vite
+        -- streamlink is still starting, or just lost the stream: retry quickly
         retry_timer = mp.add_timeout(2, load_stream)
     else
         offline = true
-        set_status(channel .. " n'est pas en live, nouvel essai dans " .. RETRY .. " s")
+        set_status(tr("{channel} is not live, retrying in {seconds} s", { channel = channel, seconds = RETRY }))
         retry_timer = mp.add_timeout(RETRY, load_stream)
         auto_switch()
     end
@@ -413,19 +437,19 @@ local function rect(x, y, w, h, color, alpha)
         :format(math.floor(x), math.floor(y), color, alpha, w, w, h, h)
 end
 
-local function text(x, y, size, color, s, suffix)   -- suffix : ASS brut ajouté après le texte échappé
+local function text(x, y, size, color, s, suffix)   -- suffix: raw ASS added after the escaped text
     return ("{\\an5\\pos(%d,%d)\\fs%d\\bord1.5\\shad0\\3c&H000000&\\1c&H%s&}%s%s")
         :format(math.floor(x), math.floor(y), math.floor(size), color, ass_escape(s), suffix or "")
 end
 
--- QR code de la télécommande web, pour les invités : carré clair (gris, moins marquant pour l'écran que du blanc) et
--- modules sombres en un seul tracé, une bande par suite de modules. Renvoie le dessin et son côté, ou nil.
+-- Companion app QR code, for guests: light square (gray, easier on the screen than white) and
+-- dark modules in a single path, one strip per run of modules. Returns the drawing and its side, or nil.
 local function qr_code(x, y, size)
     local setup = (ambient_data or {}).setup
     if not (setup and setup.ssid) and (qr_mode == "never" or (qr_mode == "timed" and mp.get_time() > qr_until)) then return nil end
     local rows = qr_data and qr_data.rows or {}
     local n = #rows
-    local m = n > 0 and math.floor(size / (n + 4)) or 0   -- marge de 2 modules tout autour
+    local m = n > 0 and math.floor(size / (n + 4)) or 0   -- margin of 2 modules all around
     if m < 2 then return nil end
     local paths = {}
     for r, row in ipairs(rows) do
@@ -455,8 +479,8 @@ local function live_badge(name)
     local info = live[name]
     if not info then return nil end
     local v = tonumber(info.viewers) or 0
-    local count = v >= 1000 and (("%.1f k"):format(v / 1000):gsub("%.", ",")) or tostring(v)
-    return "{\\1c&H4848FF&}  ● " .. count   -- rouge (BGR)
+    local count = v >= 1000 and I18N.dec(("%.1f k"):format(v / 1000)) or tostring(v)
+    return "{\\1c&H4848FF&}  ● " .. count   -- red (BGR)
 end
 
 local function draw_menu()
@@ -464,9 +488,9 @@ local function draw_menu()
     if not w or w == 0 then return end
     local mouse = mp.get_property_native("mouse-pos") or {}
 
-    -- Les streamers en grille : autant de colonnes que nécessaire, et police réduite si ça ne
-    -- rentre toujours pas dans 90 % de l'écran. La ligne du chat (case + coin) prend toute la largeur en dessous.
-    local n = math.max(#streamers, 1)   -- liste vide : on garde une case pour la mise en page
+    -- Streamers in a grid: as many columns as needed, and a smaller font if it still does not
+    -- fit in 90 % of the screen. The chat row (checkbox + corner) takes the full width below.
+    local n = math.max(#streamers, 1)   -- empty list: keep one cell for the layout
     local fs, bw, bh, sp, title_h, cols, rows, panel_w, panel_h
     fs = h / 24
     repeat
@@ -482,7 +506,7 @@ local function draw_menu()
     local x0, y0 = math.floor((w - panel_w) / 2), math.floor((h - panel_h) / 2)
 
     local out = { rect(x0 - sp * 2, y0 - sp * 2, panel_w + sp * 4, panel_h + sp * 3, "000000", "50"),
-                  text(w / 2, y0 + title_h / 2, fs, "FFFFFF", "Streamers") }
+                  text(w / 2, y0 + title_h / 2, fs, "FFFFFF", tr("Streamers")) }
     items = {}
     local function button(x, y, bw_, label, current, action, checked, text_color, suffix)
         local hover
@@ -491,13 +515,13 @@ local function draw_menu()
         else
             hover = mouse.x and mouse.x >= x and mouse.x <= x + bw_ and mouse.y >= y and mouse.y <= y + bh
         end
-        local color = current and "FF4691" or (hover and "606060" or "303030")   -- violet Twitch en BGR
+        local color = current and "FF4691" or (hover and "606060" or "303030")   -- Twitch purple in BGR
         if keyboard_nav and hover then
-            out[#out + 1] = rect(x - fs * 0.12, y - fs * 0.12, bw_ + fs * 0.24, bh + fs * 0.24, "FFFFFF", "00")   -- cadre
+            out[#out + 1] = rect(x - fs * 0.12, y - fs * 0.12, bw_ + fs * 0.24, bh + fs * 0.24, "FFFFFF", "00")   -- frame
         end
         out[#out + 1] = rect(x, y, bw_, bh, color, hover and "00" or "20")
         if checked ~= nil then
-            -- Case à cocher dessinée, centrée (les glyphes ☐/☑ ne sont pas dans toutes les polices)
+            -- Drawn checkbox, centered (the ☐/☑ glyphs are not in every font)
             local box = fs * 0.8
             local bx, by = x + (bw_ - box) / 2, y + (bh - box) / 2
             out[#out + 1] = rect(bx, by, box, box, "FFFFFF", "00")
@@ -510,21 +534,21 @@ local function draw_menu()
                              suffix)
         items[#items + 1] = { x0 = x, y0 = y, x1 = x + bw_, y1 = y + bh, action = action }
     end
-    -- Écran d'accueil en haut, au-dessus de la grille. Les streamers restent les premiers boutons de items (on_key
-    -- s'y fie) : la navigation à la télécommande ne dépend que des positions.
+    -- Home screen at the top, above the grid. The streamers stay the first buttons of items (on_key
+    -- relies on it): navigation with the remote only depends on positions.
     local grid_y = y0 + title_h + bh + sp * 2
     for i, name in ipairs(streamers) do
-        local col, row = math.floor((i - 1) / rows), (i - 1) % rows   -- remplissage colonne par colonne
+        local col, row = math.floor((i - 1) / rows), (i - 1) % rows   -- filled column by column
         button(x0 + col * (bw + sp), grid_y + row * (bh + sp), bw, name, name == channel and mode == "twitch",
                function() start_channel(name) end, nil, nil, live_badge(name))
     end
-    button(x0, y0 + title_h, panel_w, "⌂ Écran d'accueil", mode == "home", show_home)
+    button(x0, y0 + title_h, panel_w, tr("⌂ Home screen"), mode == "home", show_home)
     local y = grid_y + rows * (bh + sp) + sp
-    button(x0, y, bh, "", false, toggle_chat, chat_visible)   -- case : afficher / masquer le chat
-    button(x0 + bh + sp, y, panel_w - bh - sp, "Chat : " .. CORNER_LABELS[corner], false, toggle_corner, nil,
-           chat_visible and "FFFFFF" or "808080")
+    button(x0, y, bh, "", false, toggle_chat, chat_visible)   -- checkbox: show / hide the chat
+    button(x0 + bh + sp, y, panel_w - bh - sp, tr("Chat: {corner}", { corner = tr(CORNER_LABELS[corner]) }), false,
+           toggle_corner, nil, chat_visible and "FFFFFF" or "808080")
 
-    -- QR code de la télécommande à droite du menu, s'il y a la place (pas sur l'écran d'ambiance, qui a le sien)
+    -- Companion app QR code to the right of the menu, if there is room (not on the ambient screen, which has its own)
     local size = math.floor(math.min(panel_h, h * 0.3))
     local qx = x0 + panel_w + sp * 6
     if not ambient_visible and qx + size + sp * 2 <= w * 0.98 then
@@ -533,7 +557,7 @@ local function draw_menu()
         if drawing then
             out[#out + 1] = rect(qx - sp * 2, qy - sp * 2, side + sp * 4, side + fs * 1.6 + sp * 4, "000000", "50")
             out[#out + 1] = drawing
-            out[#out + 1] = text(qx + side / 2, qy + side + fs * 0.5, fs * 0.6, "FFFFFF", "Télécommande")
+            out[#out + 1] = text(qx + side / 2, qy + side + fs * 0.5, fs * 0.6, "FFFFFF", tr("Companion app"))
             out[#out + 1] = text(qx + side / 2, qy + side + fs * 1.2, fs * 0.5, "B0B0B0", qr_host())
         end
     end
@@ -559,17 +583,17 @@ local function on_click()
             return
         end
     end
-    hide_menu()   -- clic en dehors des boutons
+    hide_menu()   -- click outside the buttons
 end
 
 local function show_menu(by_key)
     if not menu_visible then
         menu_visible = true
         qr_until = mp.get_time() + QR_SECONDS
-        streamers = read_streamers()   -- relu à chaque ouverture : le fichier s'édite à chaud
+        streamers = read_streamers()   -- reread on each opening: the file is edited live
         mp.add_forced_key_binding("MBTN_LEFT", "streambox-click", on_click)
         if by_key then
-            -- Sélection de départ : la chaîne en cours
+            -- Initial selection: the current channel
             sel = 1
             for i, name in ipairs(streamers) do
                 if name == channel then sel = i end
@@ -583,7 +607,7 @@ local function show_menu(by_key)
 end
 
 mp.observe_property("mouse-pos", "native", function(_, m)
-    -- Ignore la position initiale du curseur au lancement de mpv
+    -- Ignore the initial cursor position when mpv starts
     if m and mp.get_time() - started > 2 and not mp.get_property_native("user-data/streambox/tvmenu") then
         keyboard_nav = false
         show_menu()
@@ -591,10 +615,10 @@ mp.observe_property("mouse-pos", "native", function(_, m)
 end)
 
 
--- Télécommande Bluetooth (testé avec celle du Xiaomi TV Stick) : cage transmet ses touches à mpv comme celles d'un
--- clavier. OK et Menu n'ont pas de nom standard : leurs codes sont ceux de cette télécommande.
+-- Bluetooth remote (tested with the Xiaomi TV Stick one): cage forwards its keys to mpv like those of a
+-- keyboard. OK and Menu have no standard name: their codes are those of this remote.
 
--- Bouton le plus proche dans la direction (dx, dy), depuis le bouton sélectionné
+-- Closest button in direction (dx, dy), from the selected button
 local function move_selection(dx, dy)
     local cur = items[sel or 1]
     if not cur then return end
@@ -620,17 +644,17 @@ local function zap(step)
     end
     local name = list[(idx - 1 + step) % #list + 1]
     local info = live[name]
-    mp.osd_message(("▶ %s%s"):format(name, info and ("   ● " .. info.viewers) or "   (hors ligne)"), 3)
+    mp.osd_message(("▶ %s%s"):format(name, info and ("   ● " .. info.viewers) or ("   (" .. tr("offline") .. ")")), 3)
     start_channel(name)
 end
 
--- Barre de lecture des vidéos, façon YouTube : affichée quelques secondes par Haut, ←/→ ou OK, retirée par Haut ou
--- Bas, et toujours affichée pendant la pause
+-- Video playback bar, YouTube style: shown for a few seconds by Up, ←/→ or OK, removed by Up or
+-- Down, and always shown while paused
 local BAR_SECONDS = 2.5
 local bar = mp.create_osd_overlay("ass-events")
 local bar_visible, bar_until = false, 0
 
--- Disque de rayon r centré en (cx, cy) : quatre quarts de cercle en courbes de Bézier (k ≈ 0,5523 r)
+-- Disc of radius r centered at (cx, cy): four quarter circles as Bézier curves (k ≈ 0.5523 r)
 local function disc(cx, cy, r, color)
     local k, d = r * 0.5523, 2 * r
     return ("{\\an5\\pos(%d,%d)\\bord0\\shad0\\1c&H%s&\\1a&H00&\\p1}"
@@ -639,7 +663,7 @@ local function disc(cx, cy, r, color)
                 r, r + k, d, r - k, d, r,  d, r + k, r + k, d, r, d,  r - k, d, 0, r + k, r,  r - k, r - k, r)
 end
 
--- Direct : partie gardée en mémoire (début, fin = le direct) et position de lecture
+-- Live: part kept in memory (start, end = the live edge) and playback position
 local function live_window()
     local st = mp.get_property_native("demuxer-cache-state") or {}
     local r = (st["seekable-ranges"] or {})[1]
@@ -648,8 +672,8 @@ local function live_window()
     return r.start, r["end"], pos
 end
 
--- En différé (ou en pause), le petit tampon avant du direct bloquerait la lecture du flux : la mémoire cesserait de
--- se remplir et le retard fondrait. On l'agrandit tant qu'on n'est pas au bord du direct.
+-- When behind (or paused), the small forward buffer of the live stream would block reading the stream: memory would
+-- stop filling up and the delay would melt away. We enlarge it as long as we are not at the live edge.
 local function set_live_buffer(behind)
     mp.set_property("demuxer-max-bytes", behind and "150MiB" or "750KiB")
 end
@@ -661,7 +685,7 @@ local function clock(t)
 end
 
 local function draw_bar()
-    if qt_ui() then   -- dessinée par qml/InfoBar.qml, d'après user-data/streambox/bar
+    if qt_ui() then   -- drawn by qml/InfoBar.qml, from user-data/streambox/bar
         bar:remove()
         return
     end
@@ -671,15 +695,15 @@ local function draw_bar()
     local dur = mp.get_property_number("duration")
     local cached = mp.get_property_number("demuxer-cache-time")
     local title = mp.get_property("media-title") or ""
-    local left, right   -- textes sous la barre (par défaut : temps écoulé, durée)
+    local left, right   -- texts under the bar (default: elapsed time, duration)
     if mode == "twitch" then
-        -- Direct : la barre représente ce qui est gardé en mémoire, son bout droit est le direct
+        -- Live: the bar represents what is kept in memory, its right end is the live edge
         local s, e = live_window()
         dur, cached, left = s and (e - s) or nil, nil, ""
         if s then
             local delay = e - pos
             pos = pos - s
-            right = delay < LIVE_EDGE and "{\\1c&H4848FF&}● EN DIRECT" or ("−" .. clock(delay))
+            right = delay < LIVE_EDGE and ("{\\1c&H4848FF&}" .. tr("● LIVE")) or ("−" .. clock(delay))
         end
         title = channel .. (live[channel] and ("  ·  " .. live[channel].title) or "")
     end
@@ -688,7 +712,7 @@ local function draw_bar()
     local x0, x1 = math.floor(w * 0.05), math.floor(w * 0.95)
     local by, bh = math.floor(h * 0.9), math.max(4, math.floor(h * 0.008))
     local out = { rect(0, math.floor(h * 0.78), w, h - math.floor(h * 0.78), "000000", "60") }
-    -- Titre, précédé d'un symbole pause dessiné (deux barres) quand la vidéo est en pause
+    -- Title, preceded by a drawn pause symbol (two bars) when the video is paused
     local tx = x0
     if paused then
         out[#out + 1] = rect(x0, by - fs * 2.4, fs * 0.28, fs * 0.9, "FFFFFF", "00")
@@ -697,7 +721,7 @@ local function draw_bar()
     end
     out[#out + 1] = ("{\\an4\\pos(%d,%d)\\fs%d\\bord1.5\\shad0\\3c&H000000&\\1c&HFFFFFF&}%s")
         :format(tx, by - fs * 1.95, fs, ass_escape(title))
-    -- Barre : fond, partie déjà chargée, partie lue (violet Twitch), curseur
+    -- Bar: background, part already loaded, part played (Twitch purple), cursor
     out[#out + 1] = rect(x0, by, x1 - x0, bh, "FFFFFF", "A0")
     if dur and dur > 0 then
         local function px(t) return x0 + (x1 - x0) * math.max(0, math.min(1, t / dur)) end
@@ -716,10 +740,10 @@ local function draw_bar()
     bar:update()
 end
 
-local ctrl_focus = nil   -- rangée de boutons sous la barre (vidéo, appli Qt) : bouton choisi, nil hors de la rangée
-local title_focus = false   -- titre de la vidéo choisi (↑ depuis les boutons ou la barre) : OK ouvre le panneau Infos
+local ctrl_focus = nil   -- row of buttons under the bar (video, Qt app): chosen button, nil outside the row
+local title_focus = false   -- video title chosen (↑ from the buttons or the bar): OK opens the Info panel
 local function hide_bar()
-    if ctrl_focus or title_focus then   -- la rangée de boutons et le titre choisi partent avec la barre
+    if ctrl_focus or title_focus then   -- the button row and the chosen title go away with the bar
         ctrl_focus, title_focus = nil, false
         mp.set_property_native("user-data/streambox/controls", { items = {}, focus = -1 })
     end
@@ -749,11 +773,11 @@ mp.observe_property("pause", "bool", function(_, paused)
     if paused then
         show_bar()
     elseif bar_visible then
-        show_bar(1)   -- à la reprise, la barre reste encore un peu
+        show_bar(1)   -- on resume, the bar stays a little longer
     end
 end)
 
--- Notification « X vient de lancer son live » (envoyée par remote.py), en haut à droite ; OK pour y aller
+-- "X just went live" notification (sent by remote.py), top right; OK to go there
 local TOAST_SECONDS = 12
 local toast = mp.create_osd_overlay("ass-events")
 local toast_channel, toast_timer = nil, nil
@@ -766,9 +790,9 @@ local function hide_toast()
 end
 
 mp.register_script_message("streambox-went-live", function(name)
-    if name == channel and mode == "twitch" then return end   -- on le regarde déjà
+    if name == channel and mode == "twitch" then return end   -- already watching it
     local info = live[name] or {}
-    if qt_ui() then   -- dessinée par qml/Toast.qml ; OK et Retour restent gérés ici (toast_channel)
+    if qt_ui() then   -- drawn by qml/Toast.qml; OK and Back are still handled here (toast_channel)
         mp.set_property_native("user-data/streambox/toast", { name = name, title = info.title or "",
             game = info.game or "", viewers = info.viewers or 0, seconds = TOAST_SECONDS })
         toast_channel = name
@@ -782,9 +806,9 @@ mp.register_script_message("streambox-went-live", function(name)
     local title = info.title or ""
     if #title > 60 then title = title:sub(1, 57) .. "…" end
     local lines = {
-        "{\\1c&H4848FF&}● {\\1c&HFFFFFF&\\b1}" .. ass_escape(name) .. "{\\b0} est en live",
+        "{\\1c&H4848FF&}● {\\1c&HFFFFFF&}" .. tr("{name} is live", { name = "{\\b1}" .. ass_escape(name) .. "{\\b0}" }),
         "{\\fs" .. math.floor(fs * 0.8) .. "\\1c&HC0C0C0&}" .. ass_escape(title .. (info.game and ("  ·  " .. info.game) or "")),
-        "{\\fs" .. math.floor(fs * 0.8) .. "\\1c&HFF4691&}OK pour regarder",
+        "{\\fs" .. math.floor(fs * 0.8) .. "\\1c&HFF4691&}" .. ass_escape(tr("OK to watch")),
     }
     local bw, bh = math.floor(w * 0.34), math.floor(fs * 4.6)
     local x, y = w - bw - math.floor(w * 0.02), math.floor(h * 0.04)
@@ -798,7 +822,7 @@ mp.register_script_message("streambox-went-live", function(name)
     toast_timer = mp.add_timeout(TOAST_SECONDS, hide_toast)
 end)
 
--- Se déplacer dans le direct gardé en mémoire ; « live » revient au direct
+-- Move within the live stream kept in memory; "live" goes back to the live edge
 local function live_seek(delta)
     local s, e, pos = live_window()
     if not s then return end
@@ -811,31 +835,32 @@ mp.register_script_message("streambox-live-seek", function(arg)
     if mode == "twitch" then live_seek(arg == "live" and "live" or tonumber(arg) or 0) end
 end)
 
--- Sous-titres et piste audio pendant une vidéo (touche ≡, appli Qt) : liste construite ici depuis track-list, publiée
--- dans user-data/streambox/tracks et dessinée par qml/TracksPanel.qml ; tant qu'elle est ouverte, ↑ ↓ choisissent,
--- OK applique, Retour ou ≡ ferment. Avec mpv seul, ≡ passe simplement aux sous-titres suivants.
-local LANGS = { fr = "Français", fre = "Français", fra = "Français", en = "Anglais", eng = "Anglais", es = "Espagnol",
-                spa = "Espagnol", de = "Allemand", ger = "Allemand", deu = "Allemand", it = "Italien", ita = "Italien",
-                ja = "Japonais", jpn = "Japonais", pt = "Portugais", por = "Portugais", nl = "Néerlandais",
-                dut = "Néerlandais", ko = "Coréen", kor = "Coréen", zh = "Chinois", chi = "Chinois" }
+-- Subtitles and audio track during a video (≡ key, Qt app): list built here from track-list, published
+-- in user-data/streambox/tracks and drawn by qml/TracksPanel.qml; while it is open, ↑ ↓ choose,
+-- OK applies, Back or ≡ close. With mpv alone, ≡ simply switches to the next subtitles.
+local LANGS = { fr = "French", fre = "French", fra = "French", en = "English", eng = "English", es = "Spanish",
+                spa = "Spanish", de = "German", ger = "German", deu = "German", it = "Italian", ita = "Italian",
+                ja = "Japanese", jpn = "Japanese", pt = "Portuguese", por = "Portuguese", nl = "Dutch",
+                dut = "Dutch", ko = "Korean", kor = "Korean", zh = "Chinese", chi = "Chinese" }
 local tracks_open, tracks_items, tracks_sel = false, {}, 1
 
 local function track_label(t)
     local lang = t.lang and (LANGS[t.lang:lower()] or LANGS[t.lang:lower():sub(1, 2)] or t.lang) or nil
-    local label = lang or t.title or ("Piste " .. t.id)
+    lang = lang and tr(lang)
+    local label = lang or t.title or tr("Track {id}", { id = t.id })
     if lang and t.title and t.title ~= "" and t.title:lower() ~= lang:lower() then label = label .. " · " .. t.title end
-    if t.forced then label = label .. " (forcés)" end
-    if t["default"] and t.type == "audio" then label = label .. " (d'origine)" end
+    if t.forced then label = tr("{label} (forced)", { label = label }) end
+    if t["default"] and t.type == "audio" then label = tr("{label} (original)", { label = label }) end
     return label
 end
 
--- Qualité d'une vidéo YouTube (panneau Sous-titres / audio) : les hauteurs proposées par YouTube, lues dans la réponse
--- de yt-dlp gardée par ytdl_hook (user-data/mpv/ytdl/json-subprocess-result, pas de nouvelle requête). Un choix recharge
--- la vidéo à la même seconde avec un ytdl-format plafonné ; il vaut pour cette vidéo, la suivante repart en Auto
-local quality = { default = mp.get_property("ytdl-format"), max = nil, path = nil }   -- une seule locale (limite de 200)
+-- Quality of a YouTube video (Subtitles / audio panel): the heights offered by YouTube, read from the
+-- yt-dlp response kept by ytdl_hook (user-data/mpv/ytdl/json-subprocess-result, no new request). A choice reloads
+-- the video at the same second with a capped ytdl-format; it applies to this video, the next one starts on Auto
+local quality = { default = mp.get_property("ytdl-format"), max = nil, path = nil }   -- a single local (200 limit)
 function quality.list()
     local path = mp.get_property("path")
-    if quality.cache and quality.cache_path == path then return quality.cache end   -- lue une fois par vidéo
+    if quality.cache and quality.cache_path == path then return quality.cache end   -- read once per video
     local res = mp.get_property_native("user-data/mpv/ytdl/json-subprocess-result")
     local info = res and res.stdout and require("mp.utils").parse_json(res.stdout)
     local heights, list = {}, {}
@@ -857,19 +882,19 @@ function quality.set(h)
     local pos = mp.get_property_number("time-pos") or 0
     mp.commandv("loadfile", quality.path, "replace", "-1", ("start=%d"):format(math.floor(pos)))
 end
-mp.register_event("start-file", function()   -- autre vidéo : retour à la qualité automatique
+mp.register_event("start-file", function()   -- another video: back to automatic quality
     if quality.max and mp.get_property("path") ~= quality.path then
         quality.max, quality.path = nil, nil
         mp.set_property("ytdl-format", quality.default)
     end
 end)
 
-local tracks_mode = "subs"   -- panneau ouvert par le bouton Sous-titres (sous-titres, audio) ou Qualité
+local tracks_mode = "subs"   -- panel opened by the Subtitles button (subtitles, audio) or Quality
 local function build_tracks()
     if tracks_mode == "quality" then
-        local items, cur = { { header = "Qualité" } }, (mp.get_property_native("video-params") or {}).h
+        local items, cur = { { header = tr("Quality") } }, (mp.get_property_native("video-params") or {}).h
         items[#items + 1] = { kind = "quality", id = false, selected = not quality.max,
-                              label = "Auto (la meilleure)" .. (cur and not quality.max and ("  ·  " .. cur .. "p") or "") }
+                              label = tr("Auto (best)") .. (cur and not quality.max and ("  ·  " .. cur .. "p") or "") }
         for _, it in ipairs(quality.list()) do
             items[#items + 1] = { kind = "quality", id = it.h, selected = quality.max == it.h,
                                   label = it.h .. "p" .. (it.fps > 30 and math.floor(it.fps + 0.5) or "") }
@@ -886,10 +911,10 @@ local function build_tracks()
             audio[#audio + 1] = { kind = "audio", id = t.id, label = track_label(t), selected = t.selected == true }
         end
     end
-    local items = { { header = "Sous-titres" }, { kind = "sub", id = false, label = "Désactivés", selected = not sub_on } }
+    local items = { { header = tr("Subtitles") }, { kind = "sub", id = false, label = tr("Off"), selected = not sub_on } }
     for _, it in ipairs(subs) do items[#items + 1] = it end
-    if #audio > 1 then   -- une seule piste audio : rien à choisir
-        items[#items + 1] = { header = "Audio" }
+    if #audio > 1 then   -- a single audio track: nothing to choose
+        items[#items + 1] = { header = tr("Audio") }
         for _, it in ipairs(audio) do items[#items + 1] = it end
     end
     tracks_items = items
@@ -908,7 +933,7 @@ local function open_tracks(mode)
     build_tracks()
     tracks_open = true
     tracks_sel = 2
-    for i, it in ipairs(tracks_items) do   -- focus sur le choix en cours
+    for i, it in ipairs(tracks_items) do   -- focus on the current choice
         if (it.kind == "sub" or it.kind == "quality") and it.selected then tracks_sel = i break end
     end
     publish_tracks()
@@ -931,12 +956,12 @@ local function tracks_key(key)
         if it and it.kind == "quality" then
             if (it.id or nil) ~= quality.max then quality.set(it.id or nil) end
         elseif it then mp.set_property(it.kind == "sub" and "sid" or "aid", it.id and tostring(it.id) or "no") end
-        -- Choix retenu pour cette vidéo (apply_sub_pref à la reprise) : la langue, ou désactivés
+        -- Choice remembered for this video (apply_sub_pref on resume): the language, or off
         if it and it.kind == "sub" then
             if not it.id then save_sub_pref("no") elseif it.lang and it.lang ~= "" then save_sub_pref(it.lang) end
         end
         close_tracks()
-    else   -- Retour, ≡, Accueil…
+    else   -- Back, ≡, Home…
         close_tracks()
     end
 end
@@ -945,8 +970,8 @@ mp.observe_property("track-list", "native", function()
 end)
 mp.register_event("end-file", close_tracks)
 
--- Panneau Infos (appli Qt, qml/InfoPanel.qml) : titre, chaîne ou série, description complète (user-data/streambox/meta
--- de remote.py). Ouvert par le bouton Infos de la rangée ou ↑ en pause ; ↑ ↓ font défiler, Retour / OK / ≡ ferment
+-- Info panel (Qt app, qml/InfoPanel.qml): title, channel or series, full description (user-data/streambox/meta
+-- from remote.py). Opened by the Info button of the row or ↑ while paused; ↑ ↓ scroll, Back / OK / ≡ close
 local info_open, info_scroll = false, 0
 local function publish_info()
     mp.set_property_native("user-data/streambox/info", info_open and { open = true, scroll = info_scroll } or {})
@@ -969,10 +994,10 @@ local function info_key(key)
 end
 mp.register_event("end-file", close_info)
 
--- Lecture d'une vidéo : avance rapide qui accélère, rangée de boutons sous la barre (appli Qt), épisode suivant
--- (Jellyfin). États publiés pour InfoBar.qml et NextUp.qml : seekfx, controls, next_card ; remote.py publie next_up.
+-- Video playback: accelerating fast forward, row of buttons under the bar (Qt app), next episode
+-- (Jellyfin). States published for InfoBar.qml and NextUp.qml: seekfx, controls, next_card; remote.py publishes next_up.
 
--- Avance rapide : appuis rapprochés ou touche maintenue → sauts de 10 s, puis 30 s, puis 1 min ; total affiché
+-- Fast forward: close presses or a held key → jumps of 10 s, then 30 s, then 1 min; total displayed
 local seek_last, seek_streak, seek_total, seek_dir, seek_n = 0, 0, 0, 0, 0
 local function fmt_seek(t)
     t = math.abs(t)
@@ -982,7 +1007,7 @@ local function fmt_seek(t)
 end
 local function media_seek(dir)
     local now = mp.get_time()
-    if now - seek_last < 0.12 then return end   -- répétition d'une touche maintenue : pas plus de 8 sauts par seconde
+    if now - seek_last < 0.12 then return end   -- repeat of a held key: no more than 8 jumps per second
     if now - seek_last < 0.8 and dir == seek_dir then seek_streak = seek_streak + 1 else seek_streak, seek_total = 0, 0 end
     seek_last, seek_dir = now, dir
     local step = seek_streak < 3 and 10 or seek_streak < 9 and 30 or 60
@@ -992,17 +1017,17 @@ local function media_seek(dir)
     mp.set_property_native("user-data/streambox/seekfx", { text = (dir > 0 and "+" or "−") .. fmt_seek(seek_total), n = seek_n })
 end
 
--- Épisode suivant (Jellyfin) : remote.py publie user-data/streambox/next_up { id, title, episode, thumb } ; dans les
--- 20 dernières secondes, une carte « Épisode suivant dans N s » (OK : tout de suite, Retour : non) ; à la fin, il part
+-- Next episode (Jellyfin): remote.py publishes user-data/streambox/next_up { id, title, episode, thumb }; in the
+-- last 20 seconds, a "Next episode in N s" card (OK: right away, Back: no); at the end, it starts
 local NEXT_BEFORE = 20
 local next_dismissed, next_shown = false, false
--- seulement pendant l'épisode dont c'est la suite (of) : pas pour une vidéo lancée ensuite par le shim Jellyfin
+-- only during the episode it follows (of): not for a video started afterwards by the Jellyfin shim
 local function next_up()
     local n = mp.get_property_native("user-data/streambox/next_up")
     if not (n and n.id and n.of) then return nil end
     return (mp.get_property("path") or ""):find("/Videos/" .. n.of .. "/", 1, true) and n or nil
 end
-local next_cache = nil   -- dernier next_up valable : à la fin du fichier, path n'est plus lisible
+local next_cache = nil   -- last valid next_up: at the end of the file, path can no longer be read
 local function play_next()
     local n = next_up() or next_cache
     if not n then return end
@@ -1031,23 +1056,24 @@ mp.add_periodic_timer(1, function()
     mp.set_property_native("user-data/streambox/next_card", { seconds = math.max(0, math.ceil(left)), title = n.title,
                                                                episode = n.episode or "", thumb = n.thumb or "" })
     if not qt_ui() then
-        mp.osd_message(("Épisode suivant dans %d s : %s — OK pour le lancer, Retour pour rester"):format(math.ceil(left), n.episode or n.title), 2)
+        mp.osd_message(tr("Next episode in {seconds} s: {title} — OK to start it, Back to stay",
+            { seconds = math.ceil(left), title = n.episode or n.title }), 2)
     end
 end)
 mp.register_event("end-file", function(e)
     if e.reason == "eof" and mode == "media" and not next_dismissed and next_cache then play_next() end
 end)
 
--- Rangée de boutons sous la barre (appli Qt) : ↓ y descend, ← → choisissent, OK, ↑ ou Retour remontent
+-- Row of buttons under the bar (Qt app): ↓ goes down into it, ← → choose, OK, ↑ or Back go back up
 local function controls_list()
     local paused = mp.get_property_native("pause")
-    -- Sous-titres à gauche : Lecture / Pause au centre de la rangée (InfoBar.qml la centre sur ce bouton)
-    local list = { { id = "tracks", label = "Sous-titres" }, { id = "back", label = "−10 s" },
-                   { id = "play", label = paused and "Lecture" or "Pause" }, { id = "fwd", label = "+10 s" } }
-    -- Qualité : YouTube seulement, quand plusieurs résolutions sont proposées (Jellyfin : fichier d'origine)
-    if #quality.list() > 1 then list[#list + 1] = { id = "quality", label = "Qualité" } end
-    if #(mp.get_property_native("chapter-list") or {}) > 1 then list[#list + 1] = { id = "chapter", label = "Chapitre suivant" } end
-    if next_up() then list[#list + 1] = { id = "next", label = "Épisode suivant" } end
+    -- Subtitles on the left: Play / Pause in the middle of the row (InfoBar.qml centers it on this button)
+    local list = { { id = "tracks", label = tr("Subtitles") }, { id = "back", label = "−10 s" },
+                   { id = "play", label = paused and tr("Play") or tr("Pause") }, { id = "fwd", label = "+10 s" } }
+    -- Quality: YouTube only, when several resolutions are offered (Jellyfin: original file)
+    if #quality.list() > 1 then list[#list + 1] = { id = "quality", label = tr("Quality") } end
+    if #(mp.get_property_native("chapter-list") or {}) > 1 then list[#list + 1] = { id = "chapter", label = tr("Next chapter") } end
+    if next_up() then list[#list + 1] = { id = "next", label = tr("Next episode") } end
     return list
 end
 local function publish_controls()
@@ -1062,7 +1088,7 @@ local function controls_key(key)
     local list = controls_list()
     if key == "left" then ctrl_focus = math.max(1, ctrl_focus - 1)
     elseif key == "right" then ctrl_focus = math.min(#list, ctrl_focus + 1)
-    elseif key == "up" then ctrl_focus, title_focus = nil, true   -- ↑ : le titre (OK : panneau Infos)
+    elseif key == "up" then ctrl_focus, title_focus = nil, true   -- ↑: the title (OK: Info panel)
     elseif key == "back" then ctrl_focus = nil
     elseif key == "ok" then
         local id = (list[ctrl_focus] or {}).id
@@ -1077,13 +1103,13 @@ local function controls_key(key)
     publish_controls()
 end
 
--- Grand menu façon Android TV (tv_menu.lua) : ouvert par le bouton Menu (touche Accueil) ; tant qu'il est ouvert,
--- toutes les touches lui sont transmises
+-- Big Android TV style menu (tv_menu.lua): opened by the Menu button (Home key); while it is open,
+-- all keys are forwarded to it
 local tvmenu_open = false
 mp.observe_property("user-data/streambox/tvmenu", "native", function(_, v) tvmenu_open = v == true end)
 local function open_tvmenu()
     if setup_pending() then
-        return mp.osd_message("Continue la configuration sur ton téléphone : scanne le QR code", 4)
+        return mp.osd_message(tr("Continue the setup on your phone: scan the QR code"), 4)
     end
     if menu_visible then hide_menu() end
     hide_bar()
@@ -1095,16 +1121,16 @@ local KEYS = {
     ENTER = "ok", KP_ENTER = "ok", ["0x21ffa0"] = "ok",
     HOMEPAGE = "home", GO_BACK = "back", ESC = "back", ["0x2111a0"] = "menu",
     WWW = "homescreen",
-    PLAY = "corner", PLAYPAUSE = "corner",   -- sans ce lien, mpv les traduit en pause, ce qui figeait le direct
-    POWER = "power", ["0x21ff2a"] = "power",  -- bouton power (télécommande, boîtier) : mpv seul, appli Qt
+    PLAY = "corner", PLAYPAUSE = "corner",   -- without this binding, mpv turns them into pause, which froze the live stream
+    POWER = "power", ["0x21ff2a"] = "power",  -- power button (remote, box): mpv alone, Qt app
     VOLUME_UP = "volume_up", VOLUME_DOWN = "volume_down", MUTE = "mute",
-    -- Clavier classique (mêmes actions qu'input.py ; ici, noms selon la disposition du clavier)
+    -- Regular keyboard (same actions as input.py; here, names depend on the keyboard layout)
     SPACE = "corner", m = "home", o = "menu", h = "homescreen", ["+"] = "volume_up", ["-"] = "volume_down",
     KP_ADD = "volume_up", KP_SUBTRACT = "volume_down", NEXT = "right", PREV = "left", STOP = "back",
 }
--- Ces noms (mpv, ou keysyms bricolés comme 0x21ffa0) ne servent qu'en secours : normalement, input.py lit les touches
--- à la source avec les noms de Linux et envoie les actions (streambox-input) ; tant qu'il tourne, les touches reçues
--- ici sont ignorées (sinon chacune compterait deux fois)
+-- These names (mpv, or hacked keysyms like 0x21ffa0) are only a fallback: normally, input.py reads the keys
+-- at the source with Linux names and sends the actions (streambox-input); while it runs, keys received
+-- here are ignored (otherwise each one would count twice)
 local input_beat = 0
 mp.observe_property("user-data/streambox/input", "string", function(_, v)
     input_beat = tonumber((v or ""):match("^evdev:(%d+)")) or 0
@@ -1112,9 +1138,9 @@ end)
 local function input_service() return os.time() - input_beat < 15 end
 local DIRECTIONS = { up = { 0, -1 }, down = { 0, 1 }, left = { -1, 0 }, right = { 1, 0 } }
 
--- Bouton power (télécommande Bluetooth, bouton du boîtier) : même action que le bouton d'arrêt de la page et de Home
--- Assistant (réglage « Bouton d'arrêt » : veille ou arrêt complet). logind n'agit plus de lui-même : remote.py tient un
--- verrou « handle-power-key ». Ignoré juste après le démarrage ou un réveil (la touche qui réveille arrive aussi).
+-- Power button (Bluetooth remote, box button): same action as the off button of the page and of Home
+-- Assistant ("Off button" setting: sleep or full shutdown). logind no longer acts by itself: remote.py holds a
+-- "handle-power-key" inhibitor lock. Ignored right after startup or a wake-up (the key that wakes also arrives).
 local power_quiet_until = mp.get_time() + 15
 local function power_key()
     if mp.get_time() < power_quiet_until then return end
@@ -1126,18 +1152,18 @@ end
 
 local function on_key(key)
     if key == "power" then return power_key() end
-    if key == "power_menu" then   -- power maintenu : fenêtre « veille, redémarrer, éteindre » (menu QML ou tv_menu.lua)
+    if key == "power_menu" then   -- power held: "sleep, restart, shut down" window (QML menu or tv_menu.lua)
         if menu_visible then hide_menu() end
         hide_bar()
         return mp.commandv("script-message", "streambox-power-menu")
     end
     if key == "volume_up" or key == "volume_down" then
         mp.commandv("add", "volume", key == "volume_up" and "5" or "-5")
-        mp.osd_message(("Volume %d %%"):format(mp.get_property_number("volume", 0)), 1.5)
+        mp.osd_message(tr("Volume {n}%", { n = ("%d"):format(mp.get_property_number("volume", 0)) }), 1.5)
         return
     elseif key == "mute" then
         mp.commandv("cycle", "mute")
-        mp.osd_message(mp.get_property_native("mute") and "Son coupé" or "Son remis", 1.5)
+        mp.osd_message(mp.get_property_native("mute") and tr("Sound muted") or tr("Sound on"), 1.5)
         return
     end
     if tvmenu_open then
@@ -1152,7 +1178,7 @@ local function on_key(key)
         info_key(key)
         return
     end
-    if next_shown and mode == "media" and (key == "ok" or key == "back") then   -- carte « Épisode suivant »
+    if next_shown and mode == "media" and (key == "ok" or key == "back") then   -- "Next episode" card
         if key == "ok" then play_next() else hide_next(true) end
         return
     end
@@ -1161,23 +1187,24 @@ local function on_key(key)
         return
     end
     if title_focus and mode == "media" and key ~= "home" and key ~= "menu" then
-        -- Titre choisi : OK ouvre le panneau Infos, ↓ redescend aux boutons, ↑ ferme la barre, Retour quitte le titre
-        -- (sans arrêter la vidéo)
+        -- Title chosen: OK opens the Info panel, ↓ goes back down to the buttons, ↑ closes the bar, Back leaves the
+        -- title (without stopping the video)
         title_focus = false
         if key == "ok" then publish_controls() return open_info() end
         if key == "up" then publish_controls() return hide_bar() end
-        if key == "down" and qt_ui() then ctrl_focus = 3 end   -- sur Pause / Lecture
+        if key == "down" and qt_ui() then ctrl_focus = 3 end   -- on Pause / Play
         show_bar()
         publish_controls()
         return
     end
-    if key == "homescreen" then   -- écran d'accueil, depuis n'importe quel mode
+    if key == "homescreen" then   -- home screen, from any mode
         if menu_visible then hide_menu() end
         if mode ~= "home" then show_home() end
         return
-    elseif key == "corner" then   -- coin suivant pour le chat, menu ouvert ou non
+    elseif key == "corner" then   -- next corner for the chat, menu open or not
         toggle_corner()
-        if menu_visible then show_menu(keyboard_nav) else mp.osd_message("Chat : " .. CORNER_LABELS[corner], 2) end
+        if menu_visible then show_menu(keyboard_nav)
+        else mp.osd_message(tr("Chat: {corner}", { corner = tr(CORNER_LABELS[corner]) }), 2) end
         return
     end
     if toast_channel and (key == "ok" or key == "back") then
@@ -1193,7 +1220,7 @@ local function on_key(key)
         elseif key == "ok" then
             if keyboard_nav and items[sel] then
                 items[sel].action()
-                -- Streamer ou écran d'accueil choisis : le menu se ferme ; réglages du chat : il reste ouvert
+                -- Streamer or home screen chosen: the menu closes; chat settings: it stays open
                 if mode == "home" or (mode == "twitch" and sel <= #streamers) then hide_menu() else show_menu(true) end
             else
                 show_menu(true)
@@ -1203,26 +1230,26 @@ local function on_key(key)
         else
             hide_menu()
         end
-    elseif mode == "home" then   -- écran d'accueil : toute touche ouvre le menu, la page principale
+    elseif mode == "home" then   -- home screen: any key opens the menu, the main page
         open_tvmenu()
     elseif mode == "twitch" then
         if key == "up" or key == "down" then
             zap(key == "down" and 1 or -1)
         elseif key == "ok" then
-            -- Bandeau d'infos : streamer, titre du live, « EN DIRECT » ou retard ; le menu s'ouvre par Accueil
+            -- Info banner: streamer, live title, "LIVE" or delay; the menu opens with Home
             if bar_visible then hide_bar() else show_bar() end
         elseif key == "home" then
             open_tvmenu()
         elseif key == "left" or key == "right" then
             live_seek(key == "right" and 10 or -10)
-        elseif key == "back" then   -- arrêt du stream, retour au menu
+        elseif key == "back" then   -- stop the stream, back to the menu
             show_home()
             open_tvmenu()
         elseif key == "menu" then
             toggle_chat()
-            mp.osd_message(chat_visible and "Chat affiché" or "Chat masqué", 2)
+            mp.osd_message(chat_visible and tr("Chat shown") or tr("Chat hidden"), 2)
         end
-    else   -- vidéo (lien, Jellyfin)
+    else   -- video (link, Jellyfin)
         if key == "ok" then
             mp.commandv("cycle", "pause")
             show_bar()
@@ -1230,13 +1257,13 @@ local function on_key(key)
             media_seek(key == "right" and 1 or -1)
             show_bar()
         elseif key == "up" then
-            if bar_visible and qt_ui() then   -- barre affichée : ↑ choisit le titre (OK : panneau Infos)
+            if bar_visible and qt_ui() then   -- bar shown: ↑ chooses the title (OK: Info panel)
                 title_focus = true
                 show_bar()
                 publish_controls()
             elseif bar_visible then hide_bar() else show_bar() end
         elseif key == "down" then
-            if qt_ui() then   -- barre et rangée de boutons, focus sur Pause / Lecture
+            if qt_ui() then   -- bar and button row, focus on Pause / Play
                 ctrl_focus = 3
                 show_bar()
                 publish_controls()
@@ -1247,19 +1274,19 @@ local function on_key(key)
             open_tvmenu()
         elseif key == "menu" then
             if qt_ui() then open_tracks() show_bar() else mp.commandv("cycle", "sub") end
-        elseif key == "back" then   -- arrêt de la vidéo (position gardée par l'historique), retour au menu
+        elseif key == "back" then   -- stop the video (position kept by the history), back to the menu
             show_home()
             open_tvmenu()
         end
     end
 end
 
--- Touches apprises (assistant « Configurer les touches » du menu Système) : ~/.config/stream-box/keymap.json,
--- {"nom de touche mpv": "action"}, par-dessus KEYS (une touche apprise peut aussi remplacer celle d'une autre action)
+-- Learned keys ("Configure keys" wizard of the System menu): ~/.config/stream-box/keymap.json,
+-- {"mpv key name": "action"}, on top of KEYS (a learned key can also replace the one of another action)
 local utils = require "mp.utils"
 local KEYMAP_FILE = (os.getenv("HOME") or "") .. "/.config/stream-box/keymap.json"
-local bound = {}   -- noms liés, pour pouvoir tout délier et relier
-local learn_key    -- assistant en cours : reçoit le nom de chaque touche à la place de on_key
+local bound = {}   -- bound names, to be able to unbind and rebind everything
+local learn_key    -- wizard running: receives the name of each key instead of on_key
 
 local function read_keymap()
     local f = io.open(KEYMAP_FILE)
@@ -1277,7 +1304,7 @@ local function bind_keys()
     for name, key in pairs(read_keymap()) do map[name] = key end
     for name, key in pairs(map) do
         if key == "power" and not name:match("^KEY_") then
-            -- Secours : power court au relâchement, maintenu 1 s → fenêtre (ui.py envoie keydown / keyup pour ces touches)
+            -- Fallback: short power on release, held 1 s → window (ui.py sends keydown / keyup for these keys)
             local timer = nil
             mp.add_forced_key_binding(name, "streambox-key-" .. name, function(t)
                 if input_service() then return end
@@ -1293,7 +1320,7 @@ local function bind_keys()
                 end
             end, { complex = true })
             bound[name] = true
-        elseif not name:match("^KEY_") and not name:match("^BTN_") and not name:match("^HAT_") then   -- noms de Linux : input.py
+        elseif not name:match("^KEY_") and not name:match("^BTN_") and not name:match("^HAT_") then   -- Linux names: input.py
             mp.add_forced_key_binding(name, "streambox-key-" .. name, function()
                 if input_service() then return end
                 if learn_key then learn_key(name) else on_key(key) end
@@ -1304,22 +1331,24 @@ local function bind_keys()
 end
 bind_keys()
 
--- Assistant : les actions une par une ; une touche dans les 8 s l'apprend, sinon l'action garde sa touche. État dans
--- user-data/streambox/learn (dessiné par qml/KeyWizard.qml), et en message à l'écran avec mpv seul
-local LEARN = { { "up", "Haut" }, { "down", "Bas" }, { "left", "Gauche" }, { "right", "Droite" }, { "ok", "OK" },
-                { "back", "Retour" }, { "home", "Menu de la TV" }, { "menu", "Options (≡)" },
-                { "homescreen", "Écran d'accueil" }, { "corner", "Lecture / coin du chat" }, { "power", "Power" } }
+-- Wizard: the actions one by one; a key within 8 s learns it, otherwise the action keeps its key. State in
+-- user-data/streambox/learn (drawn by qml/KeyWizard.qml), and as an on-screen message with mpv alone
+local LEARN = { { "up", "Up" }, { "down", "Down" }, { "left", "Left" }, { "right", "Right" }, { "ok", "OK" },
+                { "back", "Back" }, { "home", "TV menu" }, { "menu", "Options (≡)" },
+                { "homescreen", "Home screen" }, { "corner", "Play / chat corner" }, { "power", "Power" } }
 local LEARN_WAIT = 8
-local learn = nil   -- { step, learned = { nom = action }, timer, last }
+local learn = nil   -- { step, learned = { name = action }, timer, last }
 
 local function learn_publish(phase, key)
     local item = LEARN[learn.step]
     mp.set_property_native("user-data/streambox/learn", { phase = phase, step = learn.step, total = #LEARN,
-        label = item and item[2] or "", key = key or "", seconds = LEARN_WAIT })
+        label = item and tr(item[2]) or "", key = key or "", seconds = LEARN_WAIT })
     if not qt_ui() then
-        mp.osd_message(phase == "done" and "Touches enregistrées" or phase == "cancel" and "Assistant annulé : touches inchangées"
-            or ("Touches %d/%d : appuie sur la touche pour « %s »%s"):format(learn.step, #LEARN, item[2],
-                phase == "taken" and " (déjà prise)" or ""), (phase == "done" or phase == "cancel") and 3 or LEARN_WAIT)
+        mp.osd_message(phase == "done" and tr("Keys saved") or phase == "cancel" and tr("Wizard canceled: keys unchanged")
+            or tr(phase == "taken" and "Keys {step}/{total}: press the key for \"{action}\" (already taken)"
+                or "Keys {step}/{total}: press the key for \"{action}\"",
+                { step = learn.step, total = #LEARN, action = tr(item[2]) }),
+            (phase == "done" or phase == "cancel") and 3 or LEARN_WAIT)
     end
 end
 
@@ -1337,7 +1366,7 @@ local function learn_finish()
     mp.add_timeout(3, function() if not learn then mp.set_property_native("user-data/streambox/learn", {}) end end)
 end
 
--- Retour sur la télécommande virtuelle de la page : on quitte sans rien enregistrer
+-- Back on the page's virtual remote: quit without saving anything
 local function learn_cancel()
     if learn.timer then learn.timer:kill() end
     learn_publish("cancel")
@@ -1356,9 +1385,9 @@ end
 local function learn_press(name)
     if not learn or not name or name:match("^MOUSE") or name:match("^MBTN") or name:match("^WHEEL") then return end
     local now = mp.get_time()
-    if now - (learn.last or 0) < 0.6 then return end   -- touche maintenue, ou rebond
+    if now - (learn.last or 0) < 0.6 then return end   -- held key, or bounce
     learn.last = now
-    if learn.learned[name] then learn_publish("taken", name) return end   -- déjà donnée à une action précédente
+    if learn.learned[name] then learn_publish("taken", name) return end   -- already given to a previous action
     learn.learned[name] = LEARN[learn.step][1]
     learn_publish("ok", name)
     if learn.timer then learn.timer:kill() end
@@ -1370,10 +1399,10 @@ mp.register_script_message("streambox-keymap-wizard", function()
     mp.commandv("script-message", "streambox-tvmenu-close")
     learn = { step = 1, learned = {} }
     learn_publish("wait")
-    -- La touche OK qui a lancé l'assistant ne doit pas être prise pour « Haut »
+    -- The OK key that started the wizard must not be taken for "Up"
     mp.add_timeout(0.8, function()
         learn_key = learn_press
-        if not input_service() then   -- secours : touches inconnues de mpv (sinon input.py envoie tout)
+        if not input_service() then   -- fallback: keys unknown to mpv (otherwise input.py sends everything)
             mp.add_forced_key_binding("UNMAPPED", "streambox-learn-unmapped", function(t)
                 if t.event == "down" or t.event == "press" then learn_press(t.key_name) end
             end, { complex = true })
@@ -1382,10 +1411,10 @@ mp.register_script_message("streambox-keymap-wizard", function()
     end)
 end)
 
--- Touches lues à la source par input.py : nom de Linux (KEY_SELECT…) et action ; l'assistant apprend le nom
+-- Keys read at the source by input.py: Linux name (KEY_SELECT…) and action; the wizard learns the name
 mp.register_script_message("streambox-input", function(name, action)
     if learn_key then
-        -- La télécommande virtuelle de la page n'est pas apprise ; son Retour quitte l'assistant
+        -- The page's virtual remote is not learned; its Back quits the wizard
         if name ~= "VIRTUAL" then learn_key(name) elseif action == "back" then learn_cancel() end
         return
     end
@@ -1395,17 +1424,17 @@ end)
 mp.register_script_message("streambox-keymap-reset", function()
     os.remove(KEYMAP_FILE)
     bind_keys()
-    mp.osd_message("Touches de la télécommande par défaut", 3)
+    mp.osd_message(tr("Remote keys reset to default"), 3)
 end)
 
--- Télécommande web (remote.py) : mêmes actions que le menu
+-- Companion app (remote.py): same actions as the menu
 local function from_remote(fn)
     return function(...)
         fn(...)
         if menu_visible then draw_menu() end
     end
 end
--- Chaîne choisie depuis le téléphone ou Home Assistant : menu refermé (pas pour les relances automatiques du direct)
+-- Channel chosen from the phone or Home Assistant: menu closed (not for automatic restarts of the live stream)
 mp.register_script_message("streambox-channel", from_remote(function(name)
     mp.commandv("script-message", "streambox-tvmenu-close")
     start_channel(name)
@@ -1415,16 +1444,16 @@ mp.register_script_message("streambox-cycle-corner", from_remote(toggle_corner))
 mp.register_script_message("streambox-play", play_media)
 mp.register_script_message("streambox-home", from_remote(show_home))
 mp.register_script_message("streambox-setup-done", home_menu)
--- Petit bandeau en haut (télécommande connectée…, envoyé par input.py) : qml/Notice.qml, ou message de mpv seul
+-- Small banner at the top (remote connected…, sent by input.py): qml/Notice.qml, or a message with mpv alone
 mp.register_script_message("streambox-notice", function(text)
     if qt_ui() then
         mp.set_property_native("user-data/streambox/notice", { text = text, id = mp.get_time() })
     else
         mp.osd_message(text, 4)
     end
-end)   -- « Terminer » sur la page du téléphone
+end)   -- "Finish" on the phone page
 mp.register_script_message("streambox-twitch", from_remote(function() start_channel(channel) end))
--- Réveil après une mise en veille (remote.py, resume_loop) : flux coupés, on relance la lecture en cours
+-- Wake-up after sleep (remote.py, resume_loop): streams cut, restart what was playing
 mp.register_script_message("streambox-resume", function()
     power_quiet_until = mp.get_time() + 15
     if mode == "twitch" and channel then
@@ -1438,13 +1467,13 @@ mp.register_script_message("streambox-resume", function()
     end
 end)
 
--- Réglages numériques du chat et des sous-titres, modifiables depuis la télécommande : défaut, minimum, maximum
-local NUMBERS = { chat_bg = { 60, 0, 100 },     -- opacité du fond, en %
-                  chat_size = { 32, 20, 60 },   -- taille du texte, en pixels 1920x1080
-                  sub_size = { 100, 50, 200 },  -- taille des sous-titres, en % de celle de mpv
-                  sub_bg = { 0, 0, 100 } }      -- fond des sous-titres : opacité d'un bandeau noir, en % (0 : contour)
+-- Numeric settings of the chat and subtitles, editable from the companion app: default, minimum, maximum
+local NUMBERS = { chat_bg = { 60, 0, 100 },     -- background opacity, in %
+                  chat_size = { 32, 20, 60 },   -- text size, in 1920x1080 pixels
+                  sub_size = { 100, 50, 200 },  -- subtitle size, in % of mpv's
+                  sub_bg = { 0, 0, 100 } }      -- subtitle background: opacity of a black box, in % (0: outline)
 
--- Sous-titres : taille (sub-scale) et fond (bandeau noir derrière le texte, sinon contour et ombre habituels)
+-- Subtitles: size (sub-scale) and background (black box behind the text, otherwise the usual outline and shadow)
 local function apply_sub_style()
     local size = mp.get_property_native("user-data/streambox/sub_size") or 100
     local bg = mp.get_property_native("user-data/streambox/sub_bg") or 0
@@ -1471,25 +1500,25 @@ local function set_auto_switch(value)
     auto_switch_on = value ~= "no" and value ~= false
     write_state("auto_switch", auto_switch_on and "yes" or "no")
     mp.set_property_native("user-data/streambox/auto_switch", auto_switch_on)
-    auto_switch()   -- réactivée pendant que la chaîne est hors ligne : on bascule tout de suite
+    auto_switch()   -- re-enabled while the channel is offline: switch right away
 end
 mp.register_script_message("streambox-auto-switch", set_auto_switch)
 
--- Écran d'ambiance : quand rien ne joue (chaîne hors ligne, liste vide), horloge, date, météo et prochains lives
--- (données de remote.py dans user-data/streambox/ambient). Le contenu se déplace un peu chaque minute, pour ne pas
--- marquer l'écran de la TV.
-local WEEKDAYS = { "dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi" }   -- os.date : 1 = dimanche
-local MONTHS = { "janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
-                 "novembre", "décembre" }
+-- Ambient screen: when nothing plays (channel offline, empty list), clock, date, weather and upcoming streams
+-- (data from remote.py in user-data/streambox/ambient). The content moves a little every minute, so as not
+-- to burn in the TV screen.
+local WEEKDAYS = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" }   -- os.date: 1 = Sunday
+local MONTHS = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+                 "November", "December" }
 local ambient = mp.create_osd_overlay("ass-events")
-ambient.z = -10   -- sous le menu et les notifications
+ambient.z = -10   -- below the menu and the notifications
 local ambient_drawn = nil
 
--- Fond « aurore » : trois grandes taches très floues qui dérivent lentement sur un fond presque noir.
--- { couleur BGR, opacité ASS (00 = opaque), vitesse, phase }
-local AURORA = { { "FF4691", "B0", 0.011, 0.0 },    -- violet Twitch
-                 { "6A2A12", "A0", 0.008, 2.1 },    -- bleu nuit
-                 { "7A2A5E", "B8", 0.006, 4.2 } }   -- prune
+-- "Aurora" background: three large, very blurry blobs drifting slowly over an almost black background.
+-- { BGR color, ASS opacity (00 = opaque), speed, phase }
+local AURORA = { { "FF4691", "B0", 0.011, 0.0 },    -- Twitch purple
+                 { "6A2A12", "A0", 0.008, 2.1 },    -- midnight blue
+                 { "7A2A5E", "B8", 0.006, 4.2 } }   -- plum
 
 local function aurora(w, h)
     local t, r = os.time(), math.floor(h * 0.42)
@@ -1512,7 +1541,7 @@ local function ambient_wanted()
 end
 
 local function draw_ambient()
-    -- Appli Qt : l'écran d'accueil est dessiné en QML (qml/AmbientScreen.qml), d'après ambient_on et status
+    -- Qt app: the home screen is drawn in QML (qml/AmbientScreen.qml), from ambient_on and status
     if mp.get_property_native("user-data/streambox/chat_ui") == "qml" then
         ambient:remove()
         return
@@ -1531,12 +1560,13 @@ local function draw_ambient()
         aurora(w, h),
         line(cy - h * 0.30, math.floor(h * 0.22), "FFFFFF", ("%02d:%02d"):format(t.hour, t.min)),
         line(cy - h * 0.06, math.floor(fs * 1.2), "B0B0B0",
-             ass_escape(("%s %d %s"):format(WEEKDAYS[t.wday], t.day, MONTHS[t.month]))),
+             ass_escape(tr("{weekday}, {month} {day}",
+                           { weekday = tr(WEEKDAYS[t.wday]), day = t.day, month = tr(MONTHS[t.month]) }))),
     }
     local wx = ambient_data.weather
     if wx then
         local parts = { wx.city, ("%d°"):format(wx.temp), wx.text, ("%d° / %d°"):format(wx.min, wx.max) }
-        if (tonumber(wx.rain) or 0) >= 30 then parts[#parts + 1] = ("pluie %d %%"):format(wx.rain) end
+        if (tonumber(wx.rain) or 0) >= 30 then parts[#parts + 1] = tr("rain {n}%", { n = ("%d"):format(wx.rain) }) end
         local kept = {}
         for _, part in ipairs(parts) do if part and part ~= "" then kept[#kept + 1] = part end end
         out[#out + 1] = line(cy + h * 0.01, fs, "D0D0D0", ass_escape(table.concat(kept, "  ·  ")))
@@ -1544,7 +1574,7 @@ local function draw_ambient()
     local schedule = ambient_data.schedule or {}
     if #schedule > 0 then
         local y = cy + h * 0.10
-        out[#out + 1] = line(y, math.floor(fs * 0.75), "808080", "PROCHAINS LIVES")
+        out[#out + 1] = line(y, math.floor(fs * 0.75), "808080", ass_escape(tr("UPCOMING STREAMS")))
         for _, item in ipairs(schedule) do
             y = y + fs * 1.35
             local title = item.title or ""
@@ -1557,25 +1587,27 @@ local function draw_ambient()
     if status_text ~= "" then
         out[#out + 1] = line(h * 0.93, math.floor(fs * 0.7), "707070", ass_escape(status_text))
     end
-    -- Mode configuration (mpv seul ; l'appli Qt a son propre écran) : QR code du Wi-Fi de la box en bas à droite
+    -- Setup mode (mpv alone; the Qt app has its own screen): QR code of the box's Wi-Fi at the bottom right
     local setup = ambient_data.setup
     if setup and setup.ssid then
-        out[#out + 1] = line(h * 0.72, math.floor(fs * 0.9), "FFFFFF", "{\\b1}Configuration")
+        out[#out + 1] = line(h * 0.72, math.floor(fs * 0.9), "FFFFFF", "{\\b1}" .. ass_escape(tr("Setup")))
         out[#out + 1] = line(h * 0.77, math.floor(fs * 0.75), "D0D0D0",
-            ass_escape(("1. Wi-Fi « %s », mot de passe %s"):format(setup.ssid, setup.password)))
+            ass_escape(tr("1. Wi-Fi \"{ssid}\", password {password}", { ssid = setup.ssid, password = setup.password })))
         out[#out + 1] = line(h * 0.81, math.floor(fs * 0.75), "D0D0D0",
-            ass_escape("2. Ouvre " .. (setup.url or ""):gsub("^http://", ""):gsub("/$", "") .. " et choisis le Wi-Fi de la maison"))
+            ass_escape(tr("2. Open {url} and choose your home Wi-Fi",
+                          { url = (setup.url or ""):gsub("^http://", ""):gsub("/$", "") })))
     elseif setup and setup.connecting then
-        out[#out + 1] = line(h * 0.77, math.floor(fs * 0.8), "FFFFFF", ass_escape("Connexion au Wi-Fi « " .. setup.connecting .. " »…"))
+        out[#out + 1] = line(h * 0.77, math.floor(fs * 0.8), "FFFFFF",
+            ass_escape(tr("Connecting to Wi-Fi \"{ssid}\"…", { ssid = setup.connecting })))
     end
-    -- QR code de la télécommande en bas à droite, qui dérive un peu lui aussi
+    -- Companion app QR code at the bottom right, which drifts a little too
     local size = math.floor(h * 0.17)
     local qx = w - size - w * 0.04 + math.sin(minute * 0.9) * w * 0.012
     local qy = h - size - h * 0.11 + math.cos(minute * 0.6) * h * 0.015
     local drawing, side = qr_code(qx, qy, size)
     if drawing then
         out[#out + 1] = drawing
-        out[#out + 1] = text(qx + side / 2, qy - fs * 0.7, fs * 0.8, "A0A0A0", "Télécommande")
+        out[#out + 1] = text(qx + side / 2, qy - fs * 0.7, fs * 0.8, "A0A0A0", tr("Companion app"))
         out[#out + 1] = text(qx + side / 2, qy + side + fs * 0.7, fs * 0.65, "909090", qr_host())
     end
     ambient.res_x, ambient.res_y = w, h
@@ -1585,10 +1617,10 @@ end
 
 local function update_ambient(force)
     if ambient_wanted() then
-        local key = os.time() .. status_text   -- redessiné toutes les 2 s : le fond bouge en continu
+        local key = os.time() .. status_text   -- redrawn every 2 s: the background moves continuously
         if not ambient_visible then
             ambient_visible = true
-            set_loading(nil)   -- chaîne hors ligne, écran d'accueil : plus rien à attendre
+            set_loading(nil)   -- channel offline, home screen: nothing left to wait for
             qr_until = mp.get_time() + QR_SECONDS
             status:remove()
             mp.set_property_native("user-data/streambox/ambient_on", true)
@@ -1601,7 +1633,7 @@ local function update_ambient(force)
         ambient_visible, ambient_drawn = false, nil
         ambient:remove()
         mp.set_property_native("user-data/streambox/ambient_on", false)
-        set_status(status_text)   -- remet le message d'état (« Chargement… ») s'il y en a un
+        set_status(status_text)   -- puts back the status message ("Loading…") if there is one
     end
 end
 mp.add_periodic_timer(2, function() update_ambient(false) end)
@@ -1609,7 +1641,7 @@ mp.observe_property("user-data/streambox/ambient", "native", function(_, value)
     ambient_data = value or {}
     local qr = ambient_data.qr
     local setup = ambient_data.setup
-    if setup and setup.ssid then qr = { url = setup.url, rows = setup.wifi_rows } end   -- QR code du Wi-Fi de la box
+    if setup and setup.ssid then qr = { url = setup.url, rows = setup.wifi_rows } end   -- QR code of the box's Wi-Fi
     local changed = (qr and qr.url) ~= (qr_data and qr_data.url)
     qr_data = qr
     if ambient_visible then update_ambient(true) end
@@ -1622,8 +1654,8 @@ mp.observe_property("user-data/streambox/live", "native", function(_, value)
     auto_switch()
 end)
 
--- Chien de garde : direct dont l'image n'avance plus depuis FROZEN secondes alors qu'il n'est pas en pause
--- (flux bloqué, tampon coincé) → on relance la chaîne
+-- Watchdog: live stream whose picture has not moved for FROZEN seconds while not paused
+-- (stream stuck, buffer jammed) → restart the channel
 local last_pos, last_move = nil, 0
 mp.add_periodic_timer(5, function()
     local pos = mp.get_property_number("playback-time")
@@ -1632,35 +1664,35 @@ mp.add_periodic_timer(5, function()
     elseif pos ~= last_pos then
         last_pos, last_move = pos, mp.get_time()
     elseif mp.get_time() - last_move > FROZEN then
-        mp.msg.warn(("direct figé depuis %d s : on relance %s"):format(FROZEN, channel))
+        mp.msg.warn(("live stream frozen for %d s: restarting %s"):format(FROZEN, channel))
         last_pos, last_move = nil, mp.get_time()
         start_channel(channel)
     end
 end)
 
--- Sondages et prédictions de la chaîne regardée (relevés par remote.py dans user-data/streambox/polls) : encart en
--- haut au centre, loin des coins où se met le chat, avec le temps restant et la part de chaque choix
+-- Polls and predictions of the watched channel (fetched by remote.py into user-data/streambox/polls): box at
+-- the top center, away from the corners where the chat goes, with the time left and the share of each choice
 local events = mp.create_osd_overlay("ass-events")
 local events_data, events_on = {}, true
-local OUTCOME_COLORS = { BLUE = "FF7A38", PINK = "9B00F5" }   -- couleurs des prédictions sur Twitch, en BGR
+local OUTCOME_COLORS = { BLUE = "FF7A38", PINK = "9B00F5" }   -- Twitch prediction colors, in BGR
 
-local function shorten(s, n)   -- coupe à n octets sans casser un caractère UTF-8
+local function shorten(s, n)   -- cuts at n bytes without breaking a UTF-8 character
     if #s <= n then return s end
     local cut = n
     while cut > 0 and (s:byte(cut + 1) or 0) >= 0x80 and (s:byte(cut + 1) or 0) < 0xC0 do cut = cut - 1 end
     return s:sub(1, cut) .. "…"
 end
 
-local function amount(v)   -- 16617298 → « 16,6 M »
+local function amount(v)   -- 16617298 → "16,6 M"
     v = tonumber(v) or 0
     local s = v >= 1e6 and ("%.1f M"):format(v / 1e6) or v >= 1e3 and ("%.1f k"):format(v / 1e3) or tostring(v)
-    return (s:gsub("%.", ","))
+    return I18N.dec(s)
 end
 
 local function draw_events()
     local poll, pred = events_data.poll, events_data.prediction
     local w, h = mp.get_osd_size()
-    -- Appli Qt : encart dessiné par qml/PollsOverlay.qml (user-data/streambox/polls et events)
+    -- Qt app: box drawn by qml/PollsOverlay.qml (user-data/streambox/polls and events)
     if qt_ui() or not events_on or mode ~= "twitch" or not (poll or pred) or not w or w == 0 then
         events:remove()
         return
@@ -1670,7 +1702,7 @@ local function draw_events()
     local x, y = math.floor((w - bw) / 2), math.floor(h * 0.03)
     local pad, row_h = fs * 0.7, fs * 1.5
     local out = {}
-    -- rows : { libellé, part de 0 à 1, détail à droite, couleur BGR, gagnant }
+    -- rows: { label, share from 0 to 1, detail on the right, BGR color, winner }
     local function block(kind, title, right, rows)
         local bh = pad * 2 + fs * 2.5 + #rows * row_h
         out[#out + 1] = rect(x, y, bw, bh, "000000", "40")
@@ -1707,11 +1739,12 @@ local function draw_events()
         for i, c in ipairs(poll.choices or {}) do
             if i > 5 then break end
             local share = total > 0 and c.votes / total or 0
-            rows[#rows + 1] = { c.title, share, ("%d %%  ·  %s"):format(math.floor(share * 100 + 0.5), amount(c.votes)),
-                                "FF4691", poll.ended and best > 0 and c.votes == best }
+            rows[#rows + 1] = { c.title, share, tr("{pct}%  ·  {votes}", { pct = math.floor(share * 100 + 0.5),
+                                votes = amount(c.votes) }), "FF4691", poll.ended and best > 0 and c.votes == best }
         end
         local left = (poll.ends_at or 0) - now
-        block("SONDAGE", poll.title, poll.ended and "Résultats" or left > 0 and clock(left) or "Dépouillement…", rows)
+        block(ass_escape(tr("POLL")), poll.title,
+              poll.ended and tr("Results") or left > 0 and clock(left) or tr("Counting…"), rows)
     end
     if pred then
         local total = 0
@@ -1720,14 +1753,14 @@ local function draw_events()
         for i, o in ipairs(pred.outcomes or {}) do
             if i > 5 then break end
             local share = total > 0 and o.points / total or 0
-            rows[#rows + 1] = { o.title, share, ("%d %%  ·  %s points  ·  %s"):format(
-                                    math.floor(share * 100 + 0.5), amount(o.points), amount(o.users)),
+            rows[#rows + 1] = { o.title, share, tr("{pct}%  ·  {points} points  ·  {users}", {
+                                    pct = math.floor(share * 100 + 0.5), points = amount(o.points), users = amount(o.users) }),
                                 OUTCOME_COLORS[o.color] or "FF4691", o.winner }
         end
         local left = (pred.ends_at or 0) - now
-        local right = pred.status == "RESOLVED" and "Résultat" or pred.status == "CANCELED" and "Annulée"
-            or pred.status == "ACTIVE" and left > 0 and ("Paris : " .. clock(left)) or "Paris fermés"
-        block("PRÉDICTION", pred.title, right, rows)
+        local right = pred.status == "RESOLVED" and tr("Result") or pred.status == "CANCELED" and tr("Canceled")
+            or pred.status == "ACTIVE" and left > 0 and tr("Bets: {time}", { time = clock(left) }) or tr("Bets closed")
+        block(ass_escape(tr("PREDICTION")), pred.title, right, rows)
     end
     events.res_x, events.res_y = w, h
     events.data = table.concat(out, "\n")
@@ -1738,12 +1771,12 @@ mp.observe_property("user-data/streambox/polls", "native", function(_, value)
     events_data = value or {}
     draw_events()
 end)
-mp.add_periodic_timer(1, function()   -- temps restant
+mp.add_periodic_timer(1, function()   -- time left
     if events_data.poll or events_data.prediction then draw_events() end
 end)
 
--- Réglages oui / non, depuis la télécommande web : { défaut, appliqué à chaque changement et au démarrage }
--- Mode nuit : compresseur qui rapproche les passages forts des passages faibles (explosions, cris), puis limiteur
+-- Yes / no settings, from the companion app: { default, applied on each change and at startup }
+-- Night mode: compressor that brings loud passages closer to quiet ones (explosions, screams), then limiter
 local NIGHT_FILTER = "@night:lavfi=[acompressor=threshold=0.05:ratio=6:attack=10:release=300:makeup=3,"
     .. "alimiter=limit=0.9]"
 local FLAGS = {
@@ -1771,7 +1804,7 @@ local function set_flag(key, value, quiet)
     write_state(key, on and "yes" or "no")
     mp.set_property_native("user-data/streambox/" .. key, on)
     spec[2](on)
-    if not quiet and key == "night" then mp.osd_message(on and "Mode nuit activé" or "Mode nuit désactivé", 2) end
+    if not quiet and key == "night" then mp.osd_message(on and tr("Night mode on") or tr("Night mode off"), 2) end
 end
 mp.register_script_message("streambox-flag", set_flag)
 for key, spec in pairs(FLAGS) do
@@ -1779,11 +1812,11 @@ for key, spec in pairs(FLAGS) do
     set_flag(key, saved or (spec[1] and "yes" or "no"), true)
 end
 
--- Affichage du QR code de la télécommande : always, timed (QR_SECONDS secondes à chaque arrivée sur l'écran d'ambiance
--- et ouverture du menu), never
+-- Display of the companion app QR code: always, timed (QR_SECONDS seconds each time the ambient screen appears
+-- and the menu opens), never
 local function set_qr_mode(value)
     if not QR_MODES[value] then return end
-    qr_mode, qr_until = value, mp.get_time() + QR_SECONDS   -- en « timed », on le montre tout de suite pour l'exemple
+    qr_mode, qr_until = value, mp.get_time() + QR_SECONDS   -- in "timed", show it right away as an example
     write_state("qr", value)
     mp.set_property_native("user-data/streambox/qr", value)
     if ambient_visible then update_ambient(true) end
@@ -1792,7 +1825,18 @@ end
 mp.register_script_message("streambox-qr", set_qr_mode)
 set_qr_mode(read_state("qr") or "always")
 
--- Pas de double-clic plein écran : la box doit rester en plein écran
+-- Interface language changed (companion app): reload the translations and redraw what is visible
+mp.register_script_message("streambox-language", function()
+    I18N.load()
+    if menu_visible then draw_menu() end
+    if ambient_visible then update_ambient(true) end
+    if bar_visible then draw_bar() end
+    if tracks_open then build_tracks() publish_tracks() end
+    if mode == "media" then publish_controls() end
+    draw_events()
+end)
+
+-- No full-screen double-click: the box must stay full screen
 mp.add_forced_key_binding("MBTN_LEFT_DBL", "streambox-no-dbl", function() end)
 
 
@@ -1808,8 +1852,8 @@ mp.set_property_native("user-data/streambox/chat_visible", chat_visible)
 for key, spec in pairs(NUMBERS) do
     set_number(key, read_state(key) or spec[1])
 end
--- Démarrage sur le menu, rien en lecture ; le dernier streamer regardé reste la chaîne courante (Retour au stream,
--- Home Assistant, zapping), s'il est encore dans la liste. Petit délai : le menu (appli Qt ou tv_menu.lua) se charge.
+-- Start on the menu, nothing playing; the last watched streamer stays the current channel (Back to the stream,
+-- Home Assistant, zapping), if it is still in the list. Short delay: the menu (Qt app or tv_menu.lua) is loading.
 local last = read_state("channel")
 for _, name in ipairs(streamers) do
     if name == last then channel = last end

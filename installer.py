@@ -1,14 +1,16 @@
-"""Stream Box : installation sur un disque interne, depuis la box qui tourne sur une clé USB (image disque, image/).
+"""Stream Box: installation to an internal disk, from the box running on a USB drive (disk image, image/).
 
-Menu Système de la TV → « Installer sur ce PC » : choix du disque, confirmation, progression. Le travail est fait par
-root (/usr/local/lib/stream-box/install-to-disk, lancé par stream-box-install@<disque>.service ; règle polkit
-53-stream-box-install.rules : media ne peut démarrer que ce service), qui écrit son état dans
-/run/stream-box-install.json. Utilisé par remote.py (GET /api/install, POST /api/install {disk}).
+TV System menu → "Install on this PC": disk choice, confirmation, progress. The work is done by root
+(/usr/local/lib/stream-box/install-to-disk, started by stream-box-install@<disk>.service; polkit rule
+53-stream-box-install.rules: media can only start that service), which writes its state to
+/run/stream-box-install.json. Used by remote.py (GET /api/install, POST /api/install {disk}).
 
-Proposé seulement quand la box a démarré sur une clé USB (ou un disque amovible) et que l'image a l'installateur ;
-disques proposés : internes, 16 Go au moins, autres que celui de la box.
+Offered only when the box booted from a USB drive (or a removable disk) and the image has the installer; disks
+offered: internal, 16 GB at least, other than the box's own.
 """
 import json, os, re, subprocess
+
+from i18n import tr
 
 SCRIPT = "/usr/local/lib/stream-box/install-to-disk"
 STATUS = "/run/stream-box-install.json"
@@ -29,13 +31,13 @@ def disks():
 
 
 def mounts(d):
-    """Points de montage d'un disque et de ses partitions (tous : un btrfs en sous-volumes en a plusieurs)"""
+    """Mount points of a disk and its partitions (all of them: a btrfs with subvolumes has several)"""
     return (d.get("mountpoints") or []) + [m for c in d.get("children") or [] for m in mounts(c)]
 
 
 def raid_mode():
-    """Contrôleur de disques Intel en mode RAID (RST) : un SSD NVMe y est caché au noyau d'Arch (« remapped NVMe »),
-    il faut passer le BIOS en AHCI (Dell : SATA Operation → AHCI)"""
+    """Intel disk controller in RAID mode (RST): an NVMe SSD behind it is hidden from Arch's kernel ("remapped NVMe"),
+    the BIOS must be switched to AHCI (Dell: SATA Operation → AHCI)"""
     try:
         for dev in os.listdir("/sys/bus/pci/devices"):
             with open(f"/sys/bus/pci/devices/{dev}/class") as f:
@@ -59,15 +61,22 @@ def status():
         size = int(d["size"])
         model = (d.get("model") or "").strip() or d["name"]
         parts = d.get("children") or []
-        # Ce qu'il contient, pour le dire avant d'effacer (Windows, Linux…)
+        # What it holds, to say so before erasing (Windows, Linux…)
         labels = [p.get("label") or p.get("fstype") for p in parts if p.get("fstype")]
-        found.append({"name": d["name"], "label": f"{model} · {size / 1e9:.0f} Go", "size": size,
-                      "data": ", ".join(dict.fromkeys(l for l in labels if l))[:60] or (len(parts) and "données") or ""})
+        found.append({"name": d["name"], "label": f"{model} · " + tr("{size} GB", size=f"{size / 1e9:.0f}"), "size": size,
+                      "data": ", ".join(dict.fromkeys(l for l in labels if l))[:60] or (len(parts) and tr("data")) or ""})
     try:
         with open(STATUS) as f:
             progress = json.load(f)
     except (OSError, ValueError):
         progress = None
+    if isinstance(progress, dict):   # step and error are written in English by the root script: translated here
+        if progress.get("step"):
+            progress["step"] = tr(progress["step"])
+        error = progress.get("error")
+        if error:
+            m = re.match(r"error during: (.*)$", error)
+            progress["error"] = tr("error during: {step}", step=tr(m.group(1))) if m else tr(error)
     return {"available": live and os.path.exists(SCRIPT), "live": live, "disks": found,
             "raid_mode": not found and raid_mode(), "progress": progress}
 
@@ -75,12 +84,12 @@ def status():
 def start(name):
     s = status()
     if not s["available"]:
-        raise ValueError("L'installation se lance depuis la box démarrée sur sa clé USB.")
+        raise ValueError(tr("The installation must be started from the box booted on its USB drive."))
     if (s["progress"] or {}).get("state") == "running":
-        raise ValueError("Installation déjà en cours.")
+        raise ValueError(tr("Installation already in progress."))
     if name not in [d["name"] for d in s["disks"]]:
-        raise ValueError("Disque inconnu.")
+        raise ValueError(tr("Unknown disk."))
     r = subprocess.run(["systemctl", "start", "--no-block", f"stream-box-install@{name}.service"],
                        capture_output=True, text=True, timeout=20)
     if r.returncode != 0:
-        raise ValueError(f"Installation refusée : {(r.stderr or r.stdout).strip() or r.returncode}")
+        raise ValueError(tr("Installation refused: {error}", error=(r.stderr or r.stdout).strip() or r.returncode))

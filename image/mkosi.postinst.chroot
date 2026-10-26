@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Stream Box : services et réglages de l'image (après les paquets et mkosi.prepare.chroot)
+# Stream Box: image services and settings (after the packages and mkosi.prepare.chroot)
 set -euo pipefail
 BOX_USER=media
 BOX_HOME=/home/$BOX_USER
 as_box() { (cd "$BOX_HOME" && runuser -u "$BOX_USER" -- env HOME="$BOX_HOME" bash -c "$1"); }
 
-# SSH : clés seulement, coupé par défaut (mkosi.finalize.chroot, après le « preset-all » de mkosi qui l'annulerait)
+# SSH: keys only, off by default (mkosi.finalize.chroot, after mkosi's "preset-all" which would undo it)
 install -d /etc/ssh/sshd_config.d
 printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\n' > /etc/ssh/sshd_config.d/50-stream-box.conf
-# (« Accès SSH » du menu Système : mot de passe affiché sur la TV, 10-stream-box-password.conf ; voir ssh-access)
+# ("SSH access" in the System menu: password shown on the TV, 10-stream-box-password.conf; see ssh-access)
 
-# Services utilisateur de media : mises à jour, jetons YouTube, pont MQTT (sans config MQTT, celui-ci ne démarre pas)
+# media's user services: updates, YouTube tokens, MQTT bridge (without MQTT config, the latter doesn't start)
 as_box '
   set -e
   units=~/.config/systemd/user
@@ -22,7 +22,7 @@ as_box '
   install -d -m 700 ~/.config/stream-box ~/.config/jellyfin-mpv-shim
   echo qt > ~/.config/stream-box/player
 '
-# jellyfin-mpv-shim pilote le mpv de la box (même config que install.sh)
+# jellyfin-mpv-shim drives the box's mpv (same config as install.sh)
 as_box 'cat > ~/.config/jellyfin-mpv-shim/conf.json' << 'JSON'
 {
   "player_name": "Stream Box",

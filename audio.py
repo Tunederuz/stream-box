@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-"""Stream Box : sortie son, choisie et suivie par PipeWire (pactl).
+"""Stream Box: sound output, chosen and tracked through PipeWire (pactl).
 
-Sorties proposées : les prises HDMI / DisplayPort où un écran ou une TV qui sait jouer le son est branché (la carte
-graphique le signale : port « available », nom de l'appareil d'après son EDID), les appareils USB et Bluetooth
-(casque, barre de son, enceinte), et la sortie analogique de la carte son (haut-parleurs, prise jack).
+Outputs offered: the HDMI / DisplayPort connectors where a screen or TV able to play sound is plugged in (the graphics
+card reports it: port "available", device name from its EDID), USB and Bluetooth devices (headset, soundbar,
+speaker), and the analog output of the sound card (speakers, headphone jack).
 
-Choix : ~/.config/stream-box/audio-output contient « auto » (par défaut) ou l'identifiant d'une sortie choisie à la
-main (Réglages de la TV, page web). En automatique : un appareil Bluetooth ou USB branché passe en premier, sinon
-l'HDMI / DisplayPort où il y a une TV ; si rien de tout ça, on ne touche à rien (TV éteinte : le son ne part pas sur
-les haut-parleurs du PC). Une sortie choisie à la main et absente (enceinte éteinte) laisse la place à l'automatique,
-et reprend dès qu'elle revient. ~/.config/stream-box/no-hdmi-audio (ancien réglage) vaut « analogique ».
+Choice: ~/.config/stream-box/audio-output holds "auto" (the default) or the id of an output picked by hand (TV
+Settings, companion app). In automatic mode: a plugged-in Bluetooth or USB device comes first, otherwise the HDMI /
+DisplayPort with a TV on it; if none of these, nothing is touched (TV off: the sound doesn't go to the PC's speakers).
+An output picked by hand and missing (speaker off) gives way to automatic mode, and takes over again as soon as it
+comes back. ~/.config/stream-box/no-hdmi-audio (old setting) means "analog".
 
-  audio.py          choix au démarrage, une fois
-  audio.py watch    choix au démarrage, puis à chaque branchement ou débranchement (pactl subscribe) ; lancé par
-                    start.sh
-remote.py s'en sert aussi (outputs, current, set_choice) pour /api/audio.
+  audio.py          choice at startup, once
+  audio.py watch    choice at startup, then on every plug or unplug (pactl subscribe); started by start.sh
+remote.py also uses it (outputs, current, set_choice) for /api/audio.
 """
 import json, os, re, subprocess, sys, threading, time
+
+from i18n import tr
 
 CONF = os.path.expanduser("~/.config/stream-box/audio-output")
 NO_HDMI = os.path.expanduser("~/.config/stream-box/no-hdmi-audio")
@@ -24,7 +25,7 @@ lock = threading.Lock()
 
 
 def pactl(*args, timeout=10):
-    # En anglais : les descriptions traduites donnent des avertissements « Invalid ASCII character » en JSON
+    # In English: translated descriptions give "Invalid ASCII character" warnings in JSON
     return subprocess.run(["pactl", *args], capture_output=True, text=True, timeout=timeout,
                           env={**os.environ, "LC_ALL": "C"})
 
@@ -37,7 +38,7 @@ def listing(kind):
 
 
 def descriptions():
-    """Noms lisibles des sorties (« Description: » du listing texte : le JSON les perd dès qu'il y a un accent)"""
+    """Readable output names ("Description:" from the text listing: the JSON loses them as soon as there is an accent)"""
     out, name = {}, None
     for line in subprocess.run(["pactl", "list", "sinks"], capture_output=True, text=True, timeout=10).stdout.splitlines():
         m = re.match(r"\s*(?:Name|Nom)\s*:\s*(\S+)", line)
@@ -57,7 +58,7 @@ def default_sink():
 
 
 def outputs():
-    """Sorties possibles : [{id, label, kind, card?, profile?, port?, sink?}], meilleures d'abord"""
+    """Possible outputs: [{id, label, kind, card?, profile?, port?, sink?}], best first"""
     found, desc = [], descriptions()
     sinks = listing("sinks")
     for card in listing("cards"):
@@ -74,10 +75,10 @@ def outputs():
             num = f" (HDMI {int(name.rsplit('-', 1)[1]) + 1})" if len(hdmi) > 1 else ""
             found.append({"id": f"hdmi:{card['name']}:{name}", "kind": "hdmi", "card": card["name"],
                           "profile": outs[0], "port": name,
-                          "label": "TV / écran" + (f" · {product}" if product else "") + num})
+                          "label": tr("TV / screen") + (f" · {product}" if product else "") + num})
         if "output:analog-stereo" in profiles and profiles["output:analog-stereo"].get("available", True):
             found.append({"id": f"analog:{card['name']}", "kind": "analog", "card": card["name"],
-                          "profile": "output:analog-stereo", "label": "Haut-parleurs / prise jack"})
+                          "profile": "output:analog-stereo", "label": tr("Speakers / headphone jack")})
     for s in sinks:
         props = s.get("properties") or {}
         bus = props.get("device.bus") or ""
@@ -87,7 +88,7 @@ def outputs():
         elif bus == "usb":
             kind = "usb"
         else:
-            continue   # cartes PCI : déjà proposées par leurs prises ci-dessus
+            continue   # PCI cards: already offered through their connectors above
         label = desc.get(s["name"]) or props.get("device.description") or props.get("device.product.name") or s["name"]
         found.append({"id": f"sink:{s['name']}", "kind": kind, "sink": s["name"],
                       "label": label + (" (Bluetooth)" if kind == "bluetooth" else " (USB)")})
@@ -96,7 +97,7 @@ def outputs():
 
 
 def current(outs=None):
-    """Identifiant de la sortie par défaut actuelle"""
+    """Id of the current default output"""
     name = default_sink()
     sinks = {s["name"]: s for s in listing("sinks")}
     s = sinks.get(name) or {}
@@ -126,7 +127,7 @@ def choice():
 def apply(o):
     if o.get("card"):
         pactl("set-card-profile", o["card"], o["profile"])
-        for _ in range(20):   # la sortie de ce profil apparaît en quelques dixièmes de seconde
+        for _ in range(20):   # the output of this profile shows up within a few tenths of a second
             sink = next((s["name"] for s in listing("sinks")
                          if (s.get("properties") or {}).get("device.name") == o["card"]
                          and (o["kind"] != "hdmi" or s.get("active_port") == o["port"])), None)
@@ -138,14 +139,14 @@ def apply(o):
     else:
         sink = o["sink"]
     pactl("set-default-sink", sink)
-    # Lectures en cours (mpv…) déplacées vers la nouvelle sortie
+    # Playing streams (mpv…) moved to the new output
     for line in pactl("list", "short", "sink-inputs").stdout.splitlines():
         pactl("move-sink-input", line.split("\t")[0], sink)
     return True
 
 
 def choose():
-    """Applique le choix (manuel s'il est là, sinon automatique) ; renvoie la sortie retenue ou None"""
+    """Applies the choice (manual if there is one, otherwise automatic); returns the selected output or None"""
     with lock:
         outs = outputs()
         if not outs:
@@ -155,19 +156,19 @@ def choose():
             target = next((o for o in outs if o["kind"] == "analog"), None)
         elif c != "auto":
             target = next((o for o in outs if o["id"] == c), None)
-        if target is None:   # automatique, ou sortie choisie absente pour l'instant
+        if target is None:   # automatic, or the chosen output is missing for now
             target = next((o for o in outs if o["kind"] in ("bluetooth", "usb", "hdmi")), None)
         if target is None or current(outs) == target["id"]:
             return target
         if apply(target):
-            print(f"audio.py : sortie {target['label']} ({target['id']})", flush=True)
+            print(f"audio.py: output {target['label']} ({target['id']})", flush=True)
         return target
 
 
 def set_choice(value):
-    """« auto » ou l'identifiant d'une sortie ; appliqué tout de suite"""
+    """"auto" or the id of an output; applied right away"""
     if value != "auto" and not any(o["id"] == value for o in outputs()):
-        raise ValueError("sortie inconnue")
+        raise ValueError(tr("unknown output"))
     os.makedirs(os.path.dirname(CONF), mode=0o700, exist_ok=True)
     with open(CONF, "w", encoding="utf-8") as f:
         f.write(value + "\n")
@@ -177,7 +178,7 @@ def set_choice(value):
 
 
 def wait_pipewire():
-    for _ in range(15):   # PipeWire peut démarrer juste après la session
+    for _ in range(15):   # PipeWire may start just after the session
         if pactl("info").returncode == 0:
             return True
         time.sleep(1)
@@ -185,7 +186,7 @@ def wait_pipewire():
 
 
 def watch():
-    """Branchements et débranchements : nouveau choix 1,5 s après le dernier évènement (le temps qu'ils se calment)"""
+    """Plugs and unplugs: new choice 1.5 s after the last event (time for them to settle)"""
     choose()
     while True:
         proc = subprocess.Popen(["pactl", "subscribe"], stdout=subprocess.PIPE, text=True, env={**os.environ, "LC_ALL": "C"})
@@ -197,12 +198,12 @@ def watch():
                 timer = threading.Timer(1.5, choose)
                 timer.start()
         proc.wait()
-        time.sleep(3)   # PipeWire relancé : on se réabonne
+        time.sleep(3)   # PipeWire restarted: subscribe again
 
 
 if __name__ == "__main__":
     if not wait_pipewire():
-        sys.exit("audio.py : PipeWire injoignable")
+        sys.exit("audio.py: PipeWire unreachable")
     if sys.argv[1:] == ["watch"]:
         watch()
     else:

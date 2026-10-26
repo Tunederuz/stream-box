@@ -1,4 +1,4 @@
-// Stream Box : media active ou coupe l'accès SSH (stream-box-ssh@enable|disable.service, rien d'autre)
+// Stream Box: media enables or disables SSH access (stream-box-ssh@enable|disable.service, nothing else)
 polkit.addRule(function (action, subject) {
     if (subject.user == "media" && action.id == "org.freedesktop.systemd1.manage-units" &&
         action.lookup("verb") == "start" && /^stream-box-ssh@(enable|disable)\.service$/.test(action.lookup("unit"))) {

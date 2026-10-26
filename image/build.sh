@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Stream Box : construit l'image disque (image/mkosi.output/stream-box.raw) dans un conteneur Arch avec mkosi,
-# sans rien installer sur la machine. Docker requis ; le conteneur est privilégié (montages, systemd-repart).
-#   bash image/build.sh            construit l'image
-#   bash image/build.sh vm         la démarre dans une machine virtuelle (QEMU, UEFI) pour essayer
-#   bash image/build.sh xz         stream-box.raw.xz, la version à télécharger
-#   bash image/build.sh test       image de test (stream-box-test.raw) : Wi-Fi simulé, clé SSH de test
+# Stream Box: builds the disk image (image/mkosi.output/stream-box.raw) in an Arch container with mkosi, without
+# installing anything on the machine. Docker required; the container is privileged (mounts, systemd-repart).
+#   bash image/build.sh            builds the image
+#   bash image/build.sh vm         boots it in a virtual machine (QEMU, UEFI) to try it
+#   bash image/build.sh xz         stream-box.raw.xz, the downloadable version
+#   bash image/build.sh test       test image (stream-box-test.raw): simulated Wi-Fi, test SSH key
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 docker build -q -t stream-box-mkosi - > /dev/null << 'DOCKERFILE'
@@ -14,15 +14,15 @@ RUN pacman -Syu --noconfirm --needed mkosi systemd dosfstools mtools e2fsprogs c
 DOCKERFILE
 case "${1:-build}" in
   build) docker run --rm --privileged -v "$HERE/..":/src -w /src/image stream-box-mkosi mkosi -f build ;;
-  # Version à télécharger : compressée (Etcher et Rufus la décompressent eux-mêmes)
+  # Downloadable version: compressed (Etcher and Rufus decompress it themselves)
   xz) docker run --rm -v "$HERE/..":/src -w /src/image stream-box-mkosi \
         xz -T0 -6 -k -f -v mkosi.output/stream-box.raw ;;
-  # Clé SSH de test : image/test-key(.pub), créée au premier essai, jamais publiée (.gitignore)
+  # Test SSH key: image/test-key(.pub), created on the first try, never published (.gitignore)
   test) [ -f "$HERE/test-key" ] || ssh-keygen -q -t ed25519 -N "" -C stream-box-test -f "$HERE/test-key"
         install -m 644 "$HERE/test-key.pub" "$HERE/mkosi.profiles/test/mkosi.extra/etc/ssh/stream-box-test-keys"
         docker run --rm --privileged -v "$HERE/..":/src -w /src/image stream-box-mkosi \
           mkosi --profile=test --output=stream-box-test -f build ;;
   vm) docker run --rm -it --privileged --device /dev/kvm -v "$HERE/..":/src -w /src/image stream-box-mkosi \
         mkosi vm -m 4G ;;
-  *) echo "usage : $0 [build|xz|test|vm]" >&2; exit 2 ;;
+  *) echo "usage: $0 [build|xz|test|vm]" >&2; exit 2 ;;
 esac

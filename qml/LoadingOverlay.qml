@@ -1,14 +1,16 @@
-// Écran de chargement entre deux vidéos ou deux chaînes (stream-box.lua, user-data/streambox/loading : title, thumb,
-// kind). Le logo de la box au centre : une lueur de la couleur de la source (violet Twitch, rouge YouTube, bleu
-// Jellyfin) court sur le contour du triangle, des ondes partent de la tuile comme un signal qu'on capte, et la tuile
-// respire. Fond : miniature floutée et assombrie. Fondu à l'entrée et à la sortie.
+// Loading screen between two videos or two channels (stream-box.lua, user-data/streambox/loading: title, thumb,
+// kind). The box logo in the center: a glow in the color of the source (Twitch purple, YouTube red, Jellyfin
+// blue) runs along the outline of the triangle, waves leave the tile like a signal being received, and the tile
+// breathes. Background: blurred and darkened thumbnail. Fade in and out.
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Shapes
+import "i18n.js" as I18n
 
 Item {
     id: root
     anchors.fill: parent
+    function tr(s, a) { return I18n.t(i18n.dict, s, a) }
     readonly property var l: { try { return JSON.parse(osd.loading || "{}") } catch (e) { return {} } }
     readonly property bool shown: !!l.title
     property var last: ({})
@@ -16,7 +18,7 @@ Item {
     readonly property color accent: last.kind === "youtube" ? "#ff0033" : last.kind === "jellyfin" ? "#1565c0"
                                   : last.kind === "twitch" ? "#9146ff" : "#e8e8ee"
     readonly property string source: last.kind === "youtube" ? "YouTube" : last.kind === "jellyfin" ? "Jellyfin"
-                                   : last.kind === "twitch" ? "Twitch" : "Vidéo"
+                                   : last.kind === "twitch" ? "Twitch" : tr("Video")
     opacity: shown ? 1 : 0
     visible: opacity > 0
     Behavior on opacity { NumberAnimation { duration: root.shown ? 200 : 500; easing.type: Easing.InOutQuad } }
@@ -37,7 +39,7 @@ Item {
         blurEnabled: true; blur: 1.0; blurMax: 64
         brightness: -0.62
     }
-    RectangularShadow {   // halo de la couleur de la source derrière le logo
+    RectangularShadow {   // glow in the color of the source behind the logo
         anchors.centerIn: logo
         width: 360; height: 360; radius: 180
         blur: 200; spread: 0
@@ -45,7 +47,7 @@ Item {
         Behavior on color { ColorAnimation { duration: 300 } }
     }
 
-    // Ondes : trois anneaux qui grandissent et s'effacent, décalés
+    // Waves: three rings that grow and fade, staggered
     Repeater {
         model: 3
         Rectangle {
@@ -68,7 +70,7 @@ Item {
         }
     }
 
-    // Logo : tuile blanche, triangle anthracite, et une lueur qui court sur son contour
+    // Logo: white tile, charcoal triangle, and a glow running along its outline
     Item {
         id: logo
         width: 150; height: 150
@@ -92,14 +94,14 @@ Item {
                 PathLine { x: 58; y: 48 }
             }
         }
-        Shape {   // lueur : un trait coloré qui fait le tour du triangle
+        Shape {   // glow: a colored stroke going around the triangle
             anchors.fill: parent
             layer.enabled: true; layer.samples: 4
             ShapePath {
                 fillColor: "transparent"; strokeColor: root.accent
                 strokeWidth: 7; capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
                 strokeStyle: ShapePath.DashLine
-                dashPattern: [5, 20]   // en largeurs de trait : un trait de 35 px sur un tour de ~160 px
+                dashPattern: [5, 20]   // in stroke widths: a 35 px stroke over a ~160 px loop
                 NumberAnimation on dashOffset { from: 25; to: 0; duration: 1100; loops: Animation.Infinite; running: root.visible }
                 startX: 58; startY: 48
                 PathLine { x: 104; y: 75 }
@@ -111,9 +113,9 @@ Item {
 
     Column {
         anchors.horizontalCenter: parent.horizontalCenter
-        y: logo.y + logo.height + 140   // sous les ondes
+        y: logo.y + logo.height + 140   // below the waves
         spacing: 14
-        // ombre sous les textes : lisibles quelle que soit la miniature derrière
+        // shadow under the texts: readable whatever the thumbnail behind
         layer.enabled: true
         layer.effect: MultiEffect { shadowEnabled: true; shadowColor: "black"; shadowBlur: 0.8; shadowOpacity: 0.9; shadowVerticalOffset: 2 }
         Text {

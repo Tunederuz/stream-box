@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Stream Box : services système activés et démarrage en mode graphique. Ici et pas dans mkosi.postinst.chroot :
-# mkosi lance « systemctl preset-all » entre les deux, qui remettrait tout aux réglages par défaut d'Arch.
+# Stream Box: system services enabled and graphical boot. Here and not in mkosi.postinst.chroot: mkosi runs
+# "systemctl preset-all" in between, which would put everything back to Arch's defaults.
 set -euo pipefail
 systemctl enable greetd.service NetworkManager.service bluetooth.service systemd-timesyncd.service
-# SSH coupé par défaut : il s'active depuis le menu Système (« Accès SSH », « Mode développeur »), mot de passe affiché
-if [ -f /etc/ssh/stream-box-test-keys ]; then   # image de test : SSH par la clé de test, pour les essais en VM
+# SSH off by default: it is enabled from the System menu ("SSH access", "Developer mode"), password shown
+if [ -f /etc/ssh/stream-box-test-keys ]; then   # test image: SSH with the test key, for VM tests
   systemctl enable sshd.service
 else
   systemctl disable sshd.service 2> /dev/null || true
 fi
-systemctl set-default graphical.target   # greetd (display-manager) n'est lancé que par graphical.target
+systemctl set-default graphical.target   # greetd (display-manager) is only started by graphical.target
 
-# Allègement, sans toucher à la compatibilité : en-têtes, documentation, traductions autres que français et anglais,
-# outils de développement Qt du venv de l'appli
+# Slimming down, without affecting compatibility: headers, documentation, translations other than French and English,
+# Qt development tools from the app's venv
 rm -rf /usr/include /usr/share/doc /usr/share/man /usr/share/info /usr/share/gtk-doc
 find /usr/share/locale -mindepth 1 -maxdepth 1 -type d ! -name 'fr*' ! -name 'en*' -exec rm -rf {} +
 for d in /home/media/.local/share/ui-venv/lib/python3*/site-packages/PySide6; do

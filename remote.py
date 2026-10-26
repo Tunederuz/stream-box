@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
-"""Stream Box : télécommande web pour téléphone (http://<box>:8080), qui pilote mpv via son socket IPC.
+"""Stream Box: companion app for the phone (http://<box>:8080), which drives mpv through its IPC socket.
 
-Les changements de streamer et de chat passent par les script-messages de stream-box.lua, pour que le menu
-à l'écran, le chat et la page restent d'accord. Bibliothèque standard uniquement.
+Streamer and chat changes go through the script-messages of stream-box.lua, so that the on-screen menu, the chat
+and the page stay in agreement. Standard library only.
 
-Compte Twitch : le jeton du site (cookie auth-token) est rangé dans la config Twitch de streamlink, que
-streamlink lit tout seul. Twitch ne retire les pubs des abonnements qu'avec ce jeton-là.
+Twitch account: the site's token (auth-token cookie) is stored in streamlink's Twitch config, which streamlink reads
+by itself. Twitch only removes ads for subscriptions with that token.
 """
 import calendar, datetime, hashlib, json, os, uuid, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zoneinfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import display   # display.py, même dossier
-import netsetup  # netsetup.py : point d'accès Wi-Fi de configuration
-import audio     # audio.py : sortie son (HDMI branché, USB, Bluetooth, choix manuel)
-import btsetup   # btsetup.py : télécommandes et manettes Bluetooth (appairage, dissociation)
-import backup    # backup.py : sauvegarde et restauration des réglages (clé USB, fichier de la page)
-import installer  # installer.py : installation sur un disque interne depuis la clé USB
+import display   # display.py, same folder
+import netsetup  # netsetup.py: setup Wi-Fi access point
+import audio     # audio.py: sound output (plugged HDMI, USB, Bluetooth, manual choice)
+import btsetup   # btsetup.py: Bluetooth remotes and gamepads (pairing, removal)
+import backup    # backup.py: backup and restore of settings (USB stick, file from the page)
+import installer  # installer.py: installation to an internal disk from the USB stick
+import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
+from i18n import tr
 
 PORT = 8080
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
@@ -23,15 +25,15 @@ DIR = os.path.dirname(os.path.abspath(__file__))
 STREAMERS_FILE = os.path.join(DIR, "streamers.txt")
 TWITCH_CONFIG = os.path.expanduser("~/.config/streamlink/config.twitch")
 TOKEN_PREFIX = "twitch-api-header=Authorization=OAuth "
-# Le même jeton en cookie pour yt-dlp (VOD réservées aux abonnés). yt-dlp réécrit ce fichier en 644 à chaque
-# lecture : c'est le dossier, en 700, qui le protège.
+# The same token as a cookie for yt-dlp (subscriber-only VODs). yt-dlp rewrites this file as 644 on every
+# read: the folder, in 700, is what protects it.
 COOKIES_DIR = os.path.expanduser("~/.config/stream-box")
 COOKIES_FILE = os.path.join(COOKIES_DIR, "twitch-cookies.txt")
-CHECK_EVERY = 1800   # secondes entre deux vérifications du jeton auprès de Twitch
-LIVE_EVERY = 60      # secondes entre deux relevés « qui est en live »
-PUBLISH_EVERY = 10   # secondes entre deux envois à mpv des données déjà connues : un mpv relancé les reçoit vite
-TWITCH_WEB_CLIENT_ID = "kimne78kx3ncx6brgo4mv6wki5h1ko"   # celui du site twitch.tv, public (streamlink l'utilise aussi)
-# Fichiers servis tels quels : la page et ce qu'il faut pour l'installer comme une appli (PWA)
+CHECK_EVERY = 1800   # seconds between two token checks with Twitch
+LIVE_EVERY = 60      # seconds between two "who is live" polls
+PUBLISH_EVERY = 10   # seconds between two sends of already known data to mpv: a restarted mpv gets them quickly
+TWITCH_WEB_CLIENT_ID = "kimne78kx3ncx6brgo4mv6wki5h1ko"   # the twitch.tv site's one, public (streamlink uses it too)
+# Files served as is: the page and what is needed to install it as an app (PWA)
 STATIC = {
     "/": ("remote.html", "text/html; charset=utf-8"),
     "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
@@ -40,10 +42,14 @@ STATIC = {
     "/icon-512.png": ("icon-512.png", "image/png"),
     "/apple-touch-icon.png": ("icon-180.png", "image/png"),
 }
+# Translations (companion app, TV menu): /locales/<lang>.json
+for _code in i18n.LANGUAGES:
+    if _code != "en":
+        STATIC[f"/locales/{_code}.json"] = (f"locales/{_code}.json", "application/json; charset=utf-8")
 
 
 def read_streamers():
-    # Mêmes règles que read_streamers() dans stream-box.lua
+    # Same rules as read_streamers() in stream-box.lua
     names = []
     try:
         with open(STREAMERS_FILE, encoding="utf-8") as f:
@@ -59,7 +65,7 @@ def read_streamers():
 
 
 def mpv(*commands):
-    """Envoie des commandes à mpv ; renvoie le champ data de chaque réponse, dans l'ordre."""
+    """Sends commands to mpv; returns the data field of each reply, in order."""
     with socket.socket(socket.AF_UNIX) as s:
         s.settimeout(2)
         s.connect(MPV_SOCKET)
@@ -69,7 +75,7 @@ def mpv(*commands):
         while len(results) < len(commands):
             data = s.recv(65536)
             if not data:
-                raise OSError("mpv fermé")
+                raise OSError("mpv closed")
             *lines, buf = (buf + data).split(b"\n")
             for line in lines:
                 msg = json.loads(line)
@@ -78,11 +84,11 @@ def mpv(*commands):
         return [results[i] for i in range(len(commands))]
 
 
-# Qui est en live : relevé chaque minute pour toute la liste, publié dans user-data/streambox/live pour stream-box.lua
-# (menu de la TV, bascule automatique) et renvoyé par /api/state
+# Who is live: polled every minute for the whole list, published in user-data/streambox/live for stream-box.lua
+# (TV menu, automatic switch) and returned by /api/state
 
-live_now = {}   # pseudo -> {"title", "viewers", "game", "thumb"}, streamers en live seulement
-avatars = {}    # pseudo -> photo de profil Twitch, pour la page (en live ou non)
+live_now = {}   # login -> {"title", "viewers", "game", "thumb"}, live streamers only
+avatars = {}    # login -> Twitch profile picture, for the page (live or not)
 
 
 def fetch_live(logins):
@@ -94,7 +100,7 @@ def fetch_live(logins):
     with urllib.request.urlopen(req, timeout=10) as r:
         users = json.load(r)["data"]["users"]
     avatars.update({u["login"]: u["profileImageURL"] for u in users if u and u.get("profileImageURL")})
-    # Miniature du live : même adresse d'une minute à l'autre, l'heure du relevé force le téléphone à la recharger
+    # Live thumbnail: same address from one minute to the next, the poll time forces the phone to reload it
     return {u["login"]: {"title": u["stream"]["title"], "viewers": u["stream"]["viewersCount"],
                          "started": epoch(u["stream"]["createdAt"]) if u["stream"].get("createdAt") else None,
                          "game": (u["stream"].get("game") or {}).get("displayName"),
@@ -112,11 +118,11 @@ def live_loop():
             fetched = time.time()
             try:
                 previous, live_now = live_now, fetch_live(read_streamers())
-                # Streamers qui viennent de lancer leur live (pas au premier relevé : ils étaient déjà en live)
+                # Streamers who just went live (not on the first poll: they were already live)
                 went_live = [] if first else [login for login in live_now if login not in previous]
                 first = False
             except (OSError, ValueError, KeyError, TypeError):
-                pass   # Twitch injoignable : on garde le dernier relevé
+                pass   # Twitch unreachable: keep the last poll
         try:
             mpv(["set_property", "user-data/streambox/live", live_now])
             for login in went_live:
@@ -126,11 +132,11 @@ def live_loop():
         time.sleep(PUBLISH_EVERY)
 
 
-# Sondages et prédictions de la chaîne regardée, publiés dans user-data/streambox/polls pour l'encart de stream-box.lua.
-# Twitch n'a plus d'abonnement en temps réel (PubSub) pour un simple spectateur : on relève, comme la page twitch.tv.
+# Polls and predictions of the watched channel, published in user-data/streambox/polls for stream-box.lua's panel.
+# Twitch no longer has a real-time subscription (PubSub) for a plain viewer: we poll, like the twitch.tv page.
 
-EVENTS_EVERY = 10    # secondes entre deux relevés, seulement pendant un direct avec l'encart activé
-RESULT_FOR = 60      # secondes d'affichage du résultat d'un sondage ou d'une prédiction terminés
+EVENTS_EVERY = 10    # seconds between two polls, only during a live stream with the panel enabled
+RESULT_FOR = 60      # seconds the result of a finished poll or prediction is shown
 EVENTS_QUERY = (
     "query($l:String!){user(login:$l){"
     "viewablePoll{id title status startedAt durationSeconds totalVoters choices{id title votes{total}}} "
@@ -138,12 +144,12 @@ EVENTS_QUERY = (
     "resolvedPredictionEvents(first:1){edges{node{...p endedAt winningOutcome{id}}}}}}}"
     "fragment p on PredictionEvent{id title status createdAt predictionWindowSeconds "
     "outcomes{id title color totalPoints totalUsers}}")
-# Avec le compte connecté : son pari en cours et son solde de points de chaîne (pour voter depuis la page)
+# With the connected account: its current bet and its channel points balance (to vote from the page)
 EVENTS_SELF = "query($l:String!){user(login:$l){channel{self{communityPoints{balance}} " \
     "activePredictionEvents{id self{prediction{points outcome{id}}}} " \
     "lockedPredictionEvents{id self{prediction{points outcome{id}}}}}}}"
-events_now = {"channel": None, "at": 0.0, "data": {"poll": None, "prediction": None}}   # dernier relevé
-poll_votes = {}   # id du sondage → choix voté depuis la box (Twitch ne le redonne pas)
+events_now = {"channel": None, "at": 0.0, "data": {"poll": None, "prediction": None}}   # last poll
+poll_votes = {}   # poll id → choice voted from the box (Twitch does not give it back)
 
 
 def epoch(value):
@@ -151,8 +157,8 @@ def epoch(value):
 
 
 def fetch_events(login, seen):
-    """{"poll", "prediction"} de la chaîne, chacun None s'il n'y a rien à montrer. seen : id → heure où l'on a vu le
-    sondage terminé (Twitch ne donne pas cette heure-là), pour n'afficher son résultat que RESULT_FOR secondes."""
+    """{"poll", "prediction"} of the channel, each None when there is nothing to show. seen: id → time we saw the
+    poll finished (Twitch does not give that time), to show its result for RESULT_FOR seconds only."""
     user = twitch_gql(EVENTS_QUERY, {"l": login}).get("user") or {}
     now, out = time.time(), {"poll": None, "prediction": None}
     p = user.get("viewablePoll")
@@ -180,7 +186,7 @@ def fetch_events(login, seen):
                                            "winner": o["id"] == winner}
                                           for o in e.get("outcomes") or []]}
     if read_token() and (out["poll"] or out["prediction"]):
-        try:   # pari en cours et solde, seulement s'il y a de quoi voter
+        try:   # current bet and balance, only when there is something to vote on
             ch = (twitch_gql(EVENTS_SELF, {"l": login}).get("user") or {}).get("channel") or {}
             out["balance"] = ((ch.get("self") or {}).get("communityPoints") or {}).get("balance")
             for ev in (ch.get("activePredictionEvents") or []) + (ch.get("lockedPredictionEvents") or []):
@@ -195,46 +201,48 @@ def fetch_events(login, seen):
 def current_user_id():
     me = twitch_gql("{currentUser{id}}").get("currentUser")
     if not me:
-        raise ValueError("Connecte ton compte Twitch (Réglages) pour voter.")
+        raise ValueError(tr("Connect your Twitch account (Settings) to vote."))
     return me["id"]
 
 
-VOTE_ERRORS = {"POLL_NOT_FOUND": "Ce sondage est terminé.", "POLL_NOT_ACTIVE": "Ce sondage est terminé.",
-               "INVALID_CHOICE_INDEX": "Choix inconnu.", "NOT_ENOUGH_POINTS": "Pas assez de points de chaîne.",
-               "EVENT_NOT_ACTIVE": "Les paris sont fermés.", "EVENT_LOCKED": "Les paris sont fermés.",
-               "NOT_FOUND": "Cette prédiction est terminée.", "MULTI_OUTCOME_PREDICTION": "Tu as déjà parié sur l'autre choix."}
+VOTE_ERRORS = {"POLL_NOT_FOUND": "This poll has ended.", "POLL_NOT_ACTIVE": "This poll has ended.",
+               "INVALID_CHOICE_INDEX": "Unknown choice.", "NOT_ENOUGH_POINTS": "Not enough channel points.",
+               "EVENT_NOT_ACTIVE": "Betting is closed.", "EVENT_LOCKED": "Betting is closed.",
+               "NOT_FOUND": "This prediction has ended.", "MULTI_OUTCOME_PREDICTION": "You already bet on the other choice."}
 
 
 def vote_poll(poll_id, choice_id):
     if not read_token():
-        raise ValueError("Connecte ton compte Twitch (Réglages) pour voter.")
+        raise ValueError(tr("Connect your Twitch account (Settings) to vote."))
     d = twitch_gql("mutation($i:VoteInPollInput!){voteInPoll(input:$i){error{code}}}",
                    {"i": {"pollID": poll_id, "choiceID": choice_id, "userID": current_user_id(),
                           "voteID": uuid.uuid4().hex}})
     code = ((d.get("voteInPoll") or {}).get("error") or {}).get("code")
     if code:
-        raise ValueError(VOTE_ERRORS.get(code, f"Twitch refuse le vote ({code})."))
+        raise ValueError(tr(VOTE_ERRORS[code]) if code in VOTE_ERRORS
+                         else tr("Twitch rejected the vote ({code}).", code=code))
     poll_votes[poll_id] = choice_id
-    events_now["at"] = 0.0   # relevé à refaire
+    events_now["at"] = 0.0   # poll to redo
 
 
 def predict(event_id, outcome_id, points):
     if not read_token():
-        raise ValueError("Connecte ton compte Twitch (Réglages) pour parier.")
+        raise ValueError(tr("Connect your Twitch account (Settings) to bet."))
     if points < 1:
-        raise ValueError("Nombre de points invalide.")
+        raise ValueError(tr("Invalid number of points."))
     d = twitch_gql("mutation($i:MakePredictionInput!){makePrediction(input:$i){error{code}}}",
                    {"i": {"eventID": event_id, "outcomeID": outcome_id, "points": points,
                           "transactionID": uuid.uuid4().hex}})
     code = ((d.get("makePrediction") or {}).get("error") or {}).get("code")
     if code:
-        raise ValueError(VOTE_ERRORS.get(code, f"Twitch refuse le pari ({code})."))
+        raise ValueError(tr(VOTE_ERRORS[code]) if code in VOTE_ERRORS
+                         else tr("Twitch rejected the bet ({code}).", code=code))
     events_now["at"] = 0.0
 
 
 def events_for_page():
-    """Sondage et prédiction de la chaîne regardée, pour la page ; relevés ici si le relevé régulier ne tourne pas
-    (encart désactivé), au plus toutes les EVENTS_EVERY secondes"""
+    """Poll and prediction of the watched channel, for the page; polled here when the regular poll is not running
+    (panel disabled), at most every EVENTS_EVERY seconds"""
     user = mpv(["get_property", "user-data/streambox"])[0] or {}
     login = user.get("channel") if user.get("mode") == "twitch" else None
     if not login:
@@ -252,7 +260,7 @@ def events_loop():
             user, playing = mpv(["get_property", "user-data/streambox"], ["get_property", "video-params"])
             user = user or {}
             login = user.get("channel")
-            # Toute chaîne en direct (aussi une chaîne suivie ou un second stream inversé, hors de la liste)
+            # Any live channel (also a followed channel or a swapped second stream, outside the list)
             if user.get("mode") == "twitch" and user.get("events", True) and playing and login:
                 if login != current:
                     seen, current = {}, login
@@ -260,13 +268,13 @@ def events_loop():
                 events_now.update(channel=login, at=time.time(), data=data)
             mpv(["set_property", "user-data/streambox/polls", data])
         except (OSError, ValueError, KeyError, TypeError):
-            pass   # mpv ou Twitch injoignable : on réessaie au prochain tour
+            pass   # mpv or Twitch unreachable: retry on the next round
         time.sleep(EVENTS_EVERY)
 
 
-# Rediffusions et clips de la semaine d'un streamer, pour la page (cache de 5 min par streamer)
+# A streamer's replays and clips of the week, for the page (5 min cache per streamer)
 
-replays_cache = {}   # pseudo -> (heure, résultat)
+replays_cache = {}   # login -> (time, result)
 
 
 def fetch_replays(login):
@@ -288,12 +296,12 @@ def fetch_replays(login):
 
 def replays(login):
     if login not in read_streamers():
-        raise ValueError("streamer inconnu")
+        raise ValueError(tr("unknown streamer"))
     cached = replays_cache.get(login)
     if not cached or time.time() - cached[0] > 300:
         cached = (time.time(), fetch_replays(login))
         replays_cache[login] = cached
-    # Progression : celle de l'historique de la box si elle est plus récente que le relevé Twitch
+    # Progress: the one from the box's history when it is more recent than the Twitch poll
     known = {e["key"]: e for e in read_history()}
     result = json.loads(json.dumps(cached[1]))
     for item in result["vods"] + result["clips"]:
@@ -304,18 +312,19 @@ def replays(login):
     return result
 
 
-# Écran d'ambiance (dessiné par stream-box.lua quand rien ne joue) : météo et prochains lives prévus, publiés dans
-# user-data/streambox/ambient. La météo vient d'Open-Meteo (sans compte) ; lieu dans ~/.config/stream-box/ambient.json :
-# {"city": "...", "latitude": ..., "longitude": ..., "timezone": "Europe/..."} (sans ce fichier : pas de météo).
+# Ambient screen (drawn by stream-box.lua when nothing is playing): weather and upcoming scheduled lives, published in
+# user-data/streambox/ambient. Weather comes from Open-Meteo (no account); location in ~/.config/stream-box/ambient.json:
+# {"city": "...", "latitude": ..., "longitude": ..., "timezone": "Europe/..."} (without this file: no weather).
 
 AMBIENT_FILE = os.path.join(COOKIES_DIR, "ambient.json")
-AMBIENT_FETCH = 600   # secondes entre deux récupérations (météo, plannings)
-WEATHER = [((0,), "Ciel dégagé"), ((1,), "Plutôt dégagé"), ((2,), "Partiellement nuageux"), ((3,), "Couvert"),
-           ((45, 48), "Brouillard"), ((51, 53, 55), "Bruine"), ((56, 57), "Bruine verglaçante"), ((61,), "Pluie faible"),
-           ((63,), "Pluie"), ((65,), "Forte pluie"), ((66, 67), "Pluie verglaçante"), ((71,), "Neige faible"),
-           ((73,), "Neige"), ((75,), "Forte neige"), ((77,), "Grésil"), ((80, 81, 82), "Averses"),
-           ((85, 86), "Averses de neige"), ((95,), "Orage"), ((96, 99), "Orage et grêle")]
-DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+AMBIENT_FETCH = 600   # seconds between two fetches (weather, schedules)
+# WMO code -> text (English; translated with tr() when published)
+WEATHER = [((0,), "Clear sky"), ((1,), "Mostly clear"), ((2,), "Partly cloudy"), ((3,), "Overcast"),
+           ((45, 48), "Fog"), ((51, 53, 55), "Drizzle"), ((56, 57), "Freezing drizzle"), ((61,), "Light rain"),
+           ((63,), "Rain"), ((65,), "Heavy rain"), ((66, 67), "Freezing rain"), ((71,), "Light snow"),
+           ((73,), "Snow"), ((75,), "Heavy snow"), ((77,), "Snow grains"), ((80, 81, 82), "Showers"),
+           ((85, 86), "Snow showers"), ((95,), "Thunderstorm"), ((96, 99), "Thunderstorm with hail")]
+DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
 def ambient_conf():
@@ -337,13 +346,13 @@ def fetch_weather(conf):
         d = json.load(r)
     code = d["current"]["weather_code"]
     return {"city": conf.get("city"), "temp": round(d["current"]["temperature_2m"]), "code": code,
-            "text": next((t for codes, t in WEATHER if code in codes), ""),
+            "text": next((tr(t) for codes, t in WEATHER if code in codes), ""),
             "min": round(d["daily"]["temperature_2m_min"][0]), "max": round(d["daily"]["temperature_2m_max"][0]),
             "rain": d["daily"]["precipitation_probability_max"][0]}
 
 
 def fetch_schedule(logins, tz):
-    """Prochains lives prévus de la liste (plannings Twitch), voir next_streams."""
+    """Upcoming scheduled lives of the list (Twitch schedules), see next_streams."""
     if not logins:
         return []
     query = ("query($l:[String!]){users(logins:$l){login channel{schedule{"
@@ -356,16 +365,22 @@ def fetch_schedule(logins, tz):
     return next_streams(users, datetime.datetime.now(tz))
 
 
-MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre",
-          "décembre"]
+MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November",
+          "December"]
+
+
+def day_month(d):
+    """Day and month, such as "March 5", in the current language"""
+    month = tr(MONTHS[d.month - 1])
+    return tr("{month} 1", month=month) if d.day == 1 else tr("{month} {day}", month=month, day=d.day)
 
 
 def next_streams(users, now):
-    """Prochain créneau de chaque streamer, du plus proche au plus lointain, puis les streamers en pause.
+    """Next slot of each streamer, from nearest to furthest, then the streamers on a break.
 
-    Les plannings sont hebdomadaires : un créneau passé est reporté d'une semaine. Les créneaux annulés sont ignorés,
-    et ceux qui tombent pendant une pause (« interruption » Twitch, les vacances du streamer) aussi ; un streamer en
-    pause en ce moment est affiché « en pause jusqu'au … » au lieu d'un créneau.
+    Schedules are weekly: a past slot is moved a week later. Cancelled slots are ignored, and so are those falling
+    during a break (Twitch "interruption", the streamer's holidays); a streamer currently on a break is shown as
+    "on a break until …" instead of a slot.
     """
     tz = now.tzinfo
 
@@ -379,8 +394,8 @@ def next_streams(users, now):
         pause = (when(pause["startAt"]), when(pause["endAt"])) if pause.get("startAt") and pause.get("endAt") else None
         if pause and pause[0] <= now < pause[1]:
             end = pause[1]
-            paused.append({"login": u["login"], "when": f"en pause jusqu'au {'1er' if end.day == 1 else end.day} "
-                                                        f"{MONTHS[end.month - 1]}", "title": ""})
+            paused.append({"login": u["login"], "when": tr("on a break until {date}", date=day_month(end)),
+                           "title": ""})
             continue
         best = None
         for seg in schedule.get("segments") or []:
@@ -388,7 +403,7 @@ def next_streams(users, now):
                 continue
             start = when(seg["startAt"])
             while start < now - datetime.timedelta(hours=1) or (pause and pause[0] <= start < pause[1]):
-                start += datetime.timedelta(days=7)   # créneau passé, ou pendant la pause : la semaine suivante
+                start += datetime.timedelta(days=7)   # past slot, or during the break: the following week
             if not best or start < best[0]:
                 best = (start, seg.get("title") or "")
         if best:
@@ -396,16 +411,16 @@ def next_streams(users, now):
     out = []
     for start, login, title in sorted(upcoming)[:4]:
         days = (start.date() - now.date()).days
-        day = "aujourd'hui" if days == 0 else "demain" if days == 1 else DAYS[start.weekday()]
-        if days >= 7:   # au-delà d'une semaine (après une pause), le jour seul serait trompeur
-            day += f" {'1er' if start.day == 1 else start.day} {MONTHS[start.month - 1]}"
+        day = tr("today") if days == 0 else tr("tomorrow") if days == 1 else tr(DAYS[start.weekday()])
+        if days >= 7:   # beyond a week (after a break), the day alone would be misleading
+            day = tr("{weekday}, {date}", weekday=day, date=day_month(start))
         out.append({"login": login, "when": f"{day} {start:%H:%M}", "title": title})
     return out + paused[:2]
 
 
-# QR code de la télécommande, pour les invités (écran d'ambiance et menu de la TV). Adresse dans
-# ~/.config/stream-box/remote-url (celle du reverse proxy HTTPS, par exemple), sinon http://<IP de la box>:8080.
-# Le QR code est calculé par segno, dans le venv media, et publié comme lignes de « 0 » et « 1 ».
+# QR code of the companion app, for guests (ambient screen and TV menu). Address in
+# ~/.config/stream-box/remote-url (the HTTPS reverse proxy's, for example), otherwise http://<box IP>:8080.
+# The QR code is computed by segno, in the media venv, and published as rows of "0" and "1".
 
 REMOTE_URL_FILE = os.path.join(COOKIES_DIR, "remote-url")
 MEDIA_PYTHON = os.path.expanduser("~/.local/share/media-venv/bin/python")
@@ -424,7 +439,7 @@ def remote_url():
 
 def lan_ip():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.connect(("192.0.2.1", 9))   # rien n'est envoyé : sert seulement à connaître l'adresse de sortie
+        s.connect(("192.0.2.1", 9))   # nothing is sent: only used to learn the outgoing address
         return s.getsockname()[0]
 
 
@@ -437,7 +452,7 @@ def custom_remote_url():
 
 
 def set_remote_url(url):
-    """Adresse de la télécommande montrée en QR code : nom de domaine (reverse proxy HTTPS…) ; vide = réseau local"""
+    """Companion app address shown as a QR code: domain name (HTTPS reverse proxy…); empty = local network"""
     url = url.strip()
     if not url:
         try:
@@ -446,13 +461,13 @@ def set_remote_url(url):
             pass
         return
     if not re.match(r"https?://[\w.-]+(:\d+)?(/\S*)?$", url):
-        raise ValueError("Adresse attendue : https://… (ou http://…)")
+        raise ValueError(tr("Expected address: https://… (or http://…)"))
     os.makedirs(COOKIES_DIR, mode=0o700, exist_ok=True)
     with open(REMOTE_URL_FILE, "w", encoding="utf-8") as f:
         f.write(url + "\n")
 
 
-qr_cache = {}   # adresse -> lignes du QR code
+qr_cache = {}   # address -> QR code rows
 
 
 def qr_rows(text):
@@ -464,13 +479,13 @@ def qr_rows(text):
                                capture_output=True, text=True, timeout=20, check=True)
             qr_cache[text] = r.stdout.split()
         except (OSError, subprocess.SubprocessError):
-            qr_cache[text] = None   # segno absent : pas de nouvel essai avant le prochain démarrage
+            qr_cache[text] = None   # segno missing: no new attempt before the next start
     return qr_cache[text]
 
 
-# Première configuration (box neuve) : tant qu'elle n'est pas faite depuis la page du téléphone (écran « setup »), la
-# TV reste sur l'écran d'accueil avec le QR code en grand. Faite : ~/.config/stream-box/setup-done (aussi posé par une
-# restauration). Une box qui a déjà servi (historique) compte comme configurée ; stream-box.lua suit la même règle
+# First setup (new box): until it is done from the phone's page ("setup" screen), the TV stays on the home screen
+# with the QR code in large. Done: ~/.config/stream-box/setup-done (also created by a restore). A box that has already
+# been used (history) counts as set up; stream-box.lua follows the same rule
 SETUP_DONE = os.path.expanduser("~/.config/stream-box/setup-done")
 
 
@@ -487,7 +502,7 @@ def finish_setup(notify=True):
     os.makedirs(os.path.dirname(SETUP_DONE), exist_ok=True)
     open(SETUP_DONE, "a").close()
     if notify:
-        mpv(["script-message", "streambox-setup-done"])   # la TV passe au menu
+        mpv(["script-message", "streambox-setup-done"])   # the TV moves on to the menu
 
 
 def remote_qr():
@@ -500,10 +515,10 @@ def ambient_loop():
     data, fetched = {}, 0
     while True:
         try:
-            data["qr"] = remote_qr()   # adresse relue à chaque tour : un changement se voit tout de suite
+            data["qr"] = remote_qr()   # address read again every round: a change shows right away
         except OSError:
-            data["qr"] = None   # pas de réseau : pas d'adresse à montrer
-        # Mode configuration (point d'accès Wi-Fi de la box) : QR code pour rejoindre son réseau, puis pour la page
+            data["qr"] = None   # no network: no address to show
+        # Setup mode (the box's Wi-Fi access point): QR code to join its network, then for the page
         try:
             w = netsetup.status()
         except (OSError, subprocess.SubprocessError):
@@ -519,13 +534,13 @@ def ambient_loop():
             try:
                 tz = zoneinfo.ZoneInfo(conf["timezone"])
             except (KeyError, zoneinfo.ZoneInfoNotFoundError, ValueError):
-                tz = datetime.datetime.now().astimezone().tzinfo   # fuseau du système
+                tz = datetime.datetime.now().astimezone().tzinfo   # system time zone
             for key, fetch in (("weather", lambda: fetch_weather(conf)),
                                ("schedule", lambda: fetch_schedule(read_streamers(), tz))):
                 try:
                     data[key] = fetch()
                 except (OSError, ValueError, KeyError, TypeError):
-                    pass   # service injoignable : on garde la dernière valeur
+                    pass   # service unreachable: keep the last value
             fetched = time.time()
         try:
             mpv(["set_property", "user-data/streambox/ambient", data])
@@ -534,19 +549,19 @@ def ambient_loop():
         time.sleep(PUBLISH_EVERY)
 
 
-# Images du menu de la TV (tv_menu.lua) : par-dessus la vidéo, mpv n'affiche que des images brutes (overlay-add, BGRA à
-# alpha prémultiplié). On les télécharge, recadre et convertit avec ffmpeg, en cache dans /tmp. Seulement depuis les
-# serveurs d'images de Twitch et de YouTube : l'adresse vient de la requête.
+# TV menu images (tv_menu.lua): over the video, mpv only shows raw images (overlay-add, BGRA with premultiplied
+# alpha). They are downloaded, cropped and converted with ffmpeg, cached in /tmp. Only from Twitch's and YouTube's
+# image servers: the address comes from the request.
 
 TV_IMAGE_DIR = "/tmp/stream-box-images"
 
 
 def tv_image(src, width, height, round_, radius=0):
-    """Image prête pour overlay-add : round_ = disque, sinon coins arrondis de radius pixels (0 : carrés)."""
+    """Image ready for overlay-add: round_ = disc, otherwise rounded corners of radius pixels (0: square)."""
     host = urllib.parse.urlsplit(src).hostname or ""
     jf_host = urllib.parse.urlsplit((jf_server() or {}).get("address", "")).hostname
     if not (host.endswith(".jtvnw.net") or host in ("i.ytimg.com", "clips-media-assets2.twitch.tv") or host == jf_host):
-        raise ValueError("image refusée")
+        raise ValueError(tr("image refused"))
     width, height = max(8, min(1280, width)), max(8, min(1280, height))
     radius = max(0, min(radius, width // 2, height // 2))
     key = hashlib.sha1(f"{src}|{width}|{height}|{round_}|{radius}".encode()).hexdigest()[:24]
@@ -556,8 +571,8 @@ def tv_image(src, width, height, round_, radius=0):
         with urllib.request.urlopen(src, timeout=10) as r:
             data = r.read(8_000_000)
         vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},format=rgba"
-        # Bords adoucis : disque, ou coins arrondis (distance au centre du quart de cercle du coin le plus proche).
-        # Alpha prémultiplié : les couleurs suivent l'opacité.
+        # Smoothed edges: disc, or rounded corners (distance to the center of the nearest corner's quarter circle).
+        # Premultiplied alpha: colors follow the opacity.
         alpha = None
         if round_:
             alpha = "clip(255*(W/2+0.5-hypot(X+0.5-W/2,Y+0.5-H/2)),0,255)"
@@ -575,9 +590,9 @@ def tv_image(src, width, height, round_, radius=0):
     return {"path": path, "w": width, "h": height}
 
 
-# Aperçu de la TV pour la page, seulement quand la page le demande (bloc ouvert) : l'écran entier, écran d'ambiance et
-# menus compris, capturé par grim via le protocole wlr-screencopy de cage. Faute de grim, capture de mpv (fenêtre, avec
-# le chat et le menu), qui n'a rien à capturer quand aucune vidéo ne joue (la page affiche alors un texte).
+# TV preview for the page, only when the page asks for it (section open): the whole screen, ambient screen and
+# menus included, captured by grim through cage's wlr-screencopy protocol. Without grim, mpv capture (window, with
+# the chat and the menu), which has nothing to capture when no video is playing (the page then shows a text).
 
 PREVIEW_WIDTH = 960
 preview_lock = threading.Lock()
@@ -585,8 +600,8 @@ preview_cache = {"at": 0.0, "data": None}
 
 
 def preview():
-    """JPEG de l'écran, ou None s'il n'y a pas d'image à capturer."""
-    with preview_lock:   # une capture à la fois ; plusieurs téléphones se partagent la dernière pendant 1 s
+    """JPEG of the screen, or None when there is no image to capture."""
+    with preview_lock:   # one capture at a time; several phones share the last one for 1 s
         if time.time() - preview_cache["at"] < 1:
             return preview_cache["data"]
         data = None
@@ -608,7 +623,7 @@ def preview():
                 if os.path.exists(path):
                     os.remove(path)
             mpv(["screenshot-to-file", shot, "window"])
-            for _ in range(30):   # mpv écrit le fichier après avoir répondu
+            for _ in range(30):   # mpv writes the file after replying
                 if os.path.exists(shot) and os.path.getsize(shot) > 0:
                     size = os.path.getsize(shot)
                     time.sleep(0.05)
@@ -621,14 +636,14 @@ def preview():
                                     "-q:v", "5", small], timeout=10, check=True)
                     shot = small
                 except (OSError, subprocess.SubprocessError):
-                    pass   # sans ffmpeg : capture en taille réelle
+                    pass   # without ffmpeg: full-size capture
                 with open(shot, "rb") as f:
                     data = f.read()
         preview_cache.update(at=time.time(), data=data)
         return data
 
 
-PLAYER_FILE = os.path.join(COOKIES_DIR, "player")   # « qt » : appli Qt qui embarque mpv (voir player.sh)
+PLAYER_FILE = os.path.join(COOKIES_DIR, "player")   # "qt": Qt app embedding mpv (see player.sh)
 
 
 def player_choice():
@@ -639,9 +654,9 @@ def player_choice():
         return "mpv"
 
 
-# Action du bouton d'arrêt de la télécommande web et de Home Assistant : « suspend » (mise en veille, réveil par le
-# réseau) ou « poweroff » (arrêt complet, par défaut). Le menu de la TV a ses deux lignes, « Mettre en veille » et
-# « Éteindre la box », qui ne dépendent pas de ce réglage. Lu aussi par mqtt_bridge.py.
+# Action of the power button of the companion app and Home Assistant: "suspend" (sleep, wake on
+# network) or "poweroff" (full shutdown, default). The TV menu has its own two lines, "Sleep" and
+# "Turn off the box", which do not depend on this setting. Also read by mqtt_bridge.py.
 POWER_ACTION_FILE = os.path.join(COOKIES_DIR, "power-action")
 
 
@@ -655,50 +670,52 @@ def power_action():
 
 def set_power_action(mode):
     if mode not in ("suspend", "poweroff"):
-        raise ValueError("action inconnue")
+        raise ValueError(tr("unknown action"))
     os.makedirs(COOKIES_DIR, mode=0o700, exist_ok=True)
     with open(POWER_ACTION_FILE, "w", encoding="utf-8") as f:
         f.write(mode + "\n")
 
 
 def power(mode):
-    """« suspend » ou « poweroff ». Autorisé sans mot de passe pour media par
-    /etc/polkit-1/rules.d/50-stream-box.rules (la veille l'est aussi d'office pour une session locale active)"""
+    """"suspend" or "poweroff". Allowed without a password for media by
+    /etc/polkit-1/rules.d/50-stream-box.rules (sleep is also allowed by default for an active local session)"""
     r = subprocess.run(["systemctl", "suspend" if mode == "suspend" else "poweroff"],
                        capture_output=True, text=True, timeout=10)
     if r.returncode != 0:
-        raise ValueError(f"{'Mise en veille' if mode == 'suspend' else 'Extinction'} refusée : {r.stderr.strip() or r.returncode}")
+        error = r.stderr.strip() or r.returncode
+        raise ValueError(tr("Sleep refused: {error}", error=error) if mode == "suspend"
+                         else tr("Shutdown refused: {error}", error=error))
 
 
 def hold_power_key():
-    """Bouton power (télécommande Bluetooth, boîtier) : logind éteindrait la box de lui-même ; ce verrou l'en empêche,
-    et stream-box.lua applique le réglage « Bouton d'arrêt » (veille ou arrêt complet). Permis d'office dans la session
-    de la TV (remote.py est lancé par start.sh) ; refusé ailleurs, et logind garde alors son comportement."""
+    """Power button (Bluetooth remote, case): logind would turn the box off by itself; this lock prevents it,
+    and stream-box.lua applies the "Power button" setting (sleep or full shutdown). Allowed by default in the TV's
+    session (remote.py is started by start.sh); refused elsewhere, and logind then keeps its behavior."""
     subprocess.run(["pkill", "-u", str(os.getuid()), "-f", "who=Stream Box bouton power"], capture_output=True)
     subprocess.Popen(["systemd-inhibit", "--what=handle-power-key", "--mode=block", "--who=Stream Box bouton power",
-                      "--why=Bouton power : veille ou arrêt selon le réglage", "sleep", "infinity"],
+                      "--why=Power button: sleep or shutdown depending on the setting", "sleep", "infinity"],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
 def resume_loop():
-    """Réveil après une mise en veille : les connexions (streamlink, flux vidéo) sont mortes et l'image resterait
-    figée. logind signale PrepareForSleep(false) au réveil (suivi par gdbus) ; mpv relance alors la lecture."""
+    """Wake-up after sleep: the connections (streamlink, video stream) are dead and the picture would stay
+    frozen. logind signals PrepareForSleep(false) on wake-up (followed by gdbus); mpv then restarts playback."""
     while True:
         try:
             mon = subprocess.Popen(["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1",
                                     "--object-path", "/org/freedesktop/login1"], stdout=subprocess.PIPE, text=True)
             for line in mon.stdout:
                 if "PrepareForSleep (false" in line:
-                    # Dongle Bluetooth (clones CSR surtout) bloqué au réveil : la télécommande reste « connectée » sans
-                    # que ses touches arrivent. On le redémarre ; elle se reconnecte à la première touche
+                    # Bluetooth dongle (mostly CSR clones) stuck on wake-up: the remote stays "connected" without
+                    # its keys arriving. Restart it; the remote reconnects on the first key press
                     for args in (["power", "off"], ["power", "on"]):
                         try:
                             subprocess.run(["bluetoothctl", *args], capture_output=True, timeout=10)
                         except (OSError, subprocess.SubprocessError):
                             pass
                         time.sleep(2)
-                    # Réseau revenu (NetworkManager reprend la connexion en quelques secondes) : sinon streamlink
-                    # échoue et la box croit le streamer hors ligne, puis réessaie 15 s plus tard
+                    # Network back (NetworkManager resumes the connection within seconds): otherwise streamlink
+                    # fails and the box thinks the streamer is offline, then retries 15 s later
                     for _ in range(60):
                         try:
                             socket.create_connection(("www.twitch.tv", 443), timeout=2).close()
@@ -715,26 +732,26 @@ def resume_loop():
         time.sleep(5)
 
 
-keyboard = {}   # clavier de recherche du menu de la TV : {open, text, target, at}
+keyboard = {}   # TV menu search keyboard: {open, text, target, at}
 
 
 def set_player(mode):
-    """Choix du lecteur, appliqué tout de suite : on quitte le lecteur, la boucle de player.sh relance le bon"""
+    """Player choice, applied right away: quit the player, player.sh's loop starts the right one"""
     if mode not in ("qt", "mpv"):
-        raise ValueError("lecteur inconnu")
+        raise ValueError(tr("unknown player"))
     os.makedirs(COOKIES_DIR, mode=0o700, exist_ok=True)
     with open(PLAYER_FILE, "w", encoding="utf-8") as f:
         f.write(mode + "\n")
     mpv(["quit"])
 
 
-# Fond animé de l'écran d'accueil et du menu sans vidéo (qml/Backdrop.qml), choisi dans les Réglages de la TV : un
-# fond, un calque par-dessus, les couleurs de l'écran d'accueil. ~/.config/stream-box/backdrop :
+# Animated background of the home screen and of the menu without video (qml/Backdrop.qml), chosen in the TV Settings: a
+# background, a layer on top, the home screen colors. ~/.config/stream-box/backdrop:
 # {"base", "overlay", "color"}
 BACKDROP_FILE = os.path.expanduser("~/.config/stream-box/backdrop")
 BACKDROP_BASES = ("none", "aurora", "fluid", "borealis")
 BACKDROP_OVERLAYS = ("none", "silk", "stars")
-BACKDROP_COLORS = ("violet", "blue", "green", "sunset", "pink", "ice")   # écran d'accueil (le menu suit ses onglets)
+BACKDROP_COLORS = ("violet", "blue", "green", "sunset", "pink", "ice")   # home screen (the menu follows its tabs)
 
 
 def backdrop():
@@ -743,7 +760,7 @@ def backdrop():
         with open(BACKDROP_FILE) as f:
             raw = f.read().strip()
         saved = json.loads(raw) if raw.startswith("{") else {"base": raw}
-        if saved.get("base") == "silk":   # ancien style devenu un calque
+        if saved.get("base") == "silk":   # old style that became a layer
             saved = {"base": "aurora", "overlay": saved["base"]}
         b.update({k: v for k, v in saved.items() if k in b})
     except (OSError, ValueError, AttributeError):
@@ -762,15 +779,15 @@ def set_backdrop(body):
     for key, allowed in (("base", BACKDROP_BASES), ("overlay", BACKDROP_OVERLAYS), ("color", BACKDROP_COLORS)):
         if key in body:
             if body[key] not in allowed:
-                raise ValueError("fond inconnu")
+                raise ValueError(tr("unknown background"))
             b[key] = body[key]
     with open(BACKDROP_FILE, "w") as f:
         json.dump(b, f)
 
 
-# Accès SSH (maintenance), activé ou coupé depuis le menu Système : stream-box-ssh@enable|disable.service (root, règle
-# polkit 54-stream-box-ssh.rules, script ssh-access), installé par l'image et install.sh. Activé : mot de passe tiré par
-# ssh-access, montré sur la TV seulement (pas aux autres appareils du réseau)
+# SSH access (maintenance), turned on or off from the System menu: stream-box-ssh@enable|disable.service (root, polkit
+# rule 54-stream-box-ssh.rules, ssh-access script), installed by the image and install.sh. On: password drawn by
+# ssh-access, shown on the TV only (not to other devices on the network)
 SSH_PASS_FILE = "/var/lib/stream-box/ssh-password"
 SSH_UNIT = ("/usr/lib/systemd/system/stream-box-ssh@.service", "/etc/systemd/system/stream-box-ssh@.service")
 
@@ -792,18 +809,18 @@ def ssh_status(local=False):
 
 def set_ssh(on):
     if not ssh_status()["available"]:
-        raise ValueError("Réglage SSH absent de cette installation (relancer install.sh).")
+        raise ValueError(tr("SSH setting missing from this installation (run install.sh again)."))
     r = subprocess.run(["systemctl", "start", f"stream-box-ssh@{'enable' if on else 'disable'}.service"],
                        capture_output=True, text=True, timeout=30)
     if r.returncode != 0:
-        raise ValueError(f"SSH : {(r.stderr or r.stdout).strip() or r.returncode}")
+        raise ValueError(tr("SSH: {error}", error=(r.stderr or r.stdout).strip() or r.returncode))
 
 
-# Mode développeur : sudo sans mot de passe pour media, et SSH (stream-box-dev@enable|disable.service, script dev-mode,
-# règle polkit 55-stream-box-dev.rules). Sans lui, la box installée depuis l'image n'a aucun accès root
+# Developer mode: passwordless sudo for media, and SSH (stream-box-dev@enable|disable.service, dev-mode script,
+# polkit rule 55-stream-box-dev.rules). Without it, the box installed from the image has no root access
 DEV_UNIT = ("/usr/lib/systemd/system/stream-box-dev@.service", "/etc/systemd/system/stream-box-dev@.service")
 DEV_MARK = "/var/lib/stream-box/dev-mode"
-LOCAL_ONLY = ("ssh", "dev")   # réglages d'accès : depuis la TV seulement (le menu passe par 127.0.0.1)
+LOCAL_ONLY = ("ssh", "dev")   # access settings: from the TV only (the menu goes through 127.0.0.1)
 
 
 def dev_status():
@@ -812,11 +829,11 @@ def dev_status():
 
 def set_dev(on):
     if not dev_status()["available"]:
-        raise ValueError("Mode développeur absent de cette installation (relancer install.sh).")
+        raise ValueError(tr("Developer mode missing from this installation (run install.sh again)."))
     r = subprocess.run(["systemctl", "start", f"stream-box-dev@{'enable' if on else 'disable'}.service"],
                        capture_output=True, text=True, timeout=60)
     if r.returncode != 0:
-        raise ValueError(f"Mode développeur : {(r.stderr or r.stdout).strip() or r.returncode}")
+        raise ValueError(tr("Developer mode: {error}", error=(r.stderr or r.stdout).strip() or r.returncode))
 
 
 def state():
@@ -827,7 +844,7 @@ def state():
         ["get_property", "demuxer-cache-state"], ["get_property", "current-vo"], ["get_property", "path"])
     user = user or {}
     media = user.get("mode") == "media"
-    # Direct : retard par rapport au bout de ce qui est gardé en mémoire (0 = en direct)
+    # Live: delay behind the end of what is kept in memory (0 = live)
     ranges = (cache or {}).get("seekable-ranges") or []
     delay = max(0.0, ranges[0]["end"] - position) if ranges and position is not None and not media else None
     return {
@@ -837,19 +854,20 @@ def state():
         "sub_size": user.get("sub_size", 100), "sub_bg": user.get("sub_bg", 0),
         "auto_switch": user.get("auto_switch", True), "night": user.get("night", False),
         "events": user.get("events", True), "qr": user.get("qr", "always"),
-        # Lecteur choisi, et celui qui tourne vraiment (mpv seul après plusieurs plantages de l'appli Qt)
+        # Chosen player, and the one actually running (mpv alone after several crashes of the Qt app)
         "backdrop": backdrop(), "first_run": not setup_done(),
+        "lang": i18n.language(), "languages": i18n.LANGUAGES,
         "player": player_choice(), "player_running": "qt" if vo == "libmpv" else "mpv", "power_action": power_action(),
         "remote_url": custom_remote_url(),
-        # Clavier de recherche du menu de la TV ouvert (oublié au bout de 10 min, menu fermé entre-temps)
+        # TV menu search keyboard open (forgotten after 10 min, menu closed in the meantime)
         "keyboard": keyboard if keyboard.get("open") and time.time() - keyboard.get("at", 0) < 600 else None,
         "pip": user.get("pip") or {"channel": "", "layout": ""},
         "volume": round(volume or 0), "mute": bool(mute), "pause": bool(pause), "playing": bool(video),
         "live": live_now, "mode": user.get("mode", "twitch"), "delay": delay, "title": title if media else None,
         "position": position if media else None, "duration": duration if media else None,
-        # Type de la vidéo en cours (youtube, jellyfin, twitch-vod…) : le menu de la TV s'ouvre sur l'onglet qui va avec
+        # Kind of the current video (youtube, jellyfin, twitch-vod…): the TV menu opens on the matching tab
         "media_kind": media_key(path)[1] if media and path else None,
-        "subs": [{"id": t["id"], "name": t.get("title") or t.get("lang") or f"Piste {t['id']}",
+        "subs": [{"id": t["id"], "name": t.get("title") or t.get("lang") or tr("Track {id}", id=t["id"]),
                   "selected": bool(t.get("selected"))}
                  for t in (tracks or []) if t.get("type") == "sub"] if media else [],
     }
@@ -859,9 +877,8 @@ SRT_CUE = re.compile(r"(\d+)\s*\n(\d\d:\d\d:\d\d,\d\d\d) --> (\d\d:\d\d:\d\d,\d\
 
 
 def fix_auto_subs(srt):
-    """Sous-titres automatiques de YouTube : chaque réplique dure jusqu'au début de l'avant-dernière suivante, si
-    bien que deux répliques sont toujours affichées et que l'ancienne semble ne jamais partir. On coupe chacune au
-    début de la suivante."""
+    """YouTube automatic subtitles: each line lasts until the start of the one after next, so that two lines are
+    always shown and the old one never seems to go away. Cut each one at the start of the next."""
     def ms(t):
         h, m, rest = t.split(":")
         s, milli = rest.split(",")
@@ -882,14 +899,14 @@ def fix_auto_subs(srt):
 def fetch_auto_subs(url):
     parts = urllib.parse.urlsplit(url)
     if parts.scheme != "https" or parts.hostname not in ("www.youtube.com", "youtube.com"):
-        raise ValueError("seuls les sous-titres de YouTube passent par ici")
+        raise ValueError(tr("only YouTube subtitles go through here"))
     with urllib.request.urlopen(url, timeout=15) as r:
         text = r.read().decode("utf-8", "replace")
     return fix_auto_subs(text) if SRT_CUE.search(text) else text
 
 
-# Liste des streamers modifiable depuis la page : ajout (après vérification sur Twitch) et suppression. Les lignes de
-# commentaire de streamers.txt sont conservées.
+# Streamer list editable from the page: adding (after checking on Twitch) and removing. The comment lines of
+# streamers.txt are kept.
 
 def twitch_user(login):
     query = "query($l:String!){user(login:$l){login displayName}}"
@@ -901,7 +918,7 @@ def twitch_user(login):
 
 
 def write_streamers(names):
-    """Réécrit la liste dans l'ordre donné, en gardant les commentaires d'en-tête du fichier."""
+    """Rewrites the list in the given order, keeping the file's header comments."""
     with open(STREAMERS_FILE, encoding="utf-8") as f:
         lines = f.readlines()
     header = []
@@ -918,46 +935,46 @@ def write_streamers(names):
 def edit_streamers(action, raw, delta=0):
     login = raw.strip().lower().removeprefix("https://").removeprefix("www.").removeprefix("twitch.tv/").strip("/ @")
     if not re.fullmatch(r"[a-z0-9_]{3,25}", login):
-        raise ValueError("Pseudo Twitch invalide (lettres, chiffres et _ seulement).")
+        raise ValueError(tr("Invalid Twitch username (letters, digits and _ only)."))
     current = read_streamers()
     if action == "add":
         if login in current:
-            raise ValueError(f"{login} est déjà dans la liste.")
+            raise ValueError(tr("{login} is already in the list.", login=login))
         try:
             user = twitch_user(login)
         except OSError as e:
-            raise ValueError(f"Impossible de vérifier sur Twitch ({e}).") from e
+            raise ValueError(tr("Unable to check on Twitch ({error}).", error=e)) from e
         if not user:
-            raise ValueError(f"Aucune chaîne Twitch « {login} ».")
+            raise ValueError(tr("No Twitch channel \"{login}\".", login=login))
         with open(STREAMERS_FILE, "a", encoding="utf-8") as f:
             f.write(login + "\n")
-        try:   # premier streamer d'une liste vide : on le lance
+        try:   # first streamer of an empty list: start it
             if not mpv(["get_property", "user-data/streambox/channel"])[0]:
                 mpv(["script-message", "streambox-channel", login])
         except OSError:
             pass
     elif action == "remove":
         if login not in current:
-            raise ValueError(f"{login} n'est pas dans la liste.")
+            raise ValueError(tr("{login} is not in the list.", login=login))
         if len(current) == 1:
-            raise ValueError("Il faut garder au moins un streamer.")
+            raise ValueError(tr("You must keep at least one streamer."))
         write_streamers([n for n in current if n != login])
     elif action == "move":
         if login not in current:
-            raise ValueError(f"{login} n'est pas dans la liste.")
+            raise ValueError(tr("{login} is not in the list.", login=login))
         i = current.index(login)
         j = max(0, min(len(current) - 1, i + (1 if delta > 0 else -1)))
         current[i], current[j] = current[j], current[i]
         write_streamers(current)
     else:
-        raise ValueError("action inconnue")
+        raise ValueError(tr("unknown action"))
     global live_now
     live_now = {k: v for k, v in live_now.items() if k in read_streamers()}
 
 
 def find_url(*texts):
-    """Premier lien http(s) trouvé : les applis partagent souvent « titre + lien » dans le champ texte. Aussi
-    « jellyfin:ID », le lien des vidéos Jellyfin dans l'historique."""
+    """First http(s) link found: apps often share "title + link" in the text field. Also
+    "jellyfin:ID", the link of Jellyfin videos in the history."""
     for text in texts:
         match = re.search(r"https?://\S+|\bjellyfin:[0-9a-f]{32}\b", text or "")
         if match:
@@ -965,22 +982,22 @@ def find_url(*texts):
     return None
 
 
-# Historique et reprise de lecture des vidéos lancées depuis la télécommande (liens, YouTube, rediffusions et clips
-# Twitch, Jellyfin : celui-ci garde sa propre progression, l'historique de la box ne sert qu'à le retrouver ; lien
-# « jellyfin:ID », sans jeton). Les rediffusions Twitch sont synchronisées avec le compte connecté :
-# position lue au lancement, écrite toutes les 30 s. Le reste n'est connu que de la box.
+# History and resume of videos started from the companion app (links, YouTube, Twitch replays and clips,
+# Jellyfin: that one keeps its own progress, the box's history only serves to find it again; link
+# "jellyfin:ID", without token). Twitch replays are synced with the connected account:
+# position read at start, written every 30 s. The rest is known only to the box.
 
 HISTORY_FILE = os.path.expanduser("~/.local/state/stream-box/history.json")
 HISTORY_MAX = 60
-RESUME_MIN = 30         # secondes : en dessous, on repart du début
-FINISHED_LEFT = 30      # à moins de 30 s de la fin, ou au-delà de 95 %, la vidéo est vue
-TWITCH_PUSH = 30        # secondes entre deux envois de la position à Twitch
+RESUME_MIN = 30         # seconds: below that, start from the beginning
+FINISHED_LEFT = 30      # less than 30 s from the end, or beyond 95 %, the video is watched
+TWITCH_PUSH = 30        # seconds between two position sends to Twitch
 history_lock = threading.Lock()
-now_playing = {}        # vidéo lancée par play(), suivie par history_loop
+now_playing = {}        # video started by play(), tracked by history_loop
 
 
 def media_key(url):
-    """(clé stable, type, identifiant) : une même vidéo garde la même clé quelle que soit la forme du lien."""
+    """(stable key, kind, identifier): the same video keeps the same key whatever the link's form."""
     m = re.fullmatch(r"jellyfin:([0-9a-f]{32})", url) or re.search(r"/Videos/([0-9a-f]{32})/", url)
     if m:
         return f"jellyfin:{m.group(1)}", "jellyfin", m.group(1)
@@ -996,18 +1013,18 @@ def media_key(url):
     return url, "link", None
 
 
-# YouTube : chaînes suivies (liste de la box, ~/.config/stream-box/youtube.json) et leurs dernières vidéos par le flux
-# RSS public (sans clé d'API, 15 vidéos), recherche par yt-dlp (« ytsearch »). Caches : 20 min par flux, 10 min par
-# recherche, pour solliciter YouTube le moins possible (il bloque vite une adresse IP trop curieuse).
+# YouTube: followed channels (the box's list, ~/.config/stream-box/youtube.json) and their latest videos through the
+# public RSS feed (no API key, 15 videos), search through yt-dlp ("ytsearch"). Caches: 20 min per feed, 10 min per
+# search, to query YouTube as little as possible (it quickly blocks an overly curious IP address).
 
 YT_FILE = os.path.join(COOKIES_DIR, "youtube.json")
 YT_FEED_CACHE = 1200
-YT_FEED_RETRY = 600   # flux en échec (adresse limitée par YouTube…) : nouvel essai 10 min plus tard
+YT_FEED_RETRY = 600   # failed feed (address rate-limited by YouTube…): new attempt 10 min later
 YT_SEARCH_CACHE = 600
-yt_feeds, yt_searches = {}, {}   # id de chaîne → (heure, vidéos) ; requête → (heure, résultats)
+yt_feeds, yt_searches = {}, {}   # channel id → (time, videos); query → (time, results)
 yt_lock = threading.Lock()
 YTDLP = os.path.expanduser("~/.local/bin/yt-dlp")
-# Défis JavaScript de YouTube : deno s'il est installé (install.sh), sinon le Node du système (image, sans deno)
+# YouTube JavaScript challenges: deno when installed (install.sh), otherwise the system's Node (image, without deno)
 YTDLP_JS = [] if os.path.exists(os.path.expanduser("~/.local/bin/deno")) else ["--js-runtimes", "node"]
 
 
@@ -1020,7 +1037,7 @@ def yt_channels():
 
 
 def yt_resolve(raw):
-    """@nom, lien de chaîne ou identifiant UC… → {id, name, handle, avatar} (yt-dlp, une requête)"""
+    """@name, channel link or UC… identifier → {id, name, handle, avatar} (yt-dlp, one request)"""
     raw = raw.strip()
     if re.fullmatch(r"UC[\w-]{22}", raw):
         url = f"https://www.youtube.com/channel/{raw}"
@@ -1029,15 +1046,15 @@ def yt_resolve(raw):
     elif re.match(r"https?://(www\.|m\.)?youtube\.com/", raw):
         url = raw.split("?")[0]
     else:
-        raise ValueError("Donne un @nom de chaîne YouTube ou le lien de la chaîne.")
+        raise ValueError(tr("Give a YouTube channel @name or the channel link."))
     r = subprocess.run([YTDLP, "--flat-playlist", "-J", "--playlist-items", "0", "--no-warnings", url],
                        capture_output=True, text=True, timeout=60)
     try:
         d = json.loads(r.stdout)
     except ValueError:
-        raise ValueError("Chaîne YouTube introuvable.") from None
+        raise ValueError(tr("YouTube channel not found.")) from None
     if not d.get("channel_id"):
-        raise ValueError("Chaîne YouTube introuvable.")
+        raise ValueError(tr("YouTube channel not found."))
     avatar = next((t["url"] for t in d.get("thumbnails") or [] if "avatar" in str(t.get("id"))), None)
     return {"id": d["channel_id"], "name": d.get("channel") or d.get("uploader") or raw,
             "handle": d.get("uploader_id") or "", "avatar": avatar}
@@ -1047,15 +1064,15 @@ def edit_yt_channels(action, raw="", delta=0):
     with yt_lock:
         chans = yt_channels()
         if action == "add":
-            # Chaîne des abonnements (id UC…) : déjà connue, sans requête à YouTube
+            # Channel from the subscriptions (UC… id): already known, no request to YouTube
             c = next((dict(x) for x in read_json_file(YT_SUBS_FILE).get("channels") or [] if x["id"] == raw), None) \
                 or yt_resolve(raw)
             c.setdefault("handle", "")
             cache = read_json_file(YT_FEED_FILE)
             if (cache.get("channels") or {}).get(c["id"], {}).pop("checked", None) is not None:
-                write_private_json(YT_FEED_FILE, cache)   # abonnement devenu favori : 15 vidéos au prochain tour
+                write_private_json(YT_FEED_FILE, cache)   # subscription turned favorite: 15 videos on the next round
             if any(x["id"] == c["id"] for x in chans):
-                raise ValueError(f"{c['name']} est déjà dans la liste.")
+                raise ValueError(tr("{login} is already in the list.", login=c["name"]))
             chans.append(c)
         elif action == "remove":
             chans = [c for c in chans if c["id"] != raw]
@@ -1063,10 +1080,10 @@ def edit_yt_channels(action, raw="", delta=0):
             i = next((n for n, c in enumerate(chans) if c["id"] == raw), None)
             j = (i if i is not None else 0) + delta
             if i is None or not 0 <= j < len(chans):
-                raise ValueError("déplacement impossible")
+                raise ValueError(tr("cannot move"))
             chans[i], chans[j] = chans[j], chans[i]
         else:
-            raise ValueError("action inconnue")
+            raise ValueError(tr("unknown action"))
         os.makedirs(COOKIES_DIR, mode=0o700, exist_ok=True)
         with open(YT_FILE, "w", encoding="utf-8") as f:
             json.dump(chans, f, ensure_ascii=False)
@@ -1076,12 +1093,12 @@ def yt_feed(channel_id):
     cached = yt_feeds.get(channel_id)
     if cached and time.time() - cached[0] < (YT_FEED_CACHE if cached[1] is not None else YT_FEED_RETRY):
         if cached[1] is None:
-            raise OSError("flux injoignable (nouvel essai plus tard)")
+            raise OSError("feed unreachable (new attempt later)")
         return cached[1]
     try:
         return yt_fetch_feed(channel_id)
     except (OSError, ValueError):
-        yt_feeds[channel_id] = (time.time(), None)   # échec gardé : pas de nouvel essai à chaque ouverture du menu
+        yt_feeds[channel_id] = (time.time(), None)   # failure kept: no new attempt each time the menu opens
         raise
 
 
@@ -1095,7 +1112,7 @@ def yt_fetch_feed(channel_id):
     for e in root.findall("a:entry", ns):
         vid = e.findtext("yt:videoId", namespaces=ns)
         link = (e.find("a:link", ns).get("href") if e.find("a:link", ns) is not None else "") or ""
-        if not vid or "/shorts/" in link:   # les Shorts (vidéos verticales d'une minute) n'ont rien à faire sur la TV
+        if not vid or "/shorts/" in link:   # Shorts (one-minute vertical videos) have no place on the TV
             continue
         stats = e.find("m:group/m:community/m:statistics", ns)
         videos.append({"id": vid, "title": e.findtext("a:title", namespaces=ns) or "",
@@ -1108,7 +1125,7 @@ def yt_fetch_feed(channel_id):
 
 
 def yt_meta(video_id):
-    """(titre, durée) d'une vidéo : API Google si le compte est connecté (1 unité), sinon oEmbed (titre seul)"""
+    """(title, duration) of a video: Google API when the account is connected (1 unit), otherwise oEmbed (title only)"""
     try:
         token = yt_token()
         if token:
@@ -1126,8 +1143,8 @@ def yt_meta(video_id):
 
 
 def with_progress(videos, known=None):
-    """Position et « vu » d'après l'historique de la box ; vidéo vue ailleurs : pourcentage du compte YouTube (percent,
-    indicatif : YouTube le met à jour avec retard)"""
+    """Position and "watched" from the box's history; video watched elsewhere: the YouTube account's percentage
+    (percent, indicative: YouTube updates it with a delay)"""
     known = known if known is not None else {e["key"]: e for e in read_history()}
     remote = yt_tv_progress()
     out = []
@@ -1137,18 +1154,18 @@ def with_progress(videos, known=None):
         item = {**v, "position": e.get("position"), "seconds": seconds, "finished": bool(e.get("finished"))}
         pct = remote.get(v["id"])
         mine = 100 * e["position"] / e["duration"] if e.get("duration") else 0
-        if pct and (not e or (pct > mine + 2 and not e.get("finished"))):   # vue plus loin ailleurs : YouTube gagne
+        if pct and (not e or (pct > mine + 2 and not e.get("finished"))):   # watched further elsewhere: YouTube wins
             item.update(percent=pct, finished=pct >= 95,
                         position=round(pct / 100 * seconds) if seconds else None)
         out.append(item)
     return out
 
 
-# Progression du compte YouTube par l'accès « appli TV » (cast/youtube_tv.js, 127.0.0.1:8091) : la box garde ses
-# positions (reprise exacte), les renvoie à YouTube (le téléphone reprend là où la TV s'arrête), et montre le
-# pourcentage du compte pour les vidéos vues ailleurs.
+# YouTube account progress through the "TV app" access (cast/youtube_tv.js, 127.0.0.1:8091): the box keeps its
+# positions (exact resume), sends them back to YouTube (the phone resumes where the TV stops), and shows the
+# account's percentage for videos watched elsewhere.
 YT_TV = "http://127.0.0.1:8091"
-YT_TV_PUSH = 30   # secondes entre deux envois de la position
+YT_TV_PUSH = 30   # seconds between two position sends
 yt_tv_cache = {"at": 0.0, "data": {}}
 
 
@@ -1174,7 +1191,7 @@ def yt_tv_report(video_id, position, final=False):
 
 
 def yt_fav_videos(cache, channel_id):
-    """Vidéos d'un favori d'après le relevé des abonnements (API Google), ou None s'il n'y est pas"""
+    """Videos of a favorite from the subscriptions poll (Google API), or None when it is not there"""
     entry = (cache.get("channels") or {}).get(channel_id) or {}
     if "checked" not in entry or not read_json_file(YT_TOKEN_FILE).get("refresh_token"):
         return None
@@ -1189,8 +1206,8 @@ def yt_fav_videos(cache, channel_id):
 
 
 def youtube_home():
-    """Favoris (une rangée par chaîne) et abonnements. Favoris abonnés : relevé des abonnements, sans requête à
-    youtube.com ; les autres : flux RSS, lus en parallèle (yt_feed garde aussi les échecs)"""
+    """Favorites (one row per channel) and subscriptions. Subscribed favorites: subscriptions poll, no request to
+    youtube.com; the others: RSS feeds, read in parallel (yt_feed also keeps failures)"""
     from concurrent.futures import ThreadPoolExecutor
     cache, chans = read_json_file(YT_FEED_FILE), yt_channels()
     videos = {c["id"]: yt_fav_videos(cache, c["id"]) for c in chans}
@@ -1200,31 +1217,31 @@ def youtube_home():
             videos.update(zip(rss, pool.map(lambda cid: yt_safe(yt_feed, cid), rss)))
     known = {e["key"]: e for e in read_history()}
     out = [{**c, "videos": with_progress(videos[c["id"]], known) if videos[c["id"]] is not None else None}
-           for c in chans]   # flux injoignable : la chaîne reste affichée, sans vidéos
+           for c in chans]   # feed unreachable: the channel stays shown, without videos
     try:
         subs = yt_subscriptions()
-    except (OSError, ValueError, KeyError) as e:   # compte YouTube en panne : les chaînes de la liste restent
-        print(f"remote.py : abonnements YouTube : {e}", flush=True)
+    except (OSError, ValueError, KeyError) as e:   # YouTube account broken: the list's channels remain
+        print(f"remote.py: YouTube subscriptions: {e}", flush=True)
         subs = None
     return {"channels": out, "subs": subs}
 
 
 def yt_search(query):
-    """Vidéos et chaînes trouvées : la même requête renvoie les chaînes dont le nom correspond bien"""
+    """Videos and channels found: the same request returns the channels whose name matches well"""
     query = " ".join(query.split())[:100]
     if not query:
         return {"results": [], "channels": []}
     cached = yt_searches.get(query.lower())
     if cached and time.time() - cached[0] < YT_SEARCH_CACHE:
         return yt_search_out(*cached[1:])
-    # lang=fr : titres d'origine (sinon YouTube renvoie ses traductions automatiques en anglais)
+    # lang=fr: original titles (otherwise YouTube returns its automatic English translations)
     r = subprocess.run([YTDLP, "--flat-playlist", "-J", "--no-warnings", "--extractor-args", "youtube:lang=fr",
                         f"ytsearch20:{query}"],
                        capture_output=True, text=True, timeout=60)
     try:
         entries = json.loads(r.stdout).get("entries") or []
     except ValueError:
-        raise ValueError("Recherche YouTube impossible pour l'instant.") from None
+        raise ValueError(tr("YouTube search unavailable for now.")) from None
     results, channels = [], []
     for e in entries:
         if re.fullmatch(r"UC[\w-]{22}", e.get("id") or ""):
@@ -1234,7 +1251,7 @@ def yt_search(query):
                              "handle": e.get("uploader_id") or "", "followers": e.get("channel_follower_count"),
                              "avatar": "https:" + avatar if avatar.startswith("//") else avatar or None})
             continue
-        # Sinon des vidéos seulement (les playlists, aux identifiants plus longs, sont écartées)
+        # Otherwise videos only (playlists, with longer identifiers, are left out)
         if not re.fullmatch(r"[\w-]{11}", e.get("id") or "") or e.get("live_status") == "is_upcoming":
             continue
         results.append({"id": e["id"], "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or "",
@@ -1251,20 +1268,20 @@ def yt_search_out(results, channels):
 
 
 def yt_channel_videos(channel_id):
-    """Dernières vidéos d'une chaîne trouvée par la recherche, qu'elle soit dans la liste ou non"""
+    """Latest videos of a channel found by the search, whether it is in the list or not"""
     if not re.fullmatch(r"UC[\w-]{22}", channel_id):
-        raise ValueError("chaîne invalide")
+        raise ValueError(tr("invalid channel"))
     try:
         videos = with_progress(yt_feed(channel_id))
     except OSError:
-        raise ValueError("YouTube injoignable pour l'instant.") from None
+        raise ValueError(tr("YouTube unreachable for now.")) from None
     return {"id": channel_id, "videos": videos, "saved": any(c["id"] == channel_id for c in yt_channels())}
 
 
-# Jellyfin : bibliothèque du serveur déjà associé à jellyfin-mpv-shim (« Lire sur… »), avec ses identifiants
-# (~/.config/jellyfin-mpv-shim/users.json : adresse, UserId, AccessToken ; rien à configurer de plus). La box lit
-# « Reprendre », « Prochains épisodes », les ajouts récents par bibliothèque, cherche, et renvoie la progression au
-# serveur pendant la lecture (Sessions/Playing, /Progress, /Stopped) : « vu » et la reprise suivent partout.
+# Jellyfin: library of the server already paired with jellyfin-mpv-shim ("Play on…"), with its credentials
+# (~/.config/jellyfin-mpv-shim/users.json: address, UserId, AccessToken; nothing more to configure). The box reads
+# "Continue watching", "Next up", recent additions per library, searches, and reports progress to the
+# server during playback (Sessions/Playing, /Progress, /Stopped): "watched" and resume follow everywhere.
 
 JF_USERS = os.path.expanduser("~/.config/jellyfin-mpv-shim/users.json")
 JF_CACHE = 30
@@ -1285,7 +1302,7 @@ def jf_server():
 def jf_api(path, body=None, params=None):
     srv = jf_server()
     if not srv:
-        raise ValueError("Jellyfin n'est pas associé à la box.")
+        raise ValueError(tr("Jellyfin is not paired with the box."))
     url = srv["address"] + path.replace("{user}", srv["user"])
     if params:
         url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
@@ -1298,7 +1315,7 @@ def jf_api(path, body=None, params=None):
 
 
 def jf_item(i):
-    """Élément Jellyfin → carte : titre, ligne d'infos, image paysage, durée, position, vu"""
+    """Jellyfin item → card: title, info line, landscape image, duration, position, watched"""
     srv = jf_server() or {"address": ""}
     img = lambda item_id, kind: f"{srv['address']}/Items/{item_id}/Images/{kind}?fillWidth=480&quality=85"
     kind, tags = i.get("Type"), i.get("ImageTags") or {}
@@ -1323,7 +1340,7 @@ def jf_item(i):
         out["title"] = i.get("SeriesName") or out["title"]
         out["episode"] = (f"S{i.get('ParentIndexNumber') or 0}·E{i.get('IndexNumber') or 0} · " if i.get("IndexNumber") else "") + (i.get("Name") or "")
         out["series"] = i.get("SeriesId")
-    elif kind == "Season":   # ajouts récents d'une série, regroupés par saison
+    elif kind == "Season":   # recent additions of a series, grouped by season
         out.update(title=i.get("SeriesName") or out["title"], episode=i.get("Name") or "", series=i.get("SeriesId"))
     elif kind == "Series":
         out.update(series=i["Id"], unplayed=ud.get("UnplayedItemCount"))
@@ -1364,9 +1381,9 @@ def jellyfin_search(query):
 
 
 def jellyfin_series(series_id):
-    """Épisodes d'une série, et l'index du premier pas encore vu (là où placer le focus)"""
+    """Episodes of a series, and the index of the first one not yet watched (where to put the focus)"""
     if not re.fullmatch(r"[0-9a-f]{32}", series_id):
-        raise ValueError("série invalide")
+        raise ValueError(tr("invalid series"))
     srv = jf_server()
     eps = [jf_item(i) for i in jf_api(f"/Shows/{series_id}/Episodes", params={"UserId": srv["user"], **JF_FIELDS})["Items"]]
     first = next((n for n, e in enumerate(eps) if not e["finished"]), 0)
@@ -1375,12 +1392,12 @@ def jellyfin_series(series_id):
 
 def jellyfin_play(item_id, from_start=False):
     if not re.fullmatch(r"[0-9a-f]{32}", item_id):
-        raise ValueError("élément invalide")
+        raise ValueError(tr("invalid item"))
     srv = jf_server()
     raw = jf_api(f"/Users/{{user}}/Items/{item_id}")
     i = jf_item(raw)
     if i["type"] == "Series":
-        raise ValueError("Choisis un épisode.")
+        raise ValueError(tr("Pick an episode."))
     title = f"{i['title']} · {i['episode']}" if i.get("episode") else i["title"]
     start = 0 if from_start or i["position"] < RESUME_MIN or i["finished"] else i["position"]
     url = f"{srv['address']}/Videos/{item_id}/stream?static=true&api_key={srv['token']}"
@@ -1389,7 +1406,7 @@ def jellyfin_play(item_id, from_start=False):
                        title=title, thumb=i["thumb"], position=start)
     mpv(["script-message", "streambox-play", url, str(start), title, i["thumb"] or ""])
     mpv(["set_property", "user-data/streambox/storyboard", {}])
-    # Barre de lecture et écran de pause : série, épisode, année, résumé ; épisode suivant pour la carte de fin
+    # Seek bar and pause screen: series, episode, year, overview; next episode for the end card
     mpv(["set_property", "user-data/streambox/meta",
          {"source": "jellyfin", "series": raw.get("SeriesName") or "", "episode": i.get("episode") or "",
           "year": raw.get("ProductionYear") or "", "rating": raw.get("CommunityRating") or 0,
@@ -1409,8 +1426,8 @@ def jellyfin_play(item_id, from_start=False):
     jf_cache.pop("home", None)
     record(dict(now_playing), start, i["seconds"])
     jf_report("", item_id, start)
-    # Sous-titres à part (fichiers .srt… à côté de la vidéo) : absents du flux direct, ajoutés à mpv une fois la vidéo
-    # ouverte ; ceux intégrés au fichier y sont déjà
+    # Separate subtitles (.srt… files next to the video): missing from the direct stream, added to mpv once the video
+    # is open; those embedded in the file are already there
     source = (raw.get("MediaSources") or [{}])[0]
     external = [m for m in source.get("MediaStreams") or [] if m.get("Type") == "Subtitle" and m.get("IsExternal")]
     if external:
@@ -1418,7 +1435,7 @@ def jellyfin_play(item_id, from_start=False):
 
 
 def jf_add_subtitles(url, item_id, source_id, streams, srv):
-    for _ in range(30):   # jusqu'à 15 s pour que la vidéo s'ouvre
+    for _ in range(30):   # up to 15 s for the video to open
         time.sleep(0.5)
         try:
             path, loaded = mpv(["get_property", "path"], ["get_property", "duration"])
@@ -1438,7 +1455,7 @@ def jf_add_subtitles(url, item_id, source_id, streams, srv):
 
 
 def jf_report(what, item_id, position, paused=False):
-    """Progression vers le serveur : what = "" (début), "/Progress" ou "/Stopped" """
+    """Progress to the server: what = "" (start), "/Progress" or "/Stopped" """
     try:
         jf_api(f"/Sessions/Playing{what}", {"ItemId": item_id, "PositionTicks": int(position * 1e7), "IsPaused": paused,
                                             "CanSeek": True, "PlayMethod": "DirectStream"})
@@ -1468,7 +1485,7 @@ def write_history(entries):
 
 
 def record(video, position, duration, title=None):
-    """Met la vidéo en tête de l'historique avec sa position."""
+    """Puts the video at the top of the history with its position."""
     with history_lock:
         entries = [e for e in read_history() if e["key"] != video["key"]]
         entry = {"key": video["key"], "url": video.get("link") or video["url"], "kind": video["kind"],
@@ -1479,7 +1496,7 @@ def record(video, position, duration, title=None):
 
 
 def twitch_gql(query, variables=None):
-    """Requête GQL Twitch, avec le compte connecté s'il y en a un."""
+    """Twitch GQL request, with the connected account if there is one."""
     headers = {"Client-ID": TWITCH_WEB_CLIENT_ID, "Content-Type": "application/json"}
     token = read_token()
     if token:
@@ -1499,16 +1516,16 @@ def twitch_save_position(video_id, position):
                    {"i": {"userID": me["id"], "videoID": video_id, "videoType": "VOD", "position": int(position)}})
 
 
-# Aperçu des vidéos YouTube sur la barre de lecture (appli Qt) : planche de miniatures (« storyboard ») donnée par
-# yt-dlp, publiée dans user-data/streambox/storyboard. Chaque image de la planche est une grille rows × columns de
-# miniatures couvrant « duration » secondes.
+# YouTube video preview on the seek bar (Qt app): thumbnail sheet ("storyboard") given by yt-dlp, published in
+# user-data/streambox/storyboard. Each image of the sheet is a rows × columns grid of thumbnails covering "duration"
+# seconds.
 
 def fetch_storyboard(url, ident):
     try:
         r = subprocess.run([YTDLP, *YTDLP_JS, "-J", "--no-warnings", "--skip-download",
                             "--no-playlist", url], capture_output=True, text=True, timeout=90)
         info = json.loads(r.stdout or "{}")
-        if now_playing.get("ident") == ident:   # infos de la barre de lecture et de l'écran de pause
+        if now_playing.get("ident") == ident:   # info for the seek bar and the pause screen
             d = info.get("upload_date") or ""
             mpv(["set_property", "user-data/streambox/meta",
                  {"source": "youtube", "channel": info.get("channel") or info.get("uploader") or "",
@@ -1522,34 +1539,34 @@ def fetch_storyboard(url, ident):
         board = {"id": ident, "width": b["width"], "height": b["height"], "rows": b.get("rows") or 1,
                  "columns": b.get("columns") or 1,
                  "fragments": [{"url": f["url"], "duration": f.get("duration") or 0} for f in b["fragments"]]}
-        if now_playing.get("ident") == ident:   # toujours la même vidéo
+        if now_playing.get("ident") == ident:   # still the same video
             mpv(["set_property", "user-data/streambox/storyboard", board])
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         pass
 
 
 def play(url, from_start=False, title=None, thumb=None, at=None):
-    """title, thumb : connus de la page ou du menu qui lance la vidéo (écran de chargement, historique) ;
-    at : position imposée (cast depuis l'appli YouTube), sinon reprise d'après l'historique"""
-    if re.fullmatch(r"jellyfin:[0-9a-f]{32}", url or ""):   # depuis l'historique
+    """title, thumb: known by the page or menu starting the video (loading screen, history);
+    at: forced position (cast from the YouTube app), otherwise resume from the history"""
+    if re.fullmatch(r"jellyfin:[0-9a-f]{32}", url or ""):   # from the history
         return jellyfin_play(url.split(":")[1], from_start)
     if not url or not re.match(r"https?://", url):
-        raise ValueError("Ce n'est pas un lien http(s).")
+        raise ValueError(tr("This is not an http(s) link."))
     key, kind, ident = media_key(url)
     entry = next((e for e in read_history() if e["key"] == key), None) or {}
     video = {"key": key, "url": url, "kind": kind, "ident": ident, "title": entry.get("title") or title,
              "thumb": entry.get("thumb") or thumb or (f"https://i.ytimg.com/vi/{ident}/mqdefault.jpg" if kind == "youtube" else None)}
     position, updated, duration = entry.get("position", 0), entry.get("updated", 0), entry.get("duration", 0)
-    if kind == "youtube" and not video["title"]:   # vidéo castée depuis l'appli YouTube : seul son identifiant est connu
+    if kind == "youtube" and not video["title"]:   # video cast from the YouTube app: only its identifier is known
         video["title"], duration = yt_meta(ident)
         duration = duration or 0
     if kind == "youtube" and not from_start and at is None:
-        # Vue plus loin ailleurs (téléphone…) : reprise au pourcentage du compte, s'il dépasse la position de la box
+        # Watched further elsewhere (phone…): resume at the account's percentage, if beyond the box's position
         pct = yt_tv_progress().get(ident) or 0
         if 3 <= pct and (not duration or pct / 100 * duration > position + 30):
             duration = duration or yt_meta(ident)[1] or 0
             position = int(pct / 100 * duration)
-    try:   # Twitch : titre, vignette, durée et position enregistrée sur le compte
+    try:   # Twitch: title, thumbnail, duration and position saved on the account
         if kind == "twitch-vod":
             v = twitch_gql("query($id:ID!){video(id:$id){title lengthSeconds previewThumbnailURL(width:320,height:180) "
                            "self{viewingHistory{position updatedAt}}}}", {"id": ident}).get("video") or {}
@@ -1558,14 +1575,14 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
             seen = (v.get("self") or {}).get("viewingHistory") or {}
             if seen.get("updatedAt"):
                 at = datetime.datetime.fromisoformat(seen["updatedAt"].replace("Z", "+00:00")).timestamp()
-                if at > updated:   # vu plus récemment ailleurs (site, appli) que sur la box
+                if at > updated:   # watched more recently elsewhere (site, app) than on the box
                     position = seen.get("position") or 0
         elif kind == "twitch-clip":
             c = twitch_gql("query($s:ID!){clip(slug:$s){title durationSeconds thumbnailURL}}", {"s": ident}).get("clip") or {}
             video.update(title=c.get("title") or video["title"], thumb=c.get("thumbnailURL") or video["thumb"])
             duration = c.get("durationSeconds") or duration
     except (OSError, ValueError, KeyError):
-        pass   # Twitch injoignable : on se contente de l'historique de la box
+        pass   # Twitch unreachable: make do with the box's history
     start = 0 if from_start or position < RESUME_MIN or finished(position, duration) else int(position)
     if at is not None:
         start = max(0, int(at))
@@ -1580,12 +1597,12 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
         threading.Thread(target=fetch_storyboard, args=(url, ident), daemon=True).start()
 
 
-shim_items = {}   # identifiant Jellyfin → carte (titre, image), pour l'historique des lectures du shim
+shim_items = {}   # Jellyfin identifier → card (title, image), for the history of the shim's playbacks
 
 
 def shim_video():
-    """Vidéo Jellyfin lancée par jellyfin-mpv-shim (« Lire sur… » depuis une appli Jellyfin), d'après le lien en
-    lecture ; None sinon"""
+    """Jellyfin video started by jellyfin-mpv-shim ("Play on…" from a Jellyfin app), from the link being
+    played; None otherwise"""
     try:
         user, path = mpv(["get_property", "user-data/streambox"], ["get_property", "path"])
     except (OSError, ValueError):
@@ -1607,7 +1624,7 @@ def shim_video():
 
 
 def history_loop():
-    """Toutes les 10 s, note la position de la vidéo lancée par play() ; l'envoie à Twitch pour une rediffusion."""
+    """Every 10 s, records the position of the video started by play(); sends it to Twitch for a replay."""
     while True:
         time.sleep(10)
         video = dict(now_playing) or shim_video()
@@ -1620,7 +1637,7 @@ def history_loop():
         except (OSError, ValueError):
             continue
         playing = (user or {}).get("mode") == "media" and path == video["url"]
-        if video.get("shim"):   # lancé par « Lire sur… » : le shim rend compte au serveur, la box note l'historique
+        if video.get("shim"):   # started by "Play on…": the shim reports to the server, the box records the history
             if playing and isinstance(position, (int, float)):
                 record(video, position, duration)
             continue
@@ -1647,7 +1664,7 @@ def history_loop():
             if video["kind"] == "youtube" and time.time() - video["pushed"] >= YT_TV_PUSH:
                 yt_tv_report(video["ident"], position)
                 now_playing["pushed"] = time.time()
-        elif not playing:   # vidéo terminée ou remplacée : dernière position envoyée à Twitch
+        elif not playing:   # video finished or replaced: last position sent to Twitch
             if video["kind"] == "twitch-vod" and video.get("position"):
                 try:
                     twitch_save_position(video["ident"], video["position"])
@@ -1667,22 +1684,22 @@ def edit_history(action, key=""):
         elif action == "clear":
             entries = []
         else:
-            raise ValueError("action inconnue")
+            raise ValueError(tr("unknown action"))
         write_history(entries)
 
 
-# Chaînes suivies (onglet Suivis du menu de la TV). Twitch refuse cette liste au jeton du site (GQL : « service error »,
-# Helix : il manque le droit user:read:follows) : il faut une appli Twitch à soi (dev.twitch.tv), de type Publique (sans
-# secret) ou Confidentielle (avec secret), et une autorisation par code (« device code flow ») : la TV ou la page
-# affichent un code à taper sur twitch.tv/activate. Config dans twitch-app.json ({"client_id", "client_secret"?}),
-# jetons dans twitch-follows-token.json, tous deux en 600 dans ~/.config/stream-box.
+# Followed channels (Following tab of the TV menu). Twitch refuses this list to the site's token (GQL: "service error",
+# Helix: the user:read:follows scope is missing): you need your own Twitch app (dev.twitch.tv), of type Public (no
+# secret) or Confidential (with secret), and a code authorization ("device code flow"): the TV or the page
+# show a code to type on twitch.tv/activate. Config in twitch-app.json ({"client_id", "client_secret"?}),
+# tokens in twitch-follows-token.json, both 600 in ~/.config/stream-box.
 
 TWITCH_APP_FILE = os.path.join(COOKIES_DIR, "twitch-app.json")
 FOLLOWS_TOKEN_FILE = os.path.join(COOKIES_DIR, "twitch-follows-token.json")
 FOLLOWS_SCOPE = "user:read:follows"
-FOLLOWS_CACHE = 60   # secondes entre deux relevés de la liste
+FOLLOWS_CACHE = 60   # seconds between two polls of the list
 follows_lock = threading.Lock()
-follows_pending = {}           # autorisation en cours : user_code, verification_uri, expires_at, error
+follows_pending = {}           # authorization in progress: user_code, verification_uri, expires_at, error
 follows_cache = {"at": 0.0, "data": None}
 
 
@@ -1704,7 +1721,7 @@ def write_private_json(path, data):
 
 
 def twitch_oauth(path, fields):
-    """POST sur id.twitch.tv ; renvoie (code HTTP, réponse JSON)."""
+    """POST to id.twitch.tv; returns (HTTP code, JSON reply)."""
     req = urllib.request.Request(f"https://id.twitch.tv/oauth2/{path}", data=urllib.parse.urlencode(fields).encode())
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
@@ -1719,7 +1736,7 @@ def twitch_oauth(path, fields):
 def app_fields():
     app = read_json_file(TWITCH_APP_FILE)
     if not app.get("client_id"):
-        raise ValueError("aucune appli Twitch configurée")
+        raise ValueError(tr("no Twitch app configured"))
     fields = {"client_id": app["client_id"]}
     if app.get("client_secret"):
         fields["client_secret"] = app["client_secret"]
@@ -1732,7 +1749,7 @@ def save_follows_token(d):
 
 
 def follows_poll(device_code, interval, expires_at):
-    """Attend que l'utilisateur tape le code sur twitch.tv/activate (fil séparé)."""
+    """Waits for the user to type the code on twitch.tv/activate (separate thread)."""
     while time.time() < expires_at:
         time.sleep(interval)
         try:
@@ -1751,16 +1768,16 @@ def follows_poll(device_code, interval, expires_at):
             interval += 5
         elif message != "authorization_pending":
             with follows_lock:
-                follows_pending.update(error=message or f"refus de Twitch ({code})")
+                follows_pending.update(error=message or tr("refused by Twitch ({code})", code=code))
             return
     with follows_lock:
-        follows_pending.update(error="code expiré")
+        follows_pending.update(error=tr("code expired"))
 
 
 def follows_start():
     code, d = twitch_oauth("device", {"client_id": app_fields()["client_id"], "scopes": FOLLOWS_SCOPE})
     if code != 200 or not d.get("device_code"):
-        raise ValueError(f"Twitch refuse l'appli : {d.get('message') or code} (vérifie le Client ID)")
+        raise ValueError(tr("Twitch rejects the app: {error} (check the Client ID)", error=d.get("message") or code))
     expires_at = time.time() + int(d.get("expires_in") or 1800)
     with follows_lock:
         follows_pending.clear()
@@ -1770,7 +1787,7 @@ def follows_start():
 
 
 def follows_token():
-    """Jeton valide pour Helix, renouvelé si besoin ; None si la box n'est pas autorisée."""
+    """Valid token for Helix, renewed if needed; None when the box is not authorized."""
     tok = read_json_file(FOLLOWS_TOKEN_FILE)
     if not tok.get("access_token"):
         return None
@@ -1780,7 +1797,7 @@ def follows_token():
         code, d = twitch_oauth("token", {**app_fields(), "grant_type": "refresh_token",
                                          "refresh_token": tok["refresh_token"]})
         if code != 200 or not d.get("access_token"):
-            if code in (400, 401):   # autorisation retirée sur Twitch : il faudra recommencer
+            if code in (400, 401):   # authorization revoked on Twitch: it will have to be redone
                 os.remove(FOLLOWS_TOKEN_FILE)
             return None
         save_follows_token(d)
@@ -1804,7 +1821,7 @@ def fetch_follows(token):
                      "thumb": (st.get("thumbnail_url") or "").replace("{width}", "640").replace("{height}", "360")
                      + f"?t={int(time.time()) // FOLLOWS_CACHE}"})
     logins, cursor = [], ""
-    for _ in range(5):   # jusqu'à 500 chaînes suivies
+    for _ in range(5):   # up to 500 followed channels
         d = helix(f"channels/followed?user_id={me}&first=100" + (f"&after={cursor}" if cursor else ""), token)
         logins += [c["broadcaster_login"] for c in d.get("data", [])]
         cursor = (d.get("pagination") or {}).get("cursor")
@@ -1830,7 +1847,7 @@ def validate_helix(token):
 
 
 def follows_status():
-    """État pour la page et le menu : appli configurée, autorisation en cours, liste."""
+    """State for the page and the menu: app configured, authorization in progress, list."""
     app = read_json_file(TWITCH_APP_FILE)
     out = {"configured": bool(app.get("client_id")), "confidential": bool(app.get("client_secret")),
            "authorized": False, "pending": None, "live": [], "offline": []}
@@ -1858,12 +1875,12 @@ def follows_logins():
 def set_twitch_app(client_id, client_secret):
     client_id = client_id.strip()
     if not re.fullmatch(r"[a-z0-9]{20,40}", client_id):
-        raise ValueError("Ce n'est pas un Client ID Twitch (30 lettres et chiffres).")
+        raise ValueError(tr("This is not a Twitch Client ID (30 letters and digits)."))
     app = {"client_id": client_id}
     if client_secret.strip():
         app["client_secret"] = client_secret.strip()
     write_private_json(TWITCH_APP_FILE, app)
-    for path in (FOLLOWS_TOKEN_FILE,):   # nouvelle appli : l'ancienne autorisation ne vaut plus
+    for path in (FOLLOWS_TOKEN_FILE,):   # new app: the old authorization no longer applies
         try:
             os.remove(path)
         except FileNotFoundError:
@@ -1882,17 +1899,17 @@ def follows_logout():
         follows_cache.update(at=0.0, data=None)
 
 
-# Compte YouTube (rangée « Abonnements » de l'onglet YouTube) : appli Google à soi (console.cloud.google.com, API
-# YouTube Data v3, client « TV et appareils à saisie limitée »), autorisation par code sur google.com/device, lecture
-# seule. Config dans youtube-app.json ({"client_id", "client_secret"}), jetons dans youtube-token.json, liste des
-# abonnements dans youtube-subs.json, en 600 dans ~/.config/stream-box. Tout passe par l'API Google (googleapis.com),
-# pas par youtube.com : rien ne s'ajoute aux requêtes qui font limiter l'adresse IP de la box. Quota de l'API : 10 000
-# unités par jour ; abonnements relus une fois par jour (1 unité par 50), puis par chaîne 1 unité pour ses dernières
-# vidéos (playlist « UULF… » : vidéos sans les Shorts) et 1 unité par 50 vidéos pour durées et vues. Chaque chaîne est
-# relue à son rythme (YT_CHANNEL_RHYTHM, d'après l'âge de sa dernière vidéo : toutes les heures si elle a publié ces
-# deux derniers jours, une fois par jour si elle se tait depuis un mois), par un tour toutes les minutes en
-# arrière-plan (yt_subfeed_loop) ; relevés gardés dans youtube-subfeed.json (rien à refaire au redémarrage), unités
-# comptées pour ne pas dépasser YT_DAILY_BUDGET par jour. L'onglet s'ouvre sur le dernier fil.
+# YouTube account ("Subscriptions" row of the YouTube tab): your own Google app (console.cloud.google.com, YouTube
+# Data API v3, "TVs and Limited Input devices" client), code authorization on google.com/device, read-only. Config in
+# youtube-app.json ({"client_id", "client_secret"}), tokens in youtube-token.json, subscription list in
+# youtube-subs.json, 600 in ~/.config/stream-box. Everything goes through the Google API (googleapis.com), not
+# youtube.com: nothing is added to the requests that get the box's IP address rate-limited. API quota: 10,000
+# units per day; subscriptions read once a day (1 unit per 50), then per channel 1 unit for its latest
+# videos ("UULF…" playlist: videos without Shorts) and 1 unit per 50 videos for durations and views. Each channel is
+# read again at its own pace (YT_CHANNEL_RHYTHM, from the age of its latest video: every hour if it posted in the
+# last two days, once a day if it has been quiet for a month), by a round every minute in the
+# background (yt_subfeed_loop); polls kept in youtube-subfeed.json (nothing to redo on restart), units
+# counted so as not to exceed YT_DAILY_BUDGET per day. The tab opens on the latest feed.
 
 YT_APP_FILE = os.path.join(COOKIES_DIR, "youtube-app.json")
 YT_TOKEN_FILE = os.path.join(COOKIES_DIR, "youtube-token.json")
@@ -1900,19 +1917,19 @@ YT_SUBS_FILE = os.path.join(COOKIES_DIR, "youtube-subs.json")
 YT_FEED_FILE = os.path.join(COOKIES_DIR, "youtube-subfeed.json")
 YT_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
 YT_SUBS_EVERY = 86400
-YT_CHANNEL_RHYTHM = ((2 * 86400, 3600), (7 * 86400, 3 * 3600), (30 * 86400, 12 * 3600))   # (âge de la dernière vidéo, relecture)
-YT_DAILY_BUDGET = 7000   # sur les 10 000 du quota : marge pour « Relire mes abonnements » et les essais
+YT_CHANNEL_RHYTHM = ((2 * 86400, 3600), (7 * 86400, 3 * 3600), (30 * 86400, 12 * 3600))   # (age of the latest video, re-read)
+YT_DAILY_BUDGET = 7000   # out of the quota's 10,000: margin for "Reload my subscriptions" and tests
 YT_SUBFEED_PER_CHANNEL = 4
 YT_SUBFEED_MAX = 60
 YT_FAV_VIDEOS = 15
 yt_account_lock = threading.Lock()
-yt_pending = {}                # autorisation en cours : user_code, verification_uri, expires_at, error
+yt_pending = {}                # authorization in progress: user_code, verification_uri, expires_at, error
 yt_subfeed = {"at": 0.0, "videos": None, "refreshing": False}
-yt_units = {"day": "", "used": 0}  # unités du quota de l'API dépensées aujourd'hui
+yt_units = {"day": "", "used": 0}  # API quota units spent today
 
 
 def google_oauth(path, fields):
-    """POST sur oauth2.googleapis.com ; renvoie (code HTTP, réponse JSON)."""
+    """POST to oauth2.googleapis.com; returns (HTTP code, JSON reply)."""
     req = urllib.request.Request(f"https://oauth2.googleapis.com/{path}", data=urllib.parse.urlencode(fields).encode())
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
@@ -1927,7 +1944,7 @@ def google_oauth(path, fields):
 def yt_app():
     app = read_json_file(YT_APP_FILE)
     if not app.get("client_id") or not app.get("client_secret"):
-        raise ValueError("aucune appli Google configurée")
+        raise ValueError(tr("no Google app configured"))
     return app
 
 
@@ -1938,7 +1955,7 @@ def save_yt_token(d, refresh_token=None):
 
 
 def yt_poll(device_code, interval, expires_at):
-    """Attend que l'utilisateur tape le code sur google.com/device (fil séparé)."""
+    """Waits for the user to type the code on google.com/device (separate thread)."""
     while time.time() < expires_at:
         time.sleep(interval)
         try:
@@ -1952,25 +1969,27 @@ def yt_poll(device_code, interval, expires_at):
             save_yt_token(d)
             with yt_account_lock:
                 yt_pending.clear()
-            yt_reset_subs(everything=True)   # peut-être un autre compte
+            yt_reset_subs(everything=True)   # maybe another account
             return
         error = d.get("error", "")
         if error == "slow_down":
             interval += 5
         elif error != "authorization_pending":
             with yt_account_lock:
-                yt_pending.update(error={"access_denied": "accès refusé"}.get(error, error or f"refus de Google ({code})"))
+                yt_pending.update(error=tr("access denied") if error == "access_denied"
+                                  else error or tr("refused by Google ({code})", code=code))
             return
     with yt_account_lock:
-        yt_pending.update(error="code expiré")
+        yt_pending.update(error=tr("code expired"))
 
 
 def yt_login():
     app = yt_app()
     code, d = google_oauth("device/code", {"client_id": app["client_id"], "scope": YT_SCOPE})
     if code != 200 or not d.get("device_code"):
-        raise ValueError(f"Google refuse l'appli : {d.get('error_description') or d.get('error') or code}"
-                         " (vérifie l'ID client et son type « TV et appareils à saisie limitée »)")
+        raise ValueError(tr("Google rejects the app: {error} (check the client ID and its type "
+                            "\"TVs and Limited Input devices\")",
+                            error=d.get("error_description") or d.get("error") or code))
     expires_at = time.time() + int(d.get("expires_in") or 1800)
     with yt_account_lock:
         yt_pending.clear()
@@ -1981,7 +2000,7 @@ def yt_login():
 
 
 def yt_token():
-    """Jeton valide pour l'API YouTube, renouvelé si besoin ; None si la box n'est pas autorisée."""
+    """Valid token for the YouTube API, renewed if needed; None when the box is not authorized."""
     tok = read_json_file(YT_TOKEN_FILE)
     if not tok.get("access_token"):
         return None
@@ -1992,7 +2011,7 @@ def yt_token():
         code, d = google_oauth("token", {"client_id": app["client_id"], "client_secret": app["client_secret"],
                                          "grant_type": "refresh_token", "refresh_token": tok["refresh_token"]})
         if code != 200 or not d.get("access_token"):
-            if code in (400, 401):   # autorisation retirée sur le compte Google : il faudra recommencer
+            if code in (400, 401):   # authorization revoked on the Google account: it will have to be redone
                 os.remove(YT_TOKEN_FILE)
             return None
         save_yt_token(d, tok["refresh_token"])
@@ -2009,7 +2028,7 @@ def yt_api(path, token, **params):
 
 
 def yt_fetch_subs(token):
-    """Chaînes abonnées du compte : [{id, name, avatar}] (jusqu'à 1000)"""
+    """The account's subscribed channels: [{id, name, avatar}] (up to 1000)"""
     subs, page = [], None
     for _ in range(20):
         d = yt_api("subscriptions", token, part="snippet", mine="true", maxResults=50, order="alphabetical",
@@ -2029,7 +2048,7 @@ def yt_fetch_subs(token):
 
 
 def iso_seconds(text):
-    """« PT1H2M3S » → 3723"""
+    """"PT1H2M3S" → 3723"""
     m = re.fullmatch(r"P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", text or "")
     if not m:
         return None
@@ -2038,7 +2057,7 @@ def iso_seconds(text):
 
 
 def yt_channel_uploads(channel, token, count=YT_SUBFEED_PER_CHANNEL):
-    for prefix in ("UULF", "UU"):   # UULF : vidéos longues seulement (sans Shorts ni directs) ; UU : tout, en secours
+    for prefix in ("UULF", "UU"):   # UULF: long videos only (no Shorts or lives); UU: everything, as a fallback
         try:
             d = yt_api("playlistItems", token, part="snippet,contentDetails", maxResults=count,
                        playlistId=prefix + channel["id"][2:])
@@ -2061,7 +2080,7 @@ def yt_channel_uploads(channel, token, count=YT_SUBFEED_PER_CHANNEL):
 
 
 def yt_quota_day():
-    return time.strftime("%Y-%m-%d", time.gmtime(time.time() - 8 * 3600))   # le quota repart à minuit, heure du Pacifique
+    return time.strftime("%Y-%m-%d", time.gmtime(time.time() - 8 * 3600))   # the quota resets at midnight, Pacific time
 
 
 def yt_count_units(n=1):
@@ -2072,7 +2091,7 @@ def yt_count_units(n=1):
 
 
 def yt_channel_every(entry):
-    """Rythme de relecture d'une chaîne d'après sa dernière vidéo : souvent si elle publie souvent"""
+    """Re-read pace of a channel from its latest video: often if it posts often"""
     if not entry or "checked" not in entry:
         return 0
     dates = [v["date"] for v in entry.get("videos") or [] if v.get("date")]
@@ -2089,11 +2108,11 @@ def yt_channel_every(entry):
 
 
 def yt_build_feed(cache, token):
-    """60 vidéos les plus récentes d'après les chaînes relues ; durées et vues relues au plus toutes les heures (aussi
-    pour les vidéos des favoris, servies par yt_fav_videos)"""
+    """The 60 most recent videos from the read channels; durations and views read again at most every hour (also
+    for the favorites' videos, served by yt_fav_videos)"""
     details = cache.setdefault("details", {})
     candidates = sorted((v for e in cache["channels"].values() for v in (e.get("videos") or [])[:YT_SUBFEED_PER_CHANNEL]),
-                        key=lambda v: v["date"], reverse=True)[:YT_SUBFEED_MAX + 20]   # marge : directs à venir écartés
+                        key=lambda v: v["date"], reverse=True)[:YT_SUBFEED_MAX + 20]   # margin: upcoming lives left out
     favs = [v for c in yt_channels() for v in (cache["channels"].get(c["id"]) or {}).get("videos") or []]
     if token:
         stale = [v["id"] for v in candidates + favs if time.time() - (details.get(v["id"]) or {}).get("at", 0) > 3600]
@@ -2114,13 +2133,13 @@ def yt_build_feed(cache, token):
     for v in candidates:
         det = details.get(v["id"]) or {}
         if det.get("gone") or det.get("upcoming"):
-            continue   # supprimée, privée, ou direct pas encore commencé
+            continue   # deleted, private, or live not started yet
         out.append({**v, "date": v["date"][:10], "seconds": det.get("seconds"), "views": det.get("views")})
     return out[:YT_SUBFEED_MAX]
 
 
 def yt_refresh_subfeed():
-    """Relit les chaînes dont c'est le tour (yt_channel_every), puis refait le fil si quelque chose a bougé"""
+    """Reads the channels whose turn it is (yt_channel_every), then rebuilds the feed if something changed"""
     from concurrent.futures import ThreadPoolExecutor
     try:
         token = yt_token()
@@ -2128,7 +2147,7 @@ def yt_refresh_subfeed():
             return
         cache = read_json_file(YT_FEED_FILE)
         cache.setdefault("channels", {})
-        with yt_account_lock:   # unités déjà dépensées aujourd'hui avant un redémarrage
+        with yt_account_lock:   # units already spent today before a restart
             saved = cache.get("units") or {}
             if not yt_units["day"] and saved.get("day") == yt_quota_day():
                 yt_units.update(saved)
@@ -2136,13 +2155,13 @@ def yt_refresh_subfeed():
         subs = listed.get("channels")
         if subs is None or time.time() - listed.get("at", 0) > YT_SUBS_EVERY:
             subs = yt_fetch_subs(token)
-        cache["channels"] = {c["id"]: cache["channels"].get(c["id"], {}) for c in subs}   # désabonnements oubliés
-        favs = {c["id"] for c in yt_channels()}   # favoris : 15 vidéos pour leur rangée (même coût)
+        cache["channels"] = {c["id"]: cache["channels"].get(c["id"], {}) for c in subs}   # unsubscribed channels forgotten
+        favs = {c["id"] for c in yt_channels()}   # favorites: 15 videos for their row (same cost)
         due = [c for c in subs if time.time() - cache["channels"][c["id"]].get("checked", 0) >= yt_channel_every(cache["channels"][c["id"]])
                or (c["id"] in favs and cache["channels"][c["id"]].get("count", 0) < YT_FAV_VIDEOS)]
         with yt_account_lock:
             left = YT_DAILY_BUDGET - (yt_units["used"] if yt_units["day"] == yt_quota_day() else 0)
-        due = due[:max(0, left - 10)]   # quota du jour presque épuisé : la suite attend demain
+        due = due[:max(0, left - 10)]   # today's quota nearly used up: the rest waits until tomorrow
         if due:
             with ThreadPoolExecutor(16) as pool:
                 lists = list(pool.map(lambda c: yt_safe(yt_channel_uploads, c, token,
@@ -2151,7 +2170,7 @@ def yt_refresh_subfeed():
                 entry = cache["channels"][c["id"]]
                 entry["checked"] = time.time()
                 entry["count"] = YT_FAV_VIDEOS if c["id"] in favs else YT_SUBFEED_PER_CHANNEL
-                if videos is not None:   # injoignable : l'ancien relevé reste, nouvel essai au prochain tour
+                if videos is not None:   # unreachable: the old poll stays, new attempt on the next round
                     entry["videos"] = videos
         if due or yt_subfeed["videos"] is None or time.time() - yt_subfeed["at"] > 3600:
             videos = yt_build_feed(cache, token)
@@ -2160,10 +2179,10 @@ def yt_refresh_subfeed():
             with yt_account_lock:
                 yt_subfeed.update(at=time.time(), videos=videos)
         if due:
-            print(f"remote.py : abonnements YouTube : {len(due)} chaînes relues, {yt_units['used']} unités aujourd'hui",
+            print(f"remote.py: YouTube subscriptions: {len(due)} channels read, {yt_units['used']} units today",
                   flush=True)
     except (OSError, ValueError) as e:
-        print(f"remote.py : abonnements YouTube : {e}", flush=True)
+        print(f"remote.py: YouTube subscriptions: {e}", flush=True)
         with yt_account_lock:
             if yt_subfeed["videos"] is None:
                 yt_subfeed.update(at=time.time(), videos=[])
@@ -2176,11 +2195,11 @@ def yt_safe(fn, *args):
     try:
         return fn(*args)
     except (OSError, ValueError):
-        return None   # chaîne fermée ou injoignable : les autres restent
+        return None   # channel closed or unreachable: the others remain
 
 
 def yt_reset_subs(everything=False):
-    """Liste des abonnements relue au prochain tour ; everything : relevés des chaînes oubliés aussi (déconnexion)"""
+    """Subscription list read again on the next round; everything: channel polls forgotten too (logout)"""
     for path in (YT_SUBS_FILE, YT_FEED_FILE) if everything else (YT_SUBS_FILE,):
         try:
             os.remove(path)
@@ -2191,7 +2210,7 @@ def yt_reset_subs(everything=False):
 
 
 def yt_start_refresh():
-    """Lance un relevé s'il n'y en a pas déjà un ; renvoie True s'il faut le faire dans ce fil"""
+    """Starts a poll if there is not one already; returns True when it must be done in this thread"""
     with yt_account_lock:
         if yt_subfeed["refreshing"]:
             return False
@@ -2200,18 +2219,18 @@ def yt_start_refresh():
 
 
 def yt_subfeed_loop():
-    """Tour des chaînes toutes les minutes en arrière-plan (seules celles dont c'est le tour sont relues)"""
+    """Round of the channels every minute in the background (only those whose turn it is are read)"""
     while True:
         try:
             if read_json_file(YT_TOKEN_FILE).get("refresh_token") and yt_start_refresh():
                 yt_refresh_subfeed()
-        except Exception as e:   # le fil ne doit pas mourir
-            print(f"remote.py : abonnements YouTube : {e}", flush=True)
+        except Exception as e:   # the thread must not die
+            print(f"remote.py: YouTube subscriptions: {e}", flush=True)
         time.sleep(60)
 
 
 def yt_subscriptions():
-    """Rangée « Abonnements » pour /api/youtube : fil de yt_subfeed_loop ; le tout premier est attendu"""
+    """"Subscriptions" row for /api/youtube: feed from yt_subfeed_loop; the very first one is waited for"""
     status = yt_account_status()
     if not status["authorized"]:
         return {**status, "videos": None}
@@ -2219,7 +2238,7 @@ def yt_subscriptions():
         if yt_start_refresh():
             yt_refresh_subfeed()
         else:
-            for _ in range(150):   # relevé en cours dans un autre fil
+            for _ in range(150):   # poll in progress in another thread
                 if yt_subfeed["videos"] is not None:
                     break
                 time.sleep(0.2)
@@ -2240,23 +2259,23 @@ def yt_account_status():
     try:
         out["authorized"] = bool(yt_token())
     except (OSError, ValueError):
-        out["authorized"] = bool(read_json_file(YT_TOKEN_FILE).get("refresh_token"))   # Google injoignable : on y croit
+        out["authorized"] = bool(read_json_file(YT_TOKEN_FILE).get("refresh_token"))   # Google unreachable: assume it is
     subs = read_json_file(YT_SUBS_FILE)
     if out["authorized"] and subs.get("channels") is not None:
         out["channels"], out["synced"] = len(subs["channels"]), int(subs.get("at") or 0)
     out["units_today"] = yt_units["used"] if yt_units["day"] == yt_quota_day() else 0
-    out["tv"] = yt_tv("/status", timeout=3) or {"unavailable": True}   # progression (accès « appli TV »)
+    out["tv"] = yt_tv("/status", timeout=3) or {"unavailable": True}   # progress ("TV app" access)
     return out
 
 
 def set_yt_app(client_id, client_secret):
     client_id, client_secret = client_id.strip(), client_secret.strip()
     if not re.fullmatch(r"[\w-]+\.apps\.googleusercontent\.com", client_id):
-        raise ValueError("Ce n'est pas un ID client Google (il finit par .apps.googleusercontent.com).")
+        raise ValueError(tr("This is not a Google client ID (it ends with .apps.googleusercontent.com)."))
     if not client_secret:
-        raise ValueError("Il manque le code secret du client.")
+        raise ValueError(tr("The client secret is missing."))
     write_private_json(YT_APP_FILE, {"client_id": client_id, "client_secret": client_secret})
-    yt_logout()   # nouvelle appli : l'ancienne autorisation ne vaut plus
+    yt_logout()   # new app: the old authorization no longer applies
 
 
 def yt_logout():
@@ -2269,8 +2288,8 @@ def yt_logout():
     yt_reset_subs(everything=True)
 
 
-# État de la box (page, Réglages → Système) : températures, processeur, mémoire, disque, réseau, lecteur, services,
-# mises à jour. Le processeur et le débit réseau se mesurent sur un intervalle : relevés toutes les 5 s par un fil.
+# Box status (page, Settings → System): temperatures, processor, memory, disk, network, player, services,
+# updates. Processor and network throughput are measured over an interval: polled every 5 s by a thread.
 
 UPDATE_LOG = os.path.expanduser("~/.local/state/stream-box/update.log")
 health_rates = {"cpu": None, "rx": None, "tx": None}
@@ -2339,7 +2358,7 @@ def user_systemctl(*args):
 
 
 def last_update():
-    """Dernière mise à jour d'après update.log : date et lignes de ce passage"""
+    """Last update from update.log: date and lines of that run"""
     try:
         with open(UPDATE_LOG, encoding="utf-8", errors="replace") as f:
             text = f.read()[-20000:]
@@ -2350,7 +2369,7 @@ def last_update():
         return None
     date, _, body = runs[-1].partition("\n")
     lines = [l for l in body.splitlines() if l.strip()]
-    failed = any("échec" in l.lower() or "ÉCHEC" in l for l in lines)
+    failed = any("échec" in l.lower() or "ÉCHEC" in l or "failed" in l.lower() for l in lines)   # old French logs too
     return {"date": date.strip(), "lines": lines[-12:], "ok": not failed}
 
 
@@ -2371,9 +2390,9 @@ def health():
     services = {}
     for unit, label in (("stream-box-mqtt.service", "mqtt"), ("stream-box-pot.service", "youtube_tokens")):
         try:
-            services[label] = user_systemctl("is-active", unit) or "inconnu"
+            services[label] = user_systemctl("is-active", unit) or tr("unknown")
         except (OSError, subprocess.SubprocessError):
-            services[label] = "inconnu"
+            services[label] = tr("unknown")
     try:
         props = dict(l.split("=", 1) for l in user_systemctl(
             "show", "stream-box-update.service", "-p", "ActiveState").splitlines() if "=" in l)
@@ -2398,9 +2417,9 @@ def start_update():
     user_systemctl("start", "--no-block", "stream-box-update.service")
 
 
-# Compte Twitch
+# Twitch account
 
-account = {"login": None, "expired": False}   # dernier résultat connu, pour ne pas interroger Twitch à chaque requête
+account = {"login": None, "expired": False}   # last known result, so as not to query Twitch on every request
 account_lock = threading.Lock()
 
 
@@ -2434,14 +2453,14 @@ def write_token(token):
         return
     os.makedirs(os.path.dirname(TWITCH_CONFIG), exist_ok=True)
     tmp = TWITCH_CONFIG + ".tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)   # lisible par media seulement
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)   # readable by media only
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(TOKEN_PREFIX + token + "\n")
     os.replace(tmp, TWITCH_CONFIG)
 
 
 def validate(token):
-    """Pseudo Twitch du jeton, ou None si Twitch le refuse. OSError si Twitch est injoignable."""
+    """Twitch username of the token, or None if Twitch refuses it. OSError if Twitch is unreachable."""
     req = urllib.request.Request("https://id.twitch.tv/oauth2/validate", headers={"Authorization": f"OAuth {token}"})
     try:
         with urllib.request.urlopen(req, timeout=8) as r:
@@ -2449,21 +2468,21 @@ def validate(token):
     except urllib.error.HTTPError as e:
         if e.code == 401:
             return None
-        raise OSError(f"Twitch a répondu {e.code}") from e
+        raise OSError(f"Twitch replied {e.code}") from e
 
 
 def restart_stream():
-    # Relance streamlink sur la chaîne en cours, pour qu'il relise sa config
+    # Restart streamlink on the current channel, so it reads its config again
     try:
         channel = mpv(["get_property", "user-data/streambox/channel"])[0]
         if channel:
             mpv(["script-message", "streambox-channel", channel])
     except OSError:
-        pass   # mpv pas lancé : il lira la config au démarrage
+        pass   # mpv not running: it will read the config at startup
 
 
 def check_account():
-    """Revérifie le jeton enregistré. S'il ne marche plus, on le retire : un jeton refusé bloque la lecture."""
+    """Checks the saved token again. If it no longer works, remove it: a refused token blocks playback."""
     token = read_token()
     if not token:
         with account_lock:
@@ -2472,7 +2491,7 @@ def check_account():
     try:
         login = validate(token)
     except OSError:
-        return   # Twitch injoignable : on garde l'état connu
+        return   # Twitch unreachable: keep the known state
     with account_lock:
         account["login"] = login
         account["expired"] = login is None
@@ -2488,17 +2507,17 @@ def account_loop():
 
 
 def login(raw):
-    # Accepte la valeur du cookie telle quelle, entre guillemets ou précédée de « OAuth »
+    # Accepts the cookie value as is, in quotes or preceded by "OAuth"
     token = raw.strip().strip("\"'").strip()
     token = re.sub(r"^(OAuth|Bearer)\s+", "", token, flags=re.I)
     if not re.fullmatch(r"[A-Za-z0-9]{20,64}", token):
-        raise ValueError("Ça ne ressemble pas à un jeton Twitch : copie la valeur du cookie auth-token.")
+        raise ValueError(tr("This does not look like a Twitch token: copy the value of the auth-token cookie."))
     try:
         name = validate(token)
     except OSError as e:
-        raise ValueError(f"Impossible de joindre Twitch pour vérifier le jeton ({e}).") from e
+        raise ValueError(tr("Unable to reach Twitch to check the token ({error}).", error=e)) from e
     if not name:
-        raise ValueError("Twitch refuse ce jeton : il est expiré ou incomplet.")
+        raise ValueError(tr("Twitch refuses this token: it is expired or incomplete."))
     write_token(token)
     with account_lock:
         account.update(login=name, expired=False)
@@ -2514,9 +2533,9 @@ def logout():
 
 def action(name, body):
     if name == "channel":
-        # Streamer de la liste, ou chaîne suivie (onglet Suivis du menu de la TV)
+        # Streamer from the list, or followed channel (Following tab of the TV menu)
         if body.get("name") not in read_streamers() and body.get("name") not in follows_logins():
-            raise ValueError("streamer inconnu")
+            raise ValueError(tr("unknown streamer"))
         mpv(["script-message", "streambox-channel", body["name"]])
     elif name == "chat":
         mpv(["script-message", "streambox-toggle-chat"])
@@ -2541,21 +2560,21 @@ def action(name, body):
     elif name == "auto_switch":
         mpv(["script-message", "streambox-auto-switch", "yes" if body.get("enabled") else "no"])
     elif name == "backdrop":
-        # {"base", "overlay", "color"} (un ou plusieurs)
+        # {"base", "overlay", "color"} (one or more)
         set_backdrop(body)
     elif name == "flag":
-        # Réglages oui / non de stream-box.lua : mode nuit (son compressé), encart des sondages et prédictions
+        # Yes / no settings of stream-box.lua: night mode (compressed sound), polls and predictions panel
         if body.get("key") not in ("night", "events"):
-            raise ValueError("réglage inconnu")
+            raise ValueError(tr("unknown setting"))
         mpv(["script-message", "streambox-flag", body["key"], "yes" if body.get("enabled") else "no"])
     elif name == "pip":
-        # Second stream (appli Qt) : open <chaîne> [pip|split], close, swap, layout <pip|split>
+        # Second stream (Qt app): open <channel> [pip|split], close, swap, layout <pip|split>
         action = str(body.get("action", ""))
         if action not in ("open", "close", "swap", "layout"):
-            raise ValueError("action inconnue")
+            raise ValueError(tr("unknown action"))
         login = str(body.get("name", "")).strip().lower()
         if action == "open" and not re.fullmatch(r"[a-z0-9_]{2,25}", login):
-            raise ValueError("chaîne invalide")
+            raise ValueError(tr("invalid channel"))
         mpv(["script-message", "streambox-pip", action, login, str(body.get("layout", "pip"))])
     elif name == "vote":
         vote_poll(str(body.get("poll", "")), str(body.get("choice", "")))
@@ -2570,14 +2589,14 @@ def action(name, body):
     elif name == "update":
         start_update()
     elif name == "qr":
-        # Affichage du QR code de la télécommande sur la TV
+        # Display of the companion app QR code on the TV
         if body.get("mode") not in ("always", "timed", "never"):
-            raise ValueError("mode inconnu")
+            raise ValueError(tr("unknown mode"))
         mpv(["script-message", "streambox-qr", body["mode"]])
     elif name == "set":
-        # Bornes et enregistrement gérés par stream-box.lua (set_number)
+        # Bounds and saving handled by stream-box.lua (set_number)
         if body.get("key") not in ("chat_bg", "chat_size", "sub_size", "sub_bg"):
-            raise ValueError("réglage inconnu")
+            raise ValueError(tr("unknown setting"))
         mpv(["script-message", "streambox-set", body["key"], str(int(body.get("value", 0)))])
     elif name == "display":
         display.apply(str(body.get("mode", "auto")))
@@ -2606,29 +2625,30 @@ def action(name, body):
     elif name == "youtube_tv_login":
         d = yt_tv("/login", {}, timeout=15)
         if not d or d.get("error"):
-            raise ValueError(f"Connexion impossible : {(d or {}).get('error') or 'service cast arrêté'}")
+            raise ValueError(tr("Unable to connect: {error}",
+                                error=(d or {}).get("error") or tr("cast service stopped")))
     elif name == "youtube_tv_logout":
         yt_tv("/logout", {})
         yt_tv_cache.update(at=0.0, data={})
     elif name == "youtube_sync":
         yt_reset_subs()
     elif name == "poweroff":
-        # mode : « suspend » (Mettre en veille), « full » (Éteindre la box, menu de la TV) ; sinon le réglage
+        # mode: "suspend" (Sleep), "full" (Turn off the box, TV menu); otherwise the setting
         mode = str(body.get("mode") or "")
         power("suspend" if mode == "suspend" else "poweroff" if mode == "full" else power_action())
     elif name == "key":
-        # Télécommande virtuelle de la page : mêmes touches que la télécommande Bluetooth (stream-box.lua, KEYS)
-        # (la touche lecture de la télécommande Xiaomi change le coin du chat : ici, « Lecture » met en pause ou relance)
-        # Action envoyée telle quelle à stream-box.lua (comme les touches lues par input.py)
+        # Virtual remote of the page: same keys as the Bluetooth remote (stream-box.lua, KEYS)
+        # (the Xiaomi remote's play key changes the chat corner: here, "Play" pauses or resumes)
+        # Action sent as is to stream-box.lua (like the keys read by input.py)
         key = str(body.get("key", ""))
         if key == "playpause":
             mpv(["cycle", "pause"])
             return
         if key not in ("up", "down", "left", "right", "ok", "back", "home", "menu", "homescreen"):
-            raise ValueError("touche inconnue")
+            raise ValueError(tr("unknown key"))
         mpv(["script-message", "streambox-input", "VIRTUAL", key])
     elif name == "bluetooth":
-        # Menu Système de la TV : {"action": "scan"}, {"action": "pair" | "remove", "mac"}
+        # TV System menu: {"action": "scan"}, {"action": "pair" | "remove", "mac"}
         what, mac = str(body.get("action", "")), str(body.get("mac", "")).upper()
         if what == "scan":
             btsetup.scan()
@@ -2637,43 +2657,47 @@ def action(name, body):
         elif what == "remove":
             btsetup.remove(mac)
         else:
-            raise ValueError("action inconnue")
+            raise ValueError(tr("unknown action"))
+    elif name == "language":
+        # Interface language (companion app, TV): {"lang": "en" | "fr" …}; the TV reloads its texts right away
+        i18n.set_language(str(body.get("lang", "")))
+        mpv(["script-message", "streambox-language", i18n.language()])
     elif name == "setup":
-        # Page du téléphone : « Terminer » de la première configuration
+        # Phone page: "Finish" of the first setup
         finish_setup()
     elif name == "ssh":
         set_ssh(bool(body.get("enabled")))
     elif name == "dev":
         set_dev(bool(body.get("enabled")))
     elif name == "install":
-        # Menu Système de la TV : {"disk": "nvme0n1"} ; le disque est entièrement effacé
+        # TV System menu: {"disk": "nvme0n1"}; the disk is entirely erased
         installer.start(str(body.get("disk", ""))[:32])
     elif name == "backup":
-        # Menu Système de la TV : {"action": "save_usb", "path"}, {"action": "restore_usb", "path", "name"}
+        # TV System menu: {"action": "save_usb", "path"}, {"action": "restore_usb", "path", "name"}
         what, path = str(body.get("action", "")), str(body.get("path", ""))[:100]
         if what == "save_usb":
             backup.save_usb(path)
         elif what == "restore_usb":
             backup.restore_usb(path, str(body.get("name", ""))[:100])
         else:
-            raise ValueError("action inconnue")
+            raise ValueError(tr("unknown action"))
     elif name == "keymap":
-        # Touches de la télécommande : assistant d'apprentissage (stream-box.lua), ou retour aux touches par défaut
+        # Remote keys: learning wizard (stream-box.lua), or back to the default keys
         what = str(body.get("action", ""))
         if what not in ("wizard", "reset"):
-            raise ValueError("action inconnue")
+            raise ValueError(tr("unknown action"))
         mpv(["script-message", "streambox-keymap-" + what])
     elif name == "audio":
-        # Sortie son : « auto » ou l'identifiant d'une sortie de GET /api/audio
+        # Sound output: "auto" or the identifier of an output from GET /api/audio
         audio.set_choice(str(body.get("output", "auto"))[:200])
     elif name == "keyboard":
-        # Menu de la TV : clavier de recherche ouvert ou fermé (la page propose alors un champ de texte)
+        # TV menu: search keyboard open or closed (the page then offers a text field)
         keyboard.update(open=bool(body.get("open")), text=str(body.get("text", ""))[:80],
                         target=str(body.get("target", ""))[:20], at=time.time())
     elif name == "keyboard_input":
-        # Page : texte du champ, envoyé au clavier du menu ; submit lance la recherche
+        # Page: text of the field, sent to the menu's keyboard; submit starts the search
         if not keyboard.get("open"):
-            raise ValueError("Le clavier de la TV n'est plus ouvert.")
+            raise ValueError(tr("The TV keyboard is no longer open."))
         text = str(body.get("text", ""))[:80]
         keyboard["text"] = text
         mpv(["script-message", "streambox-tvmenu-text", text, "1" if body.get("submit") else "0"])
@@ -2682,20 +2706,20 @@ def action(name, body):
     elif name == "remote_url":
         set_remote_url(str(body.get("url", ""))[:300])
     elif name == "wifi":
-        # {"action": "connect", "ssid", "password"} : rejoindre un réseau ; {"action": "hotspot"} : mode configuration
+        # {"action": "connect", "ssid", "password"}: join a network; {"action": "hotspot"}: setup mode
         if body.get("action") == "hotspot":
             netsetup.manual_hotspot()
         else:
             netsetup.connect(str(body.get("ssid", ""))[:64], str(body.get("password", ""))[:128])
     elif name == "reboot":
-        # Autorisé à la session de la TV d'office, ailleurs par la règle polkit (login1.reboot*)
+        # Allowed by default for the TV session, elsewhere by the polkit rule (login1.reboot*)
         r = subprocess.run(["systemctl", "reboot"], capture_output=True, text=True, timeout=10)
         if r.returncode != 0:
-            raise ValueError(f"Redémarrage refusé : {r.stderr.strip() or r.returncode}")
+            raise ValueError(tr("Restart refused: {error}", error=r.stderr.strip() or r.returncode))
     elif name == "power_action":
         set_power_action(str(body.get("mode", "")))
     else:
-        raise ValueError("action inconnue")
+        raise ValueError(tr("unknown action"))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -2711,7 +2735,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             if self.path.startswith("/share?"):
-                # Cible de partage Android (share_target du manifeste) : on lance la vidéo puis on affiche la page
+                # Android share target (share_target of the manifest): start the video then show the page
                 query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
                 url = find_url(*(query.get(k, [""])[0] for k in ("url", "text", "title")))
                 try:
@@ -2724,7 +2748,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", "0")
                 self.end_headers()
             elif self.path.startswith("/subs?"):
-                # Appelé par stream-box.lua (sub-add) pour les sous-titres automatiques de YouTube
+                # Called by stream-box.lua (sub-add) for YouTube automatic subtitles
                 url = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("u", [""])[0]
                 self.send(200, fetch_auto_subs(url).encode(), "application/x-subrip; charset=utf-8")
             elif self.path.split("?")[0] in STATIC:
@@ -2738,7 +2762,7 @@ class Handler(BaseHTTPRequestHandler):
                 if image:
                     self.send(200, image, "image/jpeg")
                 else:
-                    self.send_response(204)   # rien à capturer (écran d'ambiance)
+                    self.send_response(204)   # nothing to capture (ambient screen)
                     self.send_header("Cache-Control", "no-store")
                     self.end_headers()
             elif self.path == "/api/history":
@@ -2773,7 +2797,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     self.send(200, jellyfin_home())
                 except (OSError, ValueError, KeyError) as e:
-                    self.send(503, {"error": f"Jellyfin injoignable : {e}"})
+                    self.send(503, {"error": tr("Jellyfin unreachable: {error}", error=e)})
             elif self.path.startswith("/api/jellyfin_search?") or self.path.startswith("/api/jellyfin_series?"):
                 q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
                 try:
@@ -2801,7 +2825,7 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/api/backup":
                 self.send(200, backup.status())
             elif self.path.startswith("/api/backup/download"):
-                # Page web : fichier de sauvegarde enregistré sur le téléphone
+                # Companion app: backup file saved on the phone
                 data = backup.create()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/gzip")
@@ -2822,7 +2846,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     self.send(200, events_for_page())
                 except (OSError, ValueError, KeyError) as e:
-                    self.send(503, {"error": f"Twitch injoignable : {e}"})
+                    self.send(503, {"error": tr("Twitch unreachable: {error}", error=e)})
             elif self.path == "/api/youtube_channels":
                 self.send(200, {"channels": yt_channels()})
             elif self.path == "/api/youtube_account":
@@ -2831,7 +2855,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     self.send(200, follows_status())
                 except (OSError, ValueError, KeyError) as e:
-                    self.send(503, {"error": f"Twitch injoignable : {e}"})
+                    self.send(503, {"error": tr("Twitch unreachable: {error}", error=e)})
             elif self.path.startswith("/api/qr?"):
                 text = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("text", [""])[0]
                 self.send(200, {"rows": qr_rows(text)})
@@ -2839,35 +2863,35 @@ class Handler(BaseHTTPRequestHandler):
                 with account_lock:
                     self.send(200, dict(account))
             else:
-                self.send(404, {"error": "introuvable"})
+                self.send(404, {"error": tr("not found")})
         except (OSError, ValueError) as e:
-            self.send(503, {"error": f"box injoignable : {e}"})
+            self.send(503, {"error": tr("box unreachable: {error}", error=e)})
 
     def do_POST(self):
         if not self.path.startswith("/api/"):
-            return self.send(404, {"error": "introuvable"})
+            return self.send(404, {"error": tr("not found")})
         try:
             length = int(self.headers.get("Content-Length") or 0)
-            if self.path == "/api/backup_restore":   # page web : fichier de sauvegarde brut, puis redémarrage
+            if self.path == "/api/backup_restore":   # companion app: raw backup file, then restart
                 if length > backup.MAX_SIZE:
-                    raise ValueError("Fichier trop gros pour une sauvegarde.")
+                    raise ValueError(tr("File too large for a backup."))
                 backup.restore_upload(self.rfile.read(length))
                 return self.send(200, {"ok": True})
             body = json.loads(self.rfile.read(length) or b"{}") if length else {}
             if self.path[len("/api/"):] in LOCAL_ONLY and self.client_address[0] != "127.0.0.1":
-                return self.send(403, {"error": "Réglage d'accès : seulement depuis le menu de la TV."})
+                return self.send(403, {"error": tr("Access setting: only from the TV menu.")})
             action(self.path[len("/api/"):], body)
             self.send(200, {"ok": True})
         except ValueError as e:
             self.send(400, {"error": str(e)})
         except OSError as e:
-            self.send(503, {"error": f"box injoignable : {e}"})
+            self.send(503, {"error": tr("box unreachable: {error}", error=e)})
 
     def log_message(self, *args):
-        pass   # pas de log par requête
+        pass   # no per-request log
 
 
-write_cookies(read_token())   # au démarrage : cookies alignés sur le jeton enregistré
+write_cookies(read_token())   # at startup: cookies aligned with the saved token
 threading.Thread(target=account_loop, daemon=True).start()
 threading.Thread(target=live_loop, daemon=True).start()
 threading.Thread(target=ambient_loop, daemon=True).start()

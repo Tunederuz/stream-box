@@ -1,103 +1,106 @@
 # Home Assistant
 
-La box s'annonce toute seule dans Home Assistant par la **découverte MQTT** (`mqtt_bridge.py`, service utilisateur
-`stream-box-mqtt`). Config sur la box : `~/.config/stream-box/mqtt.json` (`{"host": "<ip-broker>", "port": 1883,
-"user": "<utilisateur>"}`) et le mot de passe seul dans `~/.config/stream-box/mqtt-password` (mode 600).
+The box announces itself in Home Assistant through **MQTT discovery** (`mqtt_bridge.py`, user service
+`stream-box-mqtt`). Config on the box: `~/.config/stream-box/mqtt.json` (`{"host": "<broker-ip>", "port": 1883,
+"user": "<user>"}`) and the password alone in `~/.config/stream-box/mqtt-password` (mode 600).
 
-## Entités (appareil « Stream Box »)
+## Entities ("Stream Box" device)
 
-| Entité | Rôle |
+| Entity | Role |
 |---|---|
-| `select.stream_box_streamer` | Streamer en cours (options = la liste de la box) |
-| `switch.stream_box_chat`, `switch.stream_box_pause` | Chat affiché, pause |
-| `switch.stream_box_auto_switch`, `switch.stream_box_night`, `switch.stream_box_events` | Bascule automatique, mode nuit, sondages et prédictions à l'écran |
-| `select.stream_box_qr` | QR code de la télécommande sur la TV : Toujours, 30 secondes, Jamais |
-| `number.stream_box_volume` | Volume de mpv |
-| `button.stream_box_retour_au_stream`, `button.stream_box_revenir_au_direct`, `button.stream_box_eteindre` | Actions |
-| `text.stream_box_lire_un_lien` | Écrire une URL la lance sur la TV |
-| `sensor.stream_box_mode`, `sensor.stream_box_en_cours`, `sensor.stream_box_streamers_en_live`, `sensor.stream_box_retard_sur_le_direct` | État (les streamers en live en attributs) |
-| `binary_sensor.stream_box_lecture` | Quelque chose joue |
-| `select.stream_box_bouton_d_arret` | Action du bouton « Éteindre » (et de celui de la télécommande web) : Mise en veille ou Arrêt complet |
-| `binary_sensor.stream_box_allumee` | Box allumée : `on` / `off`, jamais `unavailable` (à utiliser dans les automatisations) |
-| `event.stream_box_lancement_de_live` | Un streamer de la liste lance son live (seulement quand la box est allumée) |
+| `select.stream_box_streamer` | Current streamer (options = the box's list) |
+| `switch.stream_box_chat`, `switch.stream_box_pause` | Chat shown, pause |
+| `switch.stream_box_auto_switch`, `switch.stream_box_night_mode`, `switch.stream_box_polls_and_predictions` | Auto switch, night mode, polls and predictions on screen |
+| `select.stream_box_companion_app_qr_code` | Companion app QR code on the TV: Always, 30 seconds, Never |
+| `number.stream_box_volume` | mpv volume |
+| `button.stream_box_back_to_the_stream`, `button.stream_box_home_screen`, `button.stream_box_go_back_to_live`, `button.stream_box_restart`, `button.stream_box_turn_off` | Actions (back to the stream, home screen, go back to live, restart, turn off) |
+| `text.stream_box_play_a_link` | Writing a URL plays it on the TV |
+| `sensor.stream_box_mode`, `sensor.stream_box_now_playing`, `sensor.stream_box_live_streamers`, `sensor.stream_box_delay_behind_live` | Status: mode, now playing, live streamers (as attributes), delay behind live |
+| `binary_sensor.stream_box_playing` | Something is playing |
+| `select.stream_box_power_button` | Action of the "Turn off" button (and of the companion app's): Sleep or Full shutdown |
+| `binary_sensor.stream_box_powered_on` | Box powered on: `on` / `off`, never `unavailable` (use it in automations) |
+| `event.stream_box_went_live` | A streamer from the list goes live (only when the box is on) |
 
-**Allumée** passe à `on` dès que le système a démarré (le pont MQTT est connecté) et à `off` tout de suite à l'extinction
-(arrêt du service), à la mise en veille, ou, en cas de coupure, quand le broker constate la déconnexion (message de dernière volonté). Les
-autres entités passent alors à `unavailable`. Au démarrage,
-elles ne redeviennent disponibles qu'une fois la box prête à recevoir des commandes : on peut donc attendre ce retour
-avant de choisir le streamer (une commande envoyée trop tôt est de toute façon gardée deux minutes).
+Entity names (and options) follow the interface language; Home Assistant derives the ids from the names when the
+entities are first discovered and keeps them. The ids above are those of a box in English at that time.
 
-## Allumer la box avec la TV
+**Powered on** (`binary_sensor.stream_box_powered_on`) switches to `on` as soon as the system has started (the MQTT bridge
+is connected) and to `off` right away on shutdown (service stopped), when it goes to sleep, or, after a power cut, when the broker
+notices the disconnection (last will message). The other entities then switch to `unavailable`. At boot, they only
+become available again once the box is ready to receive commands: you can therefore wait for that before choosing the
+streamer (a command sent too early is kept for two minutes anyway).
 
-Il faut le Wake-on-LAN (voir plus bas) et une TV que Home Assistant voit s'allumer (`media_player.<tv>`, ou un
-capteur de consommation) :
+## Turning the box on with the TV
+
+This needs Wake-on-LAN (see below) and a TV that Home Assistant sees turning on (`media_player.<tv>`, or a power
+consumption sensor):
 
 ```yaml
 automation:
-  - alias: "Stream Box : allumer avec la TV"
+  - alias: "Stream Box: turn on with the TV"
     triggers:
       - trigger: state
         entity_id: media_player.<tv>
         from: "off"
     conditions:
       - condition: state
-        entity_id: binary_sensor.stream_box_allumee
+        entity_id: binary_sensor.stream_box_powered_on
         state: "off"
     actions:
-      - action: button.press              # bouton créé par l'intégration Wake on LAN
+      - action: button.press              # button created by the Wake on LAN integration
         target:
           entity_id: button.wake_on_lan_<mac>
 
-  - alias: "Stream Box : éteindre avec la TV"   # facultatif
+  - alias: "Stream Box: turn off with the TV"   # optional
     triggers:
       - trigger: state
         entity_id: media_player.<tv>
         to: "off"
-        for: "00:05:00"                   # pas pour une TV éteinte une minute
+        for: "00:05:00"                   # not for a TV turned off for a minute
     actions:
-      # Box encore en train de démarrer (allumée avec la TV juste avant) : on attend qu'elle soit allumée.
-      # wait_template et pas wait_for_trigger : celui-ci attend un changement et ne voit rien si elle l'est déjà.
-      - wait_template: "{{ is_state('binary_sensor.stream_box_allumee', 'on') }}"
+      # Box still booting (turned on with the TV just before): wait until it is on.
+      # wait_template and not wait_for_trigger: the latter waits for a change and sees nothing if it is already on.
+      - wait_template: "{{ is_state('binary_sensor.stream_box_powered_on', 'on') }}"
         timeout: "00:05:00"
         continue_on_timeout: false
-      - action: button.press             # disponible dès que la box est allumée, même avant qu'elle soit prête
+      - action: button.press             # available as soon as the box is on, even before it is ready
         target:
-          entity_id: button.stream_box_eteindre
+          entity_id: button.stream_box_turn_off
 ```
 
-## Allumer la box et la TV quand un streamer lance son live
+## Turning the box and the TV on when a streamer goes live
 
-La box éteinte ne voit rien : c'est Home Assistant qui surveille Twitch (intégration **Twitch**, capteur
-`sensor.<streamer>` à `streaming` / `offline`). Il faut aussi le **Wake-on-LAN** sur la box, en Ethernet :
+A box that is off sees nothing: Home Assistant watches Twitch (**Twitch** integration, sensor `sensor.<streamer>` at
+`streaming` / `offline`). The box also needs **Wake-on-LAN**, over Ethernet:
 
-- BIOS : réveil par le réseau activé, veille profonde désactivée (sur un Dell : *Wake on LAN = LAN Only*,
-  *Deep Sleep Control = Disabled*) ;
-- Linux : `sudo bash install.sh --wol` (ou `nmcli connection modify "<connexion filaire>" 802-3-ethernet.wake-on-lan magic`).
+- BIOS: wake on network enabled, deep sleep disabled (on a Dell: *Wake on LAN = LAN Only*,
+  *Deep Sleep Control = Disabled*);
+- Linux: `sudo bash install.sh --wol` (or `nmcli connection modify "<wired connection>" 802-3-ethernet.wake-on-lan magic`).
 
-Dans Home Assistant, le plus simple est l'intégration **Wake on LAN** ajoutée par l'interface (MAC de la box et
-adresse de diffusion du réseau) : elle crée un bouton, qui sert aussi à allumer la box à la main. L'action
-`wake_on_lan.send_magic_packet` n'existe que si `wake_on_lan:` est déclaré dans `configuration.yaml` (redémarrage
-complet nécessaire).
+In Home Assistant, the simplest is the **Wake on LAN** integration added through the UI (box MAC and network broadcast
+address): it creates a button, which can also be used to turn the box on by hand. The
+`wake_on_lan.send_magic_packet` action only exists if `wake_on_lan:` is declared in `configuration.yaml` (full restart
+required).
 
 ```yaml
 automation:
-  - alias: "Stream Box : allumer quand <streamer> lance son live"
+  - alias: "Stream Box: turn on when <streamer> goes live"
     triggers:
       - trigger: state
         entity_id: sensor.<streamer>
         to: streaming
     conditions:
-      - condition: state            # box éteinte : on ne coupe pas ce qui est en train d'être regardé
-        entity_id: binary_sensor.stream_box_allumee
+      - condition: state            # box off: do not interrupt what is being watched
+        entity_id: binary_sensor.stream_box_powered_on
         state: "off"
     actions:
-      - action: button.press              # bouton créé par l'intégration Wake on LAN
+      - action: button.press              # button created by the Wake on LAN integration
         target:
           entity_id: button.wake_on_lan_<mac>
-      - action: media_player.turn_on        # facultatif : la TV, si elle s'allume depuis Home Assistant
+      - action: media_player.turn_on        # optional: the TV, if it can be turned on from Home Assistant
         target:
           entity_id: media_player.<tv>
-      - wait_for_trigger:                   # la box est en ligne : ses entités MQTT reviennent
+      - wait_for_trigger:                   # the box is online: its MQTT entities come back
           - trigger: state
             entity_id: select.stream_box_streamer
             from: unavailable

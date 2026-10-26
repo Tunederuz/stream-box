@@ -4,8 +4,8 @@ layout(location = 0) out vec4 fragColor;
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
-    float time;      // secondes
-    float ratio;     // largeur / hauteur
+    float time;      // seconds
+    float ratio;     // width / height
     vec4 c1;
     vec4 c2;
     vec4 c3;
@@ -36,7 +36,7 @@ float vignette(vec2 uv) {
     vec2 d = uv - 0.5;
     return clamp(1.0 - dot(d, d) * 1.3, 0.0, 1.0);
 }
-// Aurore boréale : rideaux de lumière qui ondulent, stries verticales
+// Northern lights: waving curtains of light, vertical streaks
 void main() {
     vec2 uv = qt_TexCoord0;
     float t = time * 0.06;
@@ -47,7 +47,7 @@ void main() {
         float y = 0.30 + 0.13 * fi + 0.07 * sin(x * 1.7 + t * (1.0 + fi * 0.35) + fi * 2.1)
                 + 0.04 * sin(x * 4.3 - t * 1.6 + fi * 1.3) + 0.03 * (noise(vec2(x * 2.0, t + fi)) - 0.5);
         float d = uv.y - y;
-        // Rideau : bord net en bas, s'estompe vers le haut
+        // Curtain: sharp edge at the bottom, fades towards the top
         float curtain = d < 0.0 ? exp(d * 7.0) : exp(-d * 55.0);
         float rays = 0.45 + 0.55 * noise(vec2(x * 38.0 + fi * 17.0, t * 1.5 + fi));
         vec3 c = i == 0 ? c1.rgb : (i == 1 ? c2.rgb : c3.rgb);

@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# Stream Box : sauvegarde des réglages et connexions, pour les remettre après une réinstallation :
+# Stream Box: backup of settings and connections, to put them back after a reinstallation:
 #
-#   sudo bash backup.sh [archive.tar.gz]      puis, sur la machine réinstallée :
+#   sudo bash backup.sh [archive.tar.gz]      then, on the reinstalled machine:
 #   sudo bash install.sh --restore archive.tar.gz …
 #
-# Contient la liste des streamers, les réglages de la box, le jeton Twitch, la connexion Jellyfin, la config MQTT et
-# météo, les réglages du son et les appairages Bluetooth. Ce sont des secrets : l'archive n'est lisible que par celui
-# qui lance le script, et n'a rien à faire dans le dépôt.
+# Contains the streamer list, the box settings, the Twitch token, the Jellyfin connection, the MQTT and weather config,
+# the sound settings and the Bluetooth pairings. These are secrets: the archive is only readable by whoever runs the
+# script, and has nothing to do in the repository.
 set -euo pipefail
 
 BOX_HOME=/home/media
 OUT=${1:-stream-box-backup-$(date +%F).tar.gz}
 
-[ "$(id -u)" -eq 0 ] || { echo "Erreur : à lancer avec sudo" >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || { echo "Error: run with sudo" >&2; exit 1; }
 
-# Chemins relatifs à /, gardés seulement s'ils existent (même liste que la restauration dans install.sh)
+# Paths relative to /, kept only if they exist (same list as the restore in install.sh)
 PATHS=(
   "${BOX_HOME#/}/stream-box/streamers.txt"
   "${BOX_HOME#/}/.local/state/stream-box"
@@ -28,11 +28,11 @@ present=()
 for p in "${PATHS[@]}"; do
   if [ -e "/$p" ]; then present+=("$p"); fi
 done
-[ ${#present[@]} -gt 0 ] || { echo "Rien à sauvegarder (box pas encore installée ?)" >&2; exit 1; }
+[ ${#present[@]} -gt 0 ] || { echo "Nothing to back up (box not installed yet?)" >&2; exit 1; }
 
 umask 077
 tar -czf "$OUT" -C / --exclude='*/fonts' --exclude='*/scripts' --exclude='*.lock*' --exclude='*.bak' "${present[@]}"
 [ -n "${SUDO_USER:-}" ] && chown "$SUDO_USER:" "$OUT"
 chmod 600 "$OUT"
-echo "Sauvegarde : $OUT ($(du -h "$OUT" | cut -f1)), avec :"
+echo "Backup: $OUT ($(du -h "$OUT" | cut -f1)), with:"
 printf '  /%s\n' "${present[@]}"

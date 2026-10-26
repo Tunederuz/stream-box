@@ -1,5 +1,5 @@
-// Texte sur une ligne : coupé par « … » au repos ; quand running et qu'il dépasse, il défile après une pause, et une
-// seconde copie arrive quand la première part.
+// Single-line text: cut with "…" at rest; when running and it overflows, it scrolls after a pause, and a
+// second copy comes in as the first one leaves.
 import QtQuick
 
 Item {
@@ -16,13 +16,13 @@ Item {
     implicitHeight: probe.implicitHeight
 
     Text {
-        id: probe   // mesure seulement
+        id: probe   // measuring only
         visible: false
         text: root.text
         font.pixelSize: root.pixelSize
         font.bold: root.bold
     }
-    Text {   // au repos (ou assez court) : coupé par « … »
+    Text {   // at rest (or short enough): cut with "…"
         visible: !root.scrolling
         width: root.width
         anchors.verticalCenter: parent.verticalCenter
@@ -32,7 +32,7 @@ Item {
         font.bold: root.bold
         elide: Text.ElideRight
     }
-    Row {   // défilement : deux copies l'une derrière l'autre
+    Row {   // scrolling: two copies one behind the other
         id: row
         visible: root.scrolling
         x: 0
@@ -60,7 +60,7 @@ Item {
             property: "x"
             from: 0
             to: -(probe.implicitWidth + root.gap)
-            duration: (probe.implicitWidth + root.gap) / 70 * 1000   // 70 px/s, comme l'ancien menu
+            duration: (probe.implicitWidth + root.gap) / 70 * 1000   // 70 px/s, like the old menu
         }
     }
 }

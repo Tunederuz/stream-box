@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
-"""Stream Box : résolution de la sortie vidéo, via wlr-randr (cage gère wlr-output-management).
+"""Stream Box: video output resolution, through wlr-randr (cage supports wlr-output-management).
 
-Seuls les modes à 60 Hz (ou presque) sont proposés : beaucoup de mini PC ne sortent le 4K qu'en 30 Hz en HDMI, ce qui
-fait sauter une image sur deux d'un stream à 60 i/s. « auto » = le mode préféré de la TV s'il est à 60 Hz, sinon la plus
-grande définition à 60 Hz.
+Only 60 Hz modes (or close) are offered: many mini PCs only output 4K at 30 Hz over HDMI, which drops every other
+frame of a 60 fps stream. "auto" = the TV's preferred mode if it is 60 Hz, otherwise the largest resolution at 60 Hz.
 
-Usage : display.py apply   applique le réglage enregistré (lancé par start.sh avant mpv)
-        display.py list    affiche les modes disponibles
-Aussi importé par remote.py.
+Usage: display.py apply   applies the saved setting (started by start.sh before mpv)
+       display.py list    shows the available modes
+Also imported by remote.py.
 """
 import json, os, subprocess, sys
+
+from i18n import tr
 
 STATE_FILE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"),
                           "stream-box", "display_mode")
 MIN_REFRESH = 59
-MIN_WIDTH, MIN_HEIGHT = 1280, 720   # les petits modes (640x480, 1024x768…) ne sont pas proposés dans la page
+MIN_WIDTH, MIN_HEIGHT = 1280, 720   # small modes (640x480, 1024x768…) are not offered in the companion app
 
 
 def wlr_env():
-    # remote.py peut avoir été relancé hors de la session (SSH) : on retrouve alors le socket de cage
+    # remote.py may have been restarted outside the session (SSH): find cage's socket then
     env = dict(os.environ)
     run = env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     if "WAYLAND_DISPLAY" not in env:
@@ -32,9 +33,9 @@ def wlr_randr(*args):
     try:
         r = subprocess.run(["wlr-randr", *args], capture_output=True, text=True, env=wlr_env(), timeout=15)
     except FileNotFoundError:
-        raise OSError("wlr-randr n'est pas installé (sudo pacman -S wlr-randr)") from None
+        raise OSError(tr("wlr-randr is not installed (sudo pacman -S wlr-randr)")) from None
     if r.returncode != 0:
-        raise OSError(r.stderr.strip() or f"wlr-randr a échoué ({r.returncode})")
+        raise OSError(r.stderr.strip() or tr("wlr-randr failed ({code})", code=r.returncode))
     return r.stdout
 
 
@@ -43,7 +44,7 @@ def label(mode):
 
 
 def output():
-    """Première sortie active : (nom, modes à 60 Hz sans doublons, du plus grand au plus petit)."""
+    """First active output: (name, 60 Hz modes without duplicates, largest to smallest)."""
     for out in json.loads(wlr_randr("--json")):
         if out.get("enabled"):
             modes = {}
@@ -52,7 +53,7 @@ def output():
             ordered = sorted(modes.values(), key=lambda m: (m["width"] * m["height"], m["refresh"]), reverse=True)
             fluid = [m for m in ordered if m["refresh"] >= MIN_REFRESH or m.get("current")]
             return out["name"], fluid or ordered
-    raise OSError("aucune sortie vidéo active")
+    raise OSError(tr("no active video output"))
 
 
 def choose(setting, modes):
@@ -83,11 +84,11 @@ def info():
 
 
 def apply(setting=None):
-    """Enregistre le réglage s'il est donné, puis l'applique. Renvoie le mode choisi."""
+    """Saves the setting if given, then applies it. Returns the chosen mode."""
     name, modes = output()
     if setting is not None:
         if setting != "auto" and setting not in {label(m) for m in modes}:
-            raise ValueError("mode inconnu")
+            raise ValueError(tr("unknown mode"))
         os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             f.write(setting + "\n")
@@ -106,4 +107,4 @@ if __name__ == "__main__":
         else:
             sys.exit(__doc__)
     except (OSError, ValueError) as e:
-        sys.exit(f"display.py : {e}")
+        sys.exit(f"display.py: {e}")

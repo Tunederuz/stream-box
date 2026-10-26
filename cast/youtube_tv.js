@@ -1,12 +1,12 @@
-// Stream Box : progression YouTube du compte, par l'accès « appli YouTube TV » (youtubei.js, non officiel ; l'API
-// officielle ne donne ni historique ni positions). Connexion par code sur google.com/device, jeton dans
-// ~/.config/stream-box/youtube-tv-token.json (600). Petit serveur local pour remote.py (127.0.0.1:8091) :
-//   GET  /status    connecté ?, code en attente
-//   POST /login     demande un code ;  POST /logout  oublie le jeton
-//   GET  /progress  { id: pourcentage vu } d'après l'historique et le fil des abonnements (gardé 10 min ; YouTube
-//                   ne met ce pourcentage à jour qu'avec beaucoup de retard : indicatif seulement)
-//   POST /report    { id, position, final } : position renvoyée à YouTube (le téléphone reprend là où la TV s'arrête),
-//                   comme le fait un lecteur : début de session (/player, cpn), puis segments regardés en temps réel
+// Stream Box: YouTube account progress, through the "YouTube TV app" access (youtubei.js, unofficial; the official
+// API gives neither history nor positions). Sign-in with a code on google.com/device, token in
+// ~/.config/stream-box/youtube-tv-token.json (600). Small local server for remote.py (127.0.0.1:8091):
+//   GET  /status    connected?, pending code
+//   POST /login     requests a code;  POST /logout  forgets the token
+//   GET  /progress  { id: percentage watched } from the history and the subscriptions feed (kept 10 min; YouTube
+//                   only updates this percentage with a long delay: indicative only)
+//   POST /report    { id, position, final }: position sent back to YouTube (the phone resumes where the TV stopped),
+//                   like a player does: session start (/player, cpn), then segments watched in real time
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -15,8 +15,8 @@ import { Innertube, Log, ClientType, Constants } from 'youtubei.js';
 const TOKEN = os.homedir() + '/.config/stream-box/youtube-tv-token.json';
 const PORT = 8091;
 const PROGRESS_CACHE = 600e3;
-const PAGES_HISTORY = 8, PAGES_SUBS = 2;   // ~15 vidéos par page
-const SESSION_IDLE = 120e3;   // plus de signalement depuis 2 min : nouvelle session de lecture
+const PAGES_HISTORY = 8, PAGES_SUBS = 2;   // ~15 videos per page
+const SESSION_IDLE = 120e3;   // no report for 2 min: new playback session
 const CLIENT = { client_name: Constants.CLIENTS.TV.NAME, client_version: Constants.CLIENTS.TV.VERSION };
 Log.setLevel(Log.Level.NONE);
 
@@ -41,7 +41,7 @@ async function client() {
 }
 
 async function resume() {
-  // Jeton déjà là (démarrage) : reconnexion sans code
+  // Token already there (startup): sign in again without a code
   const creds = readToken();
   if (!creds) return;
   try {
@@ -52,25 +52,25 @@ async function resume() {
   }
 }
 
-// Vidéos d'une réponse brute avec leur pourcentage vu (cartes du client TV : percentDurationWatched dans les
-// recouvrements de la miniature)
+// Videos of a raw response with their watched percentage (TV client cards: percentDurationWatched in the thumbnail
+// overlays)
 function scan(node, out, cur = null) {
   if (Array.isArray(node)) { for (const n of node) scan(n, out, cur); return; }
   if (!node || typeof node !== 'object') return;
-  const id = node.videoId || node.contentId;   // cartes du client TV : contentId
+  const id = node.videoId || node.contentId;   // TV client cards: contentId
   if (typeof id === 'string' && /^[\w-]{11}$/.test(id)) cur = id;
   if (cur && typeof node.percentDurationWatched === 'number' && !(cur in out)) out[cur] = node.percentDurationWatched;
   for (const v of Object.values(node)) scan(v, out, cur);
 }
 
-// Jeton de la page suivante d'une réponse brute
+// Next page token of a raw response
 const nextPage = (raw) => (raw.match(/"(?:nextContinuationData|continuationCommand|reloadContinuationData)":\{[^}]*?"(?:continuation|token)":"([^"]+)"/) || [])[1];
 
 async function getProgress() {
   if (!connected) return {};
   if (Date.now() - progress.at < PROGRESS_CACHE) return progress.data;
   const data = {};
-  // L'historique porte presque toutes les progressions (le fil des abonnements très peu) : plusieurs pages
+  // The history holds almost all the progress (the subscriptions feed very little): several pages
   for (const [browseId, pages] of [['FEhistory', PAGES_HISTORY], ['FEsubscriptions', PAGES_SUBS]]) {
     try {
       let r = await yt.actions.execute('/browse', { browseId, client: 'TV' });
@@ -81,8 +81,8 @@ async function getProgress() {
         r = await yt.actions.execute('/browse', { continuation: token, client: 'TV' });
       }
     } catch (e) {
-      console.error(`youtube_tv.js : ${browseId} :`, e.message);
-      if (!Object.keys(data).length) return progress.data;   // réessai au prochain appel
+      console.error(`youtube_tv.js: ${browseId}:`, e.message);
+      if (!Object.keys(data).length) return progress.data;   // retry at the next call
     }
   }
   progress = { at: Date.now(), data };
@@ -134,7 +134,7 @@ export function startYoutubeTv() {
       if (req.method === 'POST' && req.url === '/login') {
         error = null;
         const c = await client();
-        c.session.signIn().catch((e) => { error = e.message; pending = null; });   // se termine une fois le code tapé
+        c.session.signIn().catch((e) => { error = e.message; pending = null; });   // ends once the code is entered
         for (let i = 0; i < 50 && !pending && !error; i++) await new Promise((r) => setTimeout(r, 100));
         return send(200, { connected, pending, error });
       }
@@ -149,7 +149,7 @@ export function startYoutubeTv() {
         const b = await body(req);
         return send(200, { ok: await report(String(b.id || ''), Number(b.position), !!b.final) });
       }
-      send(404, { error: 'inconnu' });
+      send(404, { error: 'unknown' });
     } catch (e) {
       send(500, { error: e.message });
     }

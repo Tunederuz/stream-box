@@ -1,15 +1,17 @@
-"""Stream Box : télécommandes et manettes Bluetooth (bluetoothctl) : liste, recherche, appairage, dissociation.
+"""Stream Box: Bluetooth remotes and gamepads (bluetoothctl): list, scan, pairing, unpairing.
 
-Utilisé par remote.py (GET / POST /api/bluetooth), lui-même piloté par le menu Système de la TV. L'appairage se fait
-sans code (agent NoInputNoOutput : télécommandes, manettes, claviers « Just Works »), puis l'appareil est marqué de
-confiance (il se reconnecte seul) et connecté.
+Used by remote.py (GET / POST /api/bluetooth), itself driven by the TV System menu. Pairing is done without a code
+(NoInputNoOutput agent: "Just Works" remotes, gamepads, keyboards), then the device is marked as trusted (it reconnects
+on its own) and connected.
 """
 import os, re, subprocess, threading
 
+from i18n import tr
+
 SCAN_SECONDS = 20
-# Recherche ou appairage en cours : btagent.py (agent permanent) accepte alors aussi les appareils inconnus
+# Scan or pairing in progress: btagent.py (permanent agent) then also accepts unknown devices
 PAIRING_FLAG = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "stream-box-bt-pairing")
-state = {"scanning": False, "busy": None, "message": None, "found": {}}   # found : adresse -> nom vu à la recherche
+state = {"scanning": False, "busy": None, "message": None, "found": {}}   # found: address -> name seen during the scan
 lock = threading.Lock()
 
 
@@ -31,7 +33,7 @@ def info(mac):
 
 
 def is_input(icon):
-    return icon.startswith("input") or icon in ("", "unknown")   # télécommandes souvent sans icône
+    return icon.startswith("input") or icon in ("", "unknown")   # remotes often have no icon
 
 
 def status():
@@ -45,7 +47,7 @@ def status():
         if mac in known:
             continue
         i = info(mac)
-        # Appareils sans vrai nom (adresse affichée en guise de nom) : écartés, la liste en est pleine
+        # Devices without a real name (address shown as the name): left out, the list is full of them
         if re.fullmatch(r"[0-9A-F-]{17}", i["name"].replace(":", "-")):
             continue
         found.append({"mac": mac, "name": i["name"], "icon": i["icon"], "input": is_input(i["icon"])})
@@ -60,7 +62,7 @@ def open_pairing():
 
 
 def scan():
-    """Recherche de SCAN_SECONDS secondes en arrière-plan ; les appareils vus s'ajoutent à found"""
+    """SCAN_SECONDS-second scan in the background; the devices seen are added to found"""
     if state["scanning"]:
         return
     open_pairing()
@@ -81,27 +83,27 @@ def scan():
 
 def pair(mac):
     if not re.fullmatch(r"[0-9A-F:]{17}", mac):
-        raise ValueError("adresse invalide")
+        raise ValueError(tr("invalid address"))
 
     open_pairing()
 
     def run():
         with lock:
             name = info(mac)["name"]
-            state.update(busy=mac, message=f"Appairage de {name}…")
+            state.update(busy=mac, message=tr("Pairing {name}…", name=name))
             try:
                 ctl("--agent", "NoInputNoOutput", "--timeout", "40", "pair", mac, timeout=50)
-                # Seul l'état de BlueZ fait foi : bluetoothctl peut finir sans erreur sans que l'appairage ait abouti
-                # (télécommande sortie du mode appairage, récepteur USB qui se réinitialise en route…)
+                # Only BlueZ's state counts: bluetoothctl can end without error while pairing did not succeed
+                # (remote left pairing mode, USB receiver resetting along the way…)
                 if not info(mac)["paired"]:
-                    state["message"] = f"Appairage de {name} impossible : remets-le en mode appairage et réessaie."
+                    state["message"] = tr("Couldn't pair {name}: put it back in pairing mode and try again.", name=name)
                     return
                 ctl("trust", mac)
                 ctl("--timeout", "15", "connect", mac, timeout=25)
-                state["message"] = f"{name} appairé" + (" et connecté." if info(mac)["connected"] else
-                                                         " : appuie sur une de ses touches pour le connecter.")
+                state["message"] = (tr("{name} paired and connected.", name=name) if info(mac)["connected"] else
+                                    tr("{name} paired: press one of its buttons to connect it.", name=name))
             except (OSError, subprocess.SubprocessError):
-                state["message"] = f"Appairage de {name} impossible."
+                state["message"] = tr("Couldn't pair {name}.", name=name)
             finally:
                 state["busy"] = None
     threading.Thread(target=run, daemon=True).start()
@@ -109,7 +111,7 @@ def pair(mac):
 
 def remove(mac):
     if not re.fullmatch(r"[0-9A-F:]{17}", mac):
-        raise ValueError("adresse invalide")
+        raise ValueError(tr("invalid address"))
     name = info(mac)["name"]
     ctl("remove", mac)
-    state["message"] = f"{name} dissocié."
+    state["message"] = tr("{name} unpaired.", name=name)

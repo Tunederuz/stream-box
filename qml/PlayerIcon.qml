@@ -1,6 +1,6 @@
-// Icônes de la barre de lecture, dessinées (pas de caractères Unicode, dont le rendu dépend des polices : emoji…) :
-// back (−10 s), fwd (+10 s), play, pause, tracks (sous-titres), quality (qualité), chapter (chapitre suivant),
-// next (épisode suivant).
+// Playback bar icons, drawn (no Unicode characters, whose rendering depends on the fonts: emoji…):
+// back (−10 s), fwd (+10 s), play, pause, tracks (subtitles), quality, chapter (next chapter),
+// next (next episode).
 import QtQuick
 import QtQuick.Shapes
 
@@ -10,7 +10,7 @@ Item {
     property color color: "white"
     width: 34; height: 34
 
-    // Lecture : triangle
+    // Play: triangle
     Shape {
         visible: root.name === "play"
         anchors.fill: parent
@@ -23,7 +23,7 @@ Item {
             PathLine { x: 9; y: 4 }
         }
     }
-    // Pause : deux barres
+    // Pause: two bars
     Row {
         visible: root.name === "pause"
         anchors.centerIn: parent
@@ -31,8 +31,8 @@ Item {
         Rectangle { width: 8; height: 26; radius: 2; color: root.color }
         Rectangle { width: 8; height: 26; radius: 2; color: root.color }
     }
-    // −10 s / +10 s : cercle ouvert en haut (centre 17,17, rayon 12), pointe de flèche au bout, « 10 » au centre ;
-    // +10 s est le miroir de −10 s
+    // −10 s / +10 s: circle open at the top (center 17,17, radius 12), arrowhead at the end, "10" in the center;
+    // +10 s is the mirror of −10 s
     Item {
         visible: root.name === "back" || root.name === "fwd"
         anchors.fill: parent
@@ -44,7 +44,7 @@ Item {
                 fillColor: "transparent"; strokeColor: root.color; strokeWidth: 2.6; capStyle: ShapePath.RoundCap
                 PathAngleArc { centerX: 17; centerY: 17; radiusX: 12; radiusY: 12; startAngle: -62; sweepAngle: 296 }
             }
-            ShapePath {   // pointe au bout supérieur de l'arc, dans l'axe de l'arc (vers la gauche : recul)
+            ShapePath {   // arrowhead at the upper end of the arc, along the arc (towards the left: back)
                 fillColor: root.color; strokeColor: "transparent"
                 startX: 15.6; startY: 4.0
                 PathLine { x: 24.7; y: 1.9 }
@@ -58,7 +58,7 @@ Item {
         anchors.centerIn: parent; anchors.verticalCenterOffset: 1
         text: "10"; color: root.color; font.pixelSize: 11; font.bold: true
     }
-    // Sous-titres : cadre arrondi et deux lignes de texte
+    // Subtitles: rounded frame and two lines of text
     Rectangle {
         visible: root.name === "tracks"
         anchors.centerIn: parent
@@ -71,7 +71,7 @@ Item {
             Row { spacing: 3; Rectangle { width: 10; height: 3; color: root.color } Rectangle { width: 6; height: 3; color: root.color } }
         }
     }
-    // Qualité : « HD » dans un cadre arrondi
+    // Quality: "HD" in a rounded frame
     Rectangle {
         visible: root.name === "quality"
         anchors.centerIn: parent
@@ -79,7 +79,7 @@ Item {
         color: "transparent"; border.color: root.color; border.width: 3
         Text { anchors.centerIn: parent; text: "HD"; color: root.color; font.pixelSize: 12; font.bold: true }
     }
-    // Chapitre suivant / épisode suivant : triangle et barre (épisode : deux triangles)
+    // Next chapter / next episode: triangle and bar (episode: two triangles)
     Shape {
         visible: root.name === "chapter" || root.name === "next"
         anchors.fill: parent

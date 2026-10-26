@@ -1,4 +1,4 @@
-// Stream Box : extinction et mise en veille depuis la télécommande et Home Assistant (utilisateur media)
+// Stream Box: power off and sleep from the companion app and Home Assistant (media user)
 polkit.addRule(function (action, subject) {
     if (subject.user == "media" &&
         (action.id == "org.freedesktop.login1.power-off" ||

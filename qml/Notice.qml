@@ -1,5 +1,5 @@
-// Petit bandeau en haut au centre, quelques secondes (user-data/streambox/notice, envoyé par stream-box.lua) :
-// « Appareil connecté · Xiaomi RC »… Par-dessus tout, menu compris (on appaire souvent depuis le menu)
+// Small banner at the top center, for a few seconds (user-data/streambox/notice, sent by stream-box.lua):
+// "Device connected · Xiaomi RC"… On top of everything, menu included (pairing is often done from the menu)
 import QtQuick
 
 Item {
@@ -9,8 +9,8 @@ Item {
     property string text: ""
     property bool shown: false
     property real lastId: -1
-    // Toutes les données d'affichage partagent un seul signal (ui.py) : n est relu à chaque changement (bandeau d'infos…),
-    // on n'affiche que pour une nouvelle notification
+    // All display data share a single signal (ui.py): n is re-read on every change (info bar…),
+    // we only show for a new notification
     onNChanged: if (n.text && n.id !== lastId) { lastId = n.id; text = n.text; shown = true; hide.restart() }
     Timer { id: hide; interval: 4000; onTriggered: root.shown = false }
 

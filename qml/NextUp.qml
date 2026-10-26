@@ -1,12 +1,14 @@
-// Carte « Épisode suivant » (Jellyfin) dans les dernières secondes d'un épisode : miniature, titre, compte à rebours ;
-// OK lance tout de suite, Retour reste (stream-box.lua, user-data/streambox/next_card). En bas à droite, au-dessus de
-// la barre de lecture quand elle est affichée.
+// "Next episode" card (Jellyfin) in the last seconds of an episode: thumbnail, title, countdown;
+// OK starts right away, Back stays (stream-box.lua, user-data/streambox/next_card). Bottom right, above
+// the playback bar when it is shown.
 import QtQuick
 import QtQuick.Effects
+import "i18n.js" as I18n
 
 Item {
     id: root
     anchors.fill: parent
+    function tr(s, a) { return I18n.t(i18n.dict, s, a) }
     readonly property var n: { try { return JSON.parse(osd.nextCard || "{}") } catch (e) { return {} } }
     readonly property bool barShown: { try { return !!JSON.parse(osd.bar || "{}").bar } catch (e) { return false } }
     readonly property bool shown: n.seconds !== undefined
@@ -33,12 +35,12 @@ Item {
             x: 272; width: card.width - 292
             anchors.verticalCenter: parent.verticalCenter
             spacing: 6
-            Text { text: "ÉPISODE SUIVANT DANS " + (root.last.seconds || 0) + " S"; color: "#4a90e2"; font.pixelSize: 17; font.bold: true; font.letterSpacing: 2 }
+            Text { text: root.tr("NEXT EPISODE IN {n} S", { n: root.last.seconds || 0 }); color: "#4a90e2"; font.pixelSize: 17; font.bold: true; font.letterSpacing: 2 }
             Text { width: parent.width; elide: Text.ElideRight; text: root.last.title || ""; color: "white"; font.pixelSize: 26; font.bold: true }
             Text { width: parent.width; elide: Text.ElideRight; text: root.last.episode || ""; color: "#d0c8e0"; font.pixelSize: 21 }
-            Text { text: "OK : lancer  ·  Retour : rester"; color: "#a0ffffff"; font.pixelSize: 18 }
+            Text { text: root.tr("OK: play  ·  Back: stay"); color: "#a0ffffff"; font.pixelSize: 18 }
         }
-        Rectangle {   // temps restant
+        Rectangle {   // remaining time
             x: 20; y: card.height - 10; height: 4; radius: 2; color: "#1565c0"
             width: (card.width - 40) * Math.min(1, (root.last.seconds || 0) / 20)
             Behavior on width { NumberAnimation { duration: 1000 } }

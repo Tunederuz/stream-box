@@ -1,105 +1,109 @@
 # Stream Box
 
-Un mini PC Linux branché sur la TV qui affiche en plein écran le stream Twitch de tes streamers préférés, avec le
-chat en overlay, sans bureau ni clavier. On le pilote avec une télécommande Bluetooth, la souris ou une
-télécommande web installable sur téléphone (PWA).
+A Linux mini PC plugged into the TV that shows your favorite streamers' Twitch streams full screen, with the chat as
+an overlay, without a desktop or keyboard. It is controlled with a Bluetooth remote, the mouse, or a companion app
+that can be installed on a phone (PWA).
 
 
-## Ce qu'elle fait
+## What it does
 
-- **Stream Twitch en plein écran** (streamlink + mpv, faible latence, pubs sautées), démarrage sur le menu
-  (Retour y revient, rien en lecture derrière), bascule automatique vers un streamer en live si le sien est hors ligne, relance d'un direct
-  figé.
-- **Chat Twitch en overlay** (lecture anonyme), dans le coin de son choix, avec fond et taille réglables, et les
-  émotes Twitch, 7TV, BTTV et FFZ (animées) avec l'appli Qt.
-- **Retour en arrière dans le direct** (quelques minutes gardées en mémoire), pause en différé.
-- **Sondages et prédictions** affichés sur la TV, et vote ou pari en points de chaîne depuis le téléphone.
-- **Qui est en live** dans le menu et la télécommande, **notification** quand un streamer de la liste lance son live.
-- **Écran d'ambiance** quand rien ne joue : horloge, date, météo et prochains lives prévus (plannings Twitch).
-- **Sondages et prédictions** de la chaîne regardée affichés sur la TV, avec le temps restant et les résultats.
-- **QR code de la télécommande** sur l'écran d'ambiance et dans le menu, pour les invités : toujours, 30 secondes
-  ou jamais.
-- **Mode nuit** : son compressé (sons forts atténués, voix remontées) pour regarder à faible volume.
-- **Compte Twitch** facultatif : plus de pubs sur les chaînes où l'on est abonné, VOD réservées aux abonnés.
-- **Historique et reprise de lecture** : chaque vidéo reprend où on s'était arrêté ; les rediffusions Twitch sont
-  synchronisées avec le compte Twitch connecté.
-- **Sous-titres et piste audio** au choix pendant une vidéo (bouton ≡), y compris les sous-titres à part de Jellyfin.
-- **Mode vidéo** : liens YouTube et autres (yt-dlp, sous-titres), rediffusions et clips Twitch, partage Android
-  « Partager → Stream Box », et **Jellyfin** (« Lire sur… ») via jellyfin-mpv-shim.
-- **YouTube** : liste de chaînes avec leurs dernières vidéos et recherche de vidéos et de chaînes, sur la TV (clavier à l'écran)
-  et dans la télécommande, sans clé d'API. Barre de lecture rouge pour YouTube, bleue pour Jellyfin.
-- **Jellyfin** dans le menu de la TV et la télécommande : reprendre, prochains épisodes, ajouts récents, recherche,
-  épisodes d'une série ; la progression est renvoyée au serveur (aucune configuration en plus du « Lire sur… »).
-- **Grand menu sur la TV** façon Android TV (bouton Menu de la télécommande), animé et rendu par la puce graphique :
-  streamers en direct, chaînes suivies, rediffusions, YouTube, Jellyfin, historique, réglages, système.
-- **Deux streams à la fois** : en incrustation dans un coin ou côte à côte, avec inversion en un appui.
-- **Télécommande web** : aperçu de l'écran à la demande, streamers et ordre de la liste, chat, volume, barre de lecture, résolution de la TV,
-  extinction. **Télécommande Bluetooth** (testé avec celle du Xiaomi TV Stick) et menu à la souris.
-- **Session dédiée sans bureau** (compositeur cage) ; écran de connexion normal si un clavier est branché au démarrage.
-- **Home Assistant** par la découverte MQTT : contrôle depuis HA, et allumage automatique (Wake-on-LAN) quand un
-  streamer lance son live. Voir `docs/home-assistant.md`.
-- **Mises à jour hebdomadaires** de streamlink, yt-dlp et du reste, avec retour arrière si un test échoue. État de la box
-  (températures, réseau, lecture, services) et mise à jour à la demande dans la télécommande web.
+- **Full-screen Twitch streams** (streamlink + mpv, low latency, ads skipped), starts on the menu
+  (Back returns to it, nothing playing behind), automatic switch to a live streamer if yours is offline, restart of a
+  frozen live stream.
+- **Twitch chat overlay** (anonymous, read-only), in the corner of your choice, with adjustable background and size,
+  and Twitch, 7TV, BTTV and FFZ emotes (animated) with the Qt app.
+- **Rewind the live stream** (a few minutes kept in memory), pause with time shifting.
+- **Polls and predictions** shown on the TV, and voting or betting channel points from the phone.
+- **Who is live** in the menu and the companion app, **notification** when a streamer from the list goes live.
+- **Ambient screen** when nothing is playing: clock, date, weather and upcoming scheduled streams (Twitch schedules).
+- **Polls and predictions** of the channel being watched shown on the TV, with the time left and the results.
+- **Companion app QR code** on the ambient screen and in the menu, for guests: always, 30 seconds or never.
+- **Night mode**: compressed sound (loud sounds softened, voices boosted) for watching at low volume.
+- Optional **Twitch account**: no more ads on channels you are subscribed to, subscriber-only VODs.
+- **History and resume**: each video resumes where you left off; Twitch replays are synced with the connected Twitch
+  account.
+- **Subtitles and audio track** selectable during a video (≡ button), including Jellyfin's external subtitles.
+- **Video mode**: YouTube and other links (yt-dlp, subtitles), Twitch replays and clips, Android sharing
+  "Share → Stream Box", and **Jellyfin** ("Play on…") via jellyfin-mpv-shim.
+- **YouTube**: list of channels with their latest videos, and search for videos and channels, on the TV (on-screen
+  keyboard) and in the companion app, without an API key. Red playback bar for YouTube, blue for Jellyfin.
+- **Jellyfin** in the TV menu and the companion app: continue watching, next up, recently added, search, episodes of a
+  series; progress is reported back to the server (no configuration beyond "Play on…").
+- **Large TV menu** in the style of Android TV (Menu button of the remote), animated and rendered by the GPU:
+  live streamers, followed channels, replays, YouTube, Jellyfin, history, settings, system.
+- **Two streams at once**: picture-in-picture in a corner or side by side, swapped with one press.
+- **Companion app**: on-demand screen preview, streamers and list order, chat, volume, playback bar, TV resolution,
+  power off. **Bluetooth remote** (tested with the Xiaomi TV Stick one) and mouse menu.
+- **Dedicated session without a desktop** (cage compositor); normal login screen if a keyboard is plugged in at boot.
+- **Home Assistant** through MQTT discovery: control from HA, and automatic power on (Wake-on-LAN) when a streamer
+  goes live. See `docs/home-assistant.md`.
+- **Weekly updates** of streamlink, yt-dlp and the rest, with rollback if a test fails. Box status (temperatures,
+  network, playback, services) and on-demand update in the companion app.
+- **English and French** interface on the TV and in the companion app: English by default, chosen first in the
+  companion app's first-setup screen, then in TV Settings → Language → "Interface language" or companion app
+  Settings → "Language".
 
-## Comment c'est construit
+## How it is built
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `start.sh` | Lancé par la session : chat, télécommande web, résolution, puis boucle sur un mpv permanent |
-| `stream-box.lua` | Script mpv : streamlink, menu, modes Twitch / vidéo, différé, barre de lecture, touches |
-| `tv_menu.lua` | Grand menu de la TV façon Android TV (bouton Menu de la télécommande) |
-| `ui.py`, `ui.qml`, `player.sh` | Appli Qt Quick qui embarque mpv (libmpv), et boucle du lecteur (Qt ou mpv seul) |
-| `qml/` | Grand menu de la TV en QML (animé, rendu par la puce graphique) |
-| `chat_overlay.py` | Chat Twitch (IRC anonyme) affiché dans mpv par son IPC |
-| `chat_qt.py` | Chat avec émotes pour l'appli Qt (affiché par `qml/ChatOverlay.qml`) |
-| `remote.py` + `remote.html` | Télécommande web (bibliothèque standard Python) et sa page |
-| `display.py` | Résolution de la sortie vidéo (wlr-randr), jamais en dessous de 60 Hz |
-| `mqtt_bridge.py` | Pont MQTT vers Home Assistant (découverte automatique) |
-| `update.sh`, `systemd/` | Mises à jour, jetons anti-robot YouTube, pont MQTT |
-| `install.sh`, `backup.sh`, `backup.py`, `boot-mode.py` | Installation, mise à jour, sauvegarde (ligne de commande, menu et page) ; mode selon le clavier au démarrage |
-| `audio.py` | Sortie son sur l'HDMI de la TV au démarrage |
-| `CLAUDE.md` | Documentation technique détaillée (décisions, pièges, comment tester) |
+| `start.sh` | Launched by the session: chat, companion app, resolution, then loop on a permanent mpv |
+| `stream-box.lua` | mpv script: streamlink, menu, Twitch / video modes, time shifting, playback bar, keys |
+| `tv_menu.lua` | Large TV menu in the style of Android TV (Menu button of the remote) |
+| `ui.py`, `ui.qml`, `player.sh` | Qt Quick app embedding mpv (libmpv), and player loop (Qt or mpv alone) |
+| `qml/` | Large TV menu in QML (animated, rendered by the GPU) |
+| `chat_overlay.py` | Twitch chat (anonymous IRC) shown in mpv through its IPC |
+| `chat_qt.py` | Chat with emotes for the Qt app (shown by `qml/ChatOverlay.qml`) |
+| `remote.py` + `remote.html` | Companion app server (Python standard library) and its page |
+| `i18n.py`, `qml/i18n.js`, `locales/` | Interface translations (English by default, French available) |
+| `display.py` | Video output resolution (wlr-randr), never below 60 Hz |
+| `mqtt_bridge.py` | MQTT bridge to Home Assistant (automatic discovery) |
+| `update.sh`, `systemd/` | Updates, YouTube anti-bot tokens, MQTT bridge |
+| `install.sh`, `backup.sh`, `backup.py`, `boot-mode.py` | Installation, update, backup (command line, menu and page); mode depending on the keyboard at boot |
+| `audio.py` | Sound output on the TV's HDMI at boot |
+| `CLAUDE.md` | Detailed technical documentation (decisions, pitfalls, how to test) |
 
-## Installation (résumé)
+## Installation (summary)
 
-Pensé pour une distribution Arch (testé sur CachyOS) avec Plasma Login comme gestionnaire de connexion. SDDM, dont
-Plasma Login dérive, est pris en charge par le script mais n'a pas encore été essayé.
+Designed for an Arch distribution (tested on CachyOS) with Plasma Login as the display manager. SDDM, from which
+Plasma Login is derived, is supported by the script but has not been tried yet.
 
-Depuis un compte d'admin, dans une copie du dépôt :
+From an admin account, in a copy of the repository:
 
 ```
 git clone https://github.com/Tunederuz/stream-box.git && cd stream-box
-sudo bash install.sh --city "Ta ville" --streamers chaine1,chaine2
+sudo bash install.sh --city "Your city" --streamers channel1,channel2
 ```
 
-Le script installe les paquets, crée l'utilisateur `media` qui fait tourner la box, y copie le dépôt, installe
-streamlink, yt-dlp, jellyfin-mpv-shim et le reste dans des venvs, active les services et met en place la session
-sans bureau. Il peut être relancé pour mettre à jour une installation (`git pull`, puis `sudo bash install.sh`).
-Les options sont facultatives (`sudo bash install.sh --help`) :
+The script installs the packages, creates the `media` user that runs the box, copies the repository there, installs
+streamlink, yt-dlp, jellyfin-mpv-shim and the rest in venvs, enables the services and sets up the desktop-less
+session. It can be run again to update an installation (`git pull`, then `sudo bash install.sh`).
+The options are optional (`sudo bash install.sh --help`):
 
-| Option | Rôle |
+| Option | Role |
 |---|---|
-| `--city VILLE` | Météo de l'écran d'ambiance |
-| `--remote-url URL` | Adresse de la télécommande web montrée en QR code (sinon `http://<IP de la box>:8080`) |
-| `--streamers a,b,c` | Liste de départ (elle se remplit aussi depuis la télécommande web) |
-| `--allow-from IP` | Ouvre le port 8080 à cette adresse (reverse proxy HTTPS) si le pare-feu ufw est actif |
-| `--static-ip IP/PRÉFIXE --gateway IP [--dns IP]` | IP fixe sur la connexion Ethernet |
-| `--wol` | Wake-on-LAN sur la connexion Ethernet (à activer aussi dans le BIOS) |
-| `--restore ARCHIVE` | Remet les réglages et connexions sauvegardés par `backup.sh` |
+| `--city CITY` | Weather on the ambient screen |
+| `--remote-url URL` | Companion app address shown as a QR code (otherwise `http://<box IP>:8080`) |
+| `--streamers a,b,c` | Initial list (it can also be filled from the companion app) |
+| `--allow-from IP` | Opens port 8080 to this address (HTTPS reverse proxy) if the ufw firewall is active |
+| `--static-ip IP/PREFIX --gateway IP [--dns IP]` | Static IP on the Ethernet connection |
+| `--wol` | Wake-on-LAN on the Ethernet connection (must also be enabled in the BIOS) |
+| `--restore ARCHIVE` | Restores the settings and connections saved by `backup.sh` |
 
-À la fin, il affiche les réglages restants (compte Twitch, HTTPS, Jellyfin, Home Assistant).
+At the end, it lists the remaining settings (Twitch account, HTTPS, Jellyfin, Home Assistant).
 
-### Sauvegarde et réinstallation
+### Backup and reinstallation
 
-Le plus simple : menu Système de la TV → « Sauvegarde et restauration » (sur une clé USB), ou Réglages → Sauvegarde
-dans la télécommande web (fichier téléchargé sur le téléphone). Restaurer remet tout, puis la box redémarre.
+The simplest way: TV System menu → "Backup and restore" (on a USB stick), or Settings → Backup in the companion app
+(file downloaded to the phone). Restoring puts everything back, then the box restarts.
 
-En ligne de commande, `sudo bash backup.sh` crée une archive de tout ce qui est propre à la box : liste des streamers, réglages, jeton
-Twitch, connexion Jellyfin, configuration MQTT et météo, son, appairages Bluetooth. Elle contient des secrets : elle
-n'est lisible que par celui qui la crée, et n'a rien à faire dans le dépôt. Après une réinstallation du système :
+On the command line, `sudo bash backup.sh` creates an archive of everything specific to the box: streamer list,
+settings, Twitch token, Jellyfin connection, MQTT and weather configuration, sound, Bluetooth pairings. It contains
+secrets: it is readable only by whoever creates it, and does not belong in the repository. After reinstalling the
+system:
 
 ```
-sudo bash install.sh --restore stream-box-backup-AAAA-MM-JJ.tar.gz --static-ip … --gateway … --wol --allow-from …
+sudo bash install.sh --restore stream-box-backup-YYYY-MM-DD.tar.gz --static-ip … --gateway … --wol --allow-from …
 ```
 
-Les détails, et les raisons de chaque choix, sont dans `CLAUDE.md`.
+The details, and the reasons behind each choice, are in `CLAUDE.md`.

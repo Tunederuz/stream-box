@@ -1,5 +1,5 @@
 [Unit]
-Description=Stream Box : mise à jour de streamlink, yt-dlp et jellyfin-mpv-shim
+Description=Stream Box: update of streamlink, yt-dlp and jellyfin-mpv-shim
 
 [Service]
 Type=oneshot

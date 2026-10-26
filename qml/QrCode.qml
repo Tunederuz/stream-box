@@ -1,4 +1,4 @@
-// QR code dessiné à partir de ses lignes de « 0 » et « 1 » (remote.py, segno), sur fond clair arrondi
+// QR code drawn from its rows of "0" and "1" (remote.py, segno), on a rounded light background
 import QtQuick
 
 Rectangle {

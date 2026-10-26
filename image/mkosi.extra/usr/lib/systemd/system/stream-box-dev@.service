@@ -1,6 +1,6 @@
-# Stream Box : mode développeur (sudo pour media, SSH) activé ou coupé depuis le menu Système ; %i : enable | disable
+# Stream Box: developer mode (sudo for media, SSH) enabled or disabled from the System menu; %i: enable | disable
 [Unit]
-Description=Stream Box : mode développeur (%i)
+Description=Stream Box: developer mode (%i)
 
 [Service]
 Type=oneshot

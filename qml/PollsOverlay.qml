@@ -1,12 +1,14 @@
-// Encart des sondages et prédictions (appli Qt), en haut au centre, loin des coins du chat : temps restant, part de
-// chaque choix (barres animées), gagnant, et le vote ou le pari fait depuis la box.
+// Polls and predictions box (Qt app), top center, away from the chat corners: remaining time, share of
+// each choice (animated bars), winner, and the vote or bet made from the box.
 import QtQuick
 import QtQuick.Effects
 import "fmt.js" as Fmt
+import "i18n.js" as I18n
 
 Item {
     id: root
     anchors.fill: parent
+    function tr(s, a) { return I18n.t(i18n.dict, s, a) }
     readonly property var e: { try { return JSON.parse(osd.polls || "{}") } catch (x) { return {} } }
     readonly property var poll: e.poll || null
     readonly property var pred: e.prediction || null
@@ -33,12 +35,13 @@ Item {
                 height: 96 + rows.length * 50
                 RectangularShadow { anchors.fill: parent; radius: 24; blur: 40; color: "black"; opacity: 0.5 }
                 Rectangle { anchors.fill: parent; radius: 24; color: "#e6150f1e"; border.color: "#2affffff"; border.width: 1 }
-                Text { x: 24; y: 18; text: isPoll ? "SONDAGE" : "PRÉDICTION"; color: "#b67bff"; font.pixelSize: 17; font.bold: true; font.letterSpacing: 2 }
+                Text { x: 24; y: 18; text: isPoll ? root.tr("POLL") : root.tr("PREDICTION"); color: "#b67bff"; font.pixelSize: 17; font.bold: true; font.letterSpacing: 2 }
                 Text {
                     anchors.right: parent.right; anchors.rightMargin: 24; y: 18
-                    text: isPoll ? (ev.ended ? "Résultats" : remaining > 0 ? Fmt.clock(remaining) : "Dépouillement…")
-                        : ev.status === "RESOLVED" ? "Résultat" : ev.status === "CANCELED" ? "Annulée"
-                        : ev.status === "ACTIVE" && remaining > 0 ? "Paris : " + Fmt.clock(remaining) : "Paris fermés"
+                    text: isPoll ? (ev.ended ? root.tr("Results") : remaining > 0 ? Fmt.clock(remaining) : root.tr("Counting…"))
+                        : ev.status === "RESOLVED" ? root.tr("Result") : ev.status === "CANCELED" ? root.tr("Canceled")
+                        : ev.status === "ACTIVE" && remaining > 0 ? root.tr("Bets: {time}", { time: Fmt.clock(remaining) })
+                        : root.tr("Bets closed")
                     color: "#b4afc2"; font.pixelSize: 17
                 }
                 Text {
@@ -70,8 +73,10 @@ Item {
                         }
                         Text {
                             anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter
-                            text: Math.round(share * 100) + " %  ·  " + (isPoll ? Fmt.big(r.votes) : Fmt.big(r.points) + " pts")
-                                  + (mine && !isPoll && ev.mine.points ? "  ·  ton pari " + Fmt.big(ev.mine.points) : "")
+                            text: root.tr("{n}%", { n: Math.round(share * 100) }) + "  ·  "
+                                  + (isPoll ? Fmt.big(r.votes, root.tr) : root.tr("{n} pts", { n: Fmt.big(r.points, root.tr) }))
+                                  + (mine && !isPoll && ev.mine.points
+                                     ? "  ·  " + root.tr("your bet {n}", { n: Fmt.big(ev.mine.points, root.tr) }) : "")
                             color: "white"; font.pixelSize: 18
                         }
                     }

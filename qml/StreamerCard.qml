@@ -1,16 +1,18 @@
-// Carte de streamer (En direct, Suivis) : photo (anneau rouge en live), nom, spectateurs, jeu. Grossit au focus.
+// Streamer card (Live, Followed): photo (red ring when live), name, viewers, game. Grows when focused.
 import QtQuick
 import "fmt.js" as Fmt
+import "i18n.js" as I18n
 
 Item {
     id: root
+    function tr(s, a) { return I18n.t(i18n.dict, s, a) }
     property string name: ""
     property string avatar: ""
     property bool live: false
     property int viewers: 0
     property string game: ""
     property bool focused: false
-    property bool current: false   // streamer regardé
+    property bool current: false   // streamer being watched
     width: 330
     height: 150
     z: focused ? 2 : 1
@@ -25,7 +27,7 @@ Item {
         opacity: root.focused || root.current ? 1 : 0.85
         Behavior on color { ColorAnimation { duration: 160 } }
     }
-    Rectangle {   // anneau rouge des lives
+    Rectangle {   // red ring of lives
         visible: root.live
         x: 17; y: 25; width: 100; height: 100
         radius: 50
@@ -58,7 +60,7 @@ Item {
             running: root.focused
         }
         Text {
-            text: root.live ? "● " + Fmt.viewers(root.viewers) : "Hors ligne"
+            text: root.live ? "● " + Fmt.viewers(root.viewers, root.tr) : root.tr("Offline")
             color: root.live ? "#ff4f5e" : "#8a85a0"
             font.pixelSize: 21
             font.bold: root.live

@@ -1,11 +1,13 @@
-// Assistant « Configurer les touches » (stream-box.lua, user-data/streambox/learn) : action à apprendre, compte à
-// rebours (sans touche, l'action garde la sienne), touche reçue, puis « Touches enregistrées »
+// "Set up the keys" wizard (stream-box.lua, user-data/streambox/learn): action to learn, countdown (with no key,
+// the action keeps its own), key received, then "Keys saved"
 import QtQuick
 import QtQuick.Effects
+import "i18n.js" as I18n
 
 Item {
     id: root
     anchors.fill: parent
+    function tr(s, a) { return I18n.t(i18n.dict, s, a) }
     readonly property var l: { try { return JSON.parse(osd.learn || "{}") } catch (e) { return {} } }
     readonly property bool shown: !!l.phase
     property var last: ({})
@@ -26,14 +28,14 @@ Item {
             spacing: 22
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.last.phase === "done" || root.last.phase === "cancel" ? "TOUCHES DE LA TÉLÉCOMMANDE"
-                      : "TOUCHES DE LA TÉLÉCOMMANDE · " + (root.last.step || 0) + " / " + (root.last.total || 0)
+                text: root.last.phase === "done" || root.last.phase === "cancel" ? root.tr("REMOTE CONTROL KEYS")
+                      : root.tr("REMOTE CONTROL KEYS · {step} / {total}", { step: root.last.step || 0, total: root.last.total || 0 })
                 color: "#a3a3ad"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 3
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.last.phase === "done" ? "Touches enregistrées" : root.last.phase === "cancel" ? "Assistant annulé"
-                      : "Appuie sur la touche pour"
+                text: root.last.phase === "done" ? root.tr("Keys saved") : root.last.phase === "cancel" ? root.tr("Wizard canceled")
+                      : root.tr("Press the key for")
                 color: "white"; font.pixelSize: root.last.phase === "done" || root.last.phase === "cancel" ? 46 : 30
             }
             Text {
@@ -45,13 +47,13 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.last.phase === "ok" ? "✓ " + root.last.key
-                      : root.last.phase === "taken" ? root.last.key + " : déjà prise pour une autre action"
-                      : root.last.phase === "done" ? "" : root.last.phase === "cancel" ? "Touches inchangées"
-                      : "Sans touche, elle garde l'actuelle  ·  Retour sur le téléphone pour quitter"
+                      : root.last.phase === "taken" ? root.tr("{key}: already used for another action", { key: root.last.key })
+                      : root.last.phase === "done" ? "" : root.last.phase === "cancel" ? root.tr("Keys unchanged")
+                      : root.tr("With no key, it keeps the current one  ·  Back on the phone to quit")
                 color: root.last.phase === "ok" ? "#7ee0a0" : root.last.phase === "taken" ? "#ffb44a" : "#8a8a95"
                 font.pixelSize: 24
             }
-            Rectangle {   // temps restant
+            Rectangle {   // remaining time
                 visible: root.last.phase === "wait" || root.last.phase === "taken"
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: 600; height: 6; radius: 3; color: "#33ffffff"

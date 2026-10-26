@@ -1,14 +1,16 @@
-// Bandeau du bas (appli Qt), affiché quand stream-box.lua le décide (OK pendant un direct, ←/→ ou pause en vidéo) :
-// direct (photo, titre, jeu, spectateurs, durée du live, mémoire du différé et « EN DIRECT » ou le retard) ou barre de
-// lecture d'une vidéo (titre, chaîne ou série, chapitre, position, partie chargée, repères de chapitres, aperçu YouTube
-// au-dessus du curseur, saut en cours « +30 s », temps restant et heure de fin, rangée de boutons). Monte en glissant.
+// Bottom bar (Qt app), shown when stream-box.lua decides so (OK during a live, ←/→ or pause in a video):
+// live (photo, title, game, viewers, live duration, time-shift buffer and "LIVE" or the delay) or playback bar of a
+// video (title, channel or series, chapter, position, buffered part, chapter marks, YouTube preview above the
+// cursor, seek in progress "+30 s", remaining time and end time, row of buttons). Slides up.
 import QtQuick
 import QtQuick.Effects
 import "fmt.js" as Fmt
+import "i18n.js" as I18n
 
 Item {
     id: root
     anchors.fill: parent
+    function tr(s, a) { return I18n.t(i18n.dict, s, a) }
     readonly property var b: { try { return JSON.parse(osd.bar || "{}") } catch (e) { return {} } }
     readonly property var pb: b.playback || {}
     readonly property bool live: b.mode === "twitch"
@@ -16,29 +18,29 @@ Item {
     readonly property var board: { try { return JSON.parse(osd.storyboard || "{}") } catch (e) { return {} } }
     readonly property bool shown: !!b.bar && (b.mode === "twitch" || b.mode === "media")
     property var avatars: ({})
-    // Barre : en direct, la mémoire du différé (son bout droit est le direct) ; en vidéo, la durée
+    // Bar: in a live, the time-shift buffer (its right end is live); in a video, the duration
     readonly property real span: live ? (pb.window ? pb.window[1] - pb.window[0] : 0) : (pb.duration || 0)
     readonly property real at: live ? (pb.window ? (pb.pos || 0) - pb.window[0] : 0) : (pb.pos || 0)
     readonly property real delay: live && pb.window ? pb.window[1] - (pb.pos || 0) : 0
-    // Couleur de la barre selon la source : rouge YouTube, bleu Jellyfin (lien de son serveur : /Videos/…), sinon le
-    // violet de Twitch
+    // Bar color depending on the source: YouTube red, Jellyfin blue (link to its server: /Videos/…), otherwise
+    // Twitch purple
     readonly property string source: live ? "twitch" : /youtube\.com|youtu\.be|googlevideo/.test(pb.path || "") ? "youtube"
         : /\/Videos\/|\/videos\/[0-9a-f]{32}|api_key=|MediaSourceId=/i.test(pb.path || "") ? "jellyfin" : "other"
     readonly property var colors: source === "youtube" ? ["#ff0033", "#ff4e45"]
         : source === "jellyfin" ? ["#1565c0", "#4a90e2"] : ["#8a3ffc", "#b062ff"]
-    // Vidéo : infos (remote.py : chaîne, série, épisode…), chapitres (mpv), boutons et saut (stream-box.lua)
+    // Video: info (remote.py: channel, series, episode…), chapters (mpv), buttons and seek (stream-box.lua)
     readonly property var meta: { try { return JSON.parse(osd.meta || "{}") } catch (e) { return {} } }
     readonly property var ctl: { try { return JSON.parse(osd.controls || "{}") } catch (e) { return {} } }
     readonly property var fx: { try { return JSON.parse(osd.seekfx || "{}") } catch (e) { return {} } }
     readonly property var chapters: pb.chapters || []
     readonly property string chapterTitle: {
         var c = chapters[pb.chapter]
-        return c && chapters.length > 1 ? "Chapitre " + (pb.chapter + 1) + (c.title && !/^Chapter \d+$/i.test(c.title) ? " · " + c.title : "") : ""
+        return c && chapters.length > 1 ? tr("Chapter {n}", { n: pb.chapter + 1 }) + (c.title && !/^Chapter \d+$/i.test(c.title) ? " · " + c.title : "") : ""
     }
-    readonly property string details: (meta.source === "youtube" ? [meta.channel, meta.date, meta.views ? Fmt.big(meta.views) + " vues" : ""]
-        : meta.source === "jellyfin" ? [meta.year, meta.rating ? "★ " + Number(meta.rating).toFixed(1).replace(".", ",") : ""]   // série et épisode : déjà dans le titre
+    readonly property string details: (meta.source === "youtube" ? [meta.channel, meta.date, meta.views ? tr("{n} views", { n: Fmt.big(meta.views, tr) }) : ""]
+        : meta.source === "jellyfin" ? [meta.year, meta.rating ? "★ " + Fmt.decimal(meta.rating, tr) : ""]   // series and episode: already in the title
         : []).concat([chapterTitle]).filter(function (t) { return !!t }).join("  ·  ")
-    // Aperçu YouTube et bulle « +30 s » : seulement pendant qu'on avance ou recule (pas quand la barre est juste affichée)
+    // YouTube preview and "+30 s" bubble: only while seeking forward or back (not when the bar is just shown)
     property bool seeking: false
     property int lastSeekN: -1
     onFxChanged: if (fx.n !== undefined && fx.n !== lastSeekN) { lastSeekN = fx.n; seeking = true; seekEnd.restart() }
@@ -66,15 +68,15 @@ Item {
     Item {
         id: panel
         width: parent.width
-        // En vidéo, plus haut : l'aperçu YouTube s'affiche entre le titre et la barre, boutons et leur nom dessous
+        // In a video, taller: the YouTube preview shows between the title and the bar, buttons and their name below
         height: root.live ? 300 : 560
         y: root.shown ? parent.height - height : parent.height - height + 60
         Behavior on y { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
-        Rectangle {   // fondu vers le noir en bas de l'écran
+        Rectangle {   // fade to black at the bottom of the screen
             anchors.fill: parent
             gradient: Gradient {
-                // plus sombre plus tôt : le titre, en haut du bandeau, reste lisible sur une image claire
+                // darker sooner: the title, at the top of the bar, stays readable on a bright picture
                 GradientStop { position: 0.0; color: "#00000000" }
                 GradientStop { position: 0.22; color: "#99000000" }
                 GradientStop { position: 0.55; color: "#cc000000" }
@@ -82,13 +84,13 @@ Item {
             }
         }
 
-        // En-tête : photo du streamer (direct) ou symbole pause (vidéo), titre, ligne d'infos
-        Rectangle {   // titre choisi (↑ depuis les boutons ou la barre) : OK ouvre le panneau Infos
+        // Header: streamer photo (live) or pause symbol (video), title, info line
+        Rectangle {   // title selected (↑ from the buttons or the bar): OK opens the Info panel
             visible: opacity > 0
             opacity: !root.live && root.ctl.title ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 160 } }
             x: header.x - 24; y: header.y - 14
-            // calé sur le titre et la ligne d'infos (la colonne, elle, est large de 1500)
+            // fitted to the title and the info line (the column itself is 1500 wide)
             width: Math.min(1500, Math.max(titleMetrics.width, detailsMetrics.width)) + 48 + infoHint.width + 40
             TextMetrics { id: titleMetrics; font.pixelSize: 31; font.bold: true; text: root.pb.title || "" }
             TextMetrics { id: detailsMetrics; font.pixelSize: 22; text: root.details }
@@ -97,17 +99,17 @@ Item {
             Text {
                 id: infoHint
                 anchors.right: parent.right; anchors.rightMargin: 24; anchors.verticalCenter: parent.verticalCenter
-                text: "OK · Infos"; color: "white"; font.pixelSize: 21; font.bold: true
+                text: root.tr("OK · Info"); color: "white"; font.pixelSize: 21; font.bold: true
             }
         }
         Row {
             id: header
-            // Vidéo : juste au-dessus de la barre ; pendant les sauts, glisse vers le haut pour laisser la place à l'aperçu
+            // Video: just above the bar; while seeking, slides up to make room for the preview
             x: 96
             y: root.live ? 70 : preview.visible ? track.y - 22 - preview.height - 46 - height : 222
             Behavior on y { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
             spacing: 22
-            layer.enabled: true   // ombre sous les textes, lisibles quel que soit l'image derrière
+            layer.enabled: true   // shadow under the texts, readable whatever the picture behind
             layer.effect: MultiEffect { shadowEnabled: true; shadowColor: "black"; shadowBlur: 0.7; shadowOpacity: 0.9; shadowVerticalOffset: 2 }
             Rectangle {
                 visible: root.live
@@ -119,7 +121,7 @@ Item {
                     source: root.avatars[root.b.channel] || ""
                 }
             }
-            Row {   // pause (vidéo : PauseScreen.qml affiche déjà la grande icône)
+            Row {   // pause (video: PauseScreen.qml already shows the big icon)
                 visible: false
                 spacing: 9
                 anchors.verticalCenter: parent.verticalCenter
@@ -136,7 +138,7 @@ Item {
                                     : (root.pb.title || "")
                     pixelSize: 31; bold: true; running: root.shown
                 }
-                Text {   // vidéo : chaîne ou série, épisode, chapitre
+                Text {   // video: channel or series, episode, chapter
                     visible: !root.live && !!root.details
                     width: parent.width; elide: Text.ElideRight
                     text: root.details
@@ -144,15 +146,15 @@ Item {
                 }
                 Text {
                     visible: root.live && !!root.info
-                    text: root.info ? [root.info.game, Fmt.viewers(root.info.viewers) + " spectateurs",
-                                       root.info.started ? "en live depuis " + Fmt.since(root.info.started) : ""]
+                    text: root.info ? [root.info.game, root.tr("{n} viewers", { n: Fmt.viewers(root.info.viewers, root.tr) }),
+                                       root.info.started ? root.tr("live for {duration}", { duration: Fmt.since(root.info.started, root.tr) }) : ""]
                                       .filter(function (t) { return !!t }).join("  ·  ") : ""
                     color: "#d0c8e0"; font.pixelSize: 22
                 }
             }
         }
 
-        // Barre
+        // Bar
         Item {
             id: track
             x: 96; y: root.live ? 200 : 340
@@ -160,7 +162,7 @@ Item {
             height: 8
             readonly property real played: root.span > 0 ? Math.max(0, Math.min(1, root.at / root.span)) : 0
             Rectangle { anchors.fill: parent; radius: 4; color: "#40ffffff" }
-            Rectangle {   // partie chargée (vidéo)
+            Rectangle {   // buffered part (video)
                 visible: !root.live && root.span > 0 && (root.pb.cached || 0) > root.at
                 height: parent.height; radius: 4; color: "#70ffffff"
                 width: parent.width * Math.min(1, (root.pb.cached || 0) / Math.max(1, root.span))
@@ -175,7 +177,7 @@ Item {
                 }
                 Behavior on width { NumberAnimation { duration: 240 } }
             }
-            Repeater {   // repères des chapitres
+            Repeater {   // chapter marks
                 model: root.live || root.span <= 0 ? 0 : root.chapters.length
                 Rectangle {
                     visible: index > 0
@@ -184,13 +186,13 @@ Item {
                     color: "#d0ffffff"
                 }
             }
-            Rectangle {   // curseur
+            Rectangle {   // cursor
                 width: 22; height: 22; radius: 11; color: "white"
                 x: track.width * track.played - width / 2
                 anchors.verticalCenter: parent.verticalCenter
                 Behavior on x { NumberAnimation { duration: 240 } }
             }
-            // Aperçu YouTube au-dessus du curseur : une case de la planche de miniatures
+            // YouTube preview above the cursor: one tile of the thumbnail sheet
             Item {
                 id: preview
                 readonly property var bd: root.board
@@ -214,7 +216,7 @@ Item {
                 width: (bd.width || 160) * s
                 height: (bd.height || 90) * s
                 x: Math.max(0, Math.min(track.width - width, track.width * track.played - width / 2))
-                y: -height - 22   // au plus près de la barre (le titre remonte pendant ce temps)
+                y: -height - 22   // as close as possible to the bar (the title moves up meanwhile)
                 Rectangle { anchors.fill: parent; anchors.margins: -3; radius: 10; color: "white" }
                 Item {
                     anchors.fill: parent
@@ -230,7 +232,7 @@ Item {
                 }
             }
         }
-        // Saut en cours au-dessus du curseur (« +30 s », total des appuis rapprochés), le temps d'un instant
+        // Seek in progress above the cursor ("+30 s", total of quick presses), for a moment
         Rectangle {
             id: seekBubble
             property int lastN: -1
@@ -238,7 +240,7 @@ Item {
             opacity: 0
             readonly property real cx: track.x + track.width * (root.span > 0 ? Math.min(1, root.at / root.span) : 0)
             x: Math.max(track.x, Math.min(track.x + track.width - width, cx - width / 2))
-            // Posée sur le bord haut de l'aperçu, comme une étiquette ; sans aperçu, au-dessus du titre
+            // Sitting on the top edge of the preview, like a label; without a preview, above the title
             y: preview.visible ? track.y - 22 - preview.height - height / 2 : header.y - height - 20
             width: fxText.implicitWidth + 44; height: 58; radius: 29
             color: "#ee17151c"; border.color: root.colors[0]; border.width: 2
@@ -264,13 +266,13 @@ Item {
         }
         Text {
             anchors.right: track.right; y: track.y + 26
-            text: root.live ? (root.delay < 4 ? "● EN DIRECT" : "−" + Fmt.clock(root.delay))
-                            : root.span > 0 ? "−" + Fmt.clock(root.remaining) + "   ·   fin à " + root.endsAt : ""
+            text: root.live ? (root.delay < 4 ? root.tr("● LIVE") : "−" + Fmt.clock(root.delay))
+                            : root.span > 0 ? "−" + Fmt.clock(root.remaining) + "   ·   " + root.tr("ends at {time}", { time: root.endsAt }) : ""
             color: root.live && root.delay < 4 ? "#ff4f5e" : "white"
             font.pixelSize: 23; font.bold: root.live && root.delay < 4
         }
-        // Rangée de boutons (vidéo), centrée : ↓ pour y aller, ← → et OK. Boutons ronds à icônes dessinées (PlayerIcon),
-        // Lecture / Pause plus grand ; le nom du bouton choisi s'affiche dessous. Discrète tant qu'aucun n'est choisi
+        // Row of buttons (video), centered: ↓ to go there, ← → and OK. Round buttons with drawn icons (PlayerIcon),
+        // Play / Pause bigger; the name of the selected button shows below. Dimmed while none is selected
         Item {
             visible: !root.live && (root.ctl.items || []).length > 0
             x: 0; y: track.y + 62
@@ -279,8 +281,8 @@ Item {
             Behavior on opacity { NumberAnimation { duration: 160 } }
             Row {
                 id: buttons
-                // Centrée sur Lecture / Pause (boutons de 72, Lecture / Pause de 92, espacés de 22), quels que soient les
-                // boutons de part et d'autre (Qualité, Épisode suivant…)
+                // Centered on Play / Pause (72-wide buttons, Play / Pause 92, 22 apart), whatever the buttons
+                // on either side (Quality, Next episode…)
                 readonly property int playIndex: Math.max(0, (root.ctl.items || []).map(function (i) { return i.id }).indexOf("play"))
                 x: parent.width / 2 - playIndex * (72 + spacing) - 46
                 spacing: 22
@@ -301,13 +303,13 @@ Item {
                             Behavior on color { ColorAnimation { duration: 140 } }
                             PlayerIcon {
                                 anchors.centerIn: parent
-                                // −10 / +10 : cercle fin, agrandi pour remplir le bouton comme les autres icônes
+                                // −10 / +10: thin circle, enlarged to fill the button like the other icons
                                 scale: parent.parent.big ? 1.25 : (parent.parent.it.id === "back" || parent.parent.it.id === "fwd") ? 1.4 : 1
                                 name: parent.parent.it.id === "play" ? (root.pb.pause ? "play" : "pause") : (parent.parent.it.id || "")
                                 color: parent.parent.foc ? "#17151c" : "white"
                             }
                         }
-                        Text {   // nom du bouton choisi
+                        Text {   // name of the selected button
                             visible: parent.foc
                             anchors.horizontalCenter: parent.horizontalCenter
                             y: parent.height + 12
@@ -321,7 +323,7 @@ Item {
                 visible: root.ctl.focus < 0
                 anchors.left: buttons.right; anchors.leftMargin: 26
                 anchors.verticalCenter: buttons.verticalCenter
-                text: "↓ commandes"
+                text: root.tr("↓ controls")
                 color: "#a0ffffff"; font.pixelSize: 20
             }
         }

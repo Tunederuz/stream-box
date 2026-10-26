@@ -1,9 +1,9 @@
-// Stream Box : récepteur YouTube Cast. La box apparaît comme une TV dans l'appli YouTube (bouton Caster, même réseau),
-// grâce à yt-cast-receiver (protocole non officiel de YouTube : peut casser quand YouTube le change).
-// Une vidéo castée passe par remote.py (POST /api/play : écran de chargement, historique, sous-titres), le reste
-// (pause, reprise, avance, volume) directement par mpv (IPC). Fin de vidéo : vidéo suivante de la file de l'appli.
-// Lancé par start.sh si les modules sont installés (npm install dans ce dossier). Même processus : progression du compte
-// YouTube par l'accès « appli TV » (youtube_tv.js).
+// Stream Box: YouTube Cast receiver. The box shows up as a TV in the YouTube app (Cast button, same network), thanks
+// to yt-cast-receiver (unofficial YouTube protocol: may break when YouTube changes it).
+// A cast video goes through remote.py (POST /api/play: loading screen, history, subtitles), the rest (pause, resume,
+// seek, volume) directly through mpv (IPC). End of video: next video of the app's queue.
+// Started by start.sh if the modules are installed (npm install in this directory). Same process: YouTube account
+// progress through the "TV app" access (youtube_tv.js).
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -16,7 +16,22 @@ const MPV_SOCKET = '/tmp/stream-box-mpv.sock';
 const STORE = path.join(os.homedir(), '.config/stream-box/cast-receiver.json');
 const { PLAYER_STATUSES } = Constants;
 
-// --- mpv : requêtes (request_id) et évènements sur une connexion IPC, rouverte si le lecteur redémarre
+// Text shown on the TV in the interface language (same files as i18n.py: ~/.config/stream-box/language,
+// ../locales/<lang>.json, English text as the key)
+function tr(text, values = {}) {
+  let out = text;
+  try {
+    const lang = fs.readFileSync(path.join(os.homedir(), '.config/stream-box/language'), 'utf8').trim();
+    if (/^[a-z]{2}$/.test(lang) && lang !== 'en') {
+      const file = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'locales', `${lang}.json`);
+      out = JSON.parse(fs.readFileSync(file, 'utf8'))[text] || text;
+    }
+  } catch {}
+  for (const [k, v] of Object.entries(values)) out = out.replaceAll(`{${k}}`, String(v));
+  return out;
+}
+
+// --- mpv: requests (request_id) and events on an IPC connection, reopened if the player restarts
 let sock = null, nextId = 1, buf = '';
 const waiting = new Map(), listeners = [];
 function mpvConnect() {
@@ -42,9 +57,9 @@ function mpvConnect() {
 }
 function mpvSend(command) {
   return new Promise((resolve, reject) => {
-    if (!sock || sock.connecting) return reject(new Error('mpv injoignable'));
+    if (!sock || sock.connecting) return reject(new Error('mpv unreachable'));
     const id = nextId++;
-    const timer = setTimeout(() => { waiting.delete(id); reject(new Error('mpv ne répond pas')); }, 3000);
+    const timer = setTimeout(() => { waiting.delete(id); reject(new Error('mpv not responding')); }, 3000);
     waiting.set(id, (m) => { clearTimeout(timer); m.error === 'success' ? resolve(m.data) : reject(new Error(m.error)); });
     sock.write(JSON.stringify({ command, request_id: id }) + '\n');
   });
@@ -56,7 +71,7 @@ async function api(name, body = {}) {
   return r.ok;
 }
 
-// --- Lecteur : la vidéo castée en cours (identifiant), pour reconnaître ce que mpv lit
+// --- Player: the video being cast (id), to recognize what mpv is playing
 class BoxPlayer extends Player {
   current = null;
 
@@ -67,7 +82,7 @@ class BoxPlayer extends Player {
   async doPause() { return mpvSend(['set_property', 'pause', true]).then(() => true, () => false); }
   async doResume() { return mpvSend(['set_property', 'pause', false]).then(() => true, () => false); }
   async doStop() {
-    // « Arrêter la diffusion » dans l'appli : retour au stream, si la vidéo castée est encore à l'écran
+    // "Stop casting" in the app: back to the stream, if the cast video is still on screen
     const was = this.current;
     this.current = null;
     if (was && String(await mpvGet('path') || '').includes(was)) await api('twitch').catch(() => {});
@@ -86,7 +101,7 @@ class BoxPlayer extends Player {
   async doGetDuration() { return (await mpvGet('duration')) || 0; }
 }
 
-// --- Appairages gardés d'un démarrage à l'autre (l'appli retrouve la box sans tout refaire)
+// --- Pairings kept from one boot to the next (the app finds the box again without redoing everything)
 class FileStore extends DataStore {
   read() { try { return JSON.parse(fs.readFileSync(STORE, 'utf8')); } catch { return {}; } }
   async set(key, value) {
@@ -105,29 +120,29 @@ const receiver = new YouTubeCastReceiver(player, {
   logLevel: Constants.LOG_LEVELS.WARN,
 });
 
-// État changé hors de l'appli (télécommande, menu de la TV) : l'appli est prévenue
+// State changed outside the app (remote, TV menu): the app is notified
 listeners.push(async (m) => {
   if (!player.current) return;
   const playing = player.status === PLAYER_STATUSES.PLAYING, paused = player.status === PLAYER_STATUSES.PAUSED;
   if (m.event === 'property-change' && m.name === 'pause' && (playing || paused) && m.data !== paused) {
     await player.notifyExternalStateChange(m.data ? PLAYER_STATUSES.PAUSED : PLAYER_STATUSES.PLAYING);
   } else if (m.event === 'property-change' && m.name === 'path' && m.data && !String(m.data).includes(player.current)) {
-    player.current = null;   // autre chose lancé sur la TV (stream, autre vidéo) : la diffusion s'arrête là
+    player.current = null;   // something else started on the TV (stream, other video): casting stops there
     await player.notifyExternalStateChange(PLAYER_STATUSES.STOPPED);
   } else if (m.event === 'end-file' && m.reason === 'eof' && playing) {
     await player.pause();
-    await player.next();   // file de l'appli, ou lecture automatique
+    await player.next();   // app queue, or autoplay
   }
 });
 
 receiver.on('senderConnect', (sender) => {
-  console.log(`cast.js : ${sender.name} connecté`);
-  mpvSend(['show-text', `${sender.user?.name || sender.name} diffuse YouTube sur la box`, 4000]).catch(() => {});
+  console.log(`cast.js: ${sender.name} connected`);
+  mpvSend(['show-text', tr('{name} is casting YouTube to the box', { name: sender.user?.name || sender.name }), 4000]).catch(() => {});
 });
-receiver.on('senderDisconnect', (sender) => console.log(`cast.js : ${sender.name} déconnecté`));
-receiver.on('error', (error) => console.error('cast.js :', error));
+receiver.on('senderDisconnect', (sender) => console.log(`cast.js: ${sender.name} disconnected`));
+receiver.on('error', (error) => console.error('cast.js:', error));
 
 mpvConnect();
 startYoutubeTv();
 await receiver.start();
-console.log('cast.js : récepteur YouTube Cast prêt (« Stream Box » dans le bouton Caster de l\'appli YouTube)');
+console.log('cast.js: YouTube Cast receiver ready ("Stream Box" in the Cast button of the YouTube app)');

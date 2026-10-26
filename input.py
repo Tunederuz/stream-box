@@ -1,27 +1,29 @@
 #!/usr/bin/env python3
-"""Stream Box : touches lues à la source (télécommandes Bluetooth, manettes, claviers), traduites en actions.
+"""Stream Box: keys read at the source (Bluetooth remotes, gamepads, keyboards), turned into actions.
 
-Lit /dev/input/event* (l'utilisateur doit être dans le groupe input), avec les noms standard de Linux (KEY_UP,
-KEY_SELECT, BTN_SOUTH…), et envoie à mpv, par son IPC :
-  script-message streambox-input <nom de la touche> <action ou vide>
-stream-box.lua joue l'action (ou, pendant l'assistant « Configurer les touches », apprend la touche). Actions : up down
-left right ok back home (menu de la TV) menu (options ≡) homescreen corner power volume_up volume_down mute.
-Mapping : DEFAULTS ci-dessous, puis ~/.config/stream-box/keymap.json ({"KEY_…": "action"}, écrit par l'assistant),
-relu quand il change. Tant que ce service tourne, il l'annonce (user-data/streambox/input) et l'appli Qt et mpv
-ignorent les touches qu'ils reçoivent eux-mêmes (sinon chacune compterait deux fois) ; sans droits sur les appareils,
-il s'arrête et l'ancien chemin (touches reçues par l'appli Qt ou mpv) reprend. Lancé par start.sh.
+Reads /dev/input/event* (the user must be in the input group), with Linux's standard names (KEY_UP, KEY_SELECT,
+BTN_SOUTH…), and sends to mpv, through its IPC:
+  script-message streambox-input <key name> <action or empty>
+stream-box.lua plays the action (or, during the "Set up keys" wizard, learns the key). Actions: up down left right ok
+back home (TV menu) menu (options ≡) homescreen corner power volume_up volume_down mute.
+Mapping: DEFAULTS below, then ~/.config/stream-box/keymap.json ({"KEY_…": "action"}, written by the wizard), read again
+when it changes. While this service runs, it announces it (user-data/streambox/input) and the Qt app and mpv ignore the
+keys they receive themselves (otherwise each one would count twice); without permissions on the devices, it stops and
+the old path (keys received by the Qt app or mpv) takes over again. Started by start.sh.
 """
 import json, os, re, select, socket, struct, sys, time
 
+from i18n import tr
+
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
 KEYMAP_FILE = os.path.expanduser("~/.config/stream-box/keymap.json")
-EVENT = struct.Struct("llHHi")   # input_event : temps (2 longs), type, code, valeur
+EVENT = struct.Struct("llHHi")   # input_event: time (2 longs), type, code, value
 EV_KEY, EV_ABS = 1, 3
 ABS_HAT0X, ABS_HAT0Y = 16, 17
 REPEATABLE = {"up", "down", "left", "right", "volume_up", "volume_down"}
-LONG_PRESS = 1   # secondes : power maintenu → fenêtre « veille, redémarrer, éteindre » (power_menu) au lieu de power
+LONG_PRESS = 1   # seconds: power held → "sleep, restart, shut down" window (power_menu) instead of power
 DEFAULTS = {
-    # Télécommandes (dont Xiaomi : OK = KEY_SELECT, ≡ = KEY_VIDEOPHONE, assistant = KEY_VOICECOMMAND), claviers
+    # Remotes (including Xiaomi: OK = KEY_SELECT, ≡ = KEY_VIDEOPHONE, assistant = KEY_VOICECOMMAND), keyboards
     "KEY_UP": "up", "KEY_DOWN": "down", "KEY_LEFT": "left", "KEY_RIGHT": "right",
     "KEY_ENTER": "ok", "KEY_KPENTER": "ok", "KEY_SELECT": "ok", "KEY_OK": "ok",
     "KEY_BACK": "back", "KEY_ESC": "back", "KEY_BACKSPACE": "back",
@@ -29,12 +31,12 @@ DEFAULTS = {
     "KEY_MENU": "menu", "KEY_COMPOSE": "menu", "KEY_VIDEOPHONE": "menu", "KEY_VOICECOMMAND": "menu", "KEY_INFO": "menu",
     "KEY_WWW": "homescreen", "KEY_PLAYPAUSE": "corner", "KEY_PLAY": "corner", "KEY_POWER": "power",
     "KEY_VOLUMEUP": "volume_up", "KEY_VOLUMEDOWN": "volume_down", "KEY_MUTE": "mute",
-    # Clavier classique : Espace lecture / pause, Windows ou M menu de la TV, O options, H écran d'accueil, + / − volume, touches
-    # multimédia. Codes de Linux positionnels (QWERTY) : le M d'un clavier AZERTY envoie KEY_SEMICOLON
+    # Regular keyboard: Space play / pause, Windows or M TV menu, O options, H home screen, + / − volume, media keys.
+    # Linux codes are positional (QWERTY): the M of an AZERTY keyboard sends KEY_SEMICOLON
     "KEY_SPACE": "corner", "KEY_LEFTMETA": "home", "KEY_RIGHTMETA": "home", "KEY_M": "home", "KEY_SEMICOLON": "home", "KEY_O": "menu", "KEY_H": "homescreen",
     "KEY_KPPLUS": "volume_up", "KEY_KPMINUS": "volume_down", "KEY_EQUAL": "volume_up", "KEY_MINUS": "volume_down",
     "KEY_NEXTSONG": "right", "KEY_PREVIOUSSONG": "left", "KEY_STOPCD": "back",
-    # Manettes
+    # Gamepads
     "BTN_DPAD_UP": "up", "BTN_DPAD_DOWN": "down", "BTN_DPAD_LEFT": "left", "BTN_DPAD_RIGHT": "right",
     "BTN_SOUTH": "ok", "BTN_EAST": "back", "BTN_START": "home", "BTN_SELECT": "menu", "BTN_MODE": "homescreen",
 }
@@ -47,7 +49,7 @@ def key_name(code):
 
 
 def keyboards():
-    """Appareils avec des touches (pas les prises jack, la carte vidéo…) : {chemin : nom}"""
+    """Devices with keys (not the headphone jacks, the video card…): {path: name}"""
     found, name = {}, ""
     try:
         with open("/proc/bus/input/devices", encoding="utf-8", errors="replace") as f:
@@ -97,41 +99,42 @@ class Mpv:
                 self.sock.sendall((json.dumps({"command": list(command)}) + "\n").encode())
                 return True
             except OSError:
-                self.sock = None   # lecteur relancé : on se reconnecte
+                self.sock = None   # player restarted: reconnect
                 time.sleep(0.2)
         return False
 
 
 def main():
     mpv, keymap = Mpv(), Keymap()
-    devices = {}            # chemin -> fichier ouvert
-    hat = {}                # (chemin, axe) -> dernière valeur du pavé des manettes
-    held = {}               # (chemin, code) -> [heure d'appui, nom, fenêtre déjà ouverte] pour les touches power
+    devices = {}            # path -> open file
+    hat = {}                # (path, axis) -> last value of the gamepad d-pad
+    held = {}               # (path, code) -> [press time, name, window already open] for power keys
     last_scan = last_beat = 0
     allowed = None
-    first_scan = True       # appareils déjà là au démarrage : pas de notification
-    noticed = {}            # (nom de base, connecté ?) -> heure de la dernière notification (un appareil = souvent
-                            # plusieurs entrées)
-    names = {}              # chemin -> nom de l'appareil, pour annoncer sa déconnexion
+    first_scan = True       # devices already there at startup: no notification
+    noticed = {}            # (base name, connected?) -> time of the last notification (one device = often
+                            # several entries)
+    names = {}              # path -> device name, to announce its disconnection
 
-    def base_name(name):   # « Xiaomi RC Keyboard » et « Xiaomi RC Consumer Control » : la même télécommande
+    def base_name(name):   # "Xiaomi RC Keyboard" and "Xiaomi RC Consumer Control": the same remote
         return re.sub(r"\s+(Keyboard|Consumer Control|System Control|Mouse|Touchpad)$", "", name).strip()
 
     def notice(name, connected):
-        """Bandeau sur la TV (Notice.qml), une fois par appareil et par sens en 10 s"""
+        """Banner on the TV (Notice.qml), once per device and per direction within 10 s"""
         base = base_name(name)
         if time.time() - noticed.get((base, connected), 0) > 10:
             noticed[(base, connected)] = time.time()
-            mpv.send("script-message", "streambox-notice", f"Appareil {'connecté' if connected else 'déconnecté'} · {base}")
+            mpv.send("script-message", "streambox-notice", tr("Device connected · {name}", name=base) if connected else
+                     tr("Device disconnected · {name}", name=base))
 
     def drop(path):
         devices.pop(path).close()
         name = names.pop(path, "")
-        if name and base_name(name) not in map(base_name, names.values()):   # plus aucune entrée de cet appareil
+        if name and base_name(name) not in map(base_name, names.values()):   # no entry left for this device
             notice(name, False)
     while True:
         now = time.time()
-        if now - last_scan > 2:   # branchements et reconnexions Bluetooth
+        if now - last_scan > 2:   # plugs and Bluetooth reconnections
             last_scan = now
             present = keyboards()
             for path in list(devices):
@@ -142,9 +145,9 @@ def main():
                     try:
                         devices[path] = open(path, "rb", buffering=0)
                         allowed = True
-                        print(f"input.py : {name} ({path})", flush=True)
+                        print(f"input.py: {name} ({path})", flush=True)
                         names[path] = name
-                        if not first_scan:   # télécommande, manette ou clavier qui se connecte
+                        if not first_scan:   # remote, gamepad or keyboard connecting
                             notice(name, True)
                     except PermissionError:
                         if allowed is None:
@@ -153,13 +156,13 @@ def main():
                         pass
             first_scan = False
             if allowed is False and not devices:
-                # Pas dans le groupe input : on laisse les touches à l'appli Qt et à mpv
+                # Not in the input group: leave the keys to the Qt app and mpv
                 mpv.send("set_property", "user-data/streambox/input", "")
-                sys.exit("input.py : pas de droits sur /dev/input (groupe input) ; touches laissées à l'appli et à mpv")
-        if now - last_beat > 5:   # « ce service tourne » (stream-box.lua et ui.py ignorent alors leurs touches)
+                sys.exit("input.py: no permissions on /dev/input (input group); keys left to the app and mpv")
+        if now - last_beat > 5:   # "this service is running" (stream-box.lua and ui.py then ignore their keys)
             last_beat = now
             mpv.send("set_property", "user-data/streambox/input", f"evdev:{int(now)}")
-        for k, h in held.items():   # power maintenu assez longtemps : fenêtre de la box, sans attendre le relâchement
+        for k, h in held.items():   # power held long enough: box window, without waiting for the release
             if not h[2] and time.time() - h[0] >= LONG_PRESS:
                 h[2] = True
                 mpv.send("script-message", "streambox-input", h[1], "power_menu")
@@ -168,26 +171,26 @@ def main():
             path = next(p for p, d in devices.items() if d is f)
             try:
                 data = f.read(EVENT.size * 64)
-            except OSError:   # appareil parti
+            except OSError:   # device gone
                 drop(path)
                 continue
             for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
                 _, _, etype, code, value = EVENT.unpack_from(data, i)
                 if etype == EV_KEY and keymap.get(key_name(code)) == "power":
-                    # power : action au relâchement (appui court), ou fenêtre après LONG_PRESS (voir plus haut)
+                    # power: action on release (short press), or window after LONG_PRESS (see above)
                     if value == 1:
                         held[(path, code)] = [time.time(), key_name(code), False]
                     elif value == 0:
                         h = held.pop((path, code), None)
                         if h and not h[2]:
                             mpv.send("script-message", "streambox-input", h[1], "power")
-                elif etype == EV_KEY and value in (1, 2):   # appui, ou répétition d'une touche maintenue
+                elif etype == EV_KEY and value in (1, 2):   # press, or repeat of a held key
                     name = key_name(code)
                     action = keymap.get(name)
                     if value == 2 and action not in REPEATABLE:
                         continue
                     mpv.send("script-message", "streambox-input", name, action)
-                elif etype == EV_ABS and code in (ABS_HAT0X, ABS_HAT0Y):   # pavé directionnel des manettes
+                elif etype == EV_ABS and code in (ABS_HAT0X, ABS_HAT0Y):   # gamepad d-pad
                     if value and hat.get((path, code)) != value:
                         names = {(ABS_HAT0X, -1): "HAT_LEFT", (ABS_HAT0X, 1): "HAT_RIGHT",
                                  (ABS_HAT0Y, -1): "HAT_UP", (ABS_HAT0Y, 1): "HAT_DOWN"}
@@ -197,7 +200,7 @@ def main():
                     hat[(path, code)] = value
 
 
-# Noms des codes de touches de Linux (linux/input-event-codes.h ; « KEY_ » retiré sauf pour les BTN_)
+# Names of Linux key codes (linux/input-event-codes.h; "KEY_" removed except for BTN_)
 NAMES = {
     1: "ESC", 2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6", 8: "7", 9: "8", 10: "9", 11: "0", 12: "MINUS",
     13: "EQUAL", 14: "BACKSPACE", 15: "TAB", 16: "Q", 17: "W", 18: "E", 19: "R", 20: "T", 21: "Y", 22: "U", 23: "I",

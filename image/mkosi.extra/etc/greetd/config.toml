@@ -1,6 +1,5 @@
-# Stream Box : au démarrage, session de la box sans écran de connexion (stream-box-session : cage, Ctrl+Alt+F2… vers
-# une console).
-# Si elle se termine, écran de connexion texte (agreety).
+# Stream Box: at boot, box session without a login screen (stream-box-session: cage, Ctrl+Alt+F2… to a console).
+# If it ends, text login screen (agreety).
 [terminal]
 vt = 1
 

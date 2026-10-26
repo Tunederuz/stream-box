@@ -1,6 +1,6 @@
 [Plymouth Theme]
 Name=Stream Box
-Description=Logo de la box et roue de chargement, sur le fond de l'écran d'accueil, à l'échelle de l'écran
+Description=Box logo and loading spinner, on the home screen background, scaled to the screen
 ModuleName=script
 
 [script]

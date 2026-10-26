@@ -1,30 +1,32 @@
-// Écran d'accueil de la TV en QML (appli Qt) : affiché quand stream-box.lua le décide (box.ambientOn : chaîne hors
-// ligne, liste vide, mode accueil). Fond « aurore » de taches floues qui dérivent, horloge, date, météo dessinée,
-// prochains lives (plannings Twitch de remote.py), streamers en live, message d'état, QR code de la télécommande.
-// Tout le contenu dérive lentement, pour ne pas marquer l'écran. Coordonnées en 1920x1080.
+// TV home screen in QML (Qt app): shown when stream-box.lua decides so (box.ambientOn: channel offline, empty list,
+// home mode). "Aurora" background of drifting blurry blobs, clock, date, drawn weather, upcoming lives (Twitch
+// schedules from remote.py), live streamers, status message, QR code of the companion app.
+// All the content drifts slowly, so as not to burn in the screen. Coordinates in 1920x1080.
 import QtQuick
 import QtQuick.Effects
 import "fmt.js" as Fmt
+import "i18n.js" as I18n
 
 Item {
     id: root
     anchors.fill: parent
+    function tr(s, a) { return I18n.t(i18n.dict, s, a) }
     readonly property var ambient: { try { return JSON.parse(box.ambient || "{}") } catch (e) { return {} } }
     readonly property var weather: ambient.weather || null
     readonly property var schedule: setup ? [] : (ambient.schedule || [])
-    // Mode configuration (netsetup.py) : point d'accès Wi-Fi de la box, ou connexion en cours à un réseau
+    // Setup mode (netsetup.py): Wi-Fi access point of the box, or connection to a network in progress
     readonly property var setup: ambient.setup || null
-    // Première configuration pas encore faite (remote.py, setup-done) : QR code de la page en grand, rien d'autre
+    // First setup not done yet (remote.py, setup-done): large QR code of the page, nothing else
     readonly property bool firstRun: !!ambient.first_run && !setup
-    property var st: ({})                     // /api/state : photos, streamers en live
-    // Fond animé : d'après le dernier état lu, ici (toutes les 20 s) ou par le menu ouvert (ui.qml, plus frais)
+    property var st: ({})                     // /api/state: photos, live streamers
+    // Animated background: from the last state read, here (every 20 s) or by the open menu (ui.qml, fresher)
     property var backdrop: null
     property var bd: ({})
     onBackdropChanged: if (backdrop) bd = backdrop
     onStChanged: if (st.backdrop) bd = st.backdrop
     property date now: new Date()
     property bool qrShown: true
-    // QR code affiché (réglage : toujours, 30 secondes à chaque arrivée, jamais)
+    // QR code shown (setting: always, 30 seconds on each arrival, never)
     readonly property bool qrWanted: !!(ambient.qr && ambient.qr.rows) && (box.qrMode === "always" || (box.qrMode === "timed" && qrShown))
     readonly property var liveOthers: {
         var out = [], live = st.live || {}
@@ -50,15 +52,15 @@ Item {
     }
     Timer { interval: 20000; repeat: true; running: root.visible; triggeredOnStart: true; onTriggered: root.refresh() }
     Timer { interval: 1000; repeat: true; running: root.visible; triggeredOnStart: true; onTriggered: root.now = new Date() }
-    // QR code « 30 secondes » : affiché à chaque arrivée sur l'écran d'accueil
+    // "30 seconds" QR code: shown on each arrival on the home screen
     Timer { id: qrTimer; interval: 30000; onTriggered: root.qrShown = false }
     Connections {
         target: box
         function onAmbientOnChanged() { if (box.ambientOn) { root.qrShown = true; qrTimer.restart(); root.refresh() } }
     }
 
-    // Fond animé, au choix dans les Réglages (Backdrop.qml)
-    // Couleurs au choix (Réglages → « Couleurs de l'accueil ») : trois teintes et le fond presque noir
+    // Animated background, chosen in Settings (Backdrop.qml)
+    // Colors to choose from (Settings → "Home colors"): three hues and the almost black background
     readonly property var palettes: ({
         violet: ["#9146ff", "#2b4bdc", "#b03a7a", "#0b0710"], blue: ["#2f7bff", "#1fb5c9", "#4b3cdc", "#050a14"],
         green: ["#1ed68a", "#1a9fb0", "#6fcf3a", "#04100b"], sunset: ["#ff7a2f", "#ff3d6e", "#ffc23d", "#120806"],
@@ -73,7 +75,7 @@ Item {
         Behavior on bg { ColorAnimation { duration: 800 } }
     }
 
-    // Contenu, qui dérive de quelques dizaines de pixels sur plusieurs minutes (écran de TV : pas d'image fixe)
+    // Content, drifting by a few tens of pixels over several minutes (TV screen: no still image)
     Item {
         id: content
         width: parent.width
@@ -103,12 +105,12 @@ Item {
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.now.toLocaleDateString(Qt.locale("fr_FR"), "dddd d MMMM")
+                text: root.now.toLocaleDateString(Qt.locale(i18n.lang), root.tr("dddd, MMMM d"))
                 color: "#d0c8e0"
                 font.pixelSize: 40
             }
             Item { width: 1; height: 22 }
-            Row {   // météo
+            Row {   // weather
                 visible: !!root.weather
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 22
@@ -129,20 +131,20 @@ Item {
                     Text { text: root.weather ? (root.weather.city ? root.weather.city + "  ·  " : "") + root.weather.text : ""; color: "white"; font.pixelSize: 28 }
                     Text {
                         text: root.weather ? root.weather.min + "° / " + root.weather.max + "°"
-                              + (root.weather.rain >= 30 ? "  ·  pluie " + root.weather.rain + " %" : "") : ""
+                              + (root.weather.rain >= 30 ? "  ·  " + root.tr("rain {n}%", { n: root.weather.rain }) : "") : ""
                         color: "#b4afc2"; font.pixelSize: 24
                     }
                 }
             }
         }
 
-        // En live maintenant (streamers de la liste qu'on ne regarde pas)
+        // Live now (streamers of the list that we are not watching)
         Column {
             visible: root.liveOthers.length > 0 && !root.setup && !root.firstRun
             anchors.horizontalCenter: parent.horizontalCenter
             y: 625
             spacing: 14
-            Text { anchors.horizontalCenter: parent.horizontalCenter; text: "EN LIVE MAINTENANT"; color: "#ff7f8a"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 3 }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.tr("LIVE NOW"); color: "#ff7f8a"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 3 }
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 14
@@ -155,33 +157,33 @@ Item {
                         Row {
                             id: chipRow
                             x: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 12
-                            Rectangle {   // anneau rouge des lives
+                            Rectangle {   // red ring of lives
                                 width: 44; height: 44; radius: 22; color: "#ff4f5e"
                                 anchors.verticalCenter: parent.verticalCenter
                                 RoundImage { anchors.centerIn: parent; width: 38; height: 38; circle: true; source: (root.st.avatars || {})[modelData] || "" }
                             }
                             Text { anchors.verticalCenter: parent.verticalCenter; text: modelData; color: "white"; font.pixelSize: 24; font.bold: true }
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: "● " + Fmt.viewers(info.viewers); color: "#ff7f8a"; font.pixelSize: 21 }
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: "● " + Fmt.viewers(info.viewers, root.tr); color: "#ff7f8a"; font.pixelSize: 21 }
                         }
                     }
                 }
             }
         }
 
-        // Prochains lives : cartes de verre
+        // Upcoming lives: glass cards
         Column {
             visible: root.schedule.length > 0 && !root.firstRun
             anchors.horizontalCenter: parent.horizontalCenter
             y: root.liveOthers.length > 0 ? 770 : 660
             spacing: 18
             Behavior on y { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
-            Text { anchors.horizontalCenter: parent.horizontalCenter; text: "PROCHAINS LIVES"; color: "#a99fc0"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 3 }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.tr("UPCOMING LIVES"); color: "#a99fc0"; font.pixelSize: 20; font.bold: true; font.letterSpacing: 3 }
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 18
                 Repeater {
                     model: root.schedule.slice(0, root.qrWanted ? 3 : 4)
-                    Rectangle {   // cartes de 330 : 3 quand le QR code est affiché en bas à droite, pour ne pas le toucher
+                    Rectangle {   // 330-wide cards: 3 when the QR code is shown at the bottom right, so as not to touch it
                         width: 330; height: 108; radius: 24
                         color: "#14ffffff"; border.color: "#22ffffff"; border.width: 1
                         RoundImage {
@@ -203,7 +205,7 @@ Item {
             }
         }
 
-        Text {   // message d'état (« X n'est pas en live, nouvel essai dans 15 s »…)
+        Text {   // status message ("X is not live, retrying in 15 s"…)
             anchors.horizontalCenter: parent.horizontalCenter
             y: 1010
             text: box.statusText
@@ -211,7 +213,7 @@ Item {
             font.pixelSize: 20
         }
 
-        // Mode configuration : 1. rejoindre le Wi-Fi de la box (QR code Wi-Fi, ou nom et mot de passe), 2. ouvrir la page
+        // Setup mode: 1. join the Wi-Fi of the box (Wi-Fi QR code, or name and password), 2. open the page
         Item {
             visible: !!root.setup
             anchors.horizontalCenter: parent.horizontalCenter
@@ -219,7 +221,7 @@ Item {
             Text {
                 visible: !!(root.setup && root.setup.connecting)
                 anchors.centerIn: parent
-                text: root.setup && root.setup.connecting ? "Connexion au Wi-Fi « " + root.setup.connecting + " »…" : ""
+                text: root.setup && root.setup.connecting ? root.tr("Connecting to Wi-Fi \"{ssid}\"…", { ssid: root.setup.connecting }) : ""
                 color: "white"; font.pixelSize: 36
             }
             Column {
@@ -228,7 +230,7 @@ Item {
                 spacing: 22
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "CONFIGURATION"; color: "#c9b8ff"; font.pixelSize: 22; font.bold: true; font.letterSpacing: 4
+                    text: root.tr("SETUP"); color: "#c9b8ff"; font.pixelSize: 22; font.bold: true; font.letterSpacing: 4
                 }
                 Text {
                     visible: !!(root.setup && root.setup.error)
@@ -240,10 +242,11 @@ Item {
                     spacing: 90
                     Repeater {
                         model: root.setup && root.setup.ssid ? [
-                            { n: "1", title: "Connecte ton téléphone", rows: root.setup.wifi_rows,
-                              lines: ["Wi-Fi « " + root.setup.ssid + " »", "Mot de passe : " + root.setup.password] },
-                            { n: "2", title: "Ouvre la configuration", rows: root.setup.url_rows,
-                              lines: [String(root.setup.url).replace(/^http:\/\//, "").replace(/\/$/, ""), "Choisis le Wi-Fi de la maison"] }] : []
+                            { n: "1", title: root.tr("Connect your phone"), rows: root.setup.wifi_rows,
+                              lines: [root.tr("Wi-Fi \"{ssid}\"", { ssid: root.setup.ssid }),
+                                      root.tr("Password: {password}", { password: root.setup.password })] },
+                            { n: "2", title: root.tr("Open the setup"), rows: root.setup.url_rows,
+                              lines: [String(root.setup.url).replace(/^http:\/\//, "").replace(/\/$/, ""), root.tr("Choose your home Wi-Fi")] }] : []
                         Row {
                             spacing: 26
                             QrCode { size: 220; rows: modelData.rows || [] }
@@ -266,7 +269,7 @@ Item {
             }
         }
 
-        // Première configuration : la suite se passe sur le téléphone
+        // First setup: the rest happens on the phone
         Row {
             visible: root.firstRun && !!(root.ambient.qr && root.ambient.qr.rows)
             anchors.horizontalCenter: parent.horizontalCenter
@@ -276,10 +279,10 @@ Item {
             Column {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 16
-                Text { text: "BIENVENUE"; color: "#c9b8ff"; font.pixelSize: 24; font.bold: true; font.letterSpacing: 4 }
-                Text { text: "Continue sur ton téléphone"; color: "white"; font.pixelSize: 54; font.bold: true }
-                Text { text: "Scanne ce code pour configurer la box :"; color: "#d0c8e0"; font.pixelSize: 30 }
-                Text { text: "streamers, comptes, ou restauration d'une sauvegarde"; color: "#d0c8e0"; font.pixelSize: 30 }
+                Text { text: root.tr("WELCOME"); color: "#c9b8ff"; font.pixelSize: 24; font.bold: true; font.letterSpacing: 4 }
+                Text { text: root.tr("Continue on your phone"); color: "white"; font.pixelSize: 54; font.bold: true }
+                Text { text: root.tr("Scan this code to set up the box:"); color: "#d0c8e0"; font.pixelSize: 30 }
+                Text { text: root.tr("streamers, accounts, or restoring a backup"); color: "#d0c8e0"; font.pixelSize: 30 }
                 Text {
                     text: root.ambient.qr ? String(root.ambient.qr.url).replace(/^https?:\/\//, "").replace(/\/$/, "") : ""
                     color: "#8a85a0"; font.pixelSize: 26
@@ -287,14 +290,14 @@ Item {
             }
         }
 
-        // QR code de la télécommande, selon le réglage (toujours, 30 secondes à chaque arrivée, jamais)
+        // QR code of the companion app, depending on the setting (always, 30 seconds on each arrival, never)
         Column {
             visible: opacity > 0 && !!(root.ambient.qr && root.ambient.qr.rows) && !root.setup && !root.firstRun
             opacity: root.qrWanted ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 500 } }
             x: 1920 - 56 - width; y: 1080 - 44 - height
             spacing: 10
-            Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Télécommande"; color: "#b4afc2"; font.pixelSize: 21 }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.tr("Companion app"); color: "#b4afc2"; font.pixelSize: 21 }
             QrCode { anchors.horizontalCenter: parent.horizontalCenter; size: 230; rows: root.ambient.qr ? root.ambient.qr.rows : [] }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter

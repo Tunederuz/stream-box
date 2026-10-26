@@ -1,5 +1,5 @@
-# Stream Box : écran de démarrage. Logo et roue mis à l'échelle de la hauteur de l'écran (dessinés pour 1080 lignes) :
-# même rendu en 1080p, en 4K ou en 1366 × 768, sans imposer de mode d'affichage. Fond de l'écran d'accueil (0b0710).
+# Stream Box: boot screen. Logo and spinner scaled to the screen height (drawn for 1080 lines): same look in 1080p, in
+# 4K or in 1366 × 768, without forcing a display mode. Home screen background (0b0710).
 Window.SetBackgroundTopColor(0.043, 0.027, 0.063);
 Window.SetBackgroundBottomColor(0.043, 0.027, 0.063);
 
