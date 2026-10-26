@@ -289,7 +289,8 @@ open (`user-data/streambox/tvmenu`, which `chat_overlay.py` also follows to hide
 on top), `stream-box.lua` passes it all keys (`streambox-tvmenu-key`);
 it reads the state and acts through the `remote.py` API (curl as a subprocess), like the companion app. Settings: ◀ ▶ change
 a value, OK toggles a switch; the resolution chosen with the arrows is only applied on OK. Live: shortcuts
-above the streamers (home screen, "▶  Resume {channel}" outside the stream; ▲ from the first row).
+above the streamers ("▶  Resume {channel}" outside the stream, second stream; ▲ from the first row). "⌂  Home screen"
+is global: first entry of the rail, above the tabs (▲ from the first tab).
 System: account status, power off (OK twice), companion app QR code for whatever
 requires typing text. Pictures: raw images placed by `overlay-add` (above the ASS drawing, coordinates in
 screen pixels), prepared by `GET /api/tvimage?src=&w=&h=&round=` (ffmpeg: crop, disc with a soft edge,
@@ -366,7 +367,11 @@ Data and actions: `XMLHttpRequest` to the remote.py API; pictures and thumbnails
 Twitch / YouTube by Qt and rounded by `MultiEffect` (no more need for `/api/tvimage`); weather and QR code through
 `box.ambient` (observed property), opaque veil without video (`box.videoActive`). Components: `RoundImage`,
 `Marquee` (text clipped at rest, two copies that scroll on focus), `FocusFrame`, `StreamerCard`, `VideoCard`,
-`SettingRow`, `QrCode`, `fmt.js`. Pitfalls: font sizes ×0.78 compared to the ASS menu (Qt draws larger for
+`SettingRow`, `QrCode`, `fmt.js`.
+Dynamic rail (QML only; tv_menu.lua keeps its fixed rail): the content is full screen (`contentX`), the rail slides
+over it (dimmed) only while it has the focus (`railShown` = `area === "rail"`): OK or ▶ on a tab hides it, Back or ◀ at
+the left edge brings it back. Menu button: closes the menu over a video; with nothing playing (`idle`, `home` mode)
+it shows the rail over the content, and hides it again (`menuKey`). Pitfalls: font sizes ×0.78 compared to the ASS menu (Qt draws larger for
 the same value); in `onTabChanged`, read `tabs[tab].id` and not `tabId` (binding not recomputed yet); lists
 with `clip`: margins (`leftMargin`, `topMargin`) so as not to cut the focus glow; models as an item count
 (the delegates read the arrays) so that the list does not reset on every state poll. Testing without
@@ -805,7 +810,7 @@ The large menu is the main page: at boot (`home_menu()` 3 s after stream-box.lua
 for the menu to load), at the end of a video (`BACK_TO_MENU`) and on Back during a stream or a video, playback
 stops (`show_home`, `home` mode) and the menu opens over the home screen. No more Back ×2 (nor
 `/api/resume_last`): "▶  Resume {channel}" in Live and the History do this job. In `home` mode (menu
-closed by Menu or after 90 s: animated home screen), any key reopens the menu. Menu open with nothing
+closed after 90 s, by "⌂  Home screen" or, in the Lua menu, by Menu: animated home screen), any key reopens the menu. Menu open with nothing
 playing: Back on the tabs does not close it (QML `st.mode`, Lua `state.mode`). Menu background: glows in the
 tab's color that drift, two more without video behind (the veil is opaque there, to hide the home
 screen).

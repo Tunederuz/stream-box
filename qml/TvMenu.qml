@@ -102,6 +102,12 @@ Item {
     property int tab: 0
     readonly property string tabId: tabs[tab].id
     property string area: "content"          // rail or content
+    property bool railHome: false            // rail: focus on "Home screen" (above the tabs)
+    // Nothing playing: the menu is the main page, Menu shows the tab rail instead of closing
+    readonly property bool idle: st.mode === "home"
+    // Content in full screen; the tab rail slides over it when it has the focus
+    readonly property bool railShown: area === "rail"
+    readonly property int contentX: 230
     property int shortcut: -1                // Live: shortcut chosen above the grid, -1 = grid
     property int liveSel: 0
     property int followSel: 0
@@ -145,13 +151,16 @@ Item {
                 liveSel = Math.max(0, d.streamers.indexOf(d.channel))
                 var t = mediaTab(d)
                 for (var i = 0; i < tabs.length; i++) if (tabs[i].id === t && tab !== i) { tab = i; area = "content" }
+                if (area === "rail" && canEnter(tabs[tab].id)) area = "content"
             }
+            checkArea()
         })
     }
     function act(name, body) { call("POST", "/api/" + name, body || {}, function () { refreshSoon.restart() }) }
     function loadFollows() {
         call("GET", "/api/follows", undefined, function (d) {
             follows = d || { error: true }
+            checkArea()
             var p = follows.pending
             if (p && p.verification_uri && !p.error) {
                 if (!followsQr || followsQr.text !== p.verification_uri)
@@ -372,7 +381,7 @@ Item {
             : r ? tr("New search  (\"{query}\")", { query: r.query })
             : jfTab ? tr("Search Jellyfin") : tr("Search YouTube")
     }
-    function loadHistory() { call("GET", "/api/history", undefined, function (d) { history = d || [] }) }
+    function loadHistory() { call("GET", "/api/history", undefined, function (d) { history = d || []; checkArea() }) }
     function play(url, fromStart, item) {   // item: title and image for the loading screen and the history
         call("POST", "/api/play", { url: url, from_start: !!fromStart, title: item ? item.title : undefined,
                                     thumb: item ? item.thumb : undefined }, function () { refreshSoon.restart() })
@@ -411,13 +420,15 @@ Item {
         // their card; the data is reloaded
         var t = mediaTab(st)
         for (var i = 0; i < tabs.length; i++) if (tabs[i].id === t) tab = i
-        area = "content"
+        area = "rail"; railHome = false
         shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0; rebootUntil = 0
         follows = null; replays = ({}); history = null; rpLogin = ""; rpRow = 0; rpSel = [0, 0, 0]
         jf = null; kbOpen = false   // search results stay from one opening to the next; yt too (reloaded in the background)
         var list = st.streamers || []
         liveSel = Math.max(0, list.indexOf(st.channel))
         startFocus = true
+        if (canEnter(t)) area = "content"
+        checkArea()
         loadTab(tabs[tab].id)
         isOpen = true
         box.setMenuOpen(true)
@@ -452,7 +463,7 @@ Item {
     // Computed content
 
     function shortcuts() {
-        var l = [{ label: tr("⌂  Home screen"), current: st.mode === "home", ok: function () { act("home"); close() } }]
+        var l = []
         if (st.mode !== "twitch" && st.channel)
             l.push({ label: tr("▶  Resume {channel}", { channel: st.channel }), ok: function () { act("twitch"); close() } })
         if (pip.channel) {   // second stream running
@@ -930,7 +941,7 @@ Item {
     function key(k) {
         idleClose.restart()
         startFocus = false
-        if (k === "home") return close()
+        if (k === "home") return menuKey()
         if (k === "homescreen") { act("home"); return close() }
         if (k === "corner") return act("corner")
         if (kbOpen) return keyKeyboard(k)
@@ -942,12 +953,20 @@ Item {
         }
         if (ytAuth) { if (k === "back" || k === "left" || k === "ok") ytAuth = null; return }
         if (area === "rail") {
-            if (k === "up" || k === "down") tab = Math.max(0, Math.min(tabs.length - 1, tab + (k === "down" ? 1 : -1)))
+            if (railHome) {   // "Home screen": global, above the tabs
+                if (k === "down") railHome = false
+                else if (k === "ok") { act("home"); close() }
+                else if (k === "right") { railHome = false; enterContent() }
+                else if (k === "back" && !idle) close()
+                return
+            }
+            if (k === "up" && tab === 0) railHome = true
+            else if (k === "up" || k === "down") tab = Math.max(0, Math.min(tabs.length - 1, tab + (k === "down" ? 1 : -1)))
             else if (k === "right" || k === "ok") enterContent()
-            else if (k === "back" && st.mode !== "home") close()   // nothing playing: the menu stays the main page
+            else if (k === "back" && !idle) close()   // nothing playing: the menu stays the main page
             return
         }
-        if (k === "back") { area = "rail"; pendingDisplay = ""; pendingPlayer = ""; return }
+        if (k === "back") return toRail()
         switch (tabId) {
         case "live": return keyLive(k)
         case "follows": return keyFollows(k)
@@ -958,12 +977,38 @@ Item {
         case "system": return keyRows(k, systemRows())
         }
     }
+    function toRail() { area = "rail"; railHome = false; shortcut = -1; pendingDisplay = ""; pendingPlayer = "" }
+    // Menu button: closes the menu over a video; with nothing playing, shows the tab rail over the content (and
+    // hides it again)
+    function menuKey() {
+        if (powerOnly || !idle) return close()
+        kbOpen = false; modal = null; ytAuth = null
+        if (area === "rail") { railHome = false; enterContent() }
+        else toRail()
+    }
+    // Something to focus in the tab (data still loading counts as yes: checkArea goes back to the rail if it is empty)
+    function canEnter(id) {
+        var list = st.streamers
+        if (id === "live") return !list || list.length > 0 || shortcuts().length > 0
+        if (id === "replays") return !list || list.length > 0
+        if (id === "follows") return !follows || !!follows.configured
+        if (id === "history") return !history || history.length > 0
+        return true
+    }
+    // Hidden rail and nothing to focus in the content: the rail comes back (Live without streamers: the shortcuts)
+    function checkArea() {
+        if (area !== "content") return
+        var id = tabs[tab].id
+        if (!canEnter(id)) return toRail()
+        if (id === "live" && st.streamers && !st.streamers.length && shortcut < 0) shortcut = 0
+    }
     function enterContent() {
-        if (tabId === "youtube" || tabId === "jellyfin") { area = "content"; setRow(0); return }
-        if (tabId === "follows" && (!follows || !follows.configured)) return
-        if (tabId === "history" && !(history && history.length)) return
+        var id = tabs[tab].id   // and not tabId: right after a tab change, its binding may not be recomputed yet
+        if (!canEnter(id)) return
+        if (id === "youtube" || id === "jellyfin") { area = "content"; setRow(0); return }
         area = "content"
-        if (tabId === "replays") { rpRow = 0; rpSel = [Math.max(0, (st.streamers || []).indexOf(rpLogin)), rpSel[1], rpSel[2]] }
+        checkArea()
+        if (id === "replays") { rpRow = 0; rpSel = [Math.max(0, (st.streamers || []).indexOf(rpLogin)), rpSel[1], rpSel[2]] }
     }
     function keyLive(k) {
         var list = st.streamers || []
@@ -978,7 +1023,7 @@ Item {
         }
         if (k === "ok") { if (list[liveSel]) { act("channel", { name: list[liveSel] }); close() } return }
         if (k === "menu") { if (list[liveSel]) streamerOptions(list[liveSel], false, !!(st.live || {})[list[liveSel]]); return }
-        if (k === "up" && liveSel < 4) { shortcut = 0; return }
+        if (k === "up" && liveSel < 4) { if (shortcuts().length) shortcut = 0; return }
         var n = grid(liveSel, list.length, 4, k)
         if (n < 0) area = "rail"; else liveSel = n
     }
@@ -1115,61 +1160,9 @@ Item {
         c3: menu.hueShift(menu.accent, -0.12, 0.9)
     }
     Rectangle { anchors.fill: parent; color: menu.pal.veil; opacity: box.videoActive ? 0 : 0.30 }
-    // Tab rail
-    Rectangle { width: 400; height: parent.height; color: menu.pal.rail; opacity: 0.55
-                Behavior on color { ColorAnimation { duration: 400 } } }
-    Logo { x: 56; y: 62 }
-    Text { x: 126; y: 88 - height / 2; text: "Stream Box"; color: "white"; font.pixelSize: 28; font.bold: true }
-    Rectangle {   // tab pill: slides from one tab to the other
-        x: 40; width: 320; height: 64; radius: 32
-        y: 206 + menu.tab * 76   // 9 tabs between the logo and "Now on the TV"
-        color: "white"
-        opacity: menu.area === "rail" ? 1 : 0.10
-        Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-        Behavior on opacity { NumberAnimation { duration: 160 } }
-    }
-    Repeater {
-        model: menu.tabs.length
-        Item {
-            x: 40; y: 206 + index * 76; width: 320; height: 64
-            readonly property bool cur: index === menu.tab
-            Rectangle {   // current tab, focus in the content: dot in the tab's color
-                visible: cur && menu.area !== "rail"
-                x: 20; anchors.verticalCenter: parent.verticalCenter
-                width: 12; height: 12; radius: 6; color: menu.accent
-            }
-            Text {
-                x: cur && menu.area !== "rail" ? 48 : 38
-                anchors.verticalCenter: parent.verticalCenter
-                text: menu.tr(menu.tabs[index].label)
-                color: cur && menu.area === "rail" ? "#1a1020" : (cur ? "white" : "#b4afc2")
-                font.pixelSize: 25
-                font.bold: cur
-                Behavior on x { NumberAnimation { duration: 160 } }
-            }
-        }
-    }
-    Column {   // what plays on the TV
-        x: 56; y: menu.height - 190; width: 310; spacing: 8
-        visible: (menu.st.mode === "twitch" && !!menu.st.channel) || menu.st.mode === "media"
-        Text { text: menu.tr("NOW ON THE TV"); color: "#a99fc0"; font.pixelSize: 16; font.bold: true; font.letterSpacing: 2 }
-        Marquee {
-            width: parent.width; pixelSize: 22; running: menu.isOpen
-            // Channel outside the list (followed, swapped second stream): no live info, just its name
-            readonly property var info: (menu.st.live || {})[menu.st.channel]
-            text: menu.st.mode === "media" ? (menu.st.title || menu.tr("Video"))
-                : (menu.st.channel || "") + (info ? "  ·  " + info.title : "")
-        }
-    }
-    Text {
-        x: 56; y: menu.height - 75
-        text: menu.tr("▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back go back   ·   Menu close")
-        color: "#8a85a0"; font.pixelSize: 19
-    }
-
     // Header
-    Text { x: 460; y: 100 - height / 2; text: menu.tr(menu.tabs[menu.tab].label); color: "white"; font.pixelSize: 41; font.bold: true }
-    Text { x: 460; y: 158 - height / 2; text: menu.subtitle(); color: "#b4afc2"; font.pixelSize: 25 }
+    Text { x: menu.contentX; y: 100 - height / 2; text: menu.tr(menu.tabs[menu.tab].label); color: "white"; font.pixelSize: 41; font.bold: true }
+    Text { x: menu.contentX; y: 158 - height / 2; text: menu.subtitle(); color: "#b4afc2"; font.pixelSize: 25 }
     Row {
         anchors.right: parent.right; anchors.rightMargin: 80; y: 100 - height / 2; spacing: 28
         Text {
@@ -1184,10 +1177,10 @@ Item {
     // Tab content: slides in on each change
     Item {
         id: content
-        x: 460; y: 0; width: 1460; height: parent.height
+        x: menu.contentX; y: 0; width: 1460; height: parent.height
         ParallelAnimation {
             id: tabEnter
-            NumberAnimation { target: content; property: "x"; from: 500; to: 460; duration: 260; easing.type: Easing.OutCubic }
+            NumberAnimation { target: content; property: "x"; from: menu.contentX + 40; to: menu.contentX; duration: 260; easing.type: Easing.OutCubic }
             NumberAnimation { target: content; property: "opacity"; from: 0; to: 1; duration: 220 }
         }
 
@@ -1646,6 +1639,85 @@ Item {
                 Text { text: menu.ambient.qr ? String(menu.ambient.qr.url).replace(/^https?:\/\//, "").replace(/\/$/, "") : ""; color: "#b4afc2"; font.pixelSize: 20 }
             }
         }
+    }
+    // Content dimmed while the tab rail is over it
+    Rectangle {
+        anchors.fill: parent; color: "black"
+        opacity: menu.railShown ? 0.45 : 0
+        Behavior on opacity { NumberAnimation { duration: 220 } }
+    }
+    // Tab rail: slides over the content when it has the focus, hidden otherwise
+    Item {
+        id: railPanel
+        width: 440; height: parent.height
+        x: menu.railShown ? 0 : -width
+        visible: x > -width
+        Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+    Rectangle { width: 400; height: parent.height; color: menu.pal.rail; opacity: 0.96
+                Behavior on color { ColorAnimation { duration: 400 } } }
+    Rectangle {   // shadow on the content side
+        x: 400; width: 40; height: parent.height
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop { position: 0; color: "#66000000" }
+            GradientStop { position: 1; color: "#00000000" }
+        }
+    }
+    Logo { x: 56; y: 62 }
+    Text { x: 126; y: 88 - height / 2; text: "Stream Box"; color: "white"; font.pixelSize: 28; font.bold: true }
+    Rectangle {   // pill: slides from one entry to the other
+        x: 40; width: 320; height: 64; radius: 32
+        y: menu.railHome ? 150 : 236 + menu.tab * 76
+        color: "white"
+        Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+    }
+    Text {   // global: home screen, whatever the tab
+        x: 78; y: 182 - height / 2
+        text: menu.tr("⌂  Home screen")
+        color: menu.railHome ? "#1a1020" : "#b4afc2"
+        font.pixelSize: 25; font.bold: menu.railHome
+    }
+    Rectangle { x: 60; y: 225; width: 280; height: 1; color: "#33ffffff" }
+    Repeater {
+        model: menu.tabs.length
+        Item {
+            x: 40; y: 236 + index * 76; width: 320; height: 64
+            readonly property bool cur: index === menu.tab
+            readonly property bool pill: cur && !menu.railHome
+            Rectangle {   // current tab while the pill is on "Home screen": dot in the tab's color
+                visible: cur && !pill
+                x: 20; anchors.verticalCenter: parent.verticalCenter
+                width: 12; height: 12; radius: 6; color: menu.accent
+            }
+            Text {
+                x: cur && !pill ? 48 : 38
+                anchors.verticalCenter: parent.verticalCenter
+                text: menu.tr(menu.tabs[index].label)
+                color: pill ? "#1a1020" : (cur ? "white" : "#b4afc2")
+                font.pixelSize: 25
+                font.bold: cur
+                Behavior on x { NumberAnimation { duration: 160 } }
+            }
+        }
+    }
+    Column {   // what plays on the TV
+        x: 56; y: menu.height - 190; width: 310; spacing: 8
+        visible: (menu.st.mode === "twitch" && !!menu.st.channel) || menu.st.mode === "media"
+        Text { text: menu.tr("NOW ON THE TV"); color: "#a99fc0"; font.pixelSize: 16; font.bold: true; font.letterSpacing: 2 }
+        Marquee {
+            width: parent.width; pixelSize: 22; running: menu.isOpen
+            // Channel outside the list (followed, swapped second stream): no live info, just its name
+            readonly property var info: (menu.st.live || {})[menu.st.channel]
+            text: menu.st.mode === "media" ? (menu.st.title || menu.tr("Video"))
+                : (menu.st.channel || "") + (info ? "  ·  " + info.title : "")
+        }
+    }
+    }
+    Text {
+        anchors.right: parent.right; anchors.rightMargin: 80; y: menu.height - 75
+        text: menu.tr(menu.idle ? "▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back go back   ·   Menu tabs"
+                                : "▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back go back   ·   Menu close")
+        color: "#8a85a0"; font.pixelSize: 19
     }
 
     }

@@ -60,6 +60,7 @@ local is_open = false
 local state, display, account, qr = {}, nil, nil, nil
 local tab, area, index = 1, "rail", 1              -- tab, focused area (rail or content), item
 local shortcut = nil                                -- Live: shortcut selected above the streamers
+local rail_home = false                             -- rail: focus on "Home screen" (global, above the tabs)
 local pending_display = nil                         -- resolution chosen with the arrows, applied by OK
 local pending_player = nil                          -- player chosen with the arrows, applied by OK (it restarts)
 local poweroff_until = 0
@@ -585,12 +586,9 @@ end
 
 local LIVE_COLS = 4
 
--- Shortcuts at the top of the Live tab: home screen, and back to the stream when not on it
+-- Shortcuts at the top of the Live tab: back to the stream when not on it
 local function shortcuts()
-    local list = { { label = tr("⌂  Home screen"), current = state.mode == "home", ok = function()
-        act("home")
-        close_menu()
-    end } }
+    local list = {}
     if state.mode ~= "twitch" and state.channel then
         list[#list + 1] = { label = tr("▶  Resume {channel}", { channel = state.channel }), ok = function()
             act("twitch")
@@ -608,9 +606,12 @@ local function draw_rail(out)
     out[#out + 1] = rrect(56, 62, 52, 52, 14, "F7F2F4", "00")   -- neutral logo: white tile, charcoal triangle
     out[#out + 1] = "{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H1C1517&\\p1}m 76 77 l 93 88 76 99{\\p0}"   -- drawn ▶
     out[#out + 1] = label(126, 88, 36, "FFFFFF", "Stream Box", 4, "\\b1")
+    if rail_home then out[#out + 1] = rrect(40, 150, 320, 64, 32, "FFFFFF", "00") end
+    out[#out + 1] = label(78, 182, 30, rail_home and "20101A" or "C2AFB4", tr("⌂  Home screen"), 4, rail_home and "\\b1" or "")
+    out[#out + 1] = rrect(60, 225, 280, 1, 0, "FFFFFF", "CC")
     for i, t in ipairs(TABS) do
-        local y = 206 + (i - 1) * 76   -- 9 tabs between the logo and "Now on the TV"
-        if i == tab and area == "rail" then
+        local y = 236 + (i - 1) * 76   -- the tabs between "Home screen" and "Now on the TV"
+        if i == tab and area == "rail" and not rail_home then
             out[#out + 1] = rrect(40, y, 320, 64, 32, "FFFFFF", "00")
             out[#out + 1] = label(78, y + 32, 30, "20101A", ass_escape(tr(t.label)), 4, "\\b1")
         else
@@ -1299,7 +1300,7 @@ local function open_menu()
     is_open = true
     -- Tab of the current media (realigned when the state arrives), row and card kept for YouTube and Jellyfin
     for i, t in ipairs(TABS) do if t.id == media_tab(state) then tab = i end end
-    area, index, shortcut, start_focus = "content", 1, nil, true
+    area, index, shortcut, start_focus, rail_home = "content", 1, nil, true, false
     media.youtube.data, media.jellyfin.data, audio_out = nil, nil, nil
     -- Reread at each opening: the history changes, remote.py caches replays for 5 min
     history, history_loading, replays, rp_login, rp_row, rp_sel, rp_first = nil, false, {}, nil, 1, {}, {}
@@ -1367,8 +1368,21 @@ local function on_key(key)
         if is_open then draw() end
         return
     end
+    if area == "rail" and rail_home then   -- "Home screen": global, above the tabs
+        if key == "down" then
+            rail_home = false
+        elseif key == "ok" then
+            act("home")
+            return close_menu()
+        elseif key == "back" and state.mode ~= "home" then
+            return close_menu()
+        end
+        return draw()
+    end
     if area == "rail" then
-        if key == "up" or key == "down" then
+        if key == "up" and tab == 1 then
+            rail_home = true
+        elseif key == "up" or key == "down" then
             tab = math.max(1, math.min(#TABS, tab + (key == "down" and 1 or -1)))
             index, shortcut = 1, nil
         elseif (key == "right" or key == "ok") and content_count() > 0 then
@@ -1521,7 +1535,7 @@ local function on_key(key)
         elseif key == "right" then
             if col < LIVE_COLS - 1 and index < count then index = index + 1 end
         elseif key == "up" then
-            if index > LIVE_COLS then index = index - LIVE_COLS else shortcut = 1 end
+            if index > LIVE_COLS then index = index - LIVE_COLS elseif #shortcuts() > 0 then shortcut = 1 end
         elseif key == "down" then
             if index + LIVE_COLS <= count then
                 index = index + LIVE_COLS
