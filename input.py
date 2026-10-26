@@ -96,12 +96,28 @@ class Mpv:
                 if self.sock is None:
                     self.sock = socket.socket(socket.AF_UNIX)
                     self.sock.connect(MPV_SOCKET)
+                    # No events: this client never reads them, mpv would end up dropping the connection
+                    self.sock.sendall(b'{"command": ["disable_event", "all"]}\n')
+                self.drain()
                 self.sock.sendall((json.dumps({"command": list(command)}) + "\n").encode())
                 return True
             except OSError:
+                if self.sock:
+                    self.sock.close()
                 self.sock = None   # player restarted: reconnect
                 time.sleep(0.2)
         return False
+
+    def drain(self):
+        """Read mpv's replies waiting on the socket. A connection closed by mpv would swallow the next command
+        without an error: it is detected here and reopened"""
+        while True:
+            try:
+                data = self.sock.recv(65536, socket.MSG_DONTWAIT)
+            except BlockingIOError:
+                return
+            if not data:
+                raise OSError("mpv closed the connection")
 
 
 def main():
