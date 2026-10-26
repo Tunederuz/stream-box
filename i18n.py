@@ -5,7 +5,7 @@ text to the translated one. Placeholders use {name}: tr("Connected: {login}", lo
 
 The chosen language is stored in ~/.config/stream-box/language ("en" when missing). remote.py serves the locale files
 (/locales/<lang>.json) to the companion app and to the TV menu, and tells the TV when the language changes
-(script-message streambox-language <lang>). The same files are read by ui.py (QML), stream-box.lua and tv_menu.lua.
+(script-message streambox-language <lang>). The same files are read by ui.py (QML) and stream-box.lua.
 """
 import json, os
 

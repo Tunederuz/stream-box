@@ -56,6 +56,12 @@ local started = mp.get_time()
 local function qt_ui()
     return mp.get_property_native("user-data/streambox/chat_ui") == "qml"
 end
+-- Big TV menu: the QML one of the Qt app (vo libmpv), unless it failed to load (ui.py then writes "small").
+-- With mpv alone, the Menu button opens the small menu below (streamers, home screen, chat, back to the Qt app)
+local function big_menu()
+    return mp.get_property("vo", ""):find("libmpv", 1, true) ~= nil
+        and mp.get_property_native("user-data/streambox/menu") ~= "small"
+end
 
 local function read_streamers()
     local list = {}
@@ -249,9 +255,10 @@ local function setup_pending()
     return true
 end
 
+local open_tvmenu   -- (further down)
 local function home_menu()
     if mode ~= "home" then show_home() end
-    if not setup_pending() then mp.commandv("script-message", "streambox-tvmenu-open") end
+    if not setup_pending() then open_tvmenu() end
 end
 
 mp.register_event("start-file", function()
@@ -436,17 +443,19 @@ local function draw_menu()
     local mouse = mp.get_property_native("mouse-pos") or {}
 
     -- Streamers in a grid: as many columns as needed, and a smaller font if it still does not
-    -- fit in 90 % of the screen. The chat row (checkbox + corner) takes the full width below.
+    -- fit in 90 % of the screen. The chat row (checkbox + corner) takes the full width below, and with mpv alone
+    -- the "Animated menu" row under it.
     local n = math.max(#streamers, 1)   -- empty list: keep one cell for the layout
+    local extra = big_menu() and 0 or 1   -- full-width rows under the chat one
     local fs, bw, bh, sp, title_h, cols, rows, panel_w, panel_h
     fs = h / 24
     repeat
         bw, bh, sp, title_h = fs * 10, fs * 1.7, fs * 0.35, fs * 2
-        local max_rows = math.max(1, math.floor((h * 0.9 - title_h - bh * 2 - sp * 5) / (bh + sp)))
+        local max_rows = math.max(1, math.floor((h * 0.9 - title_h - bh * (2 + extra) - sp * (5 + extra)) / (bh + sp)))
         cols = math.ceil(n / max_rows)
         rows = math.ceil(n / cols)
         panel_w = cols * bw + (cols - 1) * sp
-        panel_h = title_h + rows * (bh + sp) + sp * 4 + bh * 2
+        panel_h = title_h + rows * (bh + sp) + sp * (4 + extra) + bh * (2 + extra)
         local fits = panel_w <= w * 0.9
         if not fits then fs = fs * 0.9 end
     until fits or fs < 10
@@ -494,6 +503,13 @@ local function draw_menu()
     button(x0, y, bh, "", false, toggle_chat, chat_visible)   -- checkbox: show / hide the chat
     button(x0 + bh + sp, y, panel_w - bh - sp, tr("Chat: {corner}", { corner = tr(CORNER_LABELS[corner]) }), false,
            toggle_corner, nil, chat_visible and "FFFFFF" or "808080")
+    if not big_menu() then   -- mpv alone (chosen, or fallback after the Qt app failed): way back to the big menu
+        button(x0, y + bh + sp, panel_w, tr("Animated menu (Qt app)"), false, function()
+            mp.command_native_async({ name = "subprocess", playback_only = false, args = { "curl", "-s", "-m", "5",
+                "-X", "POST", "-H", "Content-Type: application/json", "-d", '{"mode": "qt"}',
+                "http://127.0.0.1:8080/api/player" } }, function() end)
+        end)
+    end
 
     -- Companion app QR code to the right of the menu, if there is room (not on the ambient screen, which has its own)
     local size = math.floor(math.min(panel_h, h * 0.3))
@@ -1035,16 +1051,20 @@ local function controls_key(key)
     publish_controls()
 end
 
--- Big Android TV style menu (tv_menu.lua): opened by the Menu button (Home key); while it is open,
--- all keys are forwarded to it
+-- Big Android TV style menu (qml/TvMenu.qml): opened by the Menu button (Home key); while it is open,
+-- all keys are forwarded to it. With mpv alone, the same button opens and closes the small menu
 local tvmenu_open = false
 mp.observe_property("user-data/streambox/tvmenu", "native", function(_, v) tvmenu_open = v == true end)
-local function open_tvmenu()
+open_tvmenu = function()
     if setup_pending() then
         return mp.osd_message(tr("Continue the setup on your phone: scan the QR code"), 4)
     end
-    if menu_visible then hide_menu() end
     hide_bar()
+    if not big_menu() then
+        if menu_visible then hide_menu() else show_menu(true) end
+        return
+    end
+    if menu_visible then hide_menu() end
     mp.commandv("script-message", "streambox-tvmenu-open")
 end
 
@@ -1063,7 +1083,8 @@ end
 
 local function on_key(key)
     if key == "power" then return power_key() end
-    if key == "power_menu" then   -- power held: "sleep, restart, shut down" window (QML menu or tv_menu.lua)
+    if key == "power_menu" then   -- power held: "sleep, restart, shut down" window (QML menu)
+        if not big_menu() then return power_key() end   -- mpv alone: the power button's usual action
         if menu_visible then hide_menu() end
         hide_bar()
         return mp.commandv("script-message", "streambox-power-menu")
@@ -1457,7 +1478,7 @@ for key, spec in pairs(NUMBERS) do
     set_number(key, read_state(key) or spec[1])
 end
 -- Start on the menu, nothing playing; the last watched streamer stays the current channel (Back to the stream,
--- Home Assistant, zapping), if it is still in the list. Short delay: the menu (Qt app or tv_menu.lua) is loading.
+-- Home Assistant, zapping), if it is still in the list. Short delay: the Qt app's menu is loading.
 local last = read_state("channel")
 for _, name in ipairs(streamers) do
     if name == last then channel = last end

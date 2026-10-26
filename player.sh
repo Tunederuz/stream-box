@@ -20,7 +20,7 @@ YTDL_FORMAT='bestvideo[height<=?1440][vcodec!^=av01]+bestaudio/best'
 # fetch_pot: anti-bot token (stream-box-pot service) for every request, otherwise YouTube blocks the subtitles
 MPV_ARGS=(
   --idle=yes --force-window=yes --fs --osc=no --cursor-autohide=4000
-  --input-ipc-server=/tmp/stream-box-mpv.sock --script="$DIR/stream-box.lua" --script="$DIR/tv_menu.lua"
+  --input-ipc-server=/tmp/stream-box-mpv.sock --script="$DIR/stream-box.lua"
   --cache=yes --hwdec=auto-safe
   --ytdl-format="$YTDL_FORMAT"
   --ytdl-raw-options-append=sub-langs=fr,fr-FR,fr-orig,en,en-US,en-GB,en-orig

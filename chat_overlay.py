@@ -24,7 +24,7 @@ CORNERS = {
 messages = deque(maxlen=MAX_MESSAGES)
 lock = threading.Lock()
 # Updated by mpv (user-data/streambox/*). chat_bg: background opacity in %; chat_size: text size
-# tvmenu: big TV menu open (tv_menu.lua), the chat would go over it
+# tvmenu: big TV menu open, the chat would go over it
 # chat_ui: "qml" when the Qt app (ui.py) draws the chat itself, with emotes
 state = {"channel": None, "corner": "bl", "chat_visible": True, "chat_bg": 60, "chat_size": 32, "mode": "twitch",
          "tvmenu": False, "chat_ui": None}

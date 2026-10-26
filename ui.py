@@ -12,7 +12,7 @@ a corner or side by side with the main one (ui.qml, animated transitions). Drive
 IPC (script-message streambox-pip <open|close|swap|layout> [channel] [pip|split], /api/pip of remote.py); state published
 in user-data/streambox/pip. Sound muted: the sound is the main stream's (Swap exchanges the two).
 
-The big TV menu is in QML (qml/TvMenu.qml): when it loads, tv_menu.lua is not loaded; the Menu button
+The big TV menu is in QML (qml/TvMenu.qml; if it fails to load, stream-box.lua opens its small menu): the Menu button
 (script-message streambox-tvmenu-open from stream-box.lua) opens it, and while it is open keys go to it, not to
 mpv. It reads and acts through the remote.py API, like the companion app.
 
@@ -608,10 +608,8 @@ def main():
     view.setSource(QUrl.fromLocalFile(os.path.join(DIR, "ui.qml")))
     qml_menu = view.status() == QQuickView.Ready and view.rootObject().findChild(QObject, "tvMenu") is not None
     if not qml_menu:
-        print("QML menu unavailable: tv_menu.lua menu", [e.toString() for e in view.errors()], flush=True)
+        print("QML menu unavailable: small menu of stream-box.lua", [e.toString() for e in view.errors()], flush=True)
     scripts = opts.pop("scripts", [])
-    if qml_menu:   # two menus would answer the Menu button
-        scripts = [s for s in scripts if os.path.basename(s) != "tv_menu.lua"]
     if scripts:
         opts["scripts"] = ":".join(scripts)
     player = mpv.MPV(vo="libmpv", **{k.replace("-", "_"): v for k, v in opts.items()})
@@ -682,6 +680,9 @@ def main():
         bridge.ready.connect(lambda: to_mpv(set_flag, "user-data/streambox/tvmenu", False), Qt.QueuedConnection)
         # The chat is drawn here (with emotes): chat_overlay.py, which draws it as text in mpv, stays quiet
         bridge.ready.connect(lambda: to_mpv(player._set_property, "user-data/streambox/chat_ui", "qml"),
+                             Qt.QueuedConnection)
+    else:   # no big menu: stream-box.lua opens its small menu instead
+        bridge.ready.connect(lambda: to_mpv(player._set_property, "user-data/streambox/menu", "small"),
                              Qt.QueuedConnection)
     view.showFullScreen()
     # Boot image from start.sh (mpv, same image as the Plymouth screen): removed once the app's first frame is
