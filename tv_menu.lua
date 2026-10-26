@@ -19,7 +19,7 @@ function I18N.load()
     if f then lang = (f:read("*l") or "en"):match("^%s*(%a+)") or "en" f:close() end
     I18N.dict, I18N.lang = {}, lang
     if lang == "en" then return end
-    local dir = (mp.get_script_file() or ""):match("^(.*)/[^/]*$") or "."
+    local dir = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$") or "."   -- (mp.get_script_file is too recent)
     local lf = io.open(dir .. "/locales/" .. lang .. ".json")
     if lf then
         I18N.dict = require("mp.utils").parse_json(lf:read("*a") or "") or {}
