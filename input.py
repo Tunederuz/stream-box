@@ -22,6 +22,10 @@ EV_KEY, EV_ABS = 1, 3
 ABS_HAT0X, ABS_HAT0Y = 16, 17
 REPEATABLE = {"up", "down", "left", "right", "volume_up", "volume_down"}
 LONG_PRESS = 1   # seconds: power held → "sleep, restart, shut down" window (power_menu) instead of power
+# Held key: repeated here, the same for every device (the kernel only repeats for some: the Xiaomi remote's
+# "Consumer Control" entry, which sends arrows, OK and volume, has no autorepeat). Seconds; stops after REPEAT_MAX
+# in case the release is lost (Bluetooth dropping)
+REPEAT_DELAY, REPEAT_EVERY, REPEAT_MAX = 0.4, 0.08, 20
 DEFAULTS = {
     # Remotes (including Xiaomi: OK = KEY_SELECT, ≡ = KEY_VIDEOPHONE, assistant = KEY_VOICECOMMAND), keyboards
     "KEY_UP": "up", "KEY_DOWN": "down", "KEY_LEFT": "left", "KEY_RIGHT": "right",
@@ -125,6 +129,7 @@ def main():
     devices = {}            # path -> open file
     hat = {}                # (path, axis) -> last value of the gamepad d-pad
     held = {}               # (path, code) -> [press time, name, window already open] for power keys
+    repeating = {}          # (path, code or axis) -> [next repeat, name, action, press time] for held keys
     last_scan = last_beat = 0
     allowed = None
     first_scan = True       # devices already there at startup: no notification
@@ -144,6 +149,8 @@ def main():
                      tr("Device disconnected · {name}", name=base))
 
     def drop(path):
+        for k in [k for k in repeating if k[0] == path]:
+            del repeating[k]
         devices.pop(path).close()
         name = names.pop(path, "")
         if name and base_name(name) not in map(base_name, names.values()):   # no entry left for this device
@@ -184,7 +191,15 @@ def main():
             if not h[2] and time.time() - h[0] >= LONG_PRESS:
                 h[2] = True
                 mpv.send("script-message", "streambox-input", h[1], "power_menu")
-        ready, _, _ = select.select(list(devices.values()), [], [], 0.2 if held else 1)
+        now = time.time()
+        for k, r in list(repeating.items()):
+            if now - r[3] > REPEAT_MAX:
+                del repeating[k]
+            elif now >= r[0]:
+                r[0] = now + REPEAT_EVERY
+                mpv.send("script-message", "streambox-input", r[1], r[2])
+        wait = min([max(0, r[0] - now) for r in repeating.values()] + [0.2 if held else 1])
+        ready, _, _ = select.select(list(devices.values()), [], [], wait)
         for f in ready:
             path = next(p for p, d in devices.items() if d is f)
             try:
@@ -202,19 +217,25 @@ def main():
                         h = held.pop((path, code), None)
                         if h and not h[2]:
                             mpv.send("script-message", "streambox-input", h[1], "power")
-                elif etype == EV_KEY and value in (1, 2):   # press, or repeat of a held key
+                elif etype == EV_KEY and value == 1:   # press (the kernel's repeats, value 2, are ignored)
                     name = key_name(code)
                     action = keymap.get(name)
-                    if value == 2 and action not in REPEATABLE:
-                        continue
                     mpv.send("script-message", "streambox-input", name, action)
+                    if action in REPEATABLE:
+                        repeating[(path, code)] = [time.time() + REPEAT_DELAY, name, action, time.time()]
+                elif etype == EV_KEY and value == 0:   # release
+                    repeating.pop((path, code), None)
                 elif etype == EV_ABS and code in (ABS_HAT0X, ABS_HAT0Y):   # gamepad d-pad
                     if value and hat.get((path, code)) != value:
                         names = {(ABS_HAT0X, -1): "HAT_LEFT", (ABS_HAT0X, 1): "HAT_RIGHT",
                                  (ABS_HAT0Y, -1): "HAT_UP", (ABS_HAT0Y, 1): "HAT_DOWN"}
                         name = names[(code, 1 if value > 0 else -1)]
-                        mpv.send("script-message", "streambox-input", name,
-                                 keymap.get(name) or name.split("_")[1].lower())
+                        action = keymap.get(name) or name.split("_")[1].lower()
+                        mpv.send("script-message", "streambox-input", name, action)
+                        if action in REPEATABLE:
+                            repeating[(path, -code)] = [time.time() + REPEAT_DELAY, name, action, time.time()]
+                    elif not value:
+                        repeating.pop((path, -code), None)
                     hat[(path, code)] = value
 
 

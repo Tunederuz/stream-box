@@ -736,6 +736,9 @@ BTN_* and ABS_HAT pad of gamepads), translated into actions (DEFAULTS, then keym
 Without permissions on /dev/input, it stops: old path (mpv names and 0x21… keysyms, KEYS of stream-box.lua) as
 fallback. Actions: up down left right ok back home menu homescreen corner power volume_up volume_down mute. The
 page's virtual remote also sends actions (`streambox-input VIRTUAL <action>`, never learned).
+Held key: repeated by input.py itself (`REPEATABLE`: arrows, volume; 400 ms then every 80 ms, the gamepad d-pad
+too), the kernel's repeats (value 2) are ignored: the Xiaomi remote's "Consumer Control" entry (arrows, OK, volume)
+has no autorepeat (no EV_REP), only its "Keyboard" entry did, hence keys that repeated "sometimes".
 "Set up keys" wizard (System menu, QML and Lua; `POST /api/keymap {action: wizard|reset}`): in
 stream-box.lua, the actions one by one (8 s each, without a key it keeps its own; a key already taken is
 refused), learned keys added to `~/.config/stream-box/keymap.json` ({name: action}, Linux names via input.py or
