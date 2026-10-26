@@ -1,7 +1,7 @@
 """Stream Box: HTTP server of the companion app (http://<box>:8080): the page and its PWA files, the locale files, the
 GET routes of the API (state, lists, status) and POST /api/<action> (actions.py). Standard library only.
 """
-import json, os, subprocess, time, urllib.parse
+import json, os, time, urllib.parse
 from http.server import BaseHTTPRequestHandler
 
 import actions    # actions.py: POST /api/<name>, TV menu keyboard
@@ -155,14 +155,6 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, display.info())
                 except OSError as e:
                     self.send(503, {"error": str(e)})
-            elif self.path.startswith("/api/tvimage?"):
-                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                try:
-                    self.send(200, images.tv_image(q.get("src", [""])[0], int(q.get("w", ["0"])[0]),
-                                                   int(q.get("h", ["0"])[0]), q.get("round", ["0"])[0] == "1",
-                                                   int(q.get("radius", ["0"])[0])))
-                except (ValueError, subprocess.SubprocessError) as e:
-                    self.send(400, {"error": str(e)})
             elif self.path.startswith("/api/youtube_search?"):
                 q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("q", [""])[0]
                 try:
