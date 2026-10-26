@@ -368,11 +368,8 @@ Twitch / YouTube by Qt and rounded by `MultiEffect` (no more need for `/api/tvim
 `box.ambient` (observed property), opaque veil without video (`box.videoActive`). Components: `RoundImage`,
 `Marquee` (text clipped at rest, two copies that scroll on focus), `FocusFrame`, `StreamerCard`, `VideoCard`,
 `SettingRow`, `QrCode`, `fmt.js`.
-Dynamic rail (QML only; tv_menu.lua keeps its fixed rail): the rail is shown only while it has the focus
-(`railShown` = `area === "rail"`) and then pushes the content to the right (`pageX` 460, never covered: the tabs can be
-scanned); OK or ▶ on a tab hides it and the content takes the full width (`pageX` 230). ◀ at the left edge brings
-it back. Back closes the menu, from the content as from the rail (also with nothing playing: home screen). Menu button: closes the menu over a video; with nothing playing (`idle`, `home` mode)
-it shows the rail, and hides it again (`menuKey`). Pitfalls: font sizes ×0.78 compared to the ASS menu (Qt draws larger for
+Back closes the menu, from the content as from the rail (also with nothing playing: home screen). A tab with
+nothing to focus (empty list, history…) keeps the focus on the rail (`canEnter`, `checkArea`). Pitfalls: font sizes ×0.78 compared to the ASS menu (Qt draws larger for
 the same value); in `onTabChanged`, read `tabs[tab].id` and not `tabId` (binding not recomputed yet); lists
 with `clip`: margins (`leftMargin`, `topMargin`) so as not to cut the focus glow; models as an item count
 (the delegates read the arrays) so that the list does not reset on every state poll. Testing without
@@ -811,7 +808,7 @@ The large menu is the main page: at boot (`home_menu()` 3 s after stream-box.lua
 for the menu to load), at the end of a video (`BACK_TO_MENU`) and on Back during a stream or a video, playback
 stops (`show_home`, `home` mode) and the menu opens over the home screen. No more Back ×2 (nor
 `/api/resume_last`): "▶  Resume {channel}" in Live and the History do this job. In `home` mode (menu
-closed after 90 s, by Back, by "⌂  Home screen" or, in the Lua menu, by Menu: animated home screen), any key reopens the
+closed after 90 s, by Menu, by "⌂  Home screen" or, in the QML menu, by Back: animated home screen), any key reopens the
 menu. Lua menu open with nothing playing: Back on the tabs does not close it (`state.mode`). Menu background: glows in the
 tab's color that drift, two more without video behind (the veil is opaque there, to hide the home
 screen).
