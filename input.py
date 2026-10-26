@@ -112,18 +112,18 @@ def main():
     last_scan = last_beat = 0
     allowed = None
     first_scan = True       # devices already there at startup: no notification
-    noticed = {}            # (base name, connected?) -> time of the last notification (one device = often
-                            # several entries)
+    noticed = {}            # base name -> last state announced (one device = often several entries)
     names = {}              # path -> device name, to announce its disconnection
 
     def base_name(name):   # "Xiaomi RC Keyboard" and "Xiaomi RC Consumer Control": the same remote
         return re.sub(r"\s+(Keyboard|Consumer Control|System Control|Mouse|Touchpad)$", "", name).strip()
 
     def notice(name, connected):
-        """Banner on the TV (Notice.qml), once per device and per direction within 10 s"""
+        """Banner on the TV (Notice.qml) when a device changes state: a quick disconnection then reconnection
+        shows both, the several entries of one device only once"""
         base = base_name(name)
-        if time.time() - noticed.get((base, connected), 0) > 10:
-            noticed[(base, connected)] = time.time()
+        if noticed.get(base) != connected:
+            noticed[base] = connected
             mpv.send("script-message", "streambox-notice", tr("Device connected · {name}", name=base) if connected else
                      tr("Device disconnected · {name}", name=base))
 
@@ -149,6 +149,8 @@ def main():
                         names[path] = name
                         if not first_scan:   # remote, gamepad or keyboard connecting
                             notice(name, True)
+                        else:                # already there at startup: known as connected, no banner
+                            noticed[base_name(name)] = True
                     except PermissionError:
                         if allowed is None:
                             allowed = False
