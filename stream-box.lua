@@ -93,27 +93,6 @@ local function write_state(name, value)
     end
 end
 
--- Loading screen between two videos or two channels (otherwise the picture stays frozen and looks like a hang):
--- user-data/streambox/loading { title, thumb } until the first frame (playback-restart), an error or 45 s at most;
--- drawn by qml/LoadingOverlay.qml, or a simple on-screen message with mpv alone
-local loading_timer, loading_osd = nil, false
-local function set_loading(title, thumb, kind)   -- kind: twitch, youtube, jellyfin or video (animation color)
-    if loading_timer then loading_timer:kill() loading_timer = nil end
-    if title then
-        mp.set_property_native("user-data/streambox/loading", { title = title, thumb = thumb or "", kind = kind or "video" })
-        -- Qt app (vo=libmpv, known from startup, unlike chat_ui): the QML screen is enough
-        loading_osd = mp.get_property("vo") ~= "libmpv"
-        if loading_osd then mp.osd_message(tr("Loading {title}…", { title = title }), 45) end
-        loading_timer = mp.add_timeout(45, function() set_loading(nil) end)
-    else
-        mp.set_property_native("user-data/streambox/loading", {})
-        if loading_osd then mp.osd_message("", 0) end
-        loading_osd = false
-    end
-end
-mp.register_event("playback-restart", function() set_loading(nil) end)
-mp.register_event("end-file", function(e) if e.reason == "error" then set_loading(nil) end end)
-
 local function set_status(text)
     status_text = text
     mp.set_property_native("user-data/streambox/status", text)   -- for the QML home screen (Qt app)
@@ -125,6 +104,28 @@ local function set_status(text)
     status.data = "{\\an5\\pos(960,540)\\fs40\\bord2\\shad0\\3c&H000000&\\1c&HC0C0C0&}" .. ass_escape(text)
     status:update()
 end
+
+-- Loading screen between two videos or two channels (otherwise the picture stays frozen and looks like a hang):
+-- user-data/streambox/loading { title, thumb } until the first frame (playback-restart), an error or 45 s at most;
+-- drawn by qml/LoadingOverlay.qml, or the centered status message with mpv alone
+local loading_timer, loading_osd = nil, false
+local function set_loading(title, thumb, kind)   -- kind: twitch, youtube, jellyfin or video (animation color)
+    if loading_timer then loading_timer:kill() loading_timer = nil end
+    if title then
+        mp.set_property_native("user-data/streambox/loading", { title = title, thumb = thumb or "", kind = kind or "video" })
+        -- Qt app (vo=libmpv, known from startup, unlike chat_ui): the QML screen is enough
+        -- mpv alone: the centered status message (a single one: the Twitch loading sets the same text)
+        loading_osd = mp.get_property("vo") ~= "libmpv" and tr("Loading {title}…", { title = title })
+        if loading_osd then set_status(loading_osd) end
+        loading_timer = mp.add_timeout(45, function() set_loading(nil) end)
+    else
+        mp.set_property_native("user-data/streambox/loading", {})
+        if loading_osd and status_text == loading_osd then set_status("") end   -- unless replaced since ("not live"…)
+        loading_osd = false
+    end
+end
+mp.register_event("playback-restart", function() set_loading(nil) end)
+mp.register_event("end-file", function(e) if e.reason == "error" then set_loading(nil) end end)
 
 
 -- Playback: streamlink runs as a local HTTP server, mpv plays http://127.0.0.1:<port>/
@@ -503,8 +504,8 @@ local function draw_menu()
     button(x0, y, bh, "", false, toggle_chat, chat_visible)   -- checkbox: show / hide the chat
     button(x0 + bh + sp, y, panel_w - bh - sp, tr("Chat: {corner}", { corner = tr(CORNER_LABELS[corner]) }), false,
            toggle_corner, nil, chat_visible and "FFFFFF" or "808080")
-    if not big_menu() then   -- mpv alone (chosen, or fallback after the Qt app failed): way back to the big menu
-        button(x0, y + bh + sp, panel_w, tr("Animated menu (Qt app)"), false, function()
+    if not big_menu() then   -- simplified version (mpv alone, chosen or after the Qt app failed): way back
+        button(x0, y + bh + sp, panel_w, tr("Switch to the full version"), false, function()
             mp.command_native_async({ name = "subprocess", playback_only = false, args = { "curl", "-s", "-m", "5",
                 "-X", "POST", "-H", "Content-Type: application/json", "-d", '{"mode": "qt"}',
                 "http://127.0.0.1:8080/api/player" } }, function() end)

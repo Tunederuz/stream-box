@@ -318,9 +318,9 @@ applied on OK. Live: shortcuts above the streamers ("▶  Resume {channel}" outs
 the first row). System: account status, power off (OK twice), companion app QR code for whatever requires typing
 text. Testing: `keypress HOMEPAGE`, `keypress DOWN`… through the IPC, then `/api/preview`.
 
-With mpv alone (player setting "mpv only", fallback after the Qt app failed, or QML menu that failed to load: ui.py
+With mpv alone, the "simplified version" (System → Version setting, fallback after the Qt app failed, or QML menu that failed to load: ui.py
 then writes `user-data/streambox/menu = small`) there is no big menu: Menu opens and closes the small menu of
-stream-box.lua (streamers, home screen, chat, and "Animated menu (Qt app)", which calls `POST /api/player
+stream-box.lua (streamers, home screen, chat, and "Switch to the full version", which calls `POST /api/player
 {mode: qt}`), and holding power does the power button's usual action. (The Lua copy of the big menu, tv_menu.lua,
 was dropped: it duplicated every feature and kept drifting from the QML one.)
 
@@ -567,7 +567,7 @@ frame (`playback-restart`), on error, on the home screen or after 45 s. `qml/Loa
 `osd.loading`, `kind`: twitch, youtube, jellyfin, video): blurred thumbnail, box logo that breathes, glow in the
 source's color running along the triangle's outline (dashed ShapePath, animated `dashOffset`), ripples;
 drop shadow under the texts; fade in and out. With mpv alone
-(`vo` ≠ libmpv): "Loading {title}…" message on screen. Title and image come from remote.py (history, Jellyfin)
+(`vo` ≠ libmpv): "Loading {title}…" as the centered status message (the only one, also for a Twitch channel). Title and image come from remote.py (history, Jellyfin)
 or from the request (`POST /api/play` accepts `title`, `thumb`: the QML menu sends them).
 Banner and playback bar (InfoBar.qml): darker gradient reaching higher and drop shadow under the header, to read the
 title over a light image.

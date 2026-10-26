@@ -1414,7 +1414,7 @@ async function refreshHealth() {
     };
     const t = h.temps.cpu, used = h.memory.total - h.memory.available;
     const p = h.player, u = h.update, ok = (v) => v === "active" ? "✓" : "✕";
-    const player = p.running === "qt" ? tr("Qt app") : tr("mpv only");
+    const player = p.running === "qt" ? tr("Full version") : tr("Simplified version");
     $("health").replaceChildren(
       tile(tr("Temperature"), t != null ? `${t} °C` : "–", h.temps.disk != null ? tr("disk {t} °C", { t: h.temps.disk }) : "", t >= 85 ? "bad" : t >= 70 ? "warn" : ""),
       tile(tr("Processor"), h.cpu != null ? tr("{n}%", { n: Math.round(h.cpu) }) : "…",

@@ -606,8 +606,10 @@ Item {
               hint: ytAccount && ytAccount.tv && ytAccount.tv.connected ? tr("Progress synced with your account (phone, computer)")
                   : tr("Subscriptions, and progress synced with your account"),
               ok: function () { ytAccountMenu() } },
-            { label: tr("Player"), value: (pendingPlayer || st.player) === "mpv" ? tr("mpv only") : tr("Qt app (animated menu)"),
-              hint: pendingPlayer && pendingPlayer !== st.player ? tr("OK to apply: the player restarts") : undefined,
+            { label: tr("Version"), value: (pendingPlayer || st.player) === "mpv" ? tr("Simplified version") : tr("Full version"),
+              // simplified: mpv alone, small menu (Twitch streamers); videos sent from the phone still play
+              hint: pendingPlayer && pendingPlayer !== st.player ? tr("OK to apply: the player restarts")
+                  : tr("Simplified: lighter, only Twitch streamers in the TV menu"),
               step: function (d) { pendingPlayer = (pendingPlayer || st.player) === "qt" ? "mpv" : "qt" },
               ok: function () {
                   if (!pendingPlayer || pendingPlayer === st.player) return
@@ -713,7 +715,7 @@ Item {
             [tr("Network"), "↓ " + bits(net.rx), "↑ " + bits(net.tx) + (net.speed > 0 ? " · " + tr("link {speed}", { speed: net.speed >= 1000 ? net.speed / 1000 + " Gbit/s" : net.speed + " Mbit/s" }) : ""), ""],
             [tr("Up for"), since(h.uptime), "MQTT " + ok(h.services.mqtt) + " · " + tr("YouTube tokens {ok}", { ok: ok(h.services.youtube_tokens) }),
              h.services.mqtt !== "active" || h.services.youtube_tokens !== "active" ? "warn" : ""],
-            [tr("Playback"), (p.running === "qt" ? tr("Qt app") : tr("mpv only")) + (p.hwdec && p.hwdec !== "no" ? " · " + p.hwdec : p.size ? " · " + tr("CPU") : ""),
+            [tr("Playback"), (p.running === "qt" ? tr("Full version") : tr("Simplified version")) + (p.hwdec && p.hwdec !== "no" ? " · " + p.hwdec : p.size ? " · " + tr("CPU") : ""),
              p.size ? tr("{size} · {fps} fps · {dropped} dropped", { size: p.size.replace("x", " × "), fps: Math.round(p.fps || 0), dropped: p.dropped || 0 })
                     : tr("nothing playing"),
              p.size && (!p.hwdec || p.hwdec === "no") ? "warn" : ""],
