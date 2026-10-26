@@ -1,0 +1,7 @@
+# Python checks (tools/check.sh, CI): pyflakes rules only (undefined names, unused imports and variables…)
+[lint]
+select = ["F"]
+exclude = ["cast"]
+
+[lint.per-file-ignores]
+"btagent.py" = ["F821"]   # D-Bus signatures written as annotations ("o", "s"…), read by dbus-next

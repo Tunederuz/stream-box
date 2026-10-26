@@ -18,6 +18,7 @@ YTDL_FORMAT='bestvideo[height<=?1440][vcodec!^=av01]+bestaudio/best'
 # without the automatic translations ("French from Arabic"… over 100 tracks).
 # player_client: the TV client chosen by default gets refused streams (403); tv_simply and android_vr work.
 # fetch_pot: anti-bot token (stream-box-pot service) for every request, otherwise YouTube blocks the subtitles
+# shellcheck disable=SC2054  # (commas inside mpv option values, not array separators)
 MPV_ARGS=(
   --idle=yes --force-window=yes --fs --osc=no --cursor-autohide=4000
   --input-ipc-server=/tmp/stream-box-mpv.sock --script="$DIR/stream-box.lua"
