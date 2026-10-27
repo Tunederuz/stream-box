@@ -778,10 +778,10 @@ mp.register_event("end-file", close_info)
 -- (Jellyfin). States published for InfoBar.qml and NextUp.qml: seekfx, controls, next_card; remote.py publishes next_up.
 
 -- Fast forward: the jump follows how fast the key comes (time between presses, averaged: a held key repeats every
--- 0.08 s, input.py): slow presses 10 s, quick ones 30 s, held key 1 min; more than 1.5 s or the other way: from scratch.
+-- 0.08 s, input.py): slow presses 10 s, quick ones 30 s, held key 1 min; more than 0.8 s or the other way: from scratch.
 -- ← → on the bar scrub: the video pauses and a target moves (cursor and preview there, offset displayed); OK goes there
 -- and plays, Back gives up (back where it was, playing or paused as before). The ⏪ ⏩ buttons of the row jump at once.
-local seek_last, seek_gap, seek_total, seek_dir, seek_n = 0, 1.5, 0, 0, 0
+local seek_last, seek_gap, seek_total, seek_dir, seek_n = 0, 0.8, 0, 0, 0
 local function fmt_seek(t)
     t = math.abs(t)
     if t < 60 then return ("%d s"):format(t) end
@@ -792,9 +792,9 @@ local function media_seek(dir, at_once)
     local now = mp.get_time()
     if now - seek_last < 0.12 then return end   -- repeat of a held key: no more than 8 jumps per second
     local gap = now - seek_last
-    if gap < 1.5 and dir == seek_dir then seek_gap = (seek_gap + gap) / 2 else seek_gap, seek_total = 1.5, 0 end
+    if gap < 0.8 and dir == seek_dir then seek_gap = (seek_gap + gap) / 2 else seek_gap, seek_total = 0.8, 0 end
     seek_last, seek_dir = now, dir
-    local step = seek_gap < 0.35 and 60 or seek_gap < 0.7 and 30 or 10
+    local step = seek_gap < 0.18 and 60 or seek_gap < 0.3 and 30 or 10
     seek_n = seek_n + 1
     if at_once then
         seek_total = seek_total + step
