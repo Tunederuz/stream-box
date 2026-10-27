@@ -363,12 +363,13 @@ Any key, closing the menu or changing tab stops it. Resolving a link takes about
 one are resolved in advance (`POST /api/card_preview_prefetch`, one at a time in `youtube.preview_loop`, kept 1 h).
 CardPreview never goes fully invisible (opacity 0.001): libmpv needs its render context before a video starts.
 Jellyfin is left out on purpose (long intros).
-Live tab: banner at the top (`LiveTab`, `Layout.bannerH`) for the chosen streamer: Twitch's live thumbnail
-(`static-cdn.jtvnw.net/previews-ttv/live_user_<login>-640x360.jpg`, refreshed every 5 min) or its photo when offline,
-name, viewers, game, title; then the shortcuts and two rows of the grid. After 0.9 s on a live streamer (not the one
-already on the TV, nor the second stream), its live plays muted in the banner: `startPreview` with
-`twitch:<login>`, ui.py starts its own streamlink (`PREVIEW_PORT` 34591, 360p) and loads it once served (retries every
-1.5 s while the player is idle, 6 at most). Any key restarts the 0.9 s on the streamer still chosen (`keyCount`).
+Live tab: after 0.9 s on a live streamer (not the one already on the TV, nor the second stream), its card grows
+over its neighbors into a 480 × 270 tile (`LiveTab.grow`, animated from the card, kept on screen) with Twitch's live
+thumbnail (`static-cdn.jtvnw.net/previews-ttv/live_user_<login>-640x360.jpg`) and a caption (photo, name, viewers,
+game); the live fades in over the thumbnail: `startPreview` with `twitch:<login>` and the tile's final rect, ui.py
+starts its own streamlink (`PREVIEW_PORT` 34591, 360p) and loads it once served (retries every 1.5 s while the player
+is idle, 6 at most). Any key puts the card back and restarts the 0.9 s (`keyCount`). (A banner above the grid was
+tried first: it took too much room.)
 Video cards (`VideoCard`: 456 px wide, 16:9 thumbnail, height from the width): 3 per row in Replays, YouTube,
 Jellyfin (step 482) and History (3 columns, 2 rows); the Replays and YouTube/Jellyfin rows scroll vertically (one full
 row, the top of the next one showing).

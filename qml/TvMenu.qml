@@ -807,15 +807,16 @@ Item {
     }
     // Card preview: after a moment on a YouTube card, its video plays muted in the thumbnail (VideoCard.previewWanted
     // → startPreview; link from remote.py, player "cardPreview" of ui.py, drawn by menu/CardPreview.qml). The links of
-    // the cards around the focused one are resolved in advance (about 3 s each otherwise). Live tab: the live of the
-    // chosen streamer in the banner ("twitch:<login>", streamlink started by ui.py).
+    // the cards around the focused one are resolved in advance (about 3 s each otherwise). Live tab: the card of a
+    // live streamer grows and plays its live ("twitch:<login>", streamlink started by ui.py).
     property var previewRect: null   // thumbnail of the previewed card, in menu coordinates; null: no preview
     property string previewFor: ""   // link of the video being previewed (or whose link is being fetched)
-    function startPreview(item, picture) {
+    // target: the thumbnail (an Item), or a rect in menu coordinates (Live tab: the grown card, before its animation ends)
+    function startPreview(item, target) {
         stopPreview()
         var url = item.url
         previewFor = url
-        var r = picture.mapToItem(menu, 0, 0, picture.width, picture.height)
+        var r = target.mapToItem ? target.mapToItem(menu, 0, 0, target.width, target.height) : target
         if (url.indexOf("twitch:") === 0) {   // live: ui.py starts its own streamlink
             previewRect = { x: r.x, y: r.y, width: r.width, height: r.height }
             cardPreview.play(url, 0)
