@@ -19,8 +19,10 @@ from i18n import tr
 
 HOME = os.path.expanduser("~")
 # Relative to the home directory; in the archive: home/<user>/… like backup.sh
-PATHS = ("stream-box/streamers.txt", ".local/state/stream-box", ".config/stream-box", ".config/streamlink/config.twitch",
+PATHS = (".local/state/stream-box", ".config/stream-box", ".config/streamlink/config.twitch",
          ".config/jellyfin-mpv-shim", ".local/state/wireplumber")
+# Also restored: the streamer list of older backups, next to the code (twitch.py moves it into the settings)
+RESTORED = PATHS + ("stream-box/streamers.txt",)
 SKIP = re.compile(r"(^|/)(fonts|scripts|offline)(/|$)|\.lock|\.bak$|(^|/)update\.log$|(^|/)before-restore\.tar\.gz$")
 MANIFEST = "stream-box-backup.json"
 WIFI = "stream-box-wifi.json"
@@ -105,7 +107,7 @@ def restore(data):
             rel = re.match(r"home/[^/]+/(.+)$", m.name)
             rel = rel and rel.group(1)
             if not rel or SKIP.search(rel) or not (m.isfile() or m.isdir()) \
-                    or not any(rel == p or rel.startswith(p + "/") for p in PATHS):
+                    or not any(rel == p or rel.startswith(p + "/") for p in RESTORED):
                 continue
             m.name = f"{HOME.lstrip('/')}/{rel}"
             members.append(m)

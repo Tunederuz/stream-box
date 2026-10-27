@@ -16,7 +16,6 @@ OUT=${1:-stream-box-backup-$(date +%F).tar.gz}
 
 # Paths relative to /, kept only if they exist (same list as the restore in install.sh)
 PATHS=(
-  "${BOX_HOME#/}/stream-box/streamers.txt"
   "${BOX_HOME#/}/.local/state/stream-box"
   "${BOX_HOME#/}/.config/stream-box"
   "${BOX_HOME#/}/.config/streamlink/config.twitch"

@@ -4,11 +4,12 @@
 #   enable  : passwordless sudo for media (/etc/sudoers.d/90-stream-box-dev), and SSH enabled (password shown on the
 #             TV, see ssh-access): ssh media@box then sudo
 #   disable : sudo removed (SSH keeps its own setting)
+#   restore : sudo only, at boot from the marker (persist restore: a new system after an A/B update)
 set -euo pipefail
 SUDOERS=/etc/sudoers.d/90-stream-box-dev
 MARK=/var/lib/stream-box/dev-mode   # readable by media (remote.py): /etc/sudoers.d is not
 case "${1:-}" in
-  enable)
+  enable|restore)
     install -d -m 750 /etc/sudoers.d
     tmp=$(mktemp)
     echo 'media ALL=(ALL:ALL) NOPASSWD: ALL' > "$tmp"
@@ -17,7 +18,7 @@ case "${1:-}" in
     rm -f "$tmp"
     install -d -m 750 -o root -g media "$(dirname "$MARK")"
     touch "$MARK"
-    "$(dirname "$0")/ssh-access" enable
+    if [ "$1" = enable ]; then "$(dirname "$0")/ssh-access" enable; fi
     ;;
   disable)
     rm -f "$SUDOERS" "$MARK"

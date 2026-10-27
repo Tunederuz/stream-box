@@ -3,15 +3,19 @@
 #   enable  : random password for media (kept while SSH stays enabled, readable by media only in
 #             /var/lib/stream-box/ssh-password, shown on the TV), password login allowed, sshd started
 #   disable : sshd stopped and disabled, password erased, password login removed (keys stay)
+#   restore : at boot from the kept password (persist restore: a new system after an A/B update): media's password,
+#             password login, sshd enabled and started without waiting
 set -euo pipefail
 PASS_FILE=/var/lib/stream-box/ssh-password
 # Before 50-stream-box.conf (PasswordAuthentication no): sshd keeps the first value read for each setting
 CONF=/etc/ssh/sshd_config.d/10-stream-box-password.conf
 OLD_CONF=/etc/ssh/sshd_config.d/60-stream-box-password.conf   # previous name, no effect (read after the "no")
 case "${1:-}" in
-  enable)
+  enable|restore)
     install -d -m 750 -o root -g media "$(dirname "$PASS_FILE")"
-    if [ ! -s "$PASS_FILE" ]; then
+    if [ -s "$PASS_FILE" ]; then
+      echo "media:$(cat "$PASS_FILE")" | chpasswd   # also on a new system, whose /etc/shadow doesn't have it
+    else
       # Easy to type on a phone: three groups of four (lowercase and digits, without l / 1 / o / 0). No
       # "tr < /dev/urandom | head": tr ends on SIGPIPE, which pipefail takes for an error
       pass=$(python3 -c 'import secrets; a = "abcdefghijkmnpqrstuvwxyz23456789"
@@ -23,8 +27,8 @@ print("-".join("".join(secrets.choice(a) for _ in range(4)) for _ in range(3)))'
     install -d /etc/ssh/sshd_config.d
     rm -f "$OLD_CONF"
     printf 'PasswordAuthentication yes\nKbdInteractiveAuthentication no\n' > "$CONF"
-    systemctl enable sshd.service
-    systemctl restart sshd.service
+    systemctl enable -q sshd.service
+    if [ "$1" = restore ]; then systemctl start --no-block sshd.service; else systemctl restart sshd.service; fi
     ;;
   disable)
     systemctl disable --now sshd.service

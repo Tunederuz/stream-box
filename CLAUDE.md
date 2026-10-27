@@ -250,7 +250,7 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   (installed by `install.sh`), including when another session is open (SSH).
 - PWA: thanks to the reverse proxy's HTTPS, Chrome Android offers "Install app"; on iPhone, "Add to Home
   Screen". Over direct HTTP (:8080), Android would only give a shortcut.
-- `streamers.txt`: one login per line, `#` for comments. Reread each time the menu opens, no need to restart.
+- `~/.config/stream-box/streamers.txt`: one login per line, `#` for comments. Reread each time the menu opens, no need to restart.
 
 ## Saved state (`~media/.local/state/stream-box/`)
 - `channel`: last streamer watched, current channel at boot ("▶  Resume {channel}" in the menu, "Back to the stream") if it is still in `streamers.txt` (otherwise the first one).
@@ -895,6 +895,30 @@ video, the menu only has its veil (no more glows). Shaders in `qml/shaders/*.fra
 by `qml/shaders/build.sh` (Docker, PySide6 of the same version as the box: Essentials has no qsb), rendered at
 half resolution (`layer.textureSize`, `ShaderLayer` component). Measured cost: ~25 % of a core for ui.py whatever
 the background, menu included.
+
+### Partitions and persistent data (A/B, step 1: layout)
+Installed box (install-to-disk): ESP 512 MB, system A 5 GB (the running system), system B 5 GB (empty, label `_empty`,
+GPT attribute 63 no-auto: boot ignores it until an update writes it), data partition on the rest (btrfs, GPT label
+`data`). USB drive: no B (it is for trying the box, not for A/B updates); first boot (systemd-repart,
+/usr/lib/repart.d): system partition grown to its fixed 5 GB (10-root.conf), data partition created on the rest
+(30-data.conf). Everything that must survive the replacement of the system partition is on the data partition:
+`/usr/local/lib/stream-box/persist mount` (stream-box-persist.service, before sysinit.target) mounts the partition
+labelled `data` of the disk of `/` on /data, then binds /data/<path> on each path (seeded the first time with what the
+system has there): ~media/.config/{stream-box,streamlink,jellyfin-mpv-shim}, ~media/.local/state, ~media/.ssh,
+/var/lib/bluetooth, /etc/NetworkManager/system-connections, /var/lib/stream-box (developer mode, SSH password),
+/etc/ssh/keys. `persist restore` (stream-box-restore.service, before sshd and greetd) puts back what lives elsewhere in
+/etc: machine-id (/data/machine-id, a new system takes it at its next boot), sudo of the developer mode (`dev-mode
+restore`), media's SSH password and sshd enabled (`ssh-access restore`, start --no-block: restarting synchronously
+there would wait for itself); SSH host keys in /etc/ssh/keys (sshd_config.d/40-stream-box-keys.conf), copied from
+/etc/ssh the first time (same identity) or made. Without a data partition (box installed before), persist mount does
+nothing and the settings stay on the system partition. The streamer list moved to ~/.config/stream-box/streamers.txt
+(the code folder is replaced with the system): twitch.py moves a list still next to the code there at its start
+(also one restored from an older backup), stream-box.lua reads the old place until then. The installer copies the USB
+drive's /data to the disk's. The data partition is found with `blkid -p` on the disk of / (persist runs before udev
+has read the labels: lsblk returned nothing on the installed disk). Tested in QEMU with the test image: stick (first
+boot: 5 GB system, data partition, binds), settings made there (language, developer mode, a file), installation on a
+blank disk (A, B no-auto, data), boot from the disk alone (same settings, same SSH host key), then /etc state removed
+(sudo of the developer mode, media's password, sshd disabled) and put back at the next boot.
 
 ### System update (image)
 "Update now" (System menu, companion app) and the weekly update run update.sh (media: venvs, token server, cast

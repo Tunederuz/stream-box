@@ -17,7 +17,9 @@ local quick = require "streambox.quickmenu"
 local tr, ass_escape, rect, text, clock = I18N.tr, ass.ass_escape, ass.rect, ass.text, fmt.clock
 I18N.load(DIR)
 
-local STREAMERS_FILE = DIR .. "/streamers.txt"
+-- In the settings (twitch.py moves an older list from the code folder there); the old place until it has
+local STREAMERS_FILE = os.getenv("HOME") .. "/.config/stream-box/streamers.txt"
+local OLD_STREAMERS_FILE = DIR .. "/streamers.txt"
 local STATE_DIR = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")) .. "/stream-box"
 
 local CORNERS = { "tl", "tr", "br", "bl" }   -- toggle order (clockwise)
@@ -60,7 +62,7 @@ end
 
 local function read_streamers()
     local list = {}
-    local f = io.open(STREAMERS_FILE)
+    local f = io.open(STREAMERS_FILE) or io.open(OLD_STREAMERS_FILE)
     if f then
         for line in f:lines() do
             local name = line:gsub("#.*", ""):match("^%s*(.-)%s*$"):lower()

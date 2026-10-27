@@ -101,7 +101,8 @@ if [ -n "$RESTORE" ]; then
   python3 -I - "$RESTORE" "$BOX_HOME" << 'PY'
 import sys, tarfile
 archive, home = sys.argv[1], sys.argv[2].lstrip("/")
-allowed = (f"{home}/stream-box/streamers.txt", f"{home}/.local/state/stream-box", f"{home}/.config/stream-box",
+allowed = (f"{home}/stream-box/streamers.txt",   # older backups: twitch.py moves it into ~/.config/stream-box
+           f"{home}/.local/state/stream-box", f"{home}/.config/stream-box",
            f"{home}/.config/streamlink", f"{home}/.config/jellyfin-mpv-shim", f"{home}/.local/state/wireplumber",
            "var/lib/bluetooth")
 with tarfile.open(archive) as tar:
@@ -115,9 +116,13 @@ PY
     chown -R root:root /var/lib/bluetooth && chmod 700 /var/lib/bluetooth
   fi
 fi
-if [ ! -f "$BOX_DIR/streamers.txt" ]; then
-  cp "$BOX_DIR/streamers.example.txt" "$BOX_DIR/streamers.txt"
-  [ -n "$STREAMERS" ] && tr ',' '\n' <<< "$STREAMERS" | tr -d ' ' | tr '[:upper:]' '[:lower:]' | grep . >> "$BOX_DIR/streamers.txt"
+# Streamer list: in the settings (an older one next to the code is moved there by twitch.py at its start)
+LIST=$BOX_HOME/.config/stream-box/streamers.txt
+if [ ! -f "$LIST" ] && [ ! -f "$BOX_DIR/streamers.txt" ]; then
+  install -d -m 700 -o "$BOX_USER" -g "$BOX_USER" "$(dirname "$LIST")"
+  cp "$BOX_DIR/streamers.example.txt" "$LIST"
+  [ -n "$STREAMERS" ] && tr ',' '\n' <<< "$STREAMERS" | tr -d ' ' | tr '[:upper:]' '[:lower:]' | grep . >> "$LIST"
+  chown "$BOX_USER:$BOX_USER" "$LIST"
 fi
 chown -R "$BOX_USER:$BOX_USER" "$BOX_DIR"
 chmod +x "$BOX_DIR"/*.sh "$BOX_DIR"/*.py

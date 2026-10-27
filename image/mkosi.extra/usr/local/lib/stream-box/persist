@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Stream Box: what must survive a system update (A/B: the system partition is replaced as a whole) lives on the data
+# partition (GPT label "data", on the disk of the running system), mounted on /data.
+#   persist mount    early at boot (stream-box-persist.service): /data mounted, then each path below bound from
+#                    /data/<path>, seeded the first time with what the system has there (settings made so far)
+#   persist restore  before the session and sshd (stream-box-restore.service): what lives in /etc and comes with
+#                    every system put back from the persistent state: machine-id, developer mode (sudo), SSH (password)
+# No data partition (box installed before A/B, or nothing found): nothing done, everything stays on the system
+# partition as before.
+set -euo pipefail
+DATA=/data
+# Persistent paths: the box's settings and accounts (the same as the backup, plus ~/.ssh), its paired Bluetooth
+# devices and network connections, its developer mode and SSH state, its SSH host keys
+PATHS=(
+  /home/media/.config/stream-box
+  /home/media/.config/streamlink
+  /home/media/.config/jellyfin-mpv-shim
+  /home/media/.local/state
+  /home/media/.ssh
+  /var/lib/bluetooth
+  /etc/NetworkManager/system-connections
+  /var/lib/stream-box
+  /etc/ssh/keys
+)
+
+data_partition() {   # partition labelled "data" on the disk of /
+  # Read from the partition table itself (blkid -p): this runs before udev has gone through the disks, lsblk would not
+  # know the labels yet. Only the disk of /: a USB drive left plugged in has a "data" partition too
+  local disk part
+  disk=$(lsblk -no PKNAME "$(findmnt -no SOURCE / | sed 's/\[.*//')" | head -n 1)
+  [ -n "$disk" ] || return 0
+  for part in /sys/block/"$disk"/"$disk"*; do
+    [ -e "$part/partition" ] || continue
+    if [ "$(blkid -p -o value -s PART_ENTRY_NAME "/dev/${part##*/}" 2> /dev/null)" = data ]; then
+      echo "/dev/${part##*/}"
+      return 0
+    fi
+  done
+}
+
+case "${1:-}" in
+  mount)
+    part=$(data_partition)
+    [ -n "$part" ] || { echo "no data partition: settings stay on the system partition"; exit 0; }
+    mkdir -p "$DATA"
+    mountpoint -q "$DATA" || mount -o compress=zstd,noatime "$part" "$DATA"
+    for p in "${PATHS[@]}"; do
+      owner=root:root
+      case $p in /home/media/*) owner=media:media ;; esac
+      if [ ! -e "$DATA$p" ]; then   # first time: what the system has there
+        mkdir -p "$(dirname "$DATA$p")"
+        if [ -e "$p" ]; then cp -a "$p" "$DATA$p"; else mkdir -p "$DATA$p" && chown "$owner" "$DATA$p"; fi
+      fi
+      [ -e "$p" ] || { mkdir -p "$p" && chown "$owner" "$p"; }
+      mountpoint -q "$p" || mount --bind "$DATA$p" "$p"
+    done
+    ;;
+  restore)
+    # SSH host keys: in /etc/ssh/keys (persistent with a data partition), where sshd_config.d/40-stream-box-keys.conf
+    # points sshd: when missing, the system's own keys (same identity as before) or new ones, data partition or not
+    mkdir -p /etc/ssh/keys
+    for t in ed25519 ecdsa rsa; do
+      key=/etc/ssh/keys/ssh_host_${t}_key
+      [ -f "$key" ] && continue
+      if [ -f "/etc/ssh/ssh_host_${t}_key" ]; then
+        cp -p "/etc/ssh/ssh_host_${t}_key" "$key" && cp -p "/etc/ssh/ssh_host_${t}_key.pub" "$key.pub"
+      else
+        ssh-keygen -q -t "$t" -N "" -C "" -f "$key"
+      fi
+    done
+    # machine-id: the first one is kept (logs, DHCP), a new system takes it at its next boot
+    if mountpoint -q "$DATA"; then
+      if [ -s "$DATA/machine-id" ]; then
+        [ "$(cat "$DATA/machine-id")" = "$(cat /etc/machine-id 2> /dev/null)" ] || cat "$DATA/machine-id" > /etc/machine-id
+      else
+        cp /etc/machine-id "$DATA/machine-id"
+      fi
+    fi
+    # Developer mode and SSH from their persistent state, without restarting anything synchronously (this runs before
+    # sshd and the session)
+    lib=/usr/local/lib/stream-box
+    if [ -e /var/lib/stream-box/dev-mode ]; then "$lib/dev-mode" restore; fi
+    if [ -s /var/lib/stream-box/ssh-password ]; then "$lib/ssh-access" restore; fi
+    ;;
+  *) echo "usage: $0 mount|restore" >&2; exit 2 ;;
+esac

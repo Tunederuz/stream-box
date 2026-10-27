@@ -72,7 +72,8 @@ that can be installed on a phone (PWA).
 
 - A small x86-64 PC that boots in UEFI, plugged into the TV over HDMI. Tested on an Intel mini PC (UHD 630 graphics);
   AMD and NVIDIA graphics drivers are in the image but untried.
-- A USB stick of 8 GB or more, and an internal disk of 16 GB or more (it is entirely erased).
+- A USB stick of 8 GB or more, and an internal disk of 16 GB or more (it is entirely erased: two 5 GB system
+  partitions for updates, the rest for your settings).
 - Ethernet, or a Wi-Fi card (the box then offers its own Wi-Fi network to set it up from a phone).
 - A phone for the first setup, and a Bluetooth remote, a gamepad or a keyboard to use it.
 

@@ -1,0 +1,16 @@
+# Stream Box: data partition mounted on /data and the persistent paths bound from it (see
+# /usr/local/lib/stream-box/persist), before anything uses them: network, Bluetooth, session
+[Unit]
+Description=Stream Box: persistent data
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/stream-box/persist mount
+
+[Install]
+WantedBy=sysinit.target

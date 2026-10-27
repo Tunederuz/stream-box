@@ -10,7 +10,13 @@ import history   # history.py: positions of the replays and clips already watche
 from common import COOKIES_DIR, DIR, PUBLISH_EVERY, mpv, read_json_file, write_private_json
 from i18n import tr
 
-STREAMERS_FILE = os.path.join(DIR, "streamers.txt")
+# In the settings, not next to the code: the code is replaced with the system (A/B updates). A list still in the code
+# folder (older box, or restored from an older backup) takes its place.
+STREAMERS_FILE = os.path.join(COOKIES_DIR, "streamers.txt")
+OLD_STREAMERS_FILE = os.path.join(DIR, "streamers.txt")
+if os.path.exists(OLD_STREAMERS_FILE):
+    os.makedirs(COOKIES_DIR, mode=0o700, exist_ok=True)
+    os.replace(OLD_STREAMERS_FILE, STREAMERS_FILE)
 TWITCH_CONFIG = os.path.expanduser("~/.config/streamlink/config.twitch")
 TOKEN_PREFIX = "twitch-api-header=Authorization=OAuth "
 # The same token as a cookie for yt-dlp (subscriber-only VODs). yt-dlp rewrites this file as 644 on every
@@ -306,6 +312,7 @@ def edit_streamers(action, raw, delta=0):
             raise ValueError(tr("Unable to check on Twitch ({error}).", error=e)) from e
         if not user:
             raise ValueError(tr("No Twitch channel \"{login}\".", login=login))
+        os.makedirs(COOKIES_DIR, mode=0o700, exist_ok=True)
         with open(STREAMERS_FILE, "a", encoding="utf-8") as f:
             f.write(login + "\n")
         try:   # first streamer of an empty list: start it

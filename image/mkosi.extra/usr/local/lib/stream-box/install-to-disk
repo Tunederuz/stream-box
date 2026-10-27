@@ -3,10 +3,11 @@
 #
 #   install-to-disk <disk>      (nvme0n1, sda…; started by stream-box-install@<disk>.service, see installer.py)
 #
-# The disk is entirely erased: GPT table, 512 MB ESP (systemd-boot and kernel, copied from the USB drive's ESP),
-# compressed btrfs system partition on the rest, where the running system is copied as is (/home/media included:
-# accounts, favorites, history, settings made on the USB drive). At boot, systemd finds the system partition by its
-# type (no root= to write). State and progress: /run/stream-box-install.json, read by remote.py.
+# The disk is entirely erased: GPT table, 512 MB ESP (systemd-boot and kernel, copied from the USB drive's ESP), two
+# 5 GB system partitions for A/B updates (A: the running system copied as is, compressed btrfs; B: empty until an
+# update writes it, marked no-auto so that boot ignores it), and the data partition on the rest (label "data": the
+# USB drive's /data, settings made on it; see persist). At boot, systemd finds the system partition by its type (no
+# root= to write). State and progress: /run/stream-box-install.json, read by remote.py.
 set -euo pipefail
 
 DISK=${1:-}
@@ -24,7 +25,7 @@ status() {   # state, step, percentage, error
 fail() { status error "${STEP:-}" 0 "$1"; exit 1; }
 cleanup() {
   [ -n "${COPY_PID:-}" ] && kill "$COPY_PID" 2> /dev/null
-  umount -R "$WORK/esp" "$WORK/root" 2> /dev/null || true
+  umount -R "$WORK/esp" "$WORK/root" "$WORK/data" 2> /dev/null || true
 }
 trap 'cleanup; [ "$(python3 -c "import json; print(json.load(open(\"$STATUS\"))[\"state\"])" 2> /dev/null)" = done ] || fail "${ERR:-error during: ${STEP:-Preparing}}"' EXIT
 
@@ -48,16 +49,20 @@ wipefs -aq "$DEV"
 sfdisk -q --wipe always "$DEV" << 'PARTS'
 label: gpt
 size=512MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="esp"
-type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="root-x86-64"
+size=5GiB, type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="root-x86-64"
+size=5GiB, type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="_empty", attrs="GUID:63"
+type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="data"
 PARTS
 udevadm settle
 mapfile -t parts < <(lsblk -lnpo NAME "$DEV" | tail -n +2)
-[ "${#parts[@]}" -eq 2 ] || { ERR="partitions not found after partitioning"; exit 1; }
+[ "${#parts[@]}" -eq 4 ] || { ERR="partitions not found after partitioning"; exit 1; }
 mkfs.vfat -F 32 -n ESP "${parts[0]}" > /dev/null
 mkfs.btrfs -q -f -L root "${parts[1]}"
-mkdir -p "$WORK/root" "$WORK/esp"
+mkfs.btrfs -q -f -L data "${parts[3]}"
+mkdir -p "$WORK/root" "$WORK/esp" "$WORK/data"
 mount -o compress=zstd "${parts[1]}" "$WORK/root"
 mount "${parts[0]}" "$WORK/esp"
+mount -o compress=zstd "${parts[3]}" "$WORK/data"
 
 STEP="Copying the system"
 status running "$STEP" 5
@@ -74,8 +79,14 @@ done
 wait "$COPY_PID" || { COPY_PID=; ERR="system copy interrupted"; exit 1; }
 COPY_PID=
 # Mount points and subvolumes left out by --one-file-system
-for d in proc sys dev run tmp efi boot var/tmp var/log var/lib/machines var/lib/portables; do mkdir -p "$WORK/root/$d"; done
+for d in proc sys dev run tmp efi boot data var/tmp var/log var/lib/machines var/lib/portables; do mkdir -p "$WORK/root/$d"; done
 chmod 1777 "$WORK/root/tmp" "$WORK/root/var/tmp"
+
+STEP="Copying the settings"
+status running "$STEP" 90
+# The USB drive's data partition (its settings, accounts, pairings…; the bound paths were left out of the copy above).
+# Without one, the first boot of the disk takes them from the system partition (persist mount)
+if mountpoint -q /data; then cp -a /data/. "$WORK/data/"; fi
 
 STEP="Boot setup"
 status running "$STEP" 92
@@ -88,5 +99,5 @@ bootctl install --esp-path="$WORK/esp" --graceful > /dev/null 2>&1 || true
 STEP="Finishing"
 status running "$STEP" 97
 sync
-umount -R "$WORK/esp" "$WORK/root"
+umount -R "$WORK/esp" "$WORK/root" "$WORK/data"
 status done "Installed" 100
