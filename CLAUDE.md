@@ -644,9 +644,12 @@ title over a light image.
   other key gives up: back where it was, playing or paused as before (seekfx {n} without text). The −10 s / +10 s
   buttons of the row jump at once (`media_seek(dir, true)`). Also works with mpv alone (cursor on the target, no
   bubble).
-- Changing video: the bar hides on `start-file` (stream-box.lua), ui.py forgets the playback state when the bar
-  hides, and InfoBar.qml animates the progress only once settled on a video (`animate`: off when it appears or when
-  `pb.path` changes, on again after 300 ms): the bar never slides from the previous video's position and colors.
+- Changing video: the bar hides on `start-file` (stream-box.lua); ui.py drops the playback state when mpv's `path`
+  changes (`new_file`; not when the bar hides: it keeps its values while fading out) and reads it at once when the bar
+  is asked for (`wake`, instead of waiting for the next poll, up to 1 s); InfoBar.qml shows only once that state is
+  there (`pbIn.path` defined; it draws `pb`, the last state received, kept while fading out) and animates the progress
+  only once settled on a video (`animate`: off when it appears or when `pb.path` changes, on again after 300 ms): the
+  bar never shows empty (purple, 0 s) nor slides from the previous video's position and colors.
 - Focus in a video, top to bottom: title (OK: Info panel), the bar itself (← → scrub; focused whenever the bar shows
   and neither of the others is: InfoBar.qml `barFocus`, track 8 → 12 px, cursor 22 → 28 px and a faint halo), row of
   buttons. Bar hidden: ↑ or ↓ shows it, focus on the bar; from the bar ↑ the title, ↓ the buttons; from the title ↓,

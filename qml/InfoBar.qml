@@ -12,11 +12,16 @@ Item {
     anchors.fill: parent
     function tr(s, a) { return I18n.t(i18n.dict, s, a) }
     readonly property var b: { try { return JSON.parse(osd.bar || "{}") } catch (e) { return {} } }
-    readonly property var pb: b.playback || {}
+    // Playback state as drawn: the last one read, kept while the bar fades out even if a new file dropped it (pbIn empty)
+    readonly property var pbIn: b.playback || {}
+    property var pb: ({})
+    onPbInChanged: if (pbIn.path !== undefined) pb = pbIn
     readonly property bool live: b.mode === "twitch"
     readonly property var info: (b.live || {})[b.channel] || null
     readonly property var board: { try { return JSON.parse(osd.storyboard || "{}") } catch (e) { return {} } }
-    readonly property bool shown: !!b.bar && (b.mode === "twitch" || b.mode === "media")
+    // Shown once ui.py has read the playback state (right after the bar is asked for; dropped on each new file): never
+    // empty nor with the previous video's position and colors
+    readonly property bool shown: !!b.bar && (b.mode === "twitch" || b.mode === "media") && pbIn.path !== undefined
     property var avatars: ({})
     // Bar: in a live, the time-shift buffer (its right end is live); in a video, the duration
     readonly property real span: live ? (pb.window ? pb.window[1] - pb.window[0] : 0) : (pb.duration || 0)

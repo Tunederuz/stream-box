@@ -523,19 +523,26 @@ class Osd(QObject):
                      "next_card": {}, "notice": {}, "info": {},
                      "mode": "", "channel": "", "events": True}
         self._in.connect(self._set, Qt.QueuedConnection)
+        self.wake = threading.Event()   # bar just shown: read the position at once (InfoBar waits for it to appear)
 
     def _set(self, key, value):
         self.data[key] = json.loads(value)
-        if key == "bar" and not self.data[key]:
-            self.data["playback"] = {}   # shown again later, maybe for another video: never with this one's state
+        if key == "bar" and self.data[key]:
+            self.wake.set()
         self.changed.emit()
+
+    def new_file(self, _name, _path):
+        """Another file (or none): the playback state of the previous one is dropped, the bar never shows it (from mpv's
+        thread). Not when the bar hides: it keeps its values while fading out"""
+        self._in.emit("playback", "{}")
 
     def receive(self, key):
         return lambda _n, v: self._in.emit(key, json.dumps(v if v is not None else self.data[key]))
 
     def poll_loop(self):
         while True:
-            time.sleep(0.25 if self.data["bar"] else 1)
+            self.wake.wait(0.25 if self.data["bar"] else 1)
+            self.wake.clear()
             if not self.data["bar"]:
                 continue
             try:
@@ -717,6 +724,7 @@ def main():
     for key in ("bar", "toast", "polls", "storyboard", "live", "mode", "channel", "events", "tracks", "loading", "learn", "meta", "controls", "seekfx",
                 "next_card", "notice", "info"):
         player.observe_property(f"user-data/streambox/{key}", osd.receive(key))
+    player.observe_property("path", osd.new_file)
     threading.Thread(target=osd.poll_loop, daemon=True).start()
 
     def dec(v):
