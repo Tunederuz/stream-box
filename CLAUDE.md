@@ -911,7 +911,8 @@ ahead, restart: now | pending | no, date}: `/api/health` → `update.system` {ru
 now" row (version, "restart to finish", "System: failed"); companion app: under the update log. Not the Arch packages
 nor the kernel. A box installed from an image without it (v0.1) needs the three files installed once by hand
 (developer mode: system-update, its service, rule 56). Tested in QEMU: polkit, ahead, behind → fast-forward and
-restart, the whole chain from `POST /api/update`. update.sh lists the changed packages with `comm` (the image has
+restart, the whole chain from `POST /api/update`. The service does not wait for network-online.target (it pulled
+systemd-networkd-wait-online, which gives up after 2 min on a NetworkManager box). update.sh lists the changed packages with `comm` (the image has
 no diffutils: `diff` made it log "failed").
 
 ### On a USB drive (flash-mode, image)

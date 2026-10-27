@@ -1,9 +1,9 @@
 # Stream Box: code and system files of the latest release (see /usr/local/lib/stream-box/system-update). Started by
 # update.sh (media, allowed by /etc/polkit-1/rules.d/56-stream-box-update.rules): "Update now" and the weekly update.
+# No network-online.target: on the box it pulls systemd-networkd-wait-online, which never sees NetworkManager's network
+# and gives up after 2 min; without network, the update fails at its "download" step and says so.
 [Unit]
 Description=Stream Box: system update
-Wants=network-online.target
-After=network-online.target
 
 [Service]
 Type=oneshot
