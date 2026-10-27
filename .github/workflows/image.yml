@@ -27,6 +27,12 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
+        # A tag moved to another commit: the existing release gets the new image (its files replaced) instead of failing
         run: |
-          gh release create "$GITHUB_REF_NAME" stream-box.raw.xz stream-box.raw.xz.sha256 --title "Stream Box $GITHUB_REF_NAME" \
-            --notes "Disk image built from $GITHUB_REF_NAME. Flash stream-box.raw.xz on a USB stick (balenaEtcher, Rufus), boot the PC on it, then TV menu → System → \"Install on this PC\". See the README's Installation section."
+          notes="Disk image built from $GITHUB_REF_NAME. Flash stream-box.raw.xz on a USB stick (balenaEtcher, Rufus), boot the PC on it, then TV menu → System → \"Install on this PC\". See the README's Installation section."
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" stream-box.raw.xz stream-box.raw.xz.sha256 --clobber
+            gh release edit "$GITHUB_REF_NAME" --draft=false --title "Stream Box $GITHUB_REF_NAME" --notes "$notes"
+          else
+            gh release create "$GITHUB_REF_NAME" stream-box.raw.xz stream-box.raw.xz.sha256 --title "Stream Box $GITHUB_REF_NAME" --notes "$notes"
+          fi
