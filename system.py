@@ -1,7 +1,7 @@
 """Stream Box: the box as a machine: sleep and shutdown, power key lock, wake-up, SSH access and developer mode,
 status (temperatures, processor, memory, network, services) and system updates. Standard library only.
 """
-import os, shutil, socket, subprocess, time
+import json, os, shutil, socket, subprocess, time
 
 import settings  # settings.py: chosen player
 from common import lan_ip, mpv
@@ -123,6 +123,9 @@ def set_dev(on):
 # updates. Processor and network throughput are measured over an interval: polled every 5 s by a thread.
 
 UPDATE_LOG = os.path.expanduser("~/.local/state/stream-box/update.log")
+# System update of the image (root, /usr/local/lib/stream-box/system-update, started at the end of update.sh): code and
+# system files of the latest release; result in this file (readable by media)
+SYSTEM_UPDATE = "/var/lib/stream-box/system-update.json"
 health_rates = {"cpu": None, "rx": None, "tx": None}
 
 
@@ -204,6 +207,22 @@ def last_update():
     return {"date": date.strip(), "lines": lines[-12:], "ok": not failed}
 
 
+def system_update():
+    """System update (image only): None without it; otherwise running, and the last result (version, ok, message, code,
+    restart: now | pending | no)"""
+    r = subprocess.run(["systemctl", "show", "stream-box-system-update.service", "-p", "LoadState", "-p", "ActiveState"],
+                       capture_output=True, text=True, timeout=10)
+    props = dict(l.split("=", 1) for l in r.stdout.splitlines() if "=" in l)
+    if props.get("LoadState") != "loaded":
+        return None
+    try:
+        with open(SYSTEM_UPDATE, encoding="utf-8") as f:
+            last = json.load(f)
+    except (OSError, ValueError):
+        last = None
+    return {"running": props.get("ActiveState") == "activating", "last": last}
+
+
 def health():
     with open("/proc/meminfo") as f:
         mem = {k: int(v.split()[0]) for k, v in (l.split(":", 1) for l in f)}
@@ -240,7 +259,8 @@ def health():
         "player": {"choice": settings.player_choice(), "running": "qt" if vo == "libmpv" else "mpv", "hwdec": hwdec,
                    "dropped": drops, "fps": fps, "size": f"{width}x{height}" if width else None},
         "services": services,
-        "update": {"running": props.get("ActiveState") == "activating", "next": next_run, "last": last_update()},
+        "update": {"running": props.get("ActiveState") == "activating", "next": next_run, "last": last_update(),
+                   "system": system_update()},
     }
 
 

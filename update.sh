@@ -68,3 +68,14 @@ if [ -f "$CAST_DIR/package-lock.json" ] && [ "$CAST_DIR/package-lock.json" -nt "
     echo "cast receiver: npm ci FAILED"
   fi
 fi
+
+# System: code and system files of the latest release (root: stream-box-system-update.service, see
+# /usr/local/lib/stream-box/system-update; image only). Last, since it may restart the session; its result is in
+# /var/lib/stream-box/system-update.json
+if systemctl cat stream-box-system-update.service > /dev/null 2>&1; then
+  if systemctl start --no-block stream-box-system-update.service; then
+    echo "system: update started"
+  else
+    echo "system: update FAILED to start"
+  fi
+fi

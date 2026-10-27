@@ -1,0 +1,8 @@
+// Stream Box: media starts the system update (stream-box-system-update.service, nothing else): update.sh, from "Update
+// now" and the weekly update
+polkit.addRule(function (action, subject) {
+    if (subject.user == "media" && action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("verb") == "start" && action.lookup("unit") == "stream-box-system-update.service") {
+        return polkit.Result.YES;
+    }
+});

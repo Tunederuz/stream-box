@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# Stream Box: system update (stream-box-system-update.service, started by update.sh: "Update now" of the System menu
+# and the weekly update). Follows the releases (tags v*) of the repository:
+#   - its own copy of the repository, owned by root (/var/lib/stream-box/src): what is installed as root never comes
+#     from media's copy, which media can change;
+#   - the latest release's system files (image/mkosi.extra) installed, those that a release dropped removed (list of
+#     what was installed: /var/lib/stream-box/system-files), the box's units that have an [Install] section enabled;
+#   - media's code fast-forwarded to the release, never backwards (a box ahead of it, on main, keeps its code);
+#   - the session restarted when something changed and nothing plays (otherwise: at the next restart).
+# Not the Arch packages nor the kernel. Result in /var/lib/stream-box/system-update.json, read by remote.py.
+set -euo pipefail
+REPO=https://github.com/Tunederuz/stream-box.git
+STATE=/var/lib/stream-box
+SRC=$STATE/src
+FILES=$STATE/system-files
+BOX=/home/media/stream-box
+install -d -m 750 -o root -g media "$STATE"
+
+step=start tag="" files=0 code=same restart=no
+report() {   # ok message: system-update.json (readable by media through the group of the directory)
+  python3 - "$STATE/system-update.json" "$1" "$2" "$tag" "$files" "$code" "$restart" << 'PY'
+import json, os, sys, time
+path, ok, message, tag, files, code, restart = sys.argv[1:]
+with open(path + ".tmp", "w") as f:
+    json.dump({"ok": ok == "1", "message": message, "version": tag, "files": int(files), "code": code,
+               "restart": restart, "date": time.strftime("%Y-%m-%dT%H:%M:%S")}, f)
+os.chmod(path + ".tmp", 0o644)
+os.replace(path + ".tmp", path)
+PY
+}
+trap 'report 0 "failed: $step"' ERR
+
+step=download
+if [ -d "$SRC/.git" ]; then
+  git -C "$SRC" fetch -q --tags --force origin
+else
+  rm -rf "$SRC"
+  git clone -q "$REPO" "$SRC"
+fi
+tag=$(git -C "$SRC" tag -l 'v*' --sort=-v:refname | head -n 1)
+[ -n "$tag" ] || { report 0 "no release yet"; exit 0; }
+git -C "$SRC" checkout -q --force "refs/tags/$tag"
+echo "release $tag"
+
+step="system files"
+extra=$SRC/image/mkosi.extra
+wanted=$(mktemp)
+(cd "$extra" && find . -type f | sed 's|^\.||' | sort) > "$wanted"
+while read -r f; do
+  if [ ! -f "$f" ] || [ "$(sha256sum < "$extra$f")" != "$(sha256sum < "$f")" ]; then
+    install -D -m "$(stat -c %a "$extra$f")" "$extra$f" "$f"
+    files=$((files + 1))
+    echo "installed $f"
+  fi
+done < "$wanted"
+if [ -f "$FILES" ]; then   # dropped by this release
+  while read -r f; do
+    rm -f "$f"
+    files=$((files + 1))
+    echo "removed $f"
+  done < <(comm -23 "$FILES" "$wanted")
+fi
+install -m 644 "$wanted" "$FILES"
+rm -f "$wanted"
+systemctl daemon-reload
+for unit in /etc/systemd/system/stream-box-*.service /etc/systemd/system/stream-box-*.timer; do
+  if [ -f "$unit" ] && grep -q '^\[Install\]' "$unit"; then systemctl enable -q "$(basename "$unit")"; fi
+done
+
+step=code
+want=$(git -C "$SRC" rev-parse "refs/tags/$tag^{commit}")
+if [ "$(runuser -u media -- git -C "$BOX" rev-parse HEAD)" != "$want" ]; then
+  runuser -u media -- git -C "$BOX" fetch -q --tags origin
+  if runuser -u media -- git -C "$BOX" merge-base --is-ancestor HEAD "$want"; then
+    runuser -u media -- git -C "$BOX" merge -q --ff-only "$want"
+    code=updated
+  else
+    code=ahead   # newer than the release (main): kept
+  fi
+fi
+echo "code: $code, system files changed: $files"
+
+step=restart
+if [ "$code" = updated ] || [ "$files" -gt 0 ]; then
+  mode=$(curl -s -m 5 http://127.0.0.1:8080/api/state | python3 -c 'import json, sys; print(json.load(sys.stdin).get("mode", ""))' || true)
+  if [ "$mode" = home ]; then   # nothing playing
+    restart=now
+    report 1 ""
+    rm -f /run/greetd.run
+    systemctl restart greetd
+    exit 0
+  fi
+  restart=pending
+fi
+report 1 ""

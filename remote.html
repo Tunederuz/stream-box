@@ -1588,9 +1588,16 @@ async function refreshHealth() {
       tile(tr("Updates"), u.running ? tr("In progress…") : u.last ? `${u.last.ok ? "✓" : "✕"} ${frDate(u.last.date)}` : tr("never"),
            u.next ? tr("next: {date}", { date: frDate(u.next) }) : "", u.last && !u.last.ok ? "bad" : "", true),
     );
-    $("update-now").disabled = u.running;
-    $("update-now").textContent = u.running ? tr("Update in progress…") : tr("Update now");
-    $("update-log").textContent = u.last ? u.last.lines.join("\n") : tr("No update recorded.");
+    const busy = u.running || !!(u.system && u.system.running);
+    $("update-now").disabled = busy;
+    $("update-now").textContent = busy ? tr("Update in progress…") : tr("Update now");
+    const sys = u.system && u.system.last;   // system update (image): release installed
+    $("update-log").textContent = (u.last ? u.last.lines.join("\n") : tr("No update recorded."))
+      + (sys ? "\n\n" + (sys.ok ? tr("System: {version} ({date}), {files} system files changed.",
+          { version: sys.version, date: frDate(sys.date), files: sys.files }) + " "
+          + tr({ updated: "Code updated.", ahead: "Code newer than the release, kept." }[sys.code] || "Code up to date.")
+          + (sys.restart === "pending" ? " " + tr("Restart the box to finish.") : "")
+          : tr("System: {error} ({date})", { error: sys.message, date: frDate(sys.date) })) : "");
   } catch (e) { /* the page already shows the box status */ }
   healthTimer = setTimeout(refreshHealth, 5000);
 }

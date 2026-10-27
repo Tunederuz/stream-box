@@ -725,6 +725,14 @@ Item {
         for (var i = 0; i < rows.length; i++) if (!rows[i].header) out.push(i)
         return out
     }
+    // System update (image): installed release, "restart to finish" when it could not restart the session
+    function updateVersion() {
+        var s = health && health.update && health.update.system
+        var l = s && s.last
+        if (!l) return ""
+        if (!l.ok) return tr("System: failed")
+        return (l.version || "") + (l.restart === "pending" ? "  ·  " + tr("restart to finish") : "")
+    }
     function systemRows() {
         var login = account && account.login
         return [
@@ -795,8 +803,9 @@ Item {
               ok: function () { installMenu() } },
             { label: tr("Backup and restore"), hint: tr("On a USB stick, or as a file from the companion app"),
               ok: function () { backupMenu() } },
-            { label: tr("Update now"),
-              hint: health && health.update ? (health.update.running ? tr("Update in progress…")
+            { label: tr("Update now"), value: updateVersion(),
+              hint: health && health.update ? (health.update.running || (health.update.system && health.update.system.running)
+                                               ? tr("Update in progress…")
                     : (health.update.last ? tr(health.update.last.ok ? "Last: {date}" : "Failed: {date}",
                                                { date: frDate(health.update.last.date) }) : tr("Never"))
                       + (health.update.next ? "  ·  " + tr("next: {date}", { date: frDate(health.update.next) }) : "")) : undefined,
