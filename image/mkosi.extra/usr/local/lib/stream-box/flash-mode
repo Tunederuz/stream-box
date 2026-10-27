@@ -1,0 +1,19 @@
+#!/bin/sh
+# Stream Box: fewer writes when the system runs from a USB drive (the image on a stick, before "Install on this PC", or
+# kept there): flash drives wear out under small scattered writes. At each boot, before the session
+# (stream-box-flash-mode.service); nothing on an internal disk, nothing kept: everything is in /run or in memory.
+#   journal in memory (lost at shutdown), btrfs commits every 2 min instead of 30 s and no access times,
+#   media's caches in memory, marker /run/stream-box/usb-root: remote.py then writes the history once a minute
+set -eu
+src=$(findmnt -no SOURCE / | sed 's/\[.*//')
+disk=$(lsblk -no PKNAME "$src" | head -n 1)
+[ -n "$disk" ] && [ "$(lsblk -dno TRAN "/dev/$disk")" = usb ] || exit 0
+mkdir -p /run/stream-box /run/systemd/journald.conf.d
+touch /run/stream-box/usb-root
+printf '[Journal]\nStorage=volatile\nRuntimeMaxUse=64M\n' > /run/systemd/journald.conf.d/50-stream-box-usb.conf
+systemctl restart systemd-journald
+mount -o remount,commit=120,noatime /
+cache=/home/media/.cache
+mkdir -p "$cache"
+mountpoint -q "$cache" || mount -t tmpfs -o "size=1G,mode=700,uid=$(id -u media),gid=$(id -g media)" tmpfs "$cache"
+echo "running from a USB drive ($disk): fewer writes"

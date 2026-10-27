@@ -1,5 +1,5 @@
 """history.py: one key per video whatever the form of its link, and the "finished" rule."""
-import sys, unittest
+import os, sys, tempfile, unittest
 
 from tests.helpers import REPO
 
@@ -43,6 +43,34 @@ class MediaKey(unittest.TestCase):
         self.assertFalse(history.finished(50, 100))
         self.assertTrue(history.finished(96, 100))
         self.assertTrue(history.finished(3500, 3600))
+
+
+class UsbDrive(unittest.TestCase):
+    # system on a USB drive: positions written at most once a minute, kept in memory in between
+    def setUp(self):
+        saved = {k: getattr(history, k) for k in ("HISTORY_FILE", "WRITE_EVERY", "pending", "last_write")}
+        self.addCleanup(lambda: [setattr(history, k, v) for k, v in saved.items()])
+        history.HISTORY_FILE = os.path.join(tempfile.mkdtemp(), "history.json")
+        history.WRITE_EVERY, history.pending, history.last_write = 60, None, 0.0
+
+    def written(self):
+        with open(history.HISTORY_FILE) as f:
+            return f.read()
+
+    def test_positions_once_a_minute(self):
+        video = {"key": "link:a", "url": "https://example.org/a.mp4", "kind": "link"}
+        history.record(video, 100, 1000)   # first one: written
+        self.assertIn('"position": 100', self.written())
+        history.record(video, 110, 1000)   # within the minute: in memory only
+        self.assertIn('"position": 100', self.written())
+        self.assertEqual(history.read_history()[0]["position"], 110)
+        history.flush()                    # not a minute yet
+        self.assertIn('"position": 100', self.written())
+        history.flush(force=True)          # stopping
+        self.assertIn('"position": 110', self.written())
+        history.record(video, 120, 1000)
+        history.edit_history("clear")      # explicit action: written at once
+        self.assertEqual(self.written(), "[]")
 
 
 if __name__ == "__main__":

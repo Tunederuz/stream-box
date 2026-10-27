@@ -20,10 +20,11 @@ This file starts the background loops and the HTTP server; the code lives in the
   settings.py  player, power button action, background
   system.py    power, wake-up, SSH and developer mode, box status, updates
 """
-import threading
+import signal, sys, threading
 from http.server import ThreadingHTTPServer
 
 import ambient   # ambient.py: weather, schedules, QR code
+import history   # history.py: positions kept in memory on a USB drive
 import api       # api.py: HTTP request handler
 import netsetup  # netsetup.py: setup Wi-Fi access point
 import playback  # playback.py: history loop
@@ -45,4 +46,6 @@ threading.Thread(target=netsetup.setup_loop, daemon=True).start()
 threading.Thread(target=youtube.yt_subfeed_loop, daemon=True).start()
 threading.Thread(target=quickmenu.listen_loop, daemon=True).start()
 system.hold_power_key()
+# Stopped (shutdown, session restart): the positions not written yet on a USB drive are written now
+signal.signal(signal.SIGTERM, lambda *_: (history.flush(force=True), sys.exit(0)))
 ThreadingHTTPServer(("0.0.0.0", PORT), api.Handler).serve_forever()

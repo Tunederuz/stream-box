@@ -11,6 +11,12 @@ from i18n import tr
 # position read at start, written every 30 s. The rest is known only to the box.
 
 HISTORY_FILE = os.path.expanduser("~/.local/state/stream-box/history.json")
+# System on a USB drive (marker of /usr/local/lib/stream-box/flash-mode): positions are written at most once a minute,
+# kept in memory in between (history_loop flushes them); removals and clearing are written at once
+USB_ROOT = os.path.exists("/run/stream-box/usb-root")
+WRITE_EVERY = 60 if USB_ROOT else 0
+pending = None          # entries not written yet
+last_write = 0.0
 HISTORY_MAX = 60
 RESUME_MIN = 30         # seconds: below that, start from the beginning
 FINISHED_LEFT = 30      # less than 30 s from the end, or beyond 95 %, the video is watched
@@ -46,6 +52,8 @@ def finished(position, duration):
 
 
 def read_history():
+    if pending is not None:
+        return list(pending)
     try:
         with open(HISTORY_FILE, encoding="utf-8") as f:
             return json.load(f)
@@ -53,7 +61,12 @@ def read_history():
         return []
 
 
-def write_history(entries):
+def write_history(entries, now=False):
+    global pending, last_write
+    if not now and time.time() - last_write < WRITE_EVERY:
+        pending = entries[:HISTORY_MAX]
+        return
+    pending, last_write = None, time.time()
     tmp = HISTORY_FILE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(entries[:HISTORY_MAX], f, ensure_ascii=False)
@@ -71,6 +84,14 @@ def record(video, position, duration, title=None):
         write_history([entry] + entries)
 
 
+def flush(force=False):
+    """Writes the positions kept in memory once WRITE_EVERY has passed (history_loop, every 10 s), or at once (force:
+    remote.py stopping)"""
+    with history_lock:
+        if pending is not None and (force or time.time() - last_write >= WRITE_EVERY):
+            write_history(pending, now=True)
+
+
 def edit_history(action, key=""):
     with history_lock:
         entries = read_history()
@@ -80,4 +101,4 @@ def edit_history(action, key=""):
             entries = []
         else:
             raise ValueError(tr("unknown action"))
-        write_history(entries)
+        write_history(entries, now=True)

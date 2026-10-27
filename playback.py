@@ -112,6 +112,7 @@ def history_loop():
     """Every 10 s, records the position of the video started by play(); sends it to Twitch for a replay."""
     while True:
         time.sleep(10)
+        history.flush()   # positions kept in memory on a USB drive (history.WRITE_EVERY)
         video = dict(history.now_playing) or shim_video()
         if not video:
             continue
