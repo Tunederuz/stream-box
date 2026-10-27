@@ -4,8 +4,8 @@ same functions as the TV menu. stream-box.lua sends the keys as "script-message 
 received on a connection of its own to mpv's IPC (script messages reach the IPC clients as "client-message" events).
 
 A screen is {title, build, items, sel}: build() returns its items, run in a thread (network) when the screen opens
-and again after an action that changes it. An item is {label, info, on, dim, do}: do() returns a screen to open,
-CLOSE, or None (the screen is rebuilt: a setting changed).
+and again after an action that changes it. An item is {label, info, on, dim, do}: do() returns a screen to open, or
+None (the menu was closed, or a setting changed and the screen is rebuilt).
 """
 import json, socket, threading, time
 
@@ -25,7 +25,6 @@ import youtube    # youtube.py: favorites, subscriptions
 from common import MPV_SOCKET, mpv
 from i18n import tr
 
-CLOSE = "close"
 CORNERS = {"tl": "↖ top left", "tr": "↗ top right", "br": "↘ bottom right", "bl": "↙ bottom left"}   # (stream-box.lua)
 STATE = "user-data/streambox/quickmenu"
 lock = threading.RLock()
@@ -362,7 +361,7 @@ def activate(it):
         return publish()
     if isinstance(result, dict):
         push(result)
-    elif result != CLOSE and stack:   # a setting changed: the screen shows it
+    elif stack:   # a setting changed: the screen shows it
         load(stack[-1])
 
 

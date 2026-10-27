@@ -570,7 +570,6 @@ Item {
     function close() {
         if (!isOpen) return
         stopPreview()
-        peek = ""
         closePlexLink()
         closeJfLink()
         isOpen = false
@@ -947,32 +946,29 @@ Item {
         tabEnter.restart()
         loadTab(tabs[tab].id)   // tabs[tab] and not tabId: the tabId binding is not recomputed yet here
     }
-    // Live preview: startPreview with "twitch:<login>": streamlink and player "cardPreview" of ui.py, drawn by
-    // menu/CardPreview.qml. Used by the peek: ▶ on a live streamer of the Live tab shows its live full screen, muted,
-    // over the menu (menu/LivePeek.qml); OK watches it, any other key goes back
-    property string peek: ""   // login being peeked at
-    function peekable() {
-        var login = (st.streamers || [])[liveSel]
-        return tabId === "live" && area === "content" && shortcut < 0 && !modal && !kbOpen && !!login
-            && !!(st.live || {})[login] && !(st.mode === "twitch" && st.channel === login) && pip.channel !== login
+    // Live preview in the background: on the Live tab, after a moment on a live streamer, its live plays muted behind
+    // the whole menu, under a dark veil (livePreview of ui.py: streamlink and a third player, drawn by
+    // menu/LivePreview.qml). Only when the menu is the main page: nothing plays behind it
+    readonly property string bgLive: {
+        var login = (st.streamers || [])[liveSel] || ""
+        return isOpen && tabId === "live" && area === "content" && shortcut < 0 && !modal && !kbOpen && !box.videoActive
+            && !!(st.live || {})[login] ? login : ""
     }
-    function openPeek() {
-        peek = st.streamers[liveSel]
-        startPreview("twitch:" + peek, { x: 0, y: 0, width: width, height: height })
-    }
-    property var previewRect: null   // where the video goes, in menu coordinates; null: no preview
-    property string previewFor: ""   // "twitch:<login>" being previewed
-    function startPreview(url, r) {   // r: rect in menu coordinates
+    onBgLiveChanged: {
         stopPreview()
-        previewFor = url
-        previewRect = { x: r.x, y: r.y, width: r.width, height: r.height }
-        cardPreview.play(url, 0)
+        if (bgLive) bgDwell.restart(); else bgDwell.stop()
+    }
+    Timer { id: bgDwell; interval: 900; onTriggered: if (menu.bgLive) menu.startPreview(menu.bgLive) }
+    property string previewFor: ""   // login whose live plays in the background
+    function startPreview(login) {
+        stopPreview()
+        previewFor = login
+        livePreview.play(login)
     }
     function stopPreview() {
         if (!previewFor) return
         previewFor = ""
-        previewRect = null
-        cardPreview.stop()
+        livePreview.stop()
     }
     function loadBt(cb) { call("GET", "/api/bluetooth", undefined, function (d) { if (d) { bt = d; if (cb) cb(d) } }) }
     // "Remotes and controllers" dialog: paired devices (OK: unpair), "Pair a device"
@@ -1116,16 +1112,9 @@ Item {
     function key(k) {
         idleClose.restart()
         startFocus = false
-        stopPreview()   // any key: the focus moves, a dialog opens, or the video starts for real
-        if (peek) {   // OK: watch it; any other key: back to the grid
-            var login = peek
-            peek = ""
-            if (k === "ok") { act("channel", { name: login }); close() }
-            return
-        }
         if (k === "home") return close()
         if (k === "homescreen") { act("home"); return close() }
-        if (k === "corner") return peekable() ? openPeek() : act("corner")
+        if (k === "corner") return act("corner")
         if (kbOpen) return keyKeyboard(k)
         if (modal) {
             if (k === "up" || k === "down") modalSel = Math.max(0, Math.min(modal.items.length - 1, modalSel + (k === "down" ? 1 : -1)))
@@ -1337,6 +1326,12 @@ Item {
             c3: menu.hueShift(menu.accent, -0.12, 0.9)
         }
         Rectangle { anchors.fill: parent; color: menu.pal.veil; opacity: box.videoActive ? 0 : 0.30 }
+        LivePreview { menu: menu }   // live of the chosen streamer, in the background (bgLive)
+        Rectangle {   // dark veil over it: the cards and texts stay readable
+            anchors.fill: parent; color: "black"
+            opacity: livePreview.ready && menu.previewFor ? 0.55 : 0
+            Behavior on opacity { NumberAnimation { duration: 300 } }
+        }
         Rail { menu: menu }   // (menu: the id of this object, looked up before the property of the same name)
         Header { menu: menu }
 
@@ -1359,9 +1354,6 @@ Item {
             RowsTab { menu: menu; which: "system" }
             SystemStatus { menu: menu }
         }
-        LivePeek { menu: menu; part: "back" }
-        CardPreview { menu: menu }
-        LivePeek { menu: menu; part: "front" }
     }
     SearchKeyboard { menu: menu }
     CodeDialog { menu: menu }

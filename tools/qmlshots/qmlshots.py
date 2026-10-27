@@ -26,7 +26,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 WAIT = int(os.environ.get("QMLSHOTS_WAIT", "900"))   # ms after each step: animations and images done
 
 # Key sequence: ("key", name), ("open",), ("power",), ("text", text, submit), ("video", bool), ("close",),
-# ("pause", ms): nothing more than waiting (a card preview starts after a moment on a card).
+# ("pause", ms): nothing more than waiting (the live preview starts after a moment on a live streamer).
 # A screenshot follows each step; the label names it. Each scene starts from a fresh opening (Live tab).
 
 
@@ -40,8 +40,7 @@ def scene(tab, *names):   # close, open, from the rail to the tab (index in TvMe
 
 STEPS = (
     [("open",)]                                                   # Live, focus on the watched streamer
-    + keys("right right corner") + [("pause", 800)]               # ▶: full-screen peek (pink: the fake video)
-    + keys("back")                                                # back to the grid
+    + keys("right right") + [("pause", 2000)]                     # live in the background (pink: the fake video)
     + keys("down down down down up up up up")                     # the grid scrolls
     + keys("up right right left down")                            # shortcuts (second stream)
     + keys("menu down back")                                      # streamer options
@@ -181,7 +180,7 @@ def shoot(qml_dir, out):
         def paint(self, painter):
             painter.fillRect(0, 0, int(self.width()), int(self.height()), QColor("#ff2fa8"))
 
-    class CardPreview(QObject):   # cardPreview of ui.py: "plays" at once
+    class LivePreview(QObject):   # livePreview of ui.py: "plays" at once
         changed = Signal()
 
         def __init__(self):
@@ -190,15 +189,15 @@ def shoot(qml_dir, out):
 
         ready = Property(bool, lambda self: self._ready, notify=changed)
 
-        @Slot(str, float)
-        def play(self, url, start):
-            box.calls.append("cardPreview.play %s %s" % (url, start))
+        @Slot(str)
+        def play(self, login):
+            box.calls.append("livePreview.play " + login)
             self._ready = True
             self.changed.emit()
 
         @Slot()
         def stop(self):
-            box.calls.append("cardPreview.stop")
+            box.calls.append("livePreview.stop")
             self._ready = False
             self.changed.emit()
 
@@ -253,13 +252,13 @@ def shoot(qml_dir, out):
     app = QGuiApplication(sys.argv[:1])   # noqa: F841  (kept referenced: Qt needs the application object alive)
     box = Box()
     pip = Pip()
-    card_preview = CardPreview()
+    live_preview = LivePreview()
     qmlRegisterType(FakeVideo, "StreamBox", 1, 0, "MpvVideo")
     i18n = I18n(json.load(open(os.path.join(REPO, "locales", "fr.json"), encoding="utf-8")))
     view = QQuickView()
     view.rootContext().setContextProperty("box", box)
     view.rootContext().setContextProperty("pip", pip)
-    view.rootContext().setContextProperty("cardPreview", card_preview)
+    view.rootContext().setContextProperty("livePreview", live_preview)
     view.rootContext().setContextProperty("i18n", i18n)
     view.setResizeMode(QQuickView.SizeRootObjectToView)
     view.resize(1920, 1080)

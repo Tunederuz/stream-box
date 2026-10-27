@@ -364,16 +364,14 @@ before, `fits` was then -1 and the first scroll was lost).
 YouTube card previews (the focused card playing its video) were tried and dropped on 2026-10-27: resolving links with
 yt-dlp, in advance for the neighboring cards, got the box taken for a robot by YouTube within two hours ("Sign in to
 confirm you're not a bot" for every video, the player's included). Do not add requests to YouTube per card.
-Live tab, peek: ▶ (the "corner" key) on a live streamer (not the one already on the TV, nor the second stream:
-`peekable()`, the help line then shows "▶ peek") shows its live full screen, muted, over the menu (`menu.peek`):
-`qml/menu/LivePeek.qml` in two layers around the video, "back" (black, Twitch's live thumbnail
-`static-cdn.jtvnw.net/previews-ttv/live_user_<login>-1280x720.jpg` while it loads) and "front" (photo, name,
-viewers, game, title, "OK watch · any other key: back", "Loading…" until the first frame). The video is
-`qml/menu/CardPreview.qml` (third libmpv player `preview_player` of ui.py, "cardPreview"; never fully invisible,
-opacity 0.001: libmpv needs its render context before a video starts): `startPreview` with `twitch:<login>` and the
-full menu rect; ui.py starts its own streamlink (`PREVIEW_PORT` 34591, 720p) and loads it once served (retries every
-1.5 s while the player is idle, 6 at most). OK during the peek watches that live; any other key closes it. On demand
-on purpose: a banner above the grid took too much room, then a card growing after 0.9 s hid its neighbors.
+Live tab, live in the background: after 0.9 s on a live streamer (`menu.bgLive`: Live tab, content, no dialog nor
+keyboard, and nothing playing behind the menu, `box.videoActive` false), its live plays muted behind the whole menu,
+above the backdrop and under a black veil (0.55) that keeps the cards readable; moving to another streamer stops it
+and restarts the 0.9 s. The video is `qml/menu/LivePreview.qml` (third libmpv player `preview_player` of ui.py,
+"livePreview"; never fully invisible, opacity 0.001: libmpv needs its render context before a video starts):
+`startPreview(login)`; ui.py starts its own streamlink (`PREVIEW_PORT` 34591,
+720p) and loads it once served (retries every 1.5 s while the player is idle, 6 at most). (Tried before: a banner
+above the grid took too much room; a card growing over its neighbors hid them; a full-screen peek on ▶.)
 Video cards (`VideoCard`: 456 px wide, 16:9 thumbnail, height from the width): 3 per row in Replays, YouTube,
 Jellyfin (step 482) and History (3 columns, 2 rows); the Replays and YouTube/Jellyfin rows scroll vertically (one full
 row, the top of the next one showing).

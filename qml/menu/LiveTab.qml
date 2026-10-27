@@ -1,5 +1,5 @@
 // TV menu, Live tab: shortcuts above (resume, second stream), grid of the streamers of the list, title of the chosen
-// live. ▶ on a live streamer: full-screen peek at its live (menu/LivePeek.qml)
+// live. After a moment on a live streamer, its live plays in the background of the menu (TvMenu.bgLive)
 import QtQuick
 import "layout.js" as Layout
 import ".."

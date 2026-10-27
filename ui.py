@@ -12,8 +12,8 @@ a corner or side by side with the main one (ui.qml, animated transitions). Drive
 IPC (script-message streambox-pip <open|close|swap|layout> [channel] [pip|split], /api/pip of remote.py); state published
 in user-data/streambox/pip. Sound muted: the sound is the main stream's (Swap exchanges the two).
 
-Live previews: a third libmpv player (preview_player), muted, plays the live of the TV menu card grown on the Live
-tab ("cardPreview" object, driven by qml/TvMenu.qml, "twitch:<login>" through its own streamlink).
+Live preview: a third libmpv player (preview_player), muted, plays the live of the streamer chosen in the TV menu's
+Live tab, in the menu's background ("livePreview" object, driven by qml/TvMenu.qml, through its own streamlink).
 
 The big TV menu is in QML (qml/TvMenu.qml; if it fails to load, stream-box.lua opens its small menu): the Menu button
 (script-message streambox-tvmenu-open from stream-box.lua) opens it, and while it is open keys go to it, not to
@@ -404,16 +404,16 @@ class Pip(QObject):
 
 pip = Pip()
 
-preview_player = None  # third libmpv player: muted video of the focused TV menu card, created in main()
+preview_player = None  # third libmpv player: muted live in the TV menu's background, created in main()
 
 
 PREVIEW_PORT = 34591   # streamlink of the live previews
 
 
-class CardPreview(QObject):
-    """Muted preview of the focused TV menu card (qml/TvMenu.qml): plays a direct link in preview_player, in a loop,
-    or "twitch:<login>", a live through its own streamlink (720p: shown full screen by the Live tab's peek); ready once
-    its first frame is there (the thumbnail then fades into the video)"""
+class LivePreview(QObject):
+    """Muted live of the streamer chosen in the TV menu's Live tab, played in the menu's background (qml/TvMenu.qml,
+    bgLive): "twitch:<login>" through its own streamlink, loaded in preview_player once served; ready once its first
+    frame is there"""
     changed = Signal()
     _ready_in = Signal(bool)   # from the mpv thread
 
@@ -434,22 +434,17 @@ class CardPreview(QObject):
             self._ready = value
             self.changed.emit()
 
-    @Slot(str, float)
-    def play(self, url, start):
+    @Slot(str)
+    def play(self, login):
         self.stop()
-        login = url[len("twitch:"):] if url.startswith("twitch:") else None
-        if login is not None:
-            if not re.fullmatch(r"[a-z0-9_]{2,25}", login):
-                return
-            self.proc = subprocess.Popen(
-                ["streamlink", "--twitch-low-latency", "--player-external-http", "--player-external-http-interface",
-                 "127.0.0.1", "--player-external-http-port", str(PREVIEW_PORT), f"twitch.tv/{login}",
-                 "720p,720p60,480p,best"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self.tries = 0
-            self.retry.start()
+        if not re.fullmatch(r"[a-z0-9_]{2,25}", login):
             return
-        to_mpv(preview_player._set_property, "start", str(int(start)) if start > 0 else "none")
-        to_mpv(preview_player.command, "loadfile", url)
+        self.proc = subprocess.Popen(
+            ["streamlink", "--twitch-low-latency", "--player-external-http", "--player-external-http-interface",
+             "127.0.0.1", "--player-external-http-port", str(PREVIEW_PORT), f"twitch.tv/{login}",
+             "720p,720p60,480p,best"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.tries = 0
+        self.retry.start()
 
     def load_live(self):
         self.tries += 1
@@ -458,7 +453,6 @@ class CardPreview(QObject):
             return
         if not self.idle:   # a load is under way
             return
-        to_mpv(preview_player._set_property, "start", "none")
         to_mpv(preview_player.command, "loadfile", f"http://127.0.0.1:{PREVIEW_PORT}/")
 
     @Slot()
@@ -471,7 +465,7 @@ class CardPreview(QObject):
         to_mpv(preview_player.command, "stop")
 
 
-card_preview = CardPreview()
+live_preview = LivePreview()
 
 
 class ChatBridge(QObject):
@@ -673,7 +667,7 @@ def main():
     view = View()
     view.rootContext().setContextProperty("box", box)
     view.rootContext().setContextProperty("pip", pip)
-    view.rootContext().setContextProperty("cardPreview", card_preview)
+    view.rootContext().setContextProperty("livePreview", live_preview)
     global chat
     chat = ChatBridge()
     view.rootContext().setContextProperty("chat", chat)
@@ -694,12 +688,12 @@ def main():
                          demuxer_max_back_bytes="0")
     pip_player.observe_property("idle-active", lambda _n, v: v and pip._idle.emit())
     global preview_player
-    # Card previews: 360p video only (remote.py picks it), no sound, in a loop
+    # Live preview: no sound
     preview_player = mpv.MPV(vo="libmpv", hwdec=opts.get("hwdec", "auto-safe"), mute="yes", idle="yes", ytdl="no",
-                             osd_level="0", input_default_bindings="no", cache="yes", loop_file="inf",
+                             osd_level="0", input_default_bindings="no", cache="yes",
                              demuxer_max_bytes="20MiB", demuxer_max_back_bytes="0")
-    preview_player.observe_property("video-params", lambda _n, v: card_preview._ready_in.emit(v is not None))
-    preview_player.observe_property("idle-active", lambda _n, v: setattr(card_preview, "idle", bool(v)))
+    preview_player.observe_property("video-params", lambda _n, v: live_preview._ready_in.emit(v is not None))
+    preview_player.observe_property("idle-active", lambda _n, v: setattr(live_preview, "idle", bool(v)))
     main_state = {"channel": "", "mode": "", "corner": "bl"}
 
     def follow(key):
@@ -754,8 +748,8 @@ def main():
         # context held by Qt's render thread, and everything stayed frozen (IPC socket dropping connections, no restart).
         if pip.proc:
             pip.proc.terminate()
-        if card_preview.proc:
-            card_preview.proc.terminate()
+        if live_preview.proc:
+            live_preview.proc.terminate()
         os._exit(0)
     if force_window:
         bridge.ready.connect(lambda: to_mpv(player.command, "set", "force-window", force_window), Qt.QueuedConnection)
