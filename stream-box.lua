@@ -13,8 +13,8 @@ local I18N = require "streambox.i18n"   -- interface language (see i18n.py), rel
 local ass = require "streambox.ass"
 local fmt = require "streambox.fmt"
 local keys = require "streambox.keys"
+local quick = require "streambox.quickmenu"
 local tr, ass_escape, rect, text, clock = I18N.tr, ass.ass_escape, ass.rect, ass.text, fmt.clock
-local DIRECTIONS = keys.DIRECTIONS
 I18N.load(DIR)
 
 local STREAMERS_FILE = DIR .. "/streamers.txt"
@@ -22,7 +22,7 @@ local STATE_DIR = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local
 
 local CORNERS = { "tl", "tr", "br", "bl" }   -- toggle order (clockwise)
 local CORNER_LABELS = { tl = "↖ top left", tr = "↗ top right", br = "↘ bottom right", bl = "↙ bottom left" }
-local MENU_TIMEOUT = 10   -- seconds without a key before hiding the menu
+local MENU_TIMEOUT = 120  -- seconds without a key before closing the quick menu
 local RETRY = 15          -- seconds between two attempts when the channel is not live
 local BACK_TO_MENU = 3    -- seconds idle after a video before going back to the menu (lets Jellyfin chain the next one)
 local AUTO_SWITCH = 60    -- seconds offline (after a channel change) before switching to a live streamer
@@ -43,10 +43,7 @@ local ambient_data = {}       -- user-data/streambox/ambient (weather, schedules
 local QR_MODES = { always = true, timed = true, never = true }   -- always, QR_SECONDS seconds, never
 local QR_SECONDS = 30
 local qr_mode, qr_until = "always", 0   -- in "timed" mode, shown until qr_until (mp.get_time)
-local menu = mp.create_osd_overlay("ass-events")
 local status = mp.create_osd_overlay("ass-events")
-local menu_visible, hide_timer, items = false, nil, {}
-local sel, keyboard_nav = nil, false   -- button selected with the remote (index in items)
 
 
 -- Qt app (ui.py): banner, playback bar, notifications, polls box and home screen are drawn in
@@ -429,166 +426,8 @@ local function qr_host()
     return ((qr_data and qr_data.url or ""):gsub("^https?://", ""):gsub("/$", ""))
 end
 
-local function live_badge(name)
-    local info = live[name]
-    if not info then return nil end
-    local v = tonumber(info.viewers) or 0
-    local count = v >= 1000 and I18N.dec(("%.1f k"):format(v / 1000)) or tostring(v)
-    return "{\\1c&H4848FF&}  ● " .. count   -- red (BGR)
-end
-
-local function draw_menu()
-    local w, h = mp.get_osd_size()
-    if not w or w == 0 then return end
-    local mouse = mp.get_property_native("mouse-pos") or {}
-
-    -- Streamers in a grid: as many columns as needed, and a smaller font if it still does not
-    -- fit in 90 % of the screen. The chat row (checkbox + corner) takes the full width below, and with mpv alone
-    -- the "Animated menu" row under it.
-    local n = math.max(#streamers, 1)   -- empty list: keep one cell for the layout
-    local extra = big_menu() and 0 or 1   -- full-width rows under the chat one
-    local fs, bw, bh, sp, title_h, cols, rows, panel_w, panel_h
-    fs = h / 24
-    repeat
-        bw, bh, sp, title_h = fs * 10, fs * 1.7, fs * 0.35, fs * 2
-        local max_rows = math.max(1, math.floor((h * 0.9 - title_h - bh * (2 + extra) - sp * (5 + extra)) / (bh + sp)))
-        cols = math.ceil(n / max_rows)
-        rows = math.ceil(n / cols)
-        panel_w = cols * bw + (cols - 1) * sp
-        panel_h = title_h + rows * (bh + sp) + sp * (4 + extra) + bh * (2 + extra)
-        local fits = panel_w <= w * 0.9
-        if not fits then fs = fs * 0.9 end
-    until fits or fs < 10
-    local x0, y0 = math.floor((w - panel_w) / 2), math.floor((h - panel_h) / 2)
-
-    local out = { rect(x0 - sp * 2, y0 - sp * 2, panel_w + sp * 4, panel_h + sp * 3, "000000", "50"),
-                  text(w / 2, y0 + title_h / 2, fs, "FFFFFF", tr("Streamers")) }
-    items = {}
-    local function button(x, y, bw_, label, current, action, checked, text_color, suffix)
-        local hover
-        if keyboard_nav then
-            hover = sel == #items + 1
-        else
-            hover = mouse.x and mouse.x >= x and mouse.x <= x + bw_ and mouse.y >= y and mouse.y <= y + bh
-        end
-        local color = current and "FF4691" or (hover and "606060" or "303030")   -- Twitch purple in BGR
-        if keyboard_nav and hover then
-            out[#out + 1] = rect(x - fs * 0.12, y - fs * 0.12, bw_ + fs * 0.24, bh + fs * 0.24, "FFFFFF", "00")   -- frame
-        end
-        out[#out + 1] = rect(x, y, bw_, bh, color, hover and "00" or "20")
-        if checked ~= nil then
-            -- Drawn checkbox, centered (the ☐/☑ glyphs are not in every font)
-            local box = fs * 0.8
-            local bx, by = x + (bw_ - box) / 2, y + (bh - box) / 2
-            out[#out + 1] = rect(bx, by, box, box, "FFFFFF", "00")
-            out[#out + 1] = rect(bx + fs * 0.08, by + fs * 0.08, box - fs * 0.16, box - fs * 0.16, "202020", "00")
-            if checked then
-                out[#out + 1] = rect(bx + fs * 0.2, by + fs * 0.2, box - fs * 0.4, box - fs * 0.4, "FF4691", "00")
-            end
-        end
-        out[#out + 1] = text(x + bw_ / 2, y + bh / 2, fs, text_color or "FFFFFF", (current and "▶ " or "") .. label,
-                             suffix)
-        items[#items + 1] = { x0 = x, y0 = y, x1 = x + bw_, y1 = y + bh, action = action }
-    end
-    -- Home screen at the top, above the grid. The streamers stay the first buttons of items (on_key
-    -- relies on it): navigation with the remote only depends on positions.
-    local grid_y = y0 + title_h + bh + sp * 2
-    for i, name in ipairs(streamers) do
-        local col, row = math.floor((i - 1) / rows), (i - 1) % rows   -- filled column by column
-        button(x0 + col * (bw + sp), grid_y + row * (bh + sp), bw, name, name == channel and mode == "twitch",
-               function() start_channel(name) end, nil, nil, live_badge(name))
-    end
-    button(x0, y0 + title_h, panel_w, tr("⌂ Home screen"), mode == "home", show_home)
-    local y = grid_y + rows * (bh + sp) + sp
-    button(x0, y, bh, "", false, toggle_chat, chat_visible)   -- checkbox: show / hide the chat
-    button(x0 + bh + sp, y, panel_w - bh - sp, tr("Chat: {corner}", { corner = tr(CORNER_LABELS[corner]) }), false,
-           toggle_corner, nil, chat_visible and "FFFFFF" or "808080")
-    if not big_menu() then   -- simplified version (mpv alone, chosen or after the Qt app failed): way back
-        button(x0, y + bh + sp, panel_w, tr("Switch to the full version"), false, function()
-            mp.command_native_async({ name = "subprocess", playback_only = false, args = { "curl", "-s", "-m", "5",
-                "-X", "POST", "-H", "Content-Type: application/json", "-d", '{"mode": "qt"}',
-                "http://127.0.0.1:8080/api/player" } }, function() end)
-        end)
-    end
-
-    -- Companion app QR code to the right of the menu, if there is room (not on the ambient screen, which has its own)
-    local size = math.floor(math.min(panel_h, h * 0.3))
-    local qx = x0 + panel_w + sp * 6
-    if not ambient_visible and qx + size + sp * 2 <= w * 0.98 then
-        local qy = y0 + (panel_h - size - fs * 1.6) / 2
-        local drawing, side = qr_code(qx, qy, size)
-        if drawing then
-            out[#out + 1] = rect(qx - sp * 2, qy - sp * 2, side + sp * 4, side + fs * 1.6 + sp * 4, "000000", "50")
-            out[#out + 1] = drawing
-            out[#out + 1] = text(qx + side / 2, qy + side + fs * 0.5, fs * 0.6, "FFFFFF", tr("Companion app"))
-            out[#out + 1] = text(qx + side / 2, qy + side + fs * 1.2, fs * 0.5, "B0B0B0", qr_host())
-        end
-    end
-
-    menu.res_x, menu.res_y = w, h
-    menu.data = table.concat(out, "\n")
-    menu:update()
-end
-
-local function hide_menu()
-    menu_visible = false
-    sel, keyboard_nav = nil, false
-    menu:remove()
-    mp.remove_key_binding("streambox-click")
-end
-
-local function on_click()
-    local m = mp.get_property_native("mouse-pos") or {}
-    for _, it in ipairs(items) do
-        if m.x and m.x >= it.x0 and m.x <= it.x1 and m.y >= it.y0 and m.y <= it.y1 then
-            it.action()
-            draw_menu()
-            return
-        end
-    end
-    hide_menu()   -- click outside the buttons
-end
-
-local function show_menu(by_key)
-    if not menu_visible then
-        menu_visible = true
-        qr_until = mp.get_time() + QR_SECONDS
-        streamers = read_streamers()   -- reread on each opening: the file is edited live
-        mp.add_forced_key_binding("MBTN_LEFT", "streambox-click", on_click)
-        if by_key then
-            -- Initial selection: the current channel
-            sel = 1
-            for i, name in ipairs(streamers) do
-                if name == channel then sel = i end
-            end
-        end
-    end
-    if by_key then keyboard_nav = true end
-    draw_menu()
-    if hide_timer then hide_timer:kill() end
-    hide_timer = mp.add_timeout(MENU_TIMEOUT, hide_menu)
-end
-
-
 -- Bluetooth remote (tested with the Xiaomi TV Stick one): cage forwards its keys to mpv like those of a
 -- keyboard. OK and Menu have no standard name: their codes are those of this remote.
-
--- Closest button in direction (dx, dy), from the selected button
-local function move_selection(dx, dy)
-    local cur = items[sel or 1]
-    if not cur then return end
-    local cx, cy = (cur.x0 + cur.x1) / 2, (cur.y0 + cur.y1) / 2
-    local best, best_score
-    for i, it in ipairs(items) do
-        local ix, iy = (it.x0 + it.x1) / 2 - cx, (it.y0 + it.y1) / 2 - cy
-        local along, across = ix * dx + iy * dy, math.abs(ix * dy - iy * dx)
-        if i ~= sel and along > 0 then
-            local score = along + 2 * across
-            if not best_score or score < best_score then best, best_score = i, score end
-        end
-    end
-    if best then sel = best end
-end
 
 local function zap(step)
     local list = read_streamers()
@@ -1047,8 +886,41 @@ local function controls_key(key)
     publish_controls()
 end
 
+-- Quick menu of the simplified version (mpv alone): lists built by quickmenu.py (remote.py), which gets the keys
+-- (script-message streambox-qm open | close | key <name>) and publishes what to show in user-data/streambox/quickmenu
+local qm_overlay = mp.create_osd_overlay("ass-events")
+local qm_data, qm_open, qm_idle, qm_wait = {}, false, nil, nil
+local function qm_draw()
+    local w, h = mp.get_osd_size()
+    if not qm_open or not w or w == 0 then return qm_overlay:remove() end
+    qm_overlay.res_x, qm_overlay.res_y = w, h
+    qm_overlay.data = quick.draw(w, h, qm_data, tr("↑↓ choose · OK open · ← back · Menu close"))
+    qm_overlay:update()
+end
+local function qm_send(...)
+    mp.commandv("script-message", "streambox-qm", ...)
+    if qm_idle then qm_idle:kill() end
+    qm_idle = mp.add_timeout(MENU_TIMEOUT, function() mp.commandv("script-message", "streambox-qm", "close") end)
+end
+local function qm_toggle()
+    if qm_open then return qm_send("close") end
+    streamers = read_streamers()   -- reread on each opening: the file is edited live
+    qm_send("open")
+    if qm_wait then qm_wait:kill() end
+    qm_wait = mp.add_timeout(3, function()   -- remote.py stopped or restarting
+        mp.osd_message(tr("Menu unavailable: the box's service is not answering"), 4)
+    end)
+end
+mp.observe_property("user-data/streambox/quickmenu", "native", function(_, v)
+    qm_data = v or {}
+    qm_open = qm_data.items ~= nil
+    if qm_wait then qm_wait:kill() qm_wait = nil end
+    qm_draw()
+end)
+mp.observe_property("osd-dimensions", "native", function() if qm_open then qm_draw() end end)
+
 -- Big Android TV style menu (qml/TvMenu.qml): opened by the Menu button (Home key); while it is open,
--- all keys are forwarded to it. With mpv alone, the same button opens and closes the small menu
+-- all keys are forwarded to it. With mpv alone, the same button opens and closes the quick menu above
 local tvmenu_open = false
 mp.observe_property("user-data/streambox/tvmenu", "native", function(_, v) tvmenu_open = v == true end)
 open_tvmenu = function()
@@ -1056,11 +928,7 @@ open_tvmenu = function()
         return mp.osd_message(tr("Continue the setup on your phone: scan the QR code"), 4)
     end
     hide_bar()
-    if not big_menu() then
-        if menu_visible then hide_menu() else show_menu(true) end
-        return
-    end
-    if menu_visible then hide_menu() end
+    if not big_menu() then return qm_toggle() end
     mp.commandv("script-message", "streambox-tvmenu-open")
 end
 
@@ -1081,7 +949,6 @@ local function on_key(key)
     if key == "power" then return power_key() end
     if key == "power_menu" then   -- power held: "sleep, restart, shut down" window (QML menu)
         if not big_menu() then return power_key() end   -- mpv alone: the power button's usual action
-        if menu_visible then hide_menu() end
         hide_bar()
         return mp.commandv("script-message", "streambox-power-menu")
     end
@@ -1096,6 +963,10 @@ local function on_key(key)
     end
     if tvmenu_open then
         mp.commandv("script-message", "streambox-tvmenu-key", key)
+        return
+    end
+    if qm_open then
+        qm_send("key", key)
         return
     end
     if tracks_open then
@@ -1126,13 +997,11 @@ local function on_key(key)
         return
     end
     if key == "homescreen" then   -- home screen, from any mode
-        if menu_visible then hide_menu() end
         if mode ~= "home" then show_home() end
         return
-    elseif key == "corner" then   -- next corner for the chat, menu open or not
+    elseif key == "corner" then   -- next corner for the chat
         toggle_corner()
-        if menu_visible then show_menu(keyboard_nav)
-        else mp.osd_message(tr("Chat: {corner}", { corner = tr(CORNER_LABELS[corner]) }), 2) end
+        mp.osd_message(tr("Chat: {corner}", { corner = tr(CORNER_LABELS[corner]) }), 2)
         return
     end
     if toast_channel and (key == "ok" or key == "back") then
@@ -1141,24 +1010,7 @@ local function on_key(key)
         if key == "ok" then start_channel(name) end
         return
     end
-    if menu_visible then
-        if DIRECTIONS[key] then
-            if keyboard_nav then move_selection(DIRECTIONS[key][1], DIRECTIONS[key][2]) end
-            show_menu(true)
-        elseif key == "ok" then
-            if keyboard_nav and items[sel] then
-                items[sel].action()
-                -- Streamer or home screen chosen: the menu closes; chat settings: it stays open
-                if mode == "home" or (mode == "twitch" and sel <= #streamers) then hide_menu() else show_menu(true) end
-            else
-                show_menu(true)
-            end
-        elseif key == "home" then
-            open_tvmenu()
-        else
-            hide_menu()
-        end
-    elseif mode == "home" then   -- home screen: any key opens the menu, the main page
+    if mode == "home" then   -- home screen: any key opens the menu, the main page
         open_tvmenu()
     elseif mode == "twitch" then
         if key == "up" or key == "down" then
@@ -1213,21 +1065,15 @@ end
 keys.setup(on_key, qt_ui)
 
 -- Companion app (remote.py): same actions as the menu
-local function from_remote(fn)
-    return function(...)
-        fn(...)
-        if menu_visible then draw_menu() end
-    end
-end
 -- Channel chosen from the phone or Home Assistant: menu closed (not for automatic restarts of the live stream)
-mp.register_script_message("streambox-channel", from_remote(function(name)
+mp.register_script_message("streambox-channel", function(name)
     mp.commandv("script-message", "streambox-tvmenu-close")
     start_channel(name)
-end))
-mp.register_script_message("streambox-toggle-chat", from_remote(toggle_chat))
-mp.register_script_message("streambox-cycle-corner", from_remote(toggle_corner))
+end)
+mp.register_script_message("streambox-toggle-chat", toggle_chat)
+mp.register_script_message("streambox-cycle-corner", toggle_corner)
 mp.register_script_message("streambox-play", play_media)
-mp.register_script_message("streambox-home", from_remote(show_home))
+mp.register_script_message("streambox-home", show_home)
 mp.register_script_message("streambox-setup-done", home_menu)
 -- Small banner at the top (remote connected…, sent by input.py): qml/Notice.qml, or a message with mpv alone
 mp.register_script_message("streambox-notice", function(text)
@@ -1237,7 +1083,7 @@ mp.register_script_message("streambox-notice", function(text)
         mp.osd_message(text, 4)
     end
 end)   -- "Finish" on the phone page
-mp.register_script_message("streambox-twitch", from_remote(function() start_channel(channel) end))
+mp.register_script_message("streambox-twitch", function() start_channel(channel) end)
 -- Wake-up after sleep (remote.py, resume_loop): streams cut, restart what was playing
 mp.register_script_message("streambox-resume", function()
     power_quiet_until = mp.get_time() + 15
@@ -1341,15 +1187,12 @@ mp.observe_property("user-data/streambox/ambient", "native", function(_, value)
     local qr = ambient_data.qr
     local setup = ambient_data.setup
     if setup and setup.ssid then qr = { url = setup.url, rows = setup.wifi_rows } end   -- QR code of the box's Wi-Fi
-    local changed = (qr and qr.url) ~= (qr_data and qr_data.url)
     qr_data = qr
     if ambient_visible then update_ambient(true) end
-    if changed and menu_visible then draw_menu() end
 end)
 
 mp.observe_property("user-data/streambox/live", "native", function(_, value)
     live = value or {}
-    if menu_visible then draw_menu() end
     auto_switch()
 end)
 
@@ -1433,15 +1276,14 @@ for key, spec in pairs(FLAGS) do
     set_flag(key, saved or (spec[1] and "yes" or "no"), true)
 end
 
--- Display of the companion app QR code: always, timed (QR_SECONDS seconds each time the ambient screen appears
--- and the menu opens), never
+-- Display of the companion app QR code: always, timed (QR_SECONDS seconds each time the ambient screen appears),
+-- never
 local function set_qr_mode(value)
     if not QR_MODES[value] then return end
     qr_mode, qr_until = value, mp.get_time() + QR_SECONDS   -- in "timed", show it right away as an example
     write_state("qr", value)
     mp.set_property_native("user-data/streambox/qr", value)
     if ambient_visible then update_ambient(true) end
-    if menu_visible then draw_menu() end
 end
 mp.register_script_message("streambox-qr", set_qr_mode)
 set_qr_mode(read_state("qr") or "always")
@@ -1449,7 +1291,7 @@ set_qr_mode(read_state("qr") or "always")
 -- Interface language changed (companion app): reload the translations and redraw what is visible
 mp.register_script_message("streambox-language", function()
     I18N.load()
-    if menu_visible then draw_menu() end
+    if qm_open then qm_draw() end
     if ambient_visible then update_ambient(true) end
     if bar_visible then draw_bar() end
     if tracks_open then build_tracks() publish_tracks() end

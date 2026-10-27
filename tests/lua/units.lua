@@ -22,4 +22,12 @@ assert(s:find("Setup") and s:find("rain 50%%") and s:find("QR") and s:find("Load
 s = ambient.draw(1920, 1080, { setup = { connecting = "Home" } }, "", function() return nil end, "")
 assert(s:find("Connecting"))
 assert(fmt.clock(3725) == "1:02:05" and fmt.shorten("ééé", 3) == "é…")
+local quick = require "streambox.quickmenu"
+local items = {}
+for i = 1, 40 do items[i] = { label = "Item " .. i, info = i == 30 and "● 1,5 k" or "", on = i == 2, dim = i == 3 } end
+s = quick.draw(1920, 1080, { title = "Live", items = items, sel = 29, note = "Oops" }, "hint")
+assert(s:find("Item 30") and s:find("● 1,5 k") and s:find("Oops") and s:find("hint"), "selected row and note")
+assert(not s:find("Item 1}") and not s:find("Item 2\n") and s:find("▲") and s:find("▼"), "scrolled, both arrows")
+s = quick.draw(1920, 1080, { title = "Menu", items = { { label = "Live" } }, sel = 0 }, "")
+assert(s:find("Live") and not s:find("▲") and not s:find("▼"), "short list")
 print("units ok")

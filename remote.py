@@ -12,6 +12,7 @@ This file starts the background loops and the HTTP server; the code lives in the
   youtube.py   channels, search, subtitles, storyboard, account subscriptions, "TV app" progress
   jellyfin.py  Jellyfin library, playback and progress reports
   plex.py      Plex library, playback and progress reports
+  quickmenu.py quick menu of the simplified version (mpv alone): lists drawn by stream-box.lua
   playback.py  videos started from a link or the history, history loop (positions)
   history.py   history file, media keys, video being played
   ambient.py   ambient screen (weather, schedules), QR code and remote URL, first setup
@@ -26,6 +27,7 @@ import ambient   # ambient.py: weather, schedules, QR code
 import api       # api.py: HTTP request handler
 import netsetup  # netsetup.py: setup Wi-Fi access point
 import playback  # playback.py: history loop
+import quickmenu # quickmenu.py: quick menu of the simplified version
 import system    # system.py: box status, wake-up, power key
 import twitch    # twitch.py: account, who is live, polls
 import youtube   # youtube.py: subscriptions feed
@@ -41,5 +43,6 @@ threading.Thread(target=system.health_loop, daemon=True).start()
 threading.Thread(target=system.resume_loop, daemon=True).start()
 threading.Thread(target=netsetup.setup_loop, daemon=True).start()
 threading.Thread(target=youtube.yt_subfeed_loop, daemon=True).start()
+threading.Thread(target=quickmenu.listen_loop, daemon=True).start()
 system.hold_power_key()
 ThreadingHTTPServer(("0.0.0.0", PORT), api.Handler).serve_forever()

@@ -69,9 +69,7 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   - starts streamlink in local HTTP server mode (`--player-external-http`, 127.0.0.1, port 34501–34550, which changes
     with each channel) with `--twitch-low-latency --retry-streams 30`, then `loadfile http://127.0.0.1:<port>/`;
   - if the channel is not live: black screen with "{channel} is not live, retrying in {seconds} s", new attempt every 15 s;
-  - small menu of the simplified version, opened by the remote (hidden after 10 s without a key): streamers in a grid (several columns and smaller font
-    if there are many), then a row for the chat: a checkbox to show or hide it, and a button
-    that rotates it through the 4 corners (↖ ↗ ↘ ↙);
+  - quick menu of the simplified version (`lua/streambox/quickmenu.lua` draws the lists of quickmenu.py, see below);
   - publishes `user-data/streambox/{channel,corner,chat_visible}` for `chat_overlay.py`;
   - script-messages for the companion app: `streambox-channel <login>`, `streambox-toggle-chat`, `streambox-cycle-corner`;
   - disables double-click full screen.
@@ -236,7 +234,7 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   remote that would announce these keys must be added to `IGNORE` in `boot-mode.py`. cage passes its keys to mpv; stream-box.lua binds them (`KEYS`, `on_key`): OK = `0x21ffa0`, Menu ≡ =
   `0x2111a0` (Xiaomi remote codes: to adapt for another one), Back = `GO_BACK`, Home = `HOMEPAGE`, arrows, volume (mpv's default actions). Menu closed in
   Twitch: up/down change channel, OK shows/hides the info banner (title, "LIVE" or delay), Home opens
-  the large menu (OK too on the home screen; the small menu is only for the simplified version, without Qt), Menu ≡ shows/hides the chat. In all modes: WWW (the
+  the large menu (OK too on the home screen; the quick menu with mpv alone), Menu ≡ shows/hides the chat. In all modes: WWW (the
   "browser" button) shows the home screen, Play (`PLAY`/`PLAYPAUSE`, bound on purpose: otherwise mpv pauses, which
   froze the live stream) moves the chat to another corner. In video: OK pauses, ←/→ ±10 s,
   ↑ shows/hides the playback bar (↓ hides it), Menu ≡ changes subtitles. Menu open: arrows = selection (the closest
@@ -323,10 +321,19 @@ the first row). System: account status, power off (OK twice), companion app QR c
 text. Testing: `keypress HOMEPAGE`, `keypress DOWN`… through the IPC, then `/api/preview`.
 
 With mpv alone, the "simplified version" (System → Version setting, fallback after the Qt app failed, or QML menu that failed to load: ui.py
-then writes `user-data/streambox/menu = small`) there is no big menu: Menu opens and closes the small menu of
-stream-box.lua (streamers, home screen, chat, and "Switch to the full version", which calls `POST /api/player
-{mode: qt}`), and holding power does the power button's usual action. (The Lua copy of the big menu, tv_menu.lua,
-was dropped: it duplicated every feature and kept drifting from the QML one.)
+then writes `user-data/streambox/menu = small`) there is no big menu: Menu opens and closes the quick menu, and
+holding power does the power button's usual action. (The Lua copy of the big menu, tv_menu.lua, was dropped: it
+duplicated every feature and kept drifting from the QML one.)
+Quick menu: lists of text, no thumbnails nor keyboard (searches from the companion app). `quickmenu.py` (remote.py)
+builds them from the same functions as the API (live, following, replays, YouTube favorites and subscriptions,
+Jellyfin and Plex rows and series, history, home screen, settings: sound, resolution, language, chat; system: back to
+the full version, sleep, shutdown, restart) and keeps the navigation (stack of screens, selection); stream-box.lua
+only forwards the keys (`script-message streambox-qm open | close | key <name>`, heard by quickmenu.py on its own
+IPC connection as `client-message` events) and draws `user-data/streambox/quickmenu` ({title, items {label, info,
+on, dim}, sel, note}; `{}` closed) with `lua/streambox/quickmenu.lua` (panel on the left, scrolls with the
+selection). A screen builds its items in a thread ("Loading…" meanwhile; an error becomes an "Unavailable" row) and
+again after an action that changes it; playing closes the menu first. No answer within 3 s: "Menu unavailable"
+message (remote.py down). Closed after 2 min without a key. Moving the mouse opens nothing.
 
 ### Large menu in QML (qml/TvMenu.qml)
 
@@ -426,7 +433,7 @@ draws them (Flow of Text and AnimatedImage: animated GIF and WebP, Qt's `libqweb
 background and size set, hidden in video, on the home screen and with the menu open. When the app runs, it writes
 `user-data/streambox/chat_ui = qml` and chat_overlay.py (text in mpv) goes silent; it starts from scratch with each new
 player (mpv alone: text chat). QML pitfall: `left`, `top` are reserved item properties (FINAL); an
-error loading ui.qml makes the app fall back to the small menu of stream-box.lua and the text chat, without crashing.
+error loading ui.qml makes the app fall back to the quick menu and the text chat, without crashing.
 Shutdown: on mpv's `shutdown` event, `os._exit` right away from python-mpv's event thread (which
 otherwise destroys its connection and waits for the render context held by Qt: frozen app, no restart; 6/6 clean
 restarts after the fix).
