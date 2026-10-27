@@ -1,5 +1,5 @@
 """Stream Box: YouTube for the companion app and the TV menu. Followed channels (RSS feeds), search (yt-dlp), automatic
-subtitles, seek bar preview, account subscriptions (own Google app, device code) and progress synced with the
+subtitles, seek bar preview, video previews in the TV menu cards, account subscriptions (own Google app, device code) and progress synced with the
 account through the "TV app" access (cast/youtube_tv.js). Standard library only.
 """
 import calendar, json, os, re, subprocess, threading, time, urllib.error, urllib.parse, urllib.request
@@ -334,6 +334,74 @@ def fetch_storyboard(url, ident):
             mpv(["set_property", "user-data/streambox/storyboard", board])
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         pass
+
+
+# Video previews in the TV menu cards (the focused card plays its video, muted, in its frame): direct link to a
+# video-only stream of 360p at most, from yt-dlp with the player's options (player.sh). About 3 s per video, so the
+# links of the cards around the focused one are resolved in advance (preview_prefetch, one at a time: YouTube quickly
+# blocks an overly curious address) and kept for an hour (YouTube's own links last about six).
+PREVIEW_FORMAT = "bv*[height<=360][vcodec!^=av01]/wv*[vcodec!^=av01]"
+PREVIEW_KEEP = 3600
+PREVIEW_QUEUE = 8
+previews = {}          # video id → (time, direct link)
+preview_waiting = []   # ids to resolve, most recent request first
+preview_cond = threading.Condition()
+
+
+def preview_resolve(ident):
+    try:
+        r = subprocess.run([YTDLP, *YTDLP_JS, "--no-warnings", "--no-playlist", "-f", PREVIEW_FORMAT, "-g",
+                            "--extractor-args", "youtube:player_client=tv_simply,android_vr;fetch_pot=always",
+                            f"https://www.youtube.com/watch?v={ident}"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = (r.stdout or "").split()
+    link = lines[0] if r.returncode == 0 and lines and lines[0].startswith("http") else None
+    if link:
+        with preview_cond:
+            previews[ident] = (time.time(), link)
+    return link
+
+
+def preview_cached(ident):
+    with preview_cond:
+        hit = previews.get(ident)
+        return hit[1] if hit and time.time() - hit[0] < PREVIEW_KEEP else None
+
+
+def preview_ident(url):
+    _, kind, ident = history.media_key(url or "")
+    return ident if kind == "youtube" else None
+
+
+def preview_url(url):
+    """Direct link for the preview of a YouTube video (from the cache, or resolved now), None if unavailable"""
+    ident = preview_ident(url)
+    if not ident:
+        return None
+    return preview_cached(ident) or preview_resolve(ident)
+
+
+def preview_prefetch(urls):
+    """Resolves these videos in the background (the first ones first), unless already known"""
+    ids = [i for i in map(preview_ident, urls[:PREVIEW_QUEUE]) if i and not preview_cached(i)]
+    with preview_cond:
+        for ident in reversed(ids):
+            if ident in preview_waiting:
+                preview_waiting.remove(ident)
+            preview_waiting.insert(0, ident)
+        del preview_waiting[PREVIEW_QUEUE:]   # requests of rows left long ago: dropped
+        preview_cond.notify()
+
+
+def preview_loop():
+    while True:
+        with preview_cond:
+            while not preview_waiting:
+                preview_cond.wait()
+            ident = preview_waiting.pop(0)
+        if not preview_cached(ident):
+            preview_resolve(ident)
 
 
 # YouTube account ("Subscriptions" row of the YouTube tab): your own Google app (console.cloud.google.com, YouTube

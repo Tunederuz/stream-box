@@ -155,6 +155,14 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, display.info())
                 except OSError as e:
                     self.send(503, {"error": str(e)})
+            elif self.path.startswith("/api/card_preview?"):
+                # Video of the focused TV menu card (muted preview): direct link
+                url = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("u", [""])[0]
+                link = youtube.preview_url(url)
+                if link:
+                    self.send(200, {"url": link})
+                else:
+                    self.send(404, {"error": "no preview"})
             elif self.path.startswith("/api/youtube_search?"):
                 q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("q", [""])[0]
                 try:

@@ -354,6 +354,15 @@ height…). `CardRow` pitfalls: callers bind `view.model`, `view.currentIndex`, 
 directly on its ListView (going through properties of `CardRow`, the index reset when a row changed was never
 re-applied), and its sizes are literal numbers, not bindings to `layout.js` (the caller's current index arrives
 before, `fits` was then -1 and the first scroll was lost).
+Card previews (YouTube cards of the YouTube tab): after 0.9 s on a card (`VideoCard.previewable`, nothing open over the
+cards), its video plays muted in the thumbnail, faded in over it, in a loop. `TvMenu.startPreview` asks remote.py for a
+direct link (`GET /api/card_preview?u=`: `youtube.preview_url`, yt-dlp `-g` with the player's options, video only,
+360p at most, VP9/H.264), then `cardPreview.play(link, start)` (ui.py: third libmpv player `preview_player`, muted,
+`loop-file`), drawn by `qml/menu/CardPreview.qml` at the thumbnail's place (`mapToItem`), rounded by MultiEffect.
+Any key, closing the menu or changing tab stops it. Resolving a link takes about 3 s: the cards around the focused
+one are resolved in advance (`POST /api/card_preview_prefetch`, one at a time in `youtube.preview_loop`, kept 1 h).
+CardPreview never goes fully invisible (opacity 0.001): libmpv needs its render context before a video starts.
+Jellyfin is left out on purpose (long intros); Twitch lives are the next step.
 Video cards (`VideoCard`: 456 px wide, 16:9 thumbnail, height from the width): 3 per row in Replays, YouTube,
 Jellyfin (step 482) and History (3 columns, 2 rows); the Replays and YouTube/Jellyfin rows scroll vertically (one full
 row, the top of the next one showing).

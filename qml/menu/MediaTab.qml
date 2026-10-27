@@ -111,6 +111,9 @@ Item {
                             progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : (it.percent || 0) / 100)
                             accent: menu.accent
                             focused: menu.area === "content" && menu.mRow === r && index === (menu.mSel[row.key] || 0)
+                            // YouTube (Jellyfin: long intros), nothing open over the cards
+                            previewable: !menu.jfTab && !it.connect && !!it.url && !menu.modal && !menu.kbOpen && !menu.ytAuth
+                            onPreviewWanted: function (picture) { menu.startPreview(it, picture) }
                         }
                     }
                 }

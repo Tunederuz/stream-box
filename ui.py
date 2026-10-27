@@ -12,6 +12,9 @@ a corner or side by side with the main one (ui.qml, animated transitions). Drive
 IPC (script-message streambox-pip <open|close|swap|layout> [channel] [pip|split], /api/pip of remote.py); state published
 in user-data/streambox/pip. Sound muted: the sound is the main stream's (Swap exchanges the two).
 
+Card previews: a third libmpv player (preview_player), muted, plays the video of the focused TV menu card in its frame
+("cardPreview" object, driven by qml/TvMenu.qml with direct links from remote.py, /api/card_preview).
+
 The big TV menu is in QML (qml/TvMenu.qml; if it fails to load, stream-box.lua opens its small menu): the Menu button
 (script-message streambox-tvmenu-open from stream-box.lua) opens it, and while it is open keys go to it, not to
 mpv. It reads and acts through the remote.py API, like the companion app.
@@ -251,8 +254,9 @@ class MpvRenderer(QQuickFramebufferObject.Renderer):
             display = wayland_display()
             if display:
                 params["wl_display"] = ctypes.c_void_p(display)
-            main = self.item.which != "pip"
-            self.ctx = mpv.MpvRenderContext(player if main else pip_player, "opengl", **params)
+            main = self.item.which == "main"
+            source = {"pip": pip_player, "preview": preview_player}.get(self.item.which, player)
+            self.ctx = mpv.MpvRenderContext(source, "opengl", **params)
             self.ctx.update_cb = self.item.frameReady.emit
             if main:
                 bridge.ready.emit()
@@ -271,7 +275,7 @@ class MpvRenderer(QQuickFramebufferObject.Renderer):
 
 
 class MpvVideo(QQuickFramebufferObject):
-    """Video of a libmpv player: which = "main" (default) or "pip" (second stream)"""
+    """Video of a libmpv player: which = "main" (default), "pip" (second stream) or "preview" (card preview)"""
     frameReady = Signal()   # from mpv, any thread
 
     def __init__(self, parent=None):
@@ -399,6 +403,41 @@ class Pip(QObject):
 
 
 pip = Pip()
+
+preview_player = None  # third libmpv player: muted video of the focused TV menu card, created in main()
+
+
+class CardPreview(QObject):
+    """Muted preview of the focused TV menu card (qml/TvMenu.qml): plays a direct link in preview_player, in a loop;
+    ready once its first frame is there (the card's thumbnail then fades into the video)"""
+    changed = Signal()
+    _ready_in = Signal(bool)   # from the mpv thread
+
+    def __init__(self):
+        super().__init__()
+        self._ready = False
+        self._ready_in.connect(self._set_ready, Qt.QueuedConnection)
+
+    ready = Property(bool, lambda self: self._ready, notify=changed)
+
+    def _set_ready(self, value):
+        if value != self._ready:
+            self._ready = value
+            self.changed.emit()
+
+    @Slot(str, float)
+    def play(self, url, start):
+        self._set_ready(False)
+        to_mpv(preview_player._set_property, "start", str(int(start)) if start > 0 else "none")
+        to_mpv(preview_player.command, "loadfile", url)
+
+    @Slot()
+    def stop(self):
+        self._set_ready(False)
+        to_mpv(preview_player.command, "stop")
+
+
+card_preview = CardPreview()
 
 
 class ChatBridge(QObject):
@@ -600,6 +639,7 @@ def main():
     view = View()
     view.rootContext().setContextProperty("box", box)
     view.rootContext().setContextProperty("pip", pip)
+    view.rootContext().setContextProperty("cardPreview", card_preview)
     global chat
     chat = ChatBridge()
     view.rootContext().setContextProperty("chat", chat)
@@ -619,6 +659,12 @@ def main():
                          osd_level="0", input_default_bindings="no", cache="yes", demuxer_max_bytes="750KiB",
                          demuxer_max_back_bytes="0")
     pip_player.observe_property("idle-active", lambda _n, v: v and pip._idle.emit())
+    global preview_player
+    # Card previews: 360p video only (remote.py picks it), no sound, in a loop
+    preview_player = mpv.MPV(vo="libmpv", hwdec=opts.get("hwdec", "auto-safe"), mute="yes", idle="yes", ytdl="no",
+                             osd_level="0", input_default_bindings="no", cache="yes", loop_file="inf",
+                             demuxer_max_bytes="20MiB", demuxer_max_back_bytes="0")
+    preview_player.observe_property("video-params", lambda _n, v: card_preview._ready_in.emit(v is not None))
     main_state = {"channel": "", "mode": "", "corner": "bl"}
 
     def follow(key):

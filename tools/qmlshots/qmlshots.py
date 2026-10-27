@@ -25,7 +25,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 WAIT = int(os.environ.get("QMLSHOTS_WAIT", "900"))   # ms after each step: animations and images done
 
-# Key sequence: ("key", name), ("open",), ("power",), ("text", text, submit), ("video", bool), ("close",).
+# Key sequence: ("key", name), ("open",), ("power",), ("text", text, submit), ("video", bool), ("close",),
+# ("pause", ms): nothing more than waiting (a card preview starts after a moment on a card).
 # A screenshot follows each step; the label names it. Each scene starts from a fresh opening (Live tab).
 
 
@@ -47,6 +48,7 @@ STEPS = (
     + scene(2, "right right ok")                                  # Replays: another streamer
     + keys("down right right right right down right up left left left ok back")   # rows, resume dialog
     + scene(3, "down right right right right menu down back")     # YouTube: subscriptions, options
+    + [("pause", 2000)]                                           # card preview (pink: the fake video)
     + keys("down down right up up up")                            # channel rows
     + keys("ok ok right ok down down down down down right ok")    # search keyboard, search "ab"
     + keys("right right right right right right ok ok")           # found channels, dialog, its videos
@@ -128,8 +130,9 @@ def shoot(qml_dir, out):
         import faulthandler
         faulthandler.dump_traceback_later(60, exit=True)
     from PySide6.QtCore import (Property, QDate, QDateTime, QEventLoop, QTime, QObject, QTimer, QUrl, Signal, Slot, qInstallMessageHandler)
-    from PySide6.QtGui import QGuiApplication
-    from PySide6.QtQuick import QQuickView, QQuickWindow, QSGRendererInterface
+    from PySide6.QtGui import QColor, QGuiApplication
+    from PySide6.QtQml import qmlRegisterType
+    from PySide6.QtQuick import QQuickPaintedItem, QQuickView, QQuickWindow, QSGRendererInterface
 
     class Box(QObject):
         openRequested = Signal()
@@ -161,6 +164,39 @@ def shoot(qml_dir, out):
         @Slot(bool)
         def setMenuOpen(self, v):
             self.calls.append("setMenuOpen %s" % v)
+
+    class FakeVideo(QQuickPaintedItem):   # MpvVideo of ui.py (libmpv): a pink rectangle where the video would be
+        whichChanged = Signal()
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self._which = "main"
+
+        which = Property(str, lambda self: self._which, lambda self, v: setattr(self, "_which", v), notify=whichChanged)
+
+        def paint(self, painter):
+            painter.fillRect(0, 0, int(self.width()), int(self.height()), QColor("#ff2fa8"))
+
+    class CardPreview(QObject):   # cardPreview of ui.py: "plays" at once
+        changed = Signal()
+
+        def __init__(self):
+            super().__init__()
+            self._ready = False
+
+        ready = Property(bool, lambda self: self._ready, notify=changed)
+
+        @Slot(str, float)
+        def play(self, url, start):
+            box.calls.append("cardPreview.play %s %s" % (url, start))
+            self._ready = True
+            self.changed.emit()
+
+        @Slot()
+        def stop(self):
+            box.calls.append("cardPreview.stop")
+            self._ready = False
+            self.changed.emit()
 
     class Pip(QObject):   # second stream running: shortcuts in Live
         changed = Signal()
@@ -213,10 +249,13 @@ def shoot(qml_dir, out):
     app = QGuiApplication(sys.argv[:1])   # noqa: F841  (kept referenced: Qt needs the application object alive)
     box = Box()
     pip = Pip()
+    card_preview = CardPreview()
+    qmlRegisterType(FakeVideo, "StreamBox", 1, 0, "MpvVideo")
     i18n = I18n(json.load(open(os.path.join(REPO, "locales", "fr.json"), encoding="utf-8")))
     view = QQuickView()
     view.rootContext().setContextProperty("box", box)
     view.rootContext().setContextProperty("pip", pip)
+    view.rootContext().setContextProperty("cardPreview", card_preview)
     view.rootContext().setContextProperty("i18n", i18n)
     view.setResizeMode(QQuickView.SizeRootObjectToView)
     view.resize(1920, 1080)
@@ -245,6 +284,8 @@ def shoot(qml_dir, out):
             box.textInput.emit(step[1], step[2])
         elif step[0] == "video":
             box.set_video(step[1])
+        elif step[0] == "pause":
+            wait(step[1])
         t0 = time.monotonic()
         wait(WAIT)
         t1 = time.monotonic()

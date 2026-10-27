@@ -183,6 +183,8 @@ ACTIONS = {
     "chat": lambda body: mpv(["script-message", "streambox-toggle-chat"]),
     "corner": lambda body: mpv(["script-message", "streambox-cycle-corner"]),
     "play": play_url,
+    # TV menu: videos of the cards around the focused one, to resolve before they are previewed
+    "card_preview_prefetch": lambda body: youtube.preview_prefetch([str(u) for u in body.get("urls") or []]),
     "history": lambda body: history.edit_history(str(body.get("action", "")), str(body.get("key", ""))),
     "twitch": lambda body: mpv(["script-message", "streambox-twitch"]),
     "home": lambda body: mpv(["script-message", "streambox-home"]),

@@ -441,6 +441,7 @@ Item {
     }
     function close() {
         if (!isOpen) return
+        stopPreview()
         isOpen = false
         modal = null
         kbOpen = false
@@ -800,9 +801,46 @@ Item {
 
     // Displayed tab: data loaded on the first visit
     onTabChanged: {
+        stopPreview()
         tabEnter.restart()
         loadTab(tabs[tab].id)   // tabs[tab] and not tabId: the tabId binding is not recomputed yet here
     }
+    // Card preview: after a moment on a YouTube card, its video plays muted in the thumbnail (VideoCard.previewWanted
+    // → startPreview; link from remote.py, player "cardPreview" of ui.py, drawn by menu/CardPreview.qml). The links of
+    // the cards around the focused one are resolved in advance (about 3 s each otherwise).
+    property var previewRect: null   // thumbnail of the previewed card, in menu coordinates; null: no preview
+    property string previewFor: ""   // link of the video being previewed (or whose link is being fetched)
+    function startPreview(item, picture) {
+        stopPreview()
+        var url = item.url
+        previewFor = url
+        var r = picture.mapToItem(menu, 0, 0, picture.width, picture.height)
+        call("GET", "/api/card_preview?u=" + encodeURIComponent(url), undefined, function (d) {
+            if (previewFor !== url || !d || !d.url) return   // the focus moved in the meantime
+            previewRect = { x: r.x, y: r.y, width: r.width, height: r.height }
+            cardPreview.play(d.url, Fmt.resumable(item.position, item.seconds, item.finished) ? item.position : 0)
+        })
+    }
+    function stopPreview() {
+        if (!previewFor) return
+        previewFor = ""
+        previewRect = null
+        cardPreview.stop()
+    }
+    function prefetchPreviews() {
+        if (!isOpen || tabId !== "youtube") return
+        var rows = ytRows(), row = rows[Math.min(ytRow, rows.length - 1)]
+        if (!row || !row.items || !row.items.length) return
+        var sel = ytSel[row.key] || 0
+        var near = row.items.slice(sel, sel + 4).concat(row.items.slice(Math.max(0, sel - 1), sel))
+        var urls = near.map(function (v) { return v.url }).filter(function (u) { return !!u })
+        if (urls.length) call("POST", "/api/card_preview_prefetch", { urls: urls })
+    }
+    Timer { id: prefetchSoon; interval: 400; onTriggered: menu.prefetchPreviews() }
+    onYtRowChanged: prefetchSoon.restart()
+    onYtSelChanged: prefetchSoon.restart()
+    onYtChanged: prefetchSoon.restart()
+    onYtResultsChanged: prefetchSoon.restart()
     function loadBt(cb) { call("GET", "/api/bluetooth", undefined, function (d) { if (d) { bt = d; if (cb) cb(d) } }) }
     // "Remotes and controllers" dialog: paired devices (OK: unpair), "Pair a device"
     function btMenu() {
@@ -945,6 +983,7 @@ Item {
     function key(k) {
         idleClose.restart()
         startFocus = false
+        stopPreview()   // any key: the focus moves, a dialog opens, or the video starts for real
         if (k === "home") return close()
         if (k === "homescreen") { act("home"); return close() }
         if (k === "corner") return act("corner")
@@ -1177,6 +1216,7 @@ Item {
             RowsTab { menu: menu; which: "system" }
             SystemStatus { menu: menu }
         }
+        CardPreview { menu: menu }
     }
     SearchKeyboard { menu: menu }
     YtAuthDialog { menu: menu }
