@@ -637,6 +637,12 @@ remote "connected" without an input device), then (`resume_loop`, PrepareForSlee
 picture otherwise). Tested: wake-up by WoL in 6 s, stream back 8 s after the packet. Standby requested by remote.py
 is allowed by default only if it runs in the TV session (started by start.sh); outside a session (restarted over ssh),
 the polkit rule `login1.suspend*` is needed.
+Full shutdown: a Bluetooth remote still connected when the power goes off makes the dongle wake the box right back up
+(BIOS wake-up type "Power switch"; with the remote's power key it is a race: the remote often hangs up first). The image's
+`stream-box-bt-disconnect.service` (ExecStop at shutdown and reboot, before bluetooth.service stops; sleep does not stop
+services) runs `/usr/local/lib/stream-box/bt-disconnect`: disconnect the devices, then `bluetoothctl power off`. A mere
+disconnection was not enough (the remote reconnects at once). Not remembered: bluetoothd powers the adapter on at boot
+(`AutoEnable`, default true). Tested: remote connected, shutdown over SSH, the box stays off (it came back before).
 Power button (Bluetooth remote, case button): remote.py holds a logind `handle-power-key` lock
 (`hold_power_key`, allowed in the TV session); stream-box.lua binds `POWER` (mpv alone) and `0x21ff2a` (Qt app,
 keysym XF86PowerOff) to `power_key` → `POST /api/poweroff` without mode, hence the "Power button" setting. Ignored for 15 s
