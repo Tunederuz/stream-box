@@ -412,8 +412,8 @@ PREVIEW_PORT = 34591   # streamlink of the live previews
 
 class CardPreview(QObject):
     """Muted preview of the focused TV menu card (qml/TvMenu.qml): plays a direct link in preview_player, in a loop,
-    or "twitch:<login>", a live through its own streamlink (360p); ready once its first frame is there (the thumbnail
-    then fades into the video)"""
+    or "twitch:<login>", a live through its own streamlink (720p: shown full screen by the Live tab's peek); ready once
+    its first frame is there (the thumbnail then fades into the video)"""
     changed = Signal()
     _ready_in = Signal(bool)   # from the mpv thread
 
@@ -444,7 +444,7 @@ class CardPreview(QObject):
             self.proc = subprocess.Popen(
                 ["streamlink", "--twitch-low-latency", "--player-external-http", "--player-external-http-interface",
                  "127.0.0.1", "--player-external-http-port", str(PREVIEW_PORT), f"twitch.tv/{login}",
-                 "360p,480p,worst"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                 "720p,720p60,480p,best"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.tries = 0
             self.retry.start()
             return

@@ -570,6 +570,7 @@ Item {
     function close() {
         if (!isOpen) return
         stopPreview()
+        peek = ""
         closePlexLink()
         closeJfLink()
         isOpen = false
@@ -946,8 +947,19 @@ Item {
         tabEnter.restart()
         loadTab(tabs[tab].id)   // tabs[tab] and not tabId: the tabId binding is not recomputed yet here
     }
-    // Live preview: on the Live tab, the card of a live streamer grows and plays its live, muted (LiveTab.grow →
-    // startPreview with "twitch:<login>": streamlink and player "cardPreview" of ui.py, drawn by menu/CardPreview.qml)
+    // Live preview: startPreview with "twitch:<login>": streamlink and player "cardPreview" of ui.py, drawn by
+    // menu/CardPreview.qml. Used by the peek: ▶ on a live streamer of the Live tab shows its live full screen, muted,
+    // over the menu (menu/LivePeek.qml); OK watches it, any other key goes back
+    property string peek: ""   // login being peeked at
+    function peekable() {
+        var login = (st.streamers || [])[liveSel]
+        return tabId === "live" && area === "content" && shortcut < 0 && !modal && !kbOpen && !!login
+            && !!(st.live || {})[login] && !(st.mode === "twitch" && st.channel === login) && pip.channel !== login
+    }
+    function openPeek() {
+        peek = st.streamers[liveSel]
+        startPreview("twitch:" + peek, { x: 0, y: 0, width: width, height: height })
+    }
     property var previewRect: null   // where the video goes, in menu coordinates; null: no preview
     property string previewFor: ""   // "twitch:<login>" being previewed
     function startPreview(url, r) {   // r: rect in menu coordinates
@@ -1101,15 +1113,19 @@ Item {
         if (k === "down") return sel + cols < count ? sel + cols : (Math.floor(sel / cols) < Math.floor((count - 1) / cols) ? count - 1 : sel)
         return sel
     }
-    property int keyCount: 0   // keys received while open (LiveTab: the banner preview starts again after a key)
     function key(k) {
-        keyCount++
         idleClose.restart()
         startFocus = false
         stopPreview()   // any key: the focus moves, a dialog opens, or the video starts for real
+        if (peek) {   // OK: watch it; any other key: back to the grid
+            var login = peek
+            peek = ""
+            if (k === "ok") { act("channel", { name: login }); close() }
+            return
+        }
         if (k === "home") return close()
         if (k === "homescreen") { act("home"); return close() }
-        if (k === "corner") return act("corner")
+        if (k === "corner") return peekable() ? openPeek() : act("corner")
         if (kbOpen) return keyKeyboard(k)
         if (modal) {
             if (k === "up" || k === "down") modalSel = Math.max(0, Math.min(modal.items.length - 1, modalSel + (k === "down" ? 1 : -1)))
@@ -1343,7 +1359,9 @@ Item {
             RowsTab { menu: menu; which: "system" }
             SystemStatus { menu: menu }
         }
+        LivePeek { menu: menu; part: "back" }
         CardPreview { menu: menu }
+        LivePeek { menu: menu; part: "front" }
     }
     SearchKeyboard { menu: menu }
     CodeDialog { menu: menu }

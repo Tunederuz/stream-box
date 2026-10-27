@@ -40,7 +40,8 @@ def scene(tab, *names):   # close, open, from the rail to the tab (index in TvMe
 
 STEPS = (
     [("open",)]                                                   # Live, focus on the watched streamer
-    + keys("right right") + [("pause", 2000)]                     # banner: live preview (pink: the fake video)
+    + keys("right right corner") + [("pause", 800)]               # ▶: full-screen peek (pink: the fake video)
+    + keys("back")                                                # back to the grid
     + keys("down down down down up up up up")                     # the grid scrolls
     + keys("up right right left down")                            # shortcuts (second stream)
     + keys("menu down back")                                      # streamer options

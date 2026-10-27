@@ -61,7 +61,8 @@ Item {
     }
     Text {
         x: 56; y: menu.height - 75
-        text: menu.tr("▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back go back   ·   Menu close")
+        text: menu.peekable() ? menu.tr("▲▼◀▶ move   ·   OK watch   ·   ▶ peek   ·   ≡ options   ·   Back go back   ·   Menu close")
+                              : menu.tr("▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back go back   ·   Menu close")
         color: "#8a85a0"; font.pixelSize: 19
     }
 }

@@ -1,5 +1,5 @@
-// Muted live preview in the grown card of the Live tab (cardPreview of ui.py, third libmpv player): placed by
-// TvMenu.startPreview, rounded like the card, faded in once the first frame is there.
+// Muted live preview (cardPreview of ui.py, third libmpv player): placed by TvMenu.startPreview (full screen for the
+// peek of the Live tab), faded in once the first frame is there.
 import QtQuick
 import QtQuick.Effects
 import StreamBox 1.0
@@ -33,6 +33,6 @@ Item {
         layer.enabled: true
         layer.smooth: true
         visible: false
-        Rectangle { anchors.fill: parent; radius: 16; color: "black" }   // same corners as the card (VideoCard)
+        Rectangle { anchors.fill: parent; radius: root.menu.peek ? 0 : 16; color: "black" }   // card corners (VideoCard)
     }
 }
