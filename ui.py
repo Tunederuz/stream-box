@@ -12,8 +12,8 @@ a corner or side by side with the main one (ui.qml, animated transitions). Drive
 IPC (script-message streambox-pip <open|close|swap|layout> [channel] [pip|split], /api/pip of remote.py); state published
 in user-data/streambox/pip. Sound muted: the sound is the main stream's (Swap exchanges the two).
 
-Card previews: a third libmpv player (preview_player), muted, plays the video of the focused TV menu card in its frame
-("cardPreview" object, driven by qml/TvMenu.qml with direct links from remote.py, /api/card_preview).
+Live previews: a third libmpv player (preview_player), muted, plays the live of the TV menu card grown on the Live
+tab ("cardPreview" object, driven by qml/TvMenu.qml, "twitch:<login>" through its own streamlink).
 
 The big TV menu is in QML (qml/TvMenu.qml; if it fails to load, stream-box.lua opens its small menu): the Menu button
 (script-message streambox-tvmenu-open from stream-box.lua) opens it, and while it is open keys go to it, not to

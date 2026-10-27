@@ -1,5 +1,5 @@
-// Muted video preview over the focused card's thumbnail (cardPreview of ui.py, third libmpv player): placed by
-// TvMenu.startPreview on the thumbnail, rounded like it, faded in once the first frame is there.
+// Muted live preview in the grown card of the Live tab (cardPreview of ui.py, third libmpv player): placed by
+// TvMenu.startPreview, rounded like the card, faded in once the first frame is there.
 import QtQuick
 import QtQuick.Effects
 import StreamBox 1.0

@@ -354,19 +354,15 @@ height…). `CardRow` pitfalls: callers bind `view.model`, `view.currentIndex`, 
 directly on its ListView (going through properties of `CardRow`, the index reset when a row changed was never
 re-applied), and its sizes are literal numbers, not bindings to `layout.js` (the caller's current index arrives
 before, `fits` was then -1 and the first scroll was lost).
-Card previews (YouTube cards of the YouTube tab): after 0.9 s on a card (`VideoCard.previewable`, nothing open over the
-cards), its video plays muted in the thumbnail, faded in over it, in a loop. `TvMenu.startPreview` asks remote.py for a
-direct link (`GET /api/card_preview?u=`: `youtube.preview_url`, yt-dlp `-g` with the player's options, video only,
-360p at most, VP9/H.264), then `cardPreview.play(link, start)` (ui.py: third libmpv player `preview_player`, muted,
-`loop-file`), drawn by `qml/menu/CardPreview.qml` at the thumbnail's place (`mapToItem`), rounded by MultiEffect.
-Any key, closing the menu or changing tab stops it. Resolving a link takes about 3 s: the cards around the focused
-one are resolved in advance (`POST /api/card_preview_prefetch`, one at a time in `youtube.preview_loop`, kept 1 h).
-CardPreview never goes fully invisible (opacity 0.001): libmpv needs its render context before a video starts.
-Jellyfin is left out on purpose (long intros).
+YouTube card previews (the focused card playing its video) were tried and dropped on 2026-10-27: resolving links with
+yt-dlp, in advance for the neighboring cards, got the box taken for a robot by YouTube within two hours ("Sign in to
+confirm you're not a bot" for every video, the player's included). Do not add requests to YouTube per card.
 Live tab: after 0.9 s on a live streamer (not the one already on the TV, nor the second stream), its card grows
 over its neighbors into a 480 × 270 tile (`LiveTab.grow`, animated from the card, kept on screen) with Twitch's live
 thumbnail (`static-cdn.jtvnw.net/previews-ttv/live_user_<login>-640x360.jpg`) and a caption (photo, name, viewers,
-game); the live fades in over the thumbnail: `startPreview` with `twitch:<login>` and the tile's final rect, ui.py
+game); the live fades in over the thumbnail (`qml/menu/CardPreview.qml`, third libmpv player `preview_player` of
+ui.py, "cardPreview"; never fully invisible, opacity 0.001: libmpv needs its render context before a video starts):
+`startPreview` with `twitch:<login>` and the tile's final rect, ui.py
 starts its own streamlink (`PREVIEW_PORT` 34591, 360p) and loads it once served (retries every 1.5 s while the player
 is idle, 6 at most). Any key puts the card back and restarts the 0.9 s (`keyCount`). (A banner above the grid was
 tried first: it took too much room.)

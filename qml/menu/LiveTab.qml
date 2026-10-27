@@ -43,7 +43,7 @@ Item {
         grown = true
         growAnim.restart()
         // the video goes where the tile ends up, it fades in once the live is there (about 2 s)
-        menu.startPreview({ url: "twitch:" + login }, root.mapToItem(menu, x, y, tileW, videoH))
+        menu.startPreview("twitch:" + login, root.mapToItem(menu, x, y, tileW, videoH))
     }
 
     Row {

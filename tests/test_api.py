@@ -115,12 +115,6 @@ class Api(unittest.TestCase):
     def test_history_empty(self):
         self.assertEqual(self.request("GET", "/api/history"), (200, []))
 
-    def test_card_preview(self):
-        # not a YouTube video: no preview; prefetch requests are accepted (resolved in the background)
-        self.assertEqual(self.request("GET", "/api/card_preview?u=https%3A%2F%2Fexample.org%2Fa.mp4")[0], 404)
-        self.assertEqual(self.request("POST", "/api/card_preview_prefetch",
-                                      {"urls": ["https://example.org/a.mp4", "https://youtu.be/dQw4w9WgXcQ"]})[0], 200)
-
     def test_twitch_login_answers(self):
         # used to crash (UnboundLocalError in the old action dispatcher): a bad token is now refused cleanly
         status, body = self.request("POST", "/api/login", {"token": "not a token"})

@@ -49,7 +49,6 @@ STEPS = (
     + scene(2, "right right ok")                                  # Replays: another streamer
     + keys("down right right right right down right up left left left ok back")   # rows, resume dialog
     + scene(3, "down right right right right menu down back")     # YouTube: subscriptions, options
-    + [("pause", 2000)]                                           # card preview (pink: the fake video)
     + keys("down down right up up up")                            # channel rows
     + keys("ok ok right ok down down down down down right ok")    # search keyboard, search "ab"
     + keys("right right right right right right ok ok")           # found channels, dialog, its videos

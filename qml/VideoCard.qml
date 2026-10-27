@@ -10,13 +10,10 @@ Item {
     property bool focused: false
     property color accent: "#9146ff"   // glow and progress: red on the YouTube tab
     property string glyph: "▶"         // in the center, without a thumbnail ("+": action card, "Connect my account")
-    property bool previewable: false   // its video can play in the thumbnail (TvMenu.startPreview)
-    signal previewWanted(Item picture)  // focused for a moment: the thumbnail where the preview goes
     readonly property int picH: Math.round(width * 9 / 16)   // 16:9 thumbnail
     width: 456   // 3 cards per row in the menu
     height: picH + 106
     z: focused ? 2 : 1
-    Timer { interval: 900; running: root.focused && root.previewable; onTriggered: root.previewWanted(picture) }
 
     Item {
         id: picture

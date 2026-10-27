@@ -805,28 +805,15 @@ Item {
         tabEnter.restart()
         loadTab(tabs[tab].id)   // tabs[tab] and not tabId: the tabId binding is not recomputed yet here
     }
-    // Card preview: after a moment on a YouTube card, its video plays muted in the thumbnail (VideoCard.previewWanted
-    // → startPreview; link from remote.py, player "cardPreview" of ui.py, drawn by menu/CardPreview.qml). The links of
-    // the cards around the focused one are resolved in advance (about 3 s each otherwise). Live tab: the card of a
-    // live streamer grows and plays its live ("twitch:<login>", streamlink started by ui.py).
-    property var previewRect: null   // thumbnail of the previewed card, in menu coordinates; null: no preview
-    property string previewFor: ""   // link of the video being previewed (or whose link is being fetched)
-    // target: the thumbnail (an Item), or a rect in menu coordinates (Live tab: the grown card, before its animation ends)
-    function startPreview(item, target) {
+    // Live preview: on the Live tab, the card of a live streamer grows and plays its live, muted (LiveTab.grow →
+    // startPreview with "twitch:<login>": streamlink and player "cardPreview" of ui.py, drawn by menu/CardPreview.qml)
+    property var previewRect: null   // where the video goes, in menu coordinates; null: no preview
+    property string previewFor: ""   // "twitch:<login>" being previewed
+    function startPreview(url, r) {   // r: rect in menu coordinates
         stopPreview()
-        var url = item.url
         previewFor = url
-        var r = target.mapToItem ? target.mapToItem(menu, 0, 0, target.width, target.height) : target
-        if (url.indexOf("twitch:") === 0) {   // live: ui.py starts its own streamlink
-            previewRect = { x: r.x, y: r.y, width: r.width, height: r.height }
-            cardPreview.play(url, 0)
-            return
-        }
-        call("GET", "/api/card_preview?u=" + encodeURIComponent(url), undefined, function (d) {
-            if (previewFor !== url || !d || !d.url) return   // the focus moved in the meantime
-            previewRect = { x: r.x, y: r.y, width: r.width, height: r.height }
-            cardPreview.play(d.url, Fmt.resumable(item.position, item.seconds, item.finished) ? item.position : 0)
-        })
+        previewRect = { x: r.x, y: r.y, width: r.width, height: r.height }
+        cardPreview.play(url, 0)
     }
     function stopPreview() {
         if (!previewFor) return
@@ -834,20 +821,6 @@ Item {
         previewRect = null
         cardPreview.stop()
     }
-    function prefetchPreviews() {
-        if (!isOpen || tabId !== "youtube") return
-        var rows = ytRows(), row = rows[Math.min(ytRow, rows.length - 1)]
-        if (!row || !row.items || !row.items.length) return
-        var sel = ytSel[row.key] || 0
-        var near = row.items.slice(sel, sel + 4).concat(row.items.slice(Math.max(0, sel - 1), sel))
-        var urls = near.map(function (v) { return v.url }).filter(function (u) { return !!u })
-        if (urls.length) call("POST", "/api/card_preview_prefetch", { urls: urls })
-    }
-    Timer { id: prefetchSoon; interval: 400; onTriggered: menu.prefetchPreviews() }
-    onYtRowChanged: prefetchSoon.restart()
-    onYtSelChanged: prefetchSoon.restart()
-    onYtChanged: prefetchSoon.restart()
-    onYtResultsChanged: prefetchSoon.restart()
     function loadBt(cb) { call("GET", "/api/bluetooth", undefined, function (d) { if (d) { bt = d; if (cb) cb(d) } }) }
     // "Remotes and controllers" dialog: paired devices (OK: unpair), "Pair a device"
     function btMenu() {
