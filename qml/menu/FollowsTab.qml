@@ -1,4 +1,5 @@
 // TV menu, Following tab: Twitch app missing, authorization (code and QR code), or grid of the followed channels
+// (after a moment on a live one, its live plays in the menu's background: TvMenu.bgLive)
 import QtQuick
 import "layout.js" as Layout
 import ".."

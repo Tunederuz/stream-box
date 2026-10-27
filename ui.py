@@ -12,8 +12,8 @@ a corner or side by side with the main one (ui.qml, animated transitions). Drive
 IPC (script-message streambox-pip <open|close|swap|layout> [channel] [pip|split], /api/pip of remote.py); state published
 in user-data/streambox/pip. Sound muted: the sound is the main stream's (Swap exchanges the two).
 
-Live preview: a third libmpv player (preview_player), muted, plays the live of the streamer chosen in the TV menu's
-Live tab, in the menu's background ("livePreview" object, driven by qml/TvMenu.qml, through its own streamlink).
+Live preview: a third libmpv player (preview_player), muted, plays the live of the channel chosen in the TV menu's
+Live or Following tab, in the menu's background ("livePreview" object, driven by qml/TvMenu.qml, through its own streamlink).
 
 The big TV menu is in QML (qml/TvMenu.qml; if it fails to load, stream-box.lua opens its small menu): the Menu button
 (script-message streambox-tvmenu-open from stream-box.lua) opens it, and while it is open keys go to it, not to
@@ -411,8 +411,8 @@ PREVIEW_PORT = 34591   # streamlink of the live previews
 
 
 class LivePreview(QObject):
-    """Muted live of the streamer chosen in the TV menu's Live tab, played in the menu's background (qml/TvMenu.qml,
-    bgLive): "twitch:<login>" through its own streamlink, loaded in preview_player once served; ready once its first
+    """Muted live of the channel chosen in the TV menu's Live or Following tab, played in the menu's background
+    (qml/TvMenu.qml, bgLive): "twitch:<login>" through its own streamlink, loaded in preview_player once served; ready once its first
     frame is there"""
     changed = Signal()
     _ready_in = Signal(bool)   # from the mpv thread

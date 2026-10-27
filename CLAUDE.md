@@ -364,8 +364,8 @@ before, `fits` was then -1 and the first scroll was lost).
 YouTube card previews (the focused card playing its video) were tried and dropped on 2026-10-27: resolving links with
 yt-dlp, in advance for the neighboring cards, got the box taken for a robot by YouTube within two hours ("Sign in to
 confirm you're not a bot" for every video, the player's included). Do not add requests to YouTube per card.
-Live tab, live in the background: after 0.9 s on a live streamer (`menu.bgLive`: Live tab, content, no dialog nor
-keyboard, and nothing playing behind the menu, `box.videoActive` false), its live plays muted behind the whole menu,
+Live and Following tabs, live in the background: after 0.9 s on a live channel (`menu.bgLive`: Live or Following
+tab, content, no dialog nor keyboard, and nothing playing behind the menu, `box.videoActive` false), its live plays muted behind the whole menu,
 above the backdrop and under a black veil (0.55) that keeps the cards readable; moving to another streamer stops it
 and restarts the 0.9 s. The video is `qml/menu/LivePreview.qml` (third libmpv player `preview_player` of ui.py,
 "livePreview"; never fully invisible, opacity 0.001: libmpv needs its render context before a video starts):

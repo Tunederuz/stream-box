@@ -45,7 +45,8 @@ STEPS = (
     + keys("up right right left down")                            # shortcuts (second stream)
     + keys("menu down back")                                      # streamer options
     + keys("left left up down")                                   # rail, "Home screen" entry
-    + scene(1, "right down down down down ok back")               # Following: grid scrolls, options
+    + scene(1, "") + [("pause", 2000)]                            # Following: live in the background
+    + keys("right down down down down ok back")                   # grid scrolls, options
     + scene(2, "right right ok")                                  # Replays: another streamer
     + keys("down right right right right down right up left left left ok back")   # rows, resume dialog
     + scene(3, "down right right right right menu down back")     # YouTube: subscriptions, options

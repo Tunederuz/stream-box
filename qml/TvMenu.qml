@@ -946,13 +946,18 @@ Item {
         tabEnter.restart()
         loadTab(tabs[tab].id)   // tabs[tab] and not tabId: the tabId binding is not recomputed yet here
     }
-    // Live preview in the background: on the Live tab, after a moment on a live streamer, its live plays muted behind
-    // the whole menu, under a dark veil (livePreview of ui.py: streamlink and a third player, drawn by
+    // Live preview in the background: on the Live and Following tabs, after a moment on a live channel, its live plays
+    // muted behind the whole menu, under a dark veil (livePreview of ui.py: streamlink and a third player, drawn by
     // menu/LivePreview.qml). Only when the menu is the main page: nothing plays behind it
     readonly property string bgLive: {
-        var login = (st.streamers || [])[liveSel] || ""
-        return isOpen && tabId === "live" && area === "content" && shortcut < 0 && !modal && !kbOpen && !box.videoActive
-            && !!(st.live || {})[login] ? login : ""
+        if (!isOpen || area !== "content" || modal || kbOpen || box.videoActive) return ""
+        if (tabId === "live") {
+            var login = (st.streamers || [])[liveSel] || ""
+            return shortcut < 0 && (st.live || {})[login] ? login : ""
+        }
+        if (tabId === "follows")   // live channels first in followItems
+            return followSel < ((follows || {}).live || []).length ? followItems[followSel].login : ""
+        return ""
     }
     onBgLiveChanged: {
         stopPreview()

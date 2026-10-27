@@ -1,4 +1,4 @@
-// Muted live of the chosen streamer (livePreview of ui.py, third libmpv player), in the background of the whole menu
+// Muted live of the chosen channel (livePreview of ui.py, third libmpv player), in the background of the whole menu
 // (TvMenu.bgLive), faded in once the first frame is there.
 import QtQuick
 import StreamBox 1.0
