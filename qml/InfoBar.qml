@@ -110,9 +110,10 @@ Item {
         }
         Row {
             id: header
-            // Video: just above the bar; while seeking, slides up to make room for the preview
+            // Video: just above the bar; while seeking, slides up to make room for the preview, or for the bubble alone
             x: 96
-            y: root.live ? 70 : preview.visible ? track.y - 22 - preview.height - 46 - height : 222
+            y: root.live ? 70 : preview.visible ? track.y - 22 - preview.height - 46 - height
+               : root.seeking || root.scrubbing ? track.y - 22 - seekBubble.height - 24 - height : 222
             Behavior on y { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
             spacing: 22
             layer.enabled: true   // shadow under the texts, readable whatever the picture behind
@@ -246,8 +247,8 @@ Item {
             opacity: 0
             readonly property real cx: track.x + track.width * (root.span > 0 ? Math.min(1, root.at / root.span) : 0)
             x: Math.max(track.x, Math.min(track.x + track.width - width, cx - width / 2))
-            // Sitting on the top edge of the preview, like a label; without a preview, above the title
-            y: preview.visible ? track.y - 22 - preview.height - height / 2 : header.y - height - 20
+            // Sitting on the top edge of the preview, like a label; without a preview, just above the cursor
+            y: preview.visible ? track.y - 22 - preview.height - height / 2 : track.y - 22 - height
             width: fxText.implicitWidth + 44; height: 58; radius: 29
             color: "#ee17151c"; border.color: root.colors[0]; border.width: 2
             Text { id: fxText; anchors.centerIn: parent; text: root.fx.text || ""; color: "white"; font.pixelSize: 28; font.bold: true }
