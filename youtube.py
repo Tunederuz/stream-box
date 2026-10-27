@@ -315,7 +315,7 @@ def fetch_storyboard(url, ident):
     try:
         r = subprocess.run([YTDLP, *YTDLP_JS, "-J", "--no-warnings", "--skip-download",
                             "--no-playlist", url], capture_output=True, text=True, timeout=90)
-        info = json.loads(r.stdout or "{}")
+        info = json.loads(r.stdout or "{}") or {}   # "null": yt-dlp could not read the video
         if history.now_playing.get("ident") == ident:   # info for the seek bar and the pause screen
             d = info.get("upload_date") or ""
             mpv(["set_property", "user-data/streambox/meta",
