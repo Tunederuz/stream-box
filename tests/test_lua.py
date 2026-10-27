@@ -92,7 +92,7 @@ class Script(unittest.TestCase):
                 break
             time.sleep(0.2)
         video = os.path.join(self.dir, "video.mkv")   # a real file: lavfi sources report no usable duration
-        subprocess.run(["mpv", "--no-config", "av://lavfi:testsrc=duration=120:size=64x36:rate=2", "--o=" + video],
+        subprocess.run(["mpv", "--no-config", "av://lavfi:testsrc=duration=600:size=64x36:rate=2", "--o=" + video],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
         self.ipc("loadfile", video)
         for _ in range(50):
@@ -121,6 +121,16 @@ class Script(unittest.TestCase):
         self.assertFalse(get("pause"))   # playing again, where it was
         self.assertAlmostEqual(get("time-pos"), there, delta=3)
         self.assertEqual(get("user-data/streambox/mode"), "media")   # Back gave up the scrub, did not stop the video
+        time.sleep(1.2)   # a new streak
+        # held key (repeats every 0.08 s, at most 8 jumps/s kept): the jumps grow to 1 min
+        before = get("time-pos")
+        for _ in range(8):
+            self.ipc("script-message", "streambox-input", "TEST", "right")
+            time.sleep(0.13)
+        held = get("user-data/streambox/seekfx")["target"] - before
+        self.assertGreaterEqual(held, 150)   # 10 + 10 + 30 + 30 + 60…, against 80 with 10 s jumps
+        self.ipc("script-message", "streambox-input", "TEST", "back")
+        time.sleep(0.5)
         self.ipc("stop")
         self.assertEqual(self.lua_errors(), [])
 
