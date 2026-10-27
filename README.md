@@ -1,7 +1,7 @@
 # Stream Box
 
 A Linux mini PC plugged into the TV that shows your favorite streamers' Twitch streams full screen, with the chat as
-an overlay, without a desktop or keyboard. It is controlled with a Bluetooth remote, the mouse, or a companion app
+an overlay, without a desktop or keyboard. It is controlled with a Bluetooth remote or a companion app
 that can be installed on a phone (PWA).
 
 
@@ -35,7 +35,7 @@ that can be installed on a phone (PWA).
   live streamers, followed channels, replays, YouTube, Jellyfin, history, settings, system.
 - **Two streams at once**: picture-in-picture in a corner or side by side, swapped with one press.
 - **Companion app**: on-demand screen preview, streamers and list order, chat, volume, playback bar, TV resolution,
-  power off. **Bluetooth remote** (tested with the Xiaomi TV Stick one) and mouse menu.
+  power off. **Bluetooth remote** (tested with the Xiaomi TV Stick one).
 - **Dedicated session without a desktop** (cage compositor); normal login screen if a keyboard is plugged in at boot.
 - **Home Assistant** through MQTT discovery: control from HA, and automatic power on (Wake-on-LAN) when a streamer
   goes live. See `docs/home-assistant.md`.

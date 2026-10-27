@@ -1,4 +1,4 @@
--- Stream Box: menu shown when the mouse moves (streamer choice, chat corner),
+-- Stream Box: small menu of the simplified version (streamer choice, chat corner, opened by the remote),
 -- and management of streamlink, which serves the chosen channel's stream over local HTTP to this mpv.
 -- The channel, corner and chat visibility are published in user-data/streambox/* for chat_overlay.py.
 -- Two modes: "twitch" (stream of the chosen channel) and "media" (video sent from the companion app or
@@ -22,8 +22,7 @@ local STATE_DIR = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local
 
 local CORNERS = { "tl", "tr", "br", "bl" }   -- toggle order (clockwise)
 local CORNER_LABELS = { tl = "↖ top left", tr = "↗ top right", br = "↘ bottom right", bl = "↙ bottom left" }
-local MENU_TIMEOUT = 4    -- seconds without moving the mouse before hiding the menu
-local MENU_TIMEOUT_KEYS = 10   -- same when driven with the remote
+local MENU_TIMEOUT = 10   -- seconds without a key before hiding the menu
 local RETRY = 15          -- seconds between two attempts when the channel is not live
 local BACK_TO_MENU = 3    -- seconds idle after a video before going back to the menu (lets Jellyfin chain the next one)
 local AUTO_SWITCH = 60    -- seconds offline (after a channel change) before switching to a live streamer
@@ -48,7 +47,6 @@ local menu = mp.create_osd_overlay("ass-events")
 local status = mp.create_osd_overlay("ass-events")
 local menu_visible, hide_timer, items = false, nil, {}
 local sel, keyboard_nav = nil, false   -- button selected with the remote (index in items)
-local started = mp.get_time()
 
 
 -- Qt app (ui.py): banner, playback bar, notifications, polls box and home screen are drawn in
@@ -568,16 +566,8 @@ local function show_menu(by_key)
     if by_key then keyboard_nav = true end
     draw_menu()
     if hide_timer then hide_timer:kill() end
-    hide_timer = mp.add_timeout(keyboard_nav and MENU_TIMEOUT_KEYS or MENU_TIMEOUT, hide_menu)
+    hide_timer = mp.add_timeout(MENU_TIMEOUT, hide_menu)
 end
-
-mp.observe_property("mouse-pos", "native", function(_, m)
-    -- Ignore the initial cursor position when mpv starts
-    if m and mp.get_time() - started > 2 and not mp.get_property_native("user-data/streambox/tvmenu") then
-        keyboard_nav = false
-        show_menu()
-    end
-end)
 
 
 -- Bluetooth remote (tested with the Xiaomi TV Stick one): cage forwards its keys to mpv like those of a

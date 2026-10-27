@@ -4,8 +4,8 @@
 > of a given installation (network, hardware, accounts) go in `CLAUDE.local.md`, which is not versioned.
 
 Linux mini PC plugged into the TV. At boot, it shows the large menu (main page, animated background, nothing playing); a Twitch stream is watched with the chat
-as an overlay. When the mouse moves (or with a Bluetooth remote), a menu lets you change streamer and adjust the
-chat. A companion app (installable as an app) does the same from a phone, and more.
+as an overlay. With a Bluetooth remote, a menu lets you change streamer and adjust the
+chat (moving the mouse no longer opens anything). A companion app (installable as an app) does the same from a phone, and more.
 Installation and update: `install.sh` (see the README); settings backup: TV System menu and companion app (`backup.py`), or `backup.sh`.
 
 ## Languages
@@ -69,7 +69,7 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   - starts streamlink in local HTTP server mode (`--player-external-http`, 127.0.0.1, port 34501–34550, which changes
     with each channel) with `--twitch-low-latency --retry-streams 30`, then `loadfile http://127.0.0.1:<port>/`;
   - if the channel is not live: black screen with "{channel} is not live, retrying in {seconds} s", new attempt every 15 s;
-  - menu on mouse movement (hidden after 4 s): streamers in a grid (several columns and smaller font
+  - small menu of the simplified version, opened by the remote (hidden after 10 s without a key): streamers in a grid (several columns and smaller font
     if there are many), then a row for the chat: a checkbox to show or hide it, and a button
     that rotates it through the 4 corners (↖ ↗ ↘ ↙);
   - publishes `user-data/streambox/{channel,corner,chat_visible}` for `chat_overlay.py`;
@@ -236,7 +236,7 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   remote that would announce these keys must be added to `IGNORE` in `boot-mode.py`. cage passes its keys to mpv; stream-box.lua binds them (`KEYS`, `on_key`): OK = `0x21ffa0`, Menu ≡ =
   `0x2111a0` (Xiaomi remote codes: to adapt for another one), Back = `GO_BACK`, Home = `HOMEPAGE`, arrows, volume (mpv's default actions). Menu closed in
   Twitch: up/down change channel, OK shows/hides the info banner (title, "LIVE" or delay), Home opens
-  the large menu (OK too on the home screen; the small menu is now only for the mouse), Menu ≡ shows/hides the chat. In all modes: WWW (the
+  the large menu (OK too on the home screen; the small menu is only for the simplified version, without Qt), Menu ≡ shows/hides the chat. In all modes: WWW (the
   "browser" button) shows the home screen, Play (`PLAY`/`PLAYPAUSE`, bound on purpose: otherwise mpv pauses, which
   froze the live stream) moves the chat to another corner. In video: OK pauses, ←/→ ±10 s,
   ↑ shows/hides the playback bar (↓ hides it), Menu ≡ changes subtitles. Menu open: arrows = selection (the closest
