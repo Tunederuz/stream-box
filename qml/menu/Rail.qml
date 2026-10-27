@@ -12,7 +12,7 @@ Item {
     Text { x: 126; y: 88 - height / 2; text: "Stream Box"; color: "white"; font.pixelSize: 28; font.bold: true }
     Rectangle {   // pill: slides from one entry to the other
         x: 40; width: 320; height: 64; radius: 32
-        y: menu.railHome ? 150 : 236 + menu.tab * 76
+        y: menu.railHome ? 150 : 236 + menu.tab * menu.railStep
         color: "white"
         opacity: menu.area === "rail" ? 1 : 0.10
         Behavior on opacity { NumberAnimation { duration: 160 } }
@@ -28,7 +28,7 @@ Item {
     Repeater {
         model: menu.tabs.length
         Item {
-            x: 40; y: 236 + index * 76; width: 320; height: 64
+            x: 40; y: 236 + index * menu.railStep; width: 320; height: 64
             readonly property bool cur: index === menu.tab
             readonly property bool pill: cur && menu.area === "rail" && !menu.railHome
             Rectangle {   // current tab, focus in the content or on "Home screen": dot in the tab's color

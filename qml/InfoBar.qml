@@ -22,12 +22,13 @@ Item {
     readonly property real span: live ? (pb.window ? pb.window[1] - pb.window[0] : 0) : (pb.duration || 0)
     readonly property real at: live ? (pb.window ? (pb.pos || 0) - pb.window[0] : 0) : (pb.pos || 0)
     readonly property real delay: live && pb.window ? pb.window[1] - (pb.pos || 0) : 0
-    // Bar color depending on the source: YouTube red, Jellyfin blue (link to its server: /Videos/…), otherwise
-    // Twitch purple
+    // Bar color depending on the source: YouTube red, Jellyfin blue (link to its server: /Videos/…), Plex amber
+    // (/library/parts/…), otherwise Twitch purple
     readonly property string source: live ? "twitch" : /youtube\.com|youtu\.be|googlevideo/.test(pb.path || "") ? "youtube"
+        : /\/library\/parts\/\d+\//.test(pb.path || "") ? "plex"
         : /\/Videos\/|\/videos\/[0-9a-f]{32}|api_key=|MediaSourceId=/i.test(pb.path || "") ? "jellyfin" : "other"
     readonly property var colors: source === "youtube" ? ["#ff0033", "#ff4e45"]
-        : source === "jellyfin" ? ["#1565c0", "#4a90e2"] : ["#8a3ffc", "#b062ff"]
+        : source === "jellyfin" ? ["#1565c0", "#4a90e2"] : source === "plex" ? ["#e5a00d", "#f5c04a"] : ["#8a3ffc", "#b062ff"]
     // Video: info (remote.py: channel, series, episode…), chapters (mpv), buttons and seek (stream-box.lua)
     readonly property var meta: { try { return JSON.parse(osd.meta || "{}") } catch (e) { return {} } }
     readonly property var ctl: { try { return JSON.parse(osd.controls || "{}") } catch (e) { return {} } }
@@ -38,7 +39,7 @@ Item {
         return c && chapters.length > 1 ? tr("Chapter {n}", { n: pb.chapter + 1 }) + (c.title && !/^Chapter \d+$/i.test(c.title) ? " · " + c.title : "") : ""
     }
     readonly property string details: (meta.source === "youtube" ? [meta.channel, meta.date, meta.views ? tr("{n} views", { n: Fmt.big(meta.views, tr) }) : ""]
-        : meta.source === "jellyfin" ? [meta.year, meta.rating ? "★ " + Fmt.decimal(meta.rating, tr) : ""]   // series and episode: already in the title
+        : meta.source === "jellyfin" || meta.source === "plex" ? [meta.year, meta.rating ? "★ " + Fmt.decimal(meta.rating, tr) : ""]   // series and episode: already in the title
         : []).concat([chapterTitle]).filter(function (t) { return !!t }).join("  ·  ")
     // YouTube preview and "+30 s" bubble: only while seeking forward or back (not when the bar is just shown)
     property bool seeking: false

@@ -15,6 +15,7 @@ import installer  # installer.py: installation to an internal disk from the USB 
 import jellyfin   # jellyfin.py: Jellyfin playback
 import netsetup   # netsetup.py: Wi-Fi networks, setup access point
 import playback   # playback.py: videos started from a link
+import plex       # plex.py: Plex server, playback
 import settings   # settings.py: player, power button, background
 import system     # system.py: power, SSH, developer mode, updates
 import twitch     # twitch.py: streamers, polls and predictions, account, followed channels
@@ -199,6 +200,8 @@ ACTIONS = {
                                            int(body.get("points", 0))),
     "player": lambda body: settings.set_player(str(body.get("mode", ""))),
     "jellyfin_play": lambda body: jellyfin.jellyfin_play(str(body.get("id", "")), bool(body.get("from_start"))),
+    "plex_play": lambda body: plex.plex_play(str(body.get("id", "")), bool(body.get("from_start"))),
+    "plex": lambda body: plex.set_plex(str(body.get("address", "")), str(body.get("token", ""))),   # server (empty: forget)
     "youtube_channels": lambda body: youtube.edit_yt_channels(str(body.get("action", "")),
                                                               str(body.get("channel", "")), int(body.get("delta", 0))),
     "update": lambda body: system.start_update(),

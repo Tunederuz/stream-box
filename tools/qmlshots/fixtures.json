@@ -124,7 +124,11 @@
   },
   "player": "qt",
   "power_action": "suspend",
-  "title": ""
+  "title": "",
+  "libraries": {
+   "jellyfin": true,
+   "plex": true
+  }
  },
  "/api/follows": {
   "configured": true,
@@ -1421,5 +1425,314 @@
    "1000110001100011000110001",
    "0100101001010010100101001"
   ]
+ },
+ "/api/plex": {
+  "configured": true,
+  "server": "Plex de test",
+  "resume": [
+   {
+    "id": "jf0",
+    "title": "Movie 0",
+    "type": "Movie",
+    "year": 2000,
+    "seconds": 5400,
+    "thumb": "http://127.0.0.1:8080/img/2b4bdc.png",
+    "position": 1200
+   },
+   {
+    "id": "jf1",
+    "title": "Movie 1",
+    "type": "Movie",
+    "year": 2001,
+    "seconds": 5400,
+    "thumb": "http://127.0.0.1:8080/img/1db954.png",
+    "position": 1200
+   },
+   {
+    "id": "jf2",
+    "title": "Movie 2",
+    "type": "Movie",
+    "year": 2002,
+    "seconds": 5400,
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+    "position": 1200
+   },
+   {
+    "id": "jf3",
+    "title": "Movie 3",
+    "type": "Movie",
+    "year": 2003,
+    "seconds": 5400,
+    "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+    "position": 1200
+   }
+  ],
+  "nextup": [
+   {
+    "id": "jf10",
+    "title": "Episode 10",
+    "type": "Episode",
+    "year": 2010,
+    "seconds": 6000,
+    "thumb": "http://127.0.0.1:8080/img/2b4bdc.png",
+    "episode": "S1E2",
+    "series": "ser0"
+   },
+   {
+    "id": "jf11",
+    "title": "Episode 11",
+    "type": "Episode",
+    "year": 2011,
+    "seconds": 6060,
+    "thumb": "http://127.0.0.1:8080/img/1db954.png",
+    "episode": "S1E3",
+    "series": "ser1"
+   },
+   {
+    "id": "jf12",
+    "title": "Episode 12",
+    "type": "Episode",
+    "year": 2012,
+    "seconds": 6120,
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+    "episode": "S1E4",
+    "series": "ser2"
+   }
+  ],
+  "libraries": [
+   {
+    "id": "lib1",
+    "name": "Movies",
+    "items": [
+     {
+      "id": "jf20",
+      "title": "Movie 20",
+      "type": "Movie",
+      "year": 2020,
+      "seconds": 6600,
+      "thumb": "http://127.0.0.1:8080/img/2b4bdc.png"
+     },
+     {
+      "id": "jf21",
+      "title": "Movie 21",
+      "type": "Movie",
+      "year": 2021,
+      "seconds": 6660,
+      "thumb": "http://127.0.0.1:8080/img/1db954.png"
+     },
+     {
+      "id": "jf22",
+      "title": "Movie 22",
+      "type": "Movie",
+      "year": 2022,
+      "seconds": 6720,
+      "thumb": "http://127.0.0.1:8080/img/f5a623.png"
+     },
+     {
+      "id": "jf23",
+      "title": "Movie 23",
+      "type": "Movie",
+      "year": 2023,
+      "seconds": 6780,
+      "thumb": "http://127.0.0.1:8080/img/00bcd4.png"
+     },
+     {
+      "id": "jf24",
+      "title": "Movie 24",
+      "type": "Movie",
+      "year": 2024,
+      "seconds": 6840,
+      "thumb": "http://127.0.0.1:8080/img/e91e63.png"
+     },
+     {
+      "id": "jf25",
+      "title": "Movie 25",
+      "type": "Movie",
+      "year": 2025,
+      "seconds": 6900,
+      "thumb": "http://127.0.0.1:8080/img/8bc34a.png"
+     },
+     {
+      "id": "jf26",
+      "title": "Movie 26",
+      "type": "Movie",
+      "year": 2026,
+      "seconds": 6960,
+      "thumb": "http://127.0.0.1:8080/img/795548.png"
+     },
+     {
+      "id": "jf27",
+      "title": "Movie 27",
+      "type": "Movie",
+      "year": 2027,
+      "seconds": 7020,
+      "thumb": "http://127.0.0.1:8080/img/607d8b.png"
+     }
+    ]
+   },
+   {
+    "id": "lib2",
+    "name": "Shows",
+    "items": [
+     {
+      "id": "jf30",
+      "title": "Series 30",
+      "type": "Series",
+      "year": 2030,
+      "seconds": 7200,
+      "thumb": "http://127.0.0.1:8080/img/2b4bdc.png",
+      "series": "ser0",
+      "unplayed": 0
+     },
+     {
+      "id": "jf31",
+      "title": "Series 31",
+      "type": "Series",
+      "year": 2031,
+      "seconds": 7260,
+      "thumb": "http://127.0.0.1:8080/img/1db954.png",
+      "series": "ser1",
+      "unplayed": 1
+     },
+     {
+      "id": "jf32",
+      "title": "Series 32",
+      "type": "Series",
+      "year": 2032,
+      "seconds": 7320,
+      "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+      "series": "ser2",
+      "unplayed": 2
+     },
+     {
+      "id": "jf33",
+      "title": "Series 33",
+      "type": "Series",
+      "year": 2033,
+      "seconds": 7380,
+      "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+      "series": "ser3",
+      "unplayed": 3
+     },
+     {
+      "id": "jf34",
+      "title": "Series 34",
+      "type": "Series",
+      "year": 2034,
+      "seconds": 7440,
+      "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+      "series": "ser4",
+      "unplayed": 4
+     }
+    ]
+   }
+  ]
+ },
+ "/api/plex_search": {
+  "results": [
+   {
+    "id": "jf40",
+    "title": "Movie 40",
+    "type": "Movie",
+    "year": 2040,
+    "seconds": 7800,
+    "thumb": "http://127.0.0.1:8080/img/2b4bdc.png"
+   },
+   {
+    "id": "jf41",
+    "title": "Movie 41",
+    "type": "Movie",
+    "year": 2041,
+    "seconds": 7860,
+    "thumb": "http://127.0.0.1:8080/img/1db954.png"
+   },
+   {
+    "id": "jf42",
+    "title": "Movie 42",
+    "type": "Movie",
+    "year": 2042,
+    "seconds": 7920,
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png"
+   },
+   {
+    "id": "jf43",
+    "title": "Movie 43",
+    "type": "Movie",
+    "year": 2043,
+    "seconds": 7980,
+    "thumb": "http://127.0.0.1:8080/img/00bcd4.png"
+   }
+  ]
+ },
+ "/api/plex_series": {
+  "episodes": [
+   {
+    "id": "jf50",
+    "title": "Episode 50",
+    "type": "Episode",
+    "year": 2050,
+    "seconds": 8400,
+    "thumb": "http://127.0.0.1:8080/img/2b4bdc.png",
+    "episode": "S1E1",
+    "series": "ser0",
+    "finished": true
+   },
+   {
+    "id": "jf51",
+    "title": "Episode 51",
+    "type": "Episode",
+    "year": 2051,
+    "seconds": 8460,
+    "thumb": "http://127.0.0.1:8080/img/1db954.png",
+    "episode": "S1E2",
+    "series": "ser0",
+    "finished": true
+   },
+   {
+    "id": "jf52",
+    "title": "Episode 52",
+    "type": "Episode",
+    "year": 2052,
+    "seconds": 8520,
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+    "episode": "S1E3",
+    "series": "ser0",
+    "finished": false
+   },
+   {
+    "id": "jf53",
+    "title": "Episode 53",
+    "type": "Episode",
+    "year": 2053,
+    "seconds": 8580,
+    "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+    "episode": "S1E4",
+    "series": "ser0",
+    "finished": false
+   },
+   {
+    "id": "jf54",
+    "title": "Episode 54",
+    "type": "Episode",
+    "year": 2054,
+    "seconds": 8640,
+    "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+    "episode": "S1E5",
+    "series": "ser0",
+    "finished": false
+   },
+   {
+    "id": "jf55",
+    "title": "Episode 55",
+    "type": "Episode",
+    "year": 2055,
+    "seconds": 8700,
+    "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+    "episode": "S1E6",
+    "series": "ser0",
+    "finished": false
+   }
+  ],
+  "first": 2
  }
 }

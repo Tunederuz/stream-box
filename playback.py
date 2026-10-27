@@ -1,11 +1,12 @@
 """Stream Box: playback of the videos started from the companion app and the TV menu (links, YouTube, Twitch replays
-and clips, Jellyfin), and the history loop that records their position and sends it back to Twitch, YouTube and
-Jellyfin. Standard library only.
+and clips, Jellyfin, Plex), and the history loop that records their position and sends it back to Twitch, YouTube,
+Jellyfin and Plex. Standard library only.
 """
 import datetime, re, threading, time
 
 import history   # history.py: history file and the video being played
 import jellyfin  # jellyfin.py: Jellyfin videos and progress reports
+import plex      # plex.py: Plex videos and progress reports
 import twitch    # twitch.py: replays and clips (GQL), position saved on the account
 import youtube   # youtube.py: titles, storyboard, progress of the YouTube account
 from common import mpv
@@ -14,9 +15,9 @@ from i18n import tr
 
 def find_url(*texts):
     """First http(s) link found: apps often share "title + link" in the text field. Also
-    "jellyfin:ID", the link of Jellyfin videos in the history."""
+    "jellyfin:ID" and "plex:ID", the links of Jellyfin and Plex videos in the history."""
     for text in texts:
-        match = re.search(r"https?://\S+|\bjellyfin:[0-9a-f]{32}\b", text or "")
+        match = re.search(r"https?://\S+|\bjellyfin:[0-9a-f]{32}\b|\bplex:\d{1,10}\b", text or "")
         if match:
             return match.group(0)
     return None
@@ -30,6 +31,8 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
     at: forced position (cast from the YouTube app), otherwise resume from the history"""
     if re.fullmatch(r"jellyfin:[0-9a-f]{32}", url or ""):   # from the history
         return jellyfin.jellyfin_play(url.split(":")[1], from_start)
+    if re.fullmatch(r"plex:\d{1,10}", url or ""):
+        return plex.plex_play(url.split(":")[1], from_start)
     if not url or not re.match(r"https?://", url):
         raise ValueError(tr("This is not an http(s) link."))
     key, kind, ident = history.media_key(url)
@@ -131,6 +134,17 @@ def history_loop():
                 history.now_playing["position"] = position
             elif not playing:
                 jellyfin.jf_report("/Stopped", video["ident"], video.get("position") or 0)
+                if history.now_playing.get("key") == video["key"]:
+                    history.now_playing.clear()
+            continue
+        if video["kind"] == "plex":
+            if playing and isinstance(position, (int, float)):
+                paused = mpv(["get_property", "pause"])[0]
+                plex.px_report(video["ident"], position, duration, "playing", bool(paused))
+                history.record(video, position, duration)
+                history.now_playing.update(position=position, duration=duration)
+            elif not playing:
+                plex.px_report(video["ident"], video.get("position") or 0, video.get("duration"), "stopped")
                 if history.now_playing.get("key") == video["key"]:
                     history.now_playing.clear()
             continue

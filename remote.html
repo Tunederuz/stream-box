@@ -528,6 +528,26 @@
   </section>
 
   <section>
+    <h2>Plex</h2>
+    <p style="margin-top: 0">Your Plex server in the TV menu (a Plex tab): resume, next episodes, recent additions,
+      search. Progress follows on your other Plex apps.</p>
+    <label class="setting" for="plex-address">Server address</label>
+    <div class="field">
+      <input id="plex-address" type="url" autocomplete="off" placeholder="http://192.168.1.10:32400">
+    </div>
+    <details>
+      <summary>Token (if the server asks for one)</summary>
+      <p>Not needed if Plex lets the box's network in without signing in: Plex, Settings, Network, "List of IP
+        addresses and networks that are allowed without auth" (for example 192.168.1.0/255.255.255.0). Otherwise the
+        X-Plex-Token of your account: in Plex on the web, "Get info" on a video, "View XML": it ends the link.</p>
+      <input id="plex-token" type="password" autocomplete="off" placeholder="X-Plex-Token" aria-label="Plex token">
+    </details>
+    <button id="plex-save" style="width: 100%; margin-top: 8px">Connect</button>
+    <button id="plex-forget" style="width: 100%; margin-top: 8px" hidden>Disconnect</button>
+    <div class="status" id="plex-status"></div>
+  </section>
+
+  <section>
     <h2>Companion app address</h2>
     <label class="setting" for="remote-url" style="margin-top: 0">Address shown as a QR code on the TV</label>
     <div class="field">
@@ -746,6 +766,7 @@ function render(s) {
   $("home").classList.toggle("current", s.mode === "home");
   powerAction = s.power_action;
   if (document.activeElement !== $("remote-url")) $("remote-url").value = s.remote_url || "";
+  renderPlex(s);
   renderKeyboard(s.keyboard);
 }
 
@@ -1019,6 +1040,30 @@ document.querySelectorAll("[data-key]").forEach((b) => {
   b.addEventListener("contextmenu", (e) => e.preventDefault());
 });
 $("remote-url-save").onclick = () => send("remote_url", { url: $("remote-url").value.trim() });
+
+// Plex server (plex.py): checked by the box before being kept; the token is never shown again
+function renderPlex(s) {
+  if (document.activeElement !== $("plex-address")) $("plex-address").value = s.plex_server || "";
+  $("plex-forget").hidden = !s.plex_server;
+  $("plex-save").textContent = s.plex_server ? tr("Change") : tr("Connect");
+}
+$("plex-save").onclick = async () => {
+  $("plex-status").textContent = tr("Checking with the server…");
+  try {
+    const r = await fetch("/api/plex", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: $("plex-address").value.trim(), token: $("plex-token").value.trim() }) });
+    if (!r.ok) throw new Error((await r.json()).error);
+    $("plex-token").value = "";
+    $("plex-status").textContent = tr("Connected: the Plex tab is in the TV menu.");
+  } catch (e) {
+    $("plex-status").textContent = e.message || tr("Box unreachable");
+  }
+  refresh();
+};
+$("plex-forget").onclick = () => {
+  $("plex-status").textContent = "";
+  send("plex", { address: "" });
+};
 // Poll and prediction: fetched every 3 s while the page shows a live stream
 let events = null, eventsTimer = null;
 async function refreshEvents() {

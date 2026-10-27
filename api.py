@@ -12,9 +12,10 @@ import btsetup    # btsetup.py: Bluetooth devices
 import display    # display.py: screen resolution
 import history    # history.py: history file, kind of the current video
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
-import images     # images.py: TV menu images, TV preview
+import images     # images.py: TV preview
 import installer  # installer.py: installation to an internal disk
 import jellyfin   # jellyfin.py: library
+import plex       # plex.py: library
 import netsetup   # netsetup.py: Wi-Fi
 import playback   # playback.py: videos shared from the phone
 import settings   # settings.py: player, power button, background
@@ -63,6 +64,9 @@ def state():
         "player": settings.player_choice(), "player_running": "qt" if vo == "libmpv" else "mpv",
         "power_action": settings.power_action(),
         "remote_url": ambient.custom_remote_url(),
+        # Video libraries connected to the box: their TV menu tab only shows when they are
+        "libraries": {"jellyfin": jellyfin.jf_server() is not None, "plex": plex.px_config() is not None},
+        "plex_server": (plex.px_config() or {}).get("address", ""),
         # TV menu search keyboard open (forgotten after 10 min, menu closed in the meantime)
         "keyboard": (actions.keyboard if actions.keyboard.get("open") and time.time() - actions.keyboard.get("at", 0) < 600
                      else None),
@@ -174,6 +178,21 @@ class Handler(BaseHTTPRequestHandler):
                         self.send(200, {"query": query, "results": jellyfin.jellyfin_search(query)})
                     else:
                         self.send(200, jellyfin.jellyfin_series(q.get("id", [""])[0]))
+                except (OSError, ValueError, KeyError) as e:
+                    self.send(400, {"error": str(e)})
+            elif self.path == "/api/plex":
+                try:
+                    self.send(200, plex.plex_home())
+                except (OSError, ValueError, KeyError) as e:
+                    self.send(503, {"error": tr("Plex unreachable: {error}", error=e)})
+            elif self.path.startswith("/api/plex_search?") or self.path.startswith("/api/plex_series?"):
+                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                try:
+                    if self.path.startswith("/api/plex_search?"):
+                        query = q.get("q", [""])[0]
+                        self.send(200, {"query": query, "results": plex.plex_search(query)})
+                    else:
+                        self.send(200, plex.plex_series(q.get("id", [""])[0]))
                 except (OSError, ValueError, KeyError) as e:
                     self.send(400, {"error": str(e)})
             elif self.path.startswith("/api/youtube_channel?"):

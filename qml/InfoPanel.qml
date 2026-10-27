@@ -15,7 +15,7 @@ Item {
     readonly property bool shown: !!st.open
     readonly property string title: (b.playback || {}).title || ""
     readonly property string details: (meta.source === "youtube" ? [meta.channel, meta.date, meta.views ? tr("{n} views", { n: Fmt.big(meta.views, tr) }) : ""]
-        : meta.source === "jellyfin" ? [meta.series, meta.episode, meta.year, meta.rating ? "★ " + Fmt.decimal(meta.rating, tr) : ""]
+        : meta.source === "jellyfin" || meta.source === "plex" ? [meta.series, meta.episode, meta.year, meta.rating ? "★ " + Fmt.decimal(meta.rating, tr) : ""]
         : []).filter(function (t) { return !!t }).join("  ·  ")
 
     Rectangle {   // veil over the video

@@ -29,6 +29,12 @@ class MediaKey(unittest.TestCase):
         for url in ("https://clips.twitch.tv/FunnyClip-abc", "https://www.twitch.tv/someone/clip/FunnyClip-abc"):
             self.assertEqual(history.media_key(url), ("twitch-clip:FunnyClip-abc", "twitch-clip", "FunnyClip-abc"))
 
+    def test_plex(self):
+        self.assertEqual(history.media_key("plex:1234"), ("plex:1234", "plex", "1234"))
+        # file of a Plex server: the kind is known (TV menu tab), not the item
+        self.assertEqual(history.media_key("http://server:32400/library/parts/12/1793110935/file.mkv?X-Plex-Token=t")[1:],
+                         ("plex", None))
+
     def test_other_link(self):
         self.assertEqual(history.media_key("https://example.org/a.mp4"), ("https://example.org/a.mp4", "link", None))
 

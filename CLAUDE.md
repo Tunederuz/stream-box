@@ -530,6 +530,24 @@ Twitch (live, following, replays), red for YouTube, neutral charcoal with a whit
 system; background, glows, rail, focus glows (`FocusFrame.glow`), `VideoCard.accent`, `SettingRow.pal` (light switch with a
 dark knob in neutral), actions popup, keyboard. Blue is left free for Jellyfin. Logo (`qml/Logo.qml`, icons `icon-*.png`): white tile, rounded charcoal triangle, neutral on a purple background as well as on red.
 
+### Plex (QML menu tab and page)
+`plex.py`: a Plex server of the local network, chosen in the companion app (Settings → Plex, `POST /api/plex
+{address, token?}`, checked with `/identity` and `/library/sections` before being kept; empty address: forget it), in
+`~/.config/stream-box/plex.json` (600, with the box's `X-Plex-Client-Identifier`). Without a token, Plex must let the
+box's network in (Plex setting "List of IP addresses and networks that are allowed without auth"). Same card fields
+as Jellyfin (`px_item`), same API shape: `/api/plex` (On Deck split into resume / next episodes, recent additions per
+library), `/api/plex_search` (`/hubs/search`), `/api/plex_series` (`allLeaves`), `POST /api/plex_play` (direct play
+of the file, `/library/parts/…`, no transcoding). Progress: `/:/timeline` and `/:/progress` every 10 s
+(`playback.history_loop`), `/:/scrobble` at the end (`px_report`); links `plex:<ratingKey>` in the history. Next
+episode: `next_up` with `service: "plex"` and the `path` being played (Plex files hold no item id). Colors: amber
+(`#e5a00d`), bar and loading screen too. Plex.tv sign-in by code (`plex.tv/link`) not done yet.
+TV menu: Jellyfin and Plex share the code of the library tabs (`libs[id]`: home, results, preview, searching, row, sel;
+`libRows`, `libChoose`, `libPlay`; `/api/<id>…`). A library tab only shows when it is connected (`st.libraries`);
+while none is, a "Libraries" tab (`LibrariesTab`) tells how to connect Jellyfin or Plex, with the QR code. `tabs` is
+filtered from `allTabs`; `tabKept` keeps the same tab when the list changes; `railStep` 70 instead of 76 with 9 tabs.
+Test server: Docker `plexinc/pms-docker`, port published with `-p` (it then gets past ufw, `--network host` does
+not), `ALLOWED_NETWORKS` = the LAN.
+
 ### Jellyfin (QML menu tab and page)
 
 remote.py reuses the server associated with jellyfin-mpv-shim (`~/.config/jellyfin-mpv-shim/users.json`: address,

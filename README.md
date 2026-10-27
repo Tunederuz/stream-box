@@ -29,6 +29,8 @@ that can be installed on a phone (PWA).
   keyboard) and in the companion app, without an API key. Red playback bar for YouTube, blue for Jellyfin.
 - **Jellyfin** in the TV menu and the companion app: continue watching, next up, recently added, search, episodes of a
   series; progress is reported back to the server (no configuration beyond "Play on…").
+- **Plex** in the TV menu: the same rows, search and episodes, direct play, progress reported to the server (address
+  of the server given in the companion app). Library tabs only show once connected.
 - **Large TV menu** in the style of Android TV (Menu button of the remote), animated and rendered by the GPU:
   live streamers, followed channels, replays, YouTube, Jellyfin, history, settings, system.
 - **Two streams at once**: picture-in-picture in a corner or side by side, swapped with one press.
@@ -53,7 +55,7 @@ that can be installed on a phone (PWA).
 | `qml/`, `qml/menu/` | Large TV menu in the style of Android TV, in QML (animated, rendered by the GPU); its parts in `qml/menu/` |
 | `chat_overlay.py` | Twitch chat (anonymous IRC) shown in mpv through its IPC |
 | `chat_qt.py` | Chat with emotes for the Qt app (shown by `qml/ChatOverlay.qml`) |
-| `remote.py` + `remote.html` | Companion app server (Python standard library) and its page; the server's modules: `api.py`, `actions.py`, `twitch.py`, `youtube.py`, `jellyfin.py`, `playback.py`, `history.py`, `ambient.py`, `images.py`, `settings.py`, `system.py`, `common.py` |
+| `remote.py` + `remote.html` | Companion app server (Python standard library) and its page; the server's modules: `api.py`, `actions.py`, `twitch.py`, `youtube.py`, `jellyfin.py`, `plex.py`, `playback.py`, `history.py`, `ambient.py`, `images.py`, `settings.py`, `system.py`, `common.py` |
 | `input.py` | Remote, keyboard and gamepad keys read at the source |
 | `i18n.py`, `qml/i18n.js`, `locales/` | Interface translations (English by default, French available) |
 | `display.py` | Video output resolution (wlr-randr), never below 60 Hz |

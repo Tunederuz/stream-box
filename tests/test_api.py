@@ -109,6 +109,14 @@ class Api(unittest.TestCase):
         self.assertEqual(self.request("POST", "/api/corner", {})[0], 200)
         self.assertIn(["script-message", "streambox-cycle-corner"], self.mpv.commands)
 
+    def test_libraries(self):
+        # nothing connected: no library tab (the TV menu shows the "Libraries" tab instead)
+        self.assertEqual(self.request("GET", "/api/state")[1]["libraries"], {"jellyfin": False, "plex": False})
+        self.assertEqual(self.request("GET", "/api/plex"), (200, {"configured": False}))
+        status, body = self.request("POST", "/api/plex", {"address": "127.0.0.1:9"})   # nothing listens there
+        self.assertEqual(status, 400)
+        self.assertIn("error", body)
+
     def test_unknown_action(self):
         self.assertGreaterEqual(self.request("POST", "/api/no_such_action", {})[0], 400)
 

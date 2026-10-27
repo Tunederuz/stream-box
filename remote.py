@@ -11,6 +11,7 @@ This file starts the background loops and the HTTP server; the code lives in the
   twitch.py    streamer list, who is live, polls and predictions, replays, followed channels, Twitch account
   youtube.py   channels, search, subtitles, storyboard, account subscriptions, "TV app" progress
   jellyfin.py  Jellyfin library, playback and progress reports
+  plex.py      Plex library, playback and progress reports
   playback.py  videos started from a link or the history, history loop (positions)
   history.py   history file, media keys, video being played
   ambient.py   ambient screen (weather, schedules), QR code and remote URL, first setup

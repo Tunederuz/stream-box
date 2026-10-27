@@ -16,8 +16,10 @@ Item {
     property var last: ({})
     onLChanged: if (l.title) last = l
     readonly property color accent: last.kind === "youtube" ? "#ff0033" : last.kind === "jellyfin" ? "#1565c0"
+                                  : last.kind === "plex" ? "#e5a00d"
                                   : last.kind === "twitch" ? "#9146ff" : "#e8e8ee"
     readonly property string source: last.kind === "youtube" ? "YouTube" : last.kind === "jellyfin" ? "Jellyfin"
+                                   : last.kind === "plex" ? "Plex"
                                    : last.kind === "twitch" ? "Twitch" : tr("Video")
     opacity: shown ? 1 : 0
     visible: opacity > 0

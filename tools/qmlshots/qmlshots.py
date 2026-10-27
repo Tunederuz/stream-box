@@ -56,10 +56,11 @@ STEPS = (
     + [("text", "phone", False), ("text", "phone typed", True)]   # text typed on the phone
     + scene(4, "down right ok back down down right right right right down ok")   # Jellyfin: series
     + keys("right ok back up ok back")                            # episodes, dialog, keyboard closed
-    + scene(5, "right down down left ok back")                    # History
-    + scene(6, "down down down down down down down right down down down down down down down down")
+    + scene(5, "down right ok back down down right ok")           # Plex: rows, series, episodes
+    + scene(6, "right down down left ok back")                    # History
+    + scene(7, "down down down down down down down right down down down down down down down down")
     + keys("right down up up up up")                              # Settings: audio output, resolution
-    + scene(7, "down ok down ok back")                            # System: YouTube account, sync dialog
+    + scene(8, "down ok down ok back")                            # System: YouTube account, sync dialog
     + keys("down right down down ok back down down down down ok down back")   # Bluetooth, developer mode
     + keys("down ok ok back down ok back down down down down ok down ok")     # install, backup, restart
     + [("key", "home"), ("video", True), ("open",)]               # over a video: veil only

@@ -1,4 +1,4 @@
-// TV menu, YouTube and Jellyfin tabs (same page, separate state: menu.mRow, mSel…): search row, then horizontal
+// TV menu, YouTube, Jellyfin and Plex tabs (same page, separate state: menu.mRow, mSel…): search row, then horizontal
 // rows of cards (found channels, results, subscriptions, channels; series, resume, libraries)
 import QtQuick
 import "layout.js" as Layout
@@ -9,7 +9,7 @@ Item {
     id: page
     required property var menu
     anchors.fill: parent
-    visible: menu.tabId === "youtube" || menu.tabId === "jellyfin"
+    visible: menu.tabId === "youtube" || menu.libTab
     readonly property var rows: visible ? menu.mediaRows() : []
     // Fixed-height rows; vertical scrolling to keep the chosen row on screen
     readonly property real scrollY: Math.max(0, (menu.mRow - 1) * Layout.rowH)
@@ -27,9 +27,10 @@ Item {
         }
     }
     Text {
-        visible: menu.jfTab ? !!menu.jf && !menu.jf.configured && !menu.jf.error
+        visible: menu.libTab ? !!menu.lib.home && !menu.lib.home.configured && !menu.lib.home.error
                             : !!menu.yt && menu.yt.channels.length === 0 && !menu.ytResults && !(menu.yt.subs && menu.yt.subs.configured)
-        y: 320; text: menu.jfTab ? menu.tr("Jellyfin isn't linked to the box: in the Jellyfin app, \"Play on…\" → the box.")
+        y: 320; text: menu.tabId === "plex" ? menu.tr("Plex isn't connected to the box: give its address in the companion app (Settings → Plex).")
+                    : menu.libTab ? menu.tr("Jellyfin isn't linked to the box: in the Jellyfin app, \"Play on…\" → the box.")
                                  : menu.tr("Add favorite channels: Options on a video, or search.")
         color: "#b4afc2"; font.pixelSize: 27
     }
@@ -57,7 +58,7 @@ Item {
                     Text {
                         visible: !!row && row.items.length === 0
                         y: 70; text: row && row.kind === "results" ? (menu.mSearching ? menu.tr("Searching…") : menu.tr("No results"))
-                                   : row && row.loading ? menu.tr("Loading…") : menu.jfTab ? menu.tr("Nothing here")
+                                   : row && row.loading ? menu.tr("Loading…") : menu.libTab ? menu.tr("Nothing here")
                                    : menu.tr("YouTube unreachable for now")
                         color: "#8a85a0"; font.pixelSize: 24
                     }

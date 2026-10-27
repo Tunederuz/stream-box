@@ -14,7 +14,7 @@ Item {
         color: menu.pal.sheet
         scale: menu.kbOpen ? 1 : 0.95
         Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-        Text { x: 48; y: 36; text: menu.jfTab ? menu.tr("Search Jellyfin") : menu.tr("Search YouTube"); color: menu.pal.label; font.pixelSize: 22; font.bold: true }
+        Text { x: 48; y: 36; text: menu.tr("Search {service}", { service: menu.libTab ? menu.libName : "YouTube" }); color: menu.pal.label; font.pixelSize: 22; font.bold: true }
         Rectangle {   // typed text
             x: 44; y: 78; width: parent.width - 88; height: 76; radius: 18
             color: Qt.darker(menu.pal.sheet, 1.8); border.color: menu.pal.surfaceFocus; border.width: 2

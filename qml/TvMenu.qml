@@ -26,15 +26,24 @@ Item {
     function tr(s, a) { return I18n.t(i18n.dict, s, a) }
 
     readonly property string api: "http://127.0.0.1:8080"
-    readonly property var tabs: [
+    readonly property var allTabs: [
         { id: "live", label: "Live" }, { id: "follows", label: "Following" },
         { id: "replays", label: "Replays" }, { id: "youtube", label: "YouTube" },
-        { id: "jellyfin", label: "Jellyfin" },
+        { id: "jellyfin", label: "Jellyfin", library: true }, { id: "plex", label: "Plex", library: true },
+        { id: "libraries", label: "Libraries" },
         { id: "history", label: "History" },
         { id: "settings", label: "Settings" }, { id: "system", label: "System" }]
+    // Video libraries only when connected to the box (/api/state libraries), otherwise one "Libraries" tab that tells how
+    // to connect them; the chosen tab stays the same one
+    readonly property bool anyLibrary: !!((st.libraries || {}).jellyfin || (st.libraries || {}).plex)
+    readonly property var tabs: allTabs.filter(function (t) {
+        return t.library ? !!(st.libraries || {})[t.id] : t.id !== "libraries" || !anyLibrary })
+    property string tabKept: "live"
+    onTabsChanged: tab = Math.max(0, tabs.findIndex(function (t) { return t.id === tabKept }))
     readonly property var corners: ({ tl: "↖ top left", tr: "↗ top right", br: "↘ bottom right", bl: "↙ bottom left" })
     readonly property var qrModes: [["always", "Always"], ["timed", "30 seconds"], ["never", "Never"]]
-    readonly property var kinds: ({ youtube: "YouTube", "twitch-vod": "Twitch replay", "twitch-clip": "Twitch clip", link: "Link", jellyfin: "Jellyfin" })
+    readonly property var kinds: ({ youtube: "YouTube", "twitch-vod": "Twitch replay", "twitch-clip": "Twitch clip", link: "Link", jellyfin: "Jellyfin",
+                                    plex: "Plex" })
 
     // Data (reloaded on open; reassigned as a whole so bindings follow)
     property var st: ({})
@@ -60,8 +69,8 @@ Item {
     property var ytAuthQr: null
     property var ytAccount: null             // same state, for the "YouTube account" row of the System menu
     // Colors per tab: purple for Twitch (live, following, replays), red for YouTube, neutral (charcoal, white glow)
-    // for what belongs to no service (history, settings, system), blue for Jellyfin
-    readonly property string theme: tabId === "youtube" || tabId === "jellyfin" ? tabId
+    // for what belongs to no service (history, settings, system), blue for Jellyfin, amber for Plex
+    readonly property string theme: ["youtube", "jellyfin", "plex"].indexOf(tabId) >= 0 ? tabId
         : ["live", "follows", "replays"].indexOf(tabId) >= 0 ? "twitch" : "neutral"
     readonly property var pal: theme === "youtube"
         ? { accent: "#ff0033", veil: "#180407", rail: "#1a0709", sheet: "#261216", key: "#3a1f24",
@@ -69,6 +78,9 @@ Item {
         : theme === "jellyfin"
         ? { accent: "#1565c0", veil: "#030f17", rail: "#06131c", sheet: "#0f202c", key: "#173244",
             surface: "#12293a", surfaceFocus: "#1b3c54", label: "#9cc3d8" }
+        : theme === "plex"
+        ? { accent: "#e5a00d", veil: "#120d03", rail: "#181105", sheet: "#2a200d", key: "#3e3015",
+            surface: "#2d2310", surfaceFocus: "#46361a", label: "#d6bf8f" }
         : theme === "twitch"
         ? { accent: "#9146ff", veil: "#0a0612", rail: "#100b17", sheet: "#21182c", key: "#33283f",
             surface: "#2a2034", surfaceFocus: "#3a2c4e", label: "#a99fc0" }
@@ -80,24 +92,27 @@ Item {
     property bool ytSearching: false
     property int ytRow: 0                    // 0: search row, then results (if any) and channels
     property var ytSel: ({})
-    // Jellyfin: home (/api/jellyfin), search, episodes of an opened series, row and choice per row
-    property var jf: null
-    property var jfResults: null             // { query, results } or null
-    property var jfPreview: null             // opened series: { id, name, episodes, first }
-    property bool jfSearching: false
-    property int jfRow: 0
-    property var jfSel: ({})
-    // Row-based tabs (YouTube, Jellyfin): same page, same keyboard, separate state for each
-    readonly property bool jfTab: tabId === "jellyfin"
-    readonly property int mRow: jfTab ? jfRow : ytRow
-    readonly property var mSel: jfTab ? jfSel : ytSel
-    readonly property bool mSearching: jfTab ? jfSearching : ytSearching
-    readonly property var mResults: jfTab ? jfResults : ytResults
+    // Video libraries (Jellyfin, Plex: same API, /api/<id>, /api/<id>_search, _series, _play), per library: home,
+    // search results ({ query, results }), opened series ({ id, name, episodes, first }), row and choice per row
+    property var libs: ({})                  // id → { home, results, preview, searching, row, sel }
+    readonly property bool libTab: tabId === "jellyfin" || tabId === "plex"
+    readonly property var lib: libs[tabId] || ({})
+    readonly property string libName: tabId === "plex" ? "Plex" : "Jellyfin"
+    function setLib(id, changes) {
+        var all = Object.assign({}, libs)
+        all[id] = Object.assign({}, all[id] || {}, changes)
+        libs = all
+    }
+    // Row-based tabs (YouTube, libraries): same page, same keyboard, separate state for each
+    readonly property int mRow: libTab ? lib.row || 0 : ytRow
+    readonly property var mSel: libTab ? lib.sel || ({}) : ytSel
+    readonly property bool mSearching: libTab ? !!lib.searching : ytSearching
+    readonly property var mResults: libTab ? lib.results || null : ytResults
     // On-screen keyboard (search): text, chosen row and column
     property bool kbOpen: false
     property string kbText: ""
     // Keyboard opened or closed: reported to the box, the companion app then offers to type the text
-    onKbOpenChanged: call("POST", "/api/keyboard", { open: kbOpen, text: kbText, target: jfTab ? "Jellyfin" : "YouTube" })
+    onKbOpenChanged: call("POST", "/api/keyboard", { open: kbOpen, text: kbText, target: libTab ? libName : "YouTube" })
     property int kbRow: 0
     property int kbCol: 0
     readonly property var kbKeys: [
@@ -107,7 +122,8 @@ Item {
 
     // Focus
     property int tab: 0
-    readonly property string tabId: tabs[tab].id
+    readonly property string tabId: (tabs[tab] || tabs[0]).id   // (tabs may shrink before tab follows)
+    readonly property int railStep: tabs.length > 8 ? 70 : 76   // tabs of the rail, above "Now on the TV"
     property string area: "content"          // rail or content
     property bool railHome: false            // rail: focus on "Home screen" (above the tabs)
     property int shortcut: -1                // Live: shortcut chosen above the grid, -1 = grid
@@ -300,61 +316,61 @@ Item {
             : days < 31 ? tr("{n} wk ago", { n: Math.floor(days / 7) })
             : new Date(iso).toLocaleDateString(Qt.locale(i18n.lang === "fr" ? "fr_FR" : "en_US"), "d MMM")
     }
-    function loadJellyfin() {
-        call("GET", "/api/jellyfin", undefined, function (d) { jf = d || { error: true } })
+    function loadLibrary(id) {
+        call("GET", "/api/" + id, undefined, function (d) { setLib(id, { home: d || { error: true } }) })
     }
-    function jfSearch(q) {
+    function libSearch(q) {
         q = q.trim()
-        if (!q) return
-        jfResults = { query: q, results: [] }   // before jfSearching: the search row text reads query
-        jfSearching = true
-        jfPreview = null
-        call("GET", "/api/jellyfin_search?q=" + encodeURIComponent(q), undefined, function (d) {
-            jfSearching = false
-            jfResults = { query: q, results: d && d.results ? d.results : [], error: !d }
-            jfRow = 1; var s = Object.assign({}, jfSel); s["search"] = 0; jfSel = s
+        var id = tabId
+        if (!q || !libTab) return
+        // results before searching: the search row text reads query
+        setLib(id, { results: { query: q, results: [] }, searching: true, preview: null })
+        call("GET", "/api/" + id + "_search?q=" + encodeURIComponent(q), undefined, function (d) {
+            setLib(id, { searching: false, results: { query: q, results: d && d.results ? d.results : [], error: !d },
+                         row: 1, sel: Object.assign({}, (libs[id] || {}).sel, { search: 0 }) })
         })
     }
-    // Rows of the Jellyfin tab: search, opened series, results, resume, next episodes, recently added
-    function jfRows() {
-        var rows = [{ kind: "search" }]
-        if (jfPreview)
-            rows.push({ kind: "preview", key: "preview", title: tr("{name} · episodes", { name: jfPreview.name }), items: jfPreview.episodes || [],
-                        loading: jfPreview.episodes === null })
-        if (jfResults) rows.push({ kind: "results", key: "search", title: tr("Results for \"{query}\"", { query: jfResults.query }), items: jfResults.results })
-        if (jf && jf.configured) {
-            if (jf.resume.length) rows.push({ kind: "jf", key: "resume", title: tr("Resume"), items: jf.resume })
-            if (jf.nextup.length) rows.push({ kind: "jf", key: "nextup", title: tr("Next episodes"), items: jf.nextup })
-            for (var i = 0; i < jf.libraries.length; i++)
-                rows.push({ kind: "jf", key: "lib:" + jf.libraries[i].id, title: tr("{name} · recently added", { name: jf.libraries[i].name }), items: jf.libraries[i].items })
+    // Rows of a library tab: search, opened series, results, resume, next episodes, recently added
+    function libRows() {
+        var rows = [{ kind: "search" }], home = lib.home, preview = lib.preview, results = lib.results
+        if (preview)
+            rows.push({ kind: "preview", key: "preview", title: tr("{name} · episodes", { name: preview.name }), items: preview.episodes || [],
+                        loading: preview.episodes === null })
+        if (results) rows.push({ kind: "results", key: "search", title: tr("Results for \"{query}\"", { query: results.query }), items: results.results })
+        if (home && home.configured) {
+            if (home.resume.length) rows.push({ kind: "lib", key: "resume", title: tr("Resume"), items: home.resume })
+            if (home.nextup.length) rows.push({ kind: "lib", key: "nextup", title: tr("Next episodes"), items: home.nextup })
+            for (var i = 0; i < home.libraries.length; i++)
+                rows.push({ kind: "lib", key: "lib:" + home.libraries[i].id, title: tr("{name} · recently added", { name: home.libraries[i].name }), items: home.libraries[i].items })
         }
         return rows
     }
-    function mediaRows() { return jfTab ? jfRows() : ytRows() }
+    function mediaRows() { return libTab ? libRows() : ytRows() }
     // Chosen series (or season): its episodes in a row just below the search, focus on the first unwatched
-    function jfOpenSeries(item) {
-        jfPreview = { id: item.series, name: item.title, episodes: null }
-        jfRow = 1
-        call("GET", "/api/jellyfin_series?id=" + encodeURIComponent(item.series), undefined, function (d) {
-            if (!jfPreview || jfPreview.id !== item.series) return
-            jfPreview = Object.assign({}, jfPreview, { episodes: d ? d.episodes : [] })
-            var s = Object.assign({}, jfSel); s["preview"] = d ? d.first : 0; jfSel = s
+    function libOpenSeries(item) {
+        var id = tabId
+        setLib(id, { preview: { id: item.series, name: item.title, episodes: null }, row: 1 })
+        call("GET", "/api/" + id + "_series?id=" + encodeURIComponent(item.series), undefined, function (d) {
+            var preview = (libs[id] || {}).preview
+            if (!preview || preview.id !== item.series) return
+            setLib(id, { preview: Object.assign({}, preview, { episodes: d ? d.episodes : [] }),
+                         sel: Object.assign({}, (libs[id] || {}).sel, { preview: d ? d.first : 0 }) })
         })
     }
-    function jfPlay(item, fromStart) {
-        call("POST", "/api/jellyfin_play", { id: item.id, from_start: !!fromStart }, function () { refreshSoon.restart() })
+    function libPlay(item, fromStart) {
+        call("POST", "/api/" + tabId + "_play", { id: item.id, from_start: !!fromStart }, function () { refreshSoon.restart() })
         close()
     }
-    function jfChoose(item) {
-        if (item.type === "Series" || item.type === "Season") return jfOpenSeries(item)
+    function libChoose(item) {
+        if (item.type === "Series" || item.type === "Season") return libOpenSeries(item)
         var name = item.episode ? item.title + " · " + item.episode : item.title
         var items = []
         if (Fmt.resumable(item.position, item.seconds, item.finished)) {
-            items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(item.position) }), ok: function () { jfPlay(item) } })
-            items.push({ label: tr("↺  From the beginning"), ok: function () { jfPlay(item, true) } })
-        } else items.push({ label: tr(item.finished ? "↺  Watch again" : "▶  Play"), ok: function () { jfPlay(item, true) } })
-        if (item.type === "Episode" && item.series && !(jfPreview && jfPreview.id === item.series))
-            items.push({ label: tr("☰  All episodes"), ok: function () { jfOpenSeries({ series: item.series, title: item.title }) } })
+            items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(item.position) }), ok: function () { libPlay(item) } })
+            items.push({ label: tr("↺  From the beginning"), ok: function () { libPlay(item, true) } })
+        } else items.push({ label: tr(item.finished ? "↺  Watch again" : "▶  Play"), ok: function () { libPlay(item, true) } })
+        if (item.type === "Episode" && item.series && !(lib.preview && lib.preview.id === item.series))
+            items.push({ label: tr("☰  All episodes"), ok: function () { libOpenSeries({ series: item.series, title: item.title }) } })
         openModal(name, items)
     }
     // Info line of a card in the row-based tabs
@@ -364,7 +380,7 @@ Item {
     }
     function cardMeta(row, it) {
         var parts
-        if (jfTab)
+        if (libTab)
             parts = it.type === "Series" ? [it.unplayed ? tr("{n} unwatched", { n: it.unplayed }) : tr("Series"), it.year]
                 : it.episode ? [it.episode] : [it.year, it.seconds ? hm(it.seconds) : ""]
         else if (row.kind === "subs")
@@ -381,7 +397,7 @@ Item {
         var r = mResults
         return mSearching ? tr("Searching for \"{query}\"…", { query: r.query })
             : r ? tr("New search  (\"{query}\")", { query: r.query })
-            : jfTab ? tr("Search Jellyfin") : tr("Search YouTube")
+            : tr("Search {service}", { service: libTab ? libName : "YouTube" })
     }
     function loadHistory() { call("GET", "/api/history", undefined, function (d) { history = d || []; checkArea() }) }
     function play(url, fromStart, item) {   // item: title and image for the loading screen and the history
@@ -413,7 +429,7 @@ Item {
     // clip → Replays, other link → History
     function mediaTab(d) {
         if (d.mode !== "media") return "live"
-        return { youtube: "youtube", jellyfin: "jellyfin", "twitch-vod": "replays", "twitch-clip": "replays" }[d.media_kind] || "history"
+        return { youtube: "youtube", jellyfin: "jellyfin", plex: "plex", "twitch-vod": "replays", "twitch-clip": "replays" }[d.media_kind] || "history"
     }
     function open() {
         powerOnly = false
@@ -425,7 +441,11 @@ Item {
         area = "rail"; railHome = false
         shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0; rebootUntil = 0
         follows = null; replays = ({}); history = null; rpLogin = ""; rpRow = 0; rpSel = [0, 0, 0]
-        jf = null; kbOpen = false   // search results stay from one opening to the next; yt too (reloaded in the background)
+        // libraries reloaded; search results stay from one opening to the next; yt too (reloaded in the background)
+        var all = {}
+        for (var id in libs) all[id] = Object.assign({}, libs[id], { home: null })
+        libs = all
+        kbOpen = false
         var list = st.streamers || []
         liveSel = Math.max(0, list.indexOf(st.channel))
         startFocus = true
@@ -458,7 +478,7 @@ Item {
         function onTextInput(text, submit) {
             if (!menu.kbOpen) return
             menu.kbText = text.slice(0, 80)
-            if (submit && menu.kbText.trim()) { menu.kbOpen = false; if (menu.jfTab) menu.jfSearch(menu.kbText); else menu.ytSearch(menu.kbText) }
+            if (submit && menu.kbText.trim()) { menu.kbOpen = false; if (menu.libTab) menu.libSearch(menu.kbText); else menu.ytSearch(menu.kbText) }
         }
     }
     Component.onCompleted: refresh()
@@ -789,11 +809,13 @@ Item {
                     : tr(nc === 1 ? "Your subscriptions and 1 channel · latest videos" : "Your subscriptions and {n} channels · latest videos", { n: nc })
             return nc ? tr(nc === 1 ? "1 channel · latest videos" : "{n} channels · latest videos", { n: nc })
                 : tr("Search for a video, or add channels from the companion app")
-        case "jellyfin":
-            if (!jf) return tr("Loading…")
-            if (jf.error) return tr("Jellyfin unreachable for now")
-            if (!jf.configured) return tr("Your Jellyfin library")
-            return tr("{server} · progress follows on all your devices", { server: jf.server })
+        case "jellyfin": case "plex":
+            var home = lib.home
+            if (!home) return tr("Loading…")
+            if (home.error) return tr("{service} unreachable for now", { service: libName })
+            if (!home.configured) return tr("Your {service} library", { service: libName })
+            return tr("{server} · progress follows on all your devices", { server: home.server })
+        case "libraries": return tr("Your movies and series from Jellyfin or Plex")
         case "settings": return tr("◀ ▶ to change a value")
         }
         return ""
@@ -801,6 +823,7 @@ Item {
 
     // Displayed tab: data loaded on the first visit
     onTabChanged: {
+        tabKept = tabs[tab].id
         stopPreview()
         tabEnter.restart()
         loadTab(tabs[tab].id)   // tabs[tab] and not tabId: the tabId binding is not recomputed yet here
@@ -943,7 +966,7 @@ Item {
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
         if (id === "youtube") loadYoutube()   // previous rows shown in the meantime
-        if (id === "jellyfin" && jf === null) loadJellyfin()
+        if ((id === "jellyfin" || id === "plex") && !(libs[id] || {}).home) loadLibrary(id)
         if (id === "replays") {
             if (!rpLogin) rpLogin = st.channel || (st.streamers || [])[0] || ""
             loadReplays(rpLogin)
@@ -996,7 +1019,7 @@ Item {
         case "live": return keyLive(k)
         case "follows": return keyFollows(k)
         case "replays": return keyReplays(k)
-        case "youtube": case "jellyfin": return keyMedia(k)
+        case "youtube": case "jellyfin": case "plex": return keyMedia(k)
         case "history": return keyHistory(k)
         case "settings": return keyRows(k, settingsRows())
         case "system": return keyRows(k, systemRows())
@@ -1010,6 +1033,7 @@ Item {
         if (id === "replays") return !list || list.length > 0
         if (id === "follows") return !follows || !!follows.configured
         if (id === "history") return !history || history.length > 0
+        if (id === "libraries") return false   // explanations only
         return true
     }
     // Nothing to focus in the content: the focus goes back to the rail (Live without streamers: the shortcuts)
@@ -1022,7 +1046,7 @@ Item {
     function enterContent() {
         var id = tabs[tab].id   // and not tabId: right after a tab change, its binding may not be recomputed yet
         if (!canEnter(id)) return
-        if (id === "youtube" || id === "jellyfin") { area = "content"; setRow(0); return }
+        if (id === "youtube" || id === "jellyfin" || id === "plex") { area = "content"; setRow(0); return }
         area = "content"
         checkArea()
         if (id === "replays") { rpRow = 0; rpSel = [Math.max(0, (st.streamers || []).indexOf(rpLogin)), rpSel[1], rpSel[2]] }
@@ -1077,8 +1101,8 @@ Item {
             } else if (row.items[sel]) chooseVideo(row.items[sel])
         }
     }
-    function setRow(v) { if (jfTab) jfRow = v; else ytRow = v }
-    function setMediaSel(s) { if (jfTab) jfSel = s; else ytSel = s }   // (setSel is the chosen row of Settings)
+    function setRow(v) { if (libTab) setLib(tabId, { row: v }); else ytRow = v }
+    function setMediaSel(s) { if (libTab) setLib(tabId, { sel: s }); else ytSel = s }   // (setSel is the chosen row of Settings)
     function keyMedia(k) {
         var rows = mediaRows()
         var r = Math.min(mRow, rows.length - 1)
@@ -1098,7 +1122,7 @@ Item {
         else if (k === "ok" && row.items[sel]) {
             if (row.kind === "chans") ytChannelMenu(row.items[sel])
             else if (row.kind === "connect") ytConnect(false)
-            else if (jfTab) jfChoose(row.items[sel])
+            else if (libTab) libChoose(row.items[sel])
             else chooseVideo(row.items[sel])
         }
     }
@@ -1114,7 +1138,7 @@ Item {
             if (key === "Space") kbText += " "
             else if (key === "Delete") kbText = kbText.slice(0, -1)
             else if (key === "Clear all") kbText = ""
-            else if (key === "Search") { if (kbText.trim()) { kbOpen = false; if (jfTab) jfSearch(kbText); else ytSearch(kbText) } }
+            else if (key === "Search") { if (kbText.trim()) { kbOpen = false; if (libTab) libSearch(kbText); else ytSearch(kbText) } }
             else if (kbText.length < 80) kbText += key
         }
     }
@@ -1192,7 +1216,8 @@ Item {
             LiveTab { menu: menu }
             FollowsTab { menu: menu }
             ReplaysTab { menu: menu }
-            MediaTab { menu: menu }   // YouTube and Jellyfin
+            MediaTab { menu: menu }   // YouTube, Jellyfin and Plex
+            LibrariesTab { menu: menu }
             HistoryTab { menu: menu }
             RowsTab { menu: menu; which: "settings" }
             RowsTab { menu: menu; which: "system" }

@@ -1,13 +1,13 @@
 """Stream Box: history and resume of the videos started from the companion app (history.json), and the video being
-played (now_playing, shared with playback.py, jellyfin.py and youtube.py). Standard library only.
+played (now_playing, shared with playback.py, jellyfin.py, plex.py and youtube.py). Standard library only.
 """
 import json, os, re, threading, time
 
 from i18n import tr
 
 # History and resume of videos started from the companion app (links, YouTube, Twitch replays and clips,
-# Jellyfin: that one keeps its own progress, the box's history only serves to find it again; link
-# "jellyfin:ID", without token). Twitch replays are synced with the connected account:
+# Jellyfin and Plex: they keep their own progress, the box's history only serves to find them again; links
+# "jellyfin:ID" and "plex:ID", without token). Twitch replays are synced with the connected account:
 # position read at start, written every 30 s. The rest is known only to the box.
 
 HISTORY_FILE = os.path.expanduser("~/.local/state/stream-box/history.json")
@@ -23,6 +23,12 @@ def media_key(url):
     m = re.fullmatch(r"jellyfin:([0-9a-f]{32})", url) or re.search(r"/Videos/([0-9a-f]{32})/", url)
     if m:
         return f"jellyfin:{m.group(1)}", "jellyfin", m.group(1)
+    m = re.fullmatch(r"plex:(\d{1,10})", url)
+    if m:
+        return f"plex:{m.group(1)}", "plex", m.group(1)
+    m = re.search(r"/library/parts/(\d+)/", url)   # file of a Plex server (the item id is not in the link)
+    if m:
+        return f"plex-part:{m.group(1)}", "plex", None
     m = re.search(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|live/)|youtu\.be/)([\w-]{11})", url)
     if m:
         return f"youtube:{m.group(1)}", "youtube", m.group(1)

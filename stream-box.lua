@@ -109,7 +109,7 @@ end
 -- user-data/streambox/loading { title, thumb } until the first frame (playback-restart), an error or 45 s at most;
 -- drawn by qml/LoadingOverlay.qml, or the centered status message with mpv alone
 local loading_timer, loading_osd = nil, false
-local function set_loading(title, thumb, kind)   -- kind: twitch, youtube, jellyfin or video (animation color)
+local function set_loading(title, thumb, kind)   -- kind: twitch, youtube, jellyfin, plex or video (animation color)
     if loading_timer then loading_timer:kill() loading_timer = nil end
     if title then
         mp.set_property_native("user-data/streambox/loading", { title = title, thumb = thumb or "", kind = kind or "video" })
@@ -205,7 +205,8 @@ local function play_media(url, start, title, thumb, label)
     stop_twitch()
     set_mode("media")
     local kind = (url:find("youtube%.com/") or url:find("youtu%.be/")) and "youtube"
-        or url:find("/Videos/%x+/stream") and "jellyfin" or url:find("twitch%.tv/") and "twitch" or "video"
+        or url:find("/Videos/%x+/stream") and "jellyfin" or url:find("/library/parts/%d+/") and "plex"
+        or url:find("twitch%.tv/") and "twitch" or "video"
     set_loading((label and label ~= "" and label) or (title and title ~= "" and title) or tr("the video"), thumb, kind)
     mp.set_property_bool("pause", false)   -- mpv keeps pause from one file to the next
     local at = tonumber(start) or 0
@@ -966,7 +967,7 @@ local function media_seek(dir)
     mp.set_property_native("user-data/streambox/seekfx", { text = (dir > 0 and "+" or "−") .. fmt_seek(seek_total), n = seek_n })
 end
 
--- Next episode (Jellyfin): remote.py publishes user-data/streambox/next_up { id, title, episode, thumb }; in the
+-- Next episode (Jellyfin, Plex): remote.py publishes user-data/streambox/next_up { id, title, episode, thumb, service, path }; in the
 -- last 20 seconds, a "Next episode in N s" card (OK: right away, Back: no); at the end, it starts
 local NEXT_BEFORE = 20
 local next_dismissed, next_shown = false, false
@@ -974,7 +975,10 @@ local next_dismissed, next_shown = false, false
 local function next_up()
     local n = mp.get_property_native("user-data/streambox/next_up")
     if not (n and n.id and n.of) then return nil end
-    return (mp.get_property("path") or ""):find("/Videos/" .. n.of .. "/", 1, true) and n or nil
+    local path = mp.get_property("path") or ""
+    -- Plex gives the link of the episode (its file has no item id), Jellyfin's link holds the id
+    local current = n.path and path == n.path or not n.path and path:find("/Videos/" .. n.of .. "/", 1, true)
+    return current and n or nil
 end
 local next_cache = nil   -- last valid next_up: at the end of the file, path can no longer be read
 local function play_next()
@@ -984,7 +988,8 @@ local function play_next()
     mp.set_property_native("user-data/streambox/next_card", {})
     mp.command_native_async({ name = "subprocess", playback_only = false, capture_stdout = true,
         args = { "curl", "-s", "-m", "10", "-X", "POST", "-H", "Content-Type: application/json",
-                 "-d", ('{"id":"%s","from_start":true}'):format(n.id), "http://127.0.0.1:8080/api/jellyfin_play" } }, function() end)
+                 "-d", ('{"id":"%s","from_start":true}'):format(n.id),
+                 ("http://127.0.0.1:8080/api/%s_play"):format(n.service or "jellyfin") } }, function() end)
 end
 local function hide_next(dismiss)
     if dismiss then next_dismissed = true end
