@@ -112,7 +112,7 @@ class Script(unittest.TestCase):
         self.assertFalse(get("pause"))
         self.assertAlmostEqual(get("time-pos"), fx["target"], delta=2)
         there = get("time-pos")
-        time.sleep(1)   # a new streak
+        time.sleep(1.6)   # a new streak
         self.ipc("script-message", "streambox-input", "TEST", "left")
         time.sleep(0.3)
         self.assertTrue(get("pause"))
@@ -121,7 +121,7 @@ class Script(unittest.TestCase):
         self.assertFalse(get("pause"))   # playing again, where it was
         self.assertAlmostEqual(get("time-pos"), there, delta=3)
         self.assertEqual(get("user-data/streambox/mode"), "media")   # Back gave up the scrub, did not stop the video
-        time.sleep(1.2)   # a new streak
+        time.sleep(1.6)   # a new streak
         # held key (repeats every 0.08 s, at most 8 jumps/s kept): the jumps grow to 1 min
         before = get("time-pos")
         for _ in range(8):
