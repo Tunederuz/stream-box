@@ -636,10 +636,9 @@ title over a light image.
 
 ### Video playback bar (Qt app)
 
-- Scrubbing (stream-box.lua `media_seek`, `scrub`): ← → in a video pause it and move a target; the jump follows the
-  key's pace (`seek_gap`: time between presses, averaged with the previous one; at most 8 jumps/s): ≥ 0.3 s 10 s,
-  ≥ 0.18 s 30 s (quick taps), faster (held key, repeated every 0.08 s by input.py) 1 min; a gap over 0.8 s or the
-  other direction starts again at 10 s; `user-data/streambox/seekfx`
+- Scrubbing (stream-box.lua `media_seek`, `scrub`): ← → in a video pause it and move a target; each press jumps 10 s,
+  however fast; only a held key speeds up (`seek_held`: less than 0.2 s since the previous jump means repeats, which
+  input.py sends every 0.08 s; at most 8 jumps/s kept): 10 s for the first second held, 30 s for the next, then 1 min; `user-data/streambox/seekfx`
   {text: offset from where it started, n, target}: InfoBar.qml puts the cursor, the time and the preview on the
   target and keeps the "+2 min 30" bubble while scrubbing. OK (`scrub_end(true)`) seeks there and plays; Back or any
   other key gives up: back where it was, playing or paused as before (seekfx {n} without text). The −10 s / +10 s
