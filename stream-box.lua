@@ -463,6 +463,7 @@ local function set_live_buffer(behind)
     mp.set_property("demuxer-max-bytes", behind and "150MiB" or "750KiB")
 end
 
+local scrub = nil   -- video: { from, target, paused } while scrubbing with ← → (see media_seek)
 local function draw_bar()
     if qt_ui() then   -- drawn by qml/InfoBar.qml, from user-data/streambox/bar
         bar:remove()
@@ -470,7 +471,7 @@ local function draw_bar()
     end
     local w, h = mp.get_osd_size()
     if not w or w == 0 then return end
-    local pos = mp.get_property_number("time-pos") or 0
+    local pos = scrub and scrub.target or mp.get_property_number("time-pos") or 0
     local dur = mp.get_property_number("duration")
     local cached = mp.get_property_number("demuxer-cache-time")
     local title = mp.get_property("media-title") or ""
@@ -776,7 +777,9 @@ mp.register_event("end-file", close_info)
 -- Video playback: accelerating fast forward, row of buttons under the bar (Qt app), next episode
 -- (Jellyfin). States published for InfoBar.qml and NextUp.qml: seekfx, controls, next_card; remote.py publishes next_up.
 
--- Fast forward: close presses or a held key → jumps of 10 s, then 30 s, then 1 min; total displayed
+-- Fast forward: close presses or a held key → jumps of 10 s, then 30 s, then 1 min.
+-- ← → on the bar scrub: the video pauses and a target moves (cursor and preview there, offset displayed); OK goes there
+-- and plays, Back gives up (back where it was, playing or paused as before). The ⏪ ⏩ buttons of the row jump at once.
 local seek_last, seek_streak, seek_total, seek_dir, seek_n = 0, 0, 0, 0, 0
 local function fmt_seek(t)
     t = math.abs(t)
@@ -784,17 +787,40 @@ local function fmt_seek(t)
     local m, sec = math.floor(t / 60), t % 60
     return sec > 0 and ("%d min %02d"):format(m, sec) or ("%d min"):format(m)
 end
-local function media_seek(dir)
+local function media_seek(dir, at_once)
     local now = mp.get_time()
     if now - seek_last < 0.12 then return end   -- repeat of a held key: no more than 8 jumps per second
     if now - seek_last < 0.8 and dir == seek_dir then seek_streak = seek_streak + 1 else seek_streak, seek_total = 0, 0 end
     seek_last, seek_dir = now, dir
     local step = seek_streak < 3 and 10 or seek_streak < 9 and 30 or 60
-    seek_total = seek_total + step
     seek_n = seek_n + 1
-    mp.commandv("seek", tostring(step * dir))
-    mp.set_property_native("user-data/streambox/seekfx", { text = (dir > 0 and "+" or "−") .. fmt_seek(seek_total), n = seek_n })
+    if at_once then
+        seek_total = seek_total + step
+        mp.commandv("seek", tostring(step * dir))
+        mp.set_property_native("user-data/streambox/seekfx", { text = (dir > 0 and "+" or "−") .. fmt_seek(seek_total), n = seek_n })
+        return
+    end
+    if not scrub then
+        local pos = mp.get_property_number("time-pos")
+        if not pos then return end
+        scrub = { from = pos, target = pos, paused = mp.get_property_native("pause") }
+        mp.set_property_native("pause", true)
+    end
+    local dur = mp.get_property_number("duration") or 0   -- unknown (0): no end to stop at
+    scrub.target = math.max(0, scrub.target + step * dir)
+    if dur > 1 then scrub.target = math.min(dur - 1, scrub.target) end
+    local offset = scrub.target - scrub.from
+    mp.set_property_native("user-data/streambox/seekfx", { text = (offset < 0 and "−" or "+") .. fmt_seek(math.floor(offset + 0.5)),
+                                                           n = seek_n, target = scrub.target })
 end
+local function scrub_end(go)
+    if not scrub then return end
+    if go then mp.commandv("seek", tostring(scrub.target), "absolute") end
+    mp.set_property_native("pause", not go and scrub.paused)
+    scrub = nil
+    mp.set_property_native("user-data/streambox/seekfx", { n = seek_n })
+end
+mp.register_event("end-file", function() scrub = nil end)
 
 -- Next episode (Jellyfin, Plex): remote.py publishes user-data/streambox/next_up { id, title, episode, thumb, service, path }; in the
 -- last 20 seconds, a "Next episode in N s" card (OK: right away, Back: no); at the end, it starts
@@ -875,7 +901,7 @@ local function controls_key(key)
     elseif key == "back" then ctrl_focus = nil
     elseif key == "ok" then
         local id = (list[ctrl_focus] or {}).id
-        if id == "back" or id == "fwd" then media_seek(id == "fwd" and 1 or -1)
+        if id == "back" or id == "fwd" then media_seek(id == "fwd" and 1 or -1, true)
         elseif id == "play" then mp.commandv("cycle", "pause")
         elseif id == "tracks" then open_tracks()
         elseif id == "quality" then open_tracks("quality")
@@ -976,6 +1002,11 @@ local function on_key(key)
     if info_open then
         info_key(key)
         return
+    end
+    if scrub and mode == "media" and key ~= "left" and key ~= "right" then   -- scrubbing: OK goes there, the rest gives up
+        scrub_end(key == "ok")
+        show_bar()
+        if key == "ok" or key == "back" then return end
     end
     if next_shown and mode == "media" and (key == "ok" or key == "back") then   -- "Next episode" card
         if key == "ok" then play_next() else hide_next(true) end

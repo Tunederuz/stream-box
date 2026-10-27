@@ -83,6 +83,47 @@ class Script(unittest.TestCase):
         self.assertEqual(self.ipc("get_property", "user-data/streambox/night").get("data"), True)
         self.assertEqual(self.lua_errors(), [])
 
+    def test_scrub(self):
+        # ← → in a video pause it and move a target; OK goes there and plays, Back gives up
+        def get(name):
+            return self.ipc("get_property", name).get("data")
+        for _ in range(50):   # the startup's home screen (after 3 s) would stop the video
+            if get("user-data/streambox/mode") == "home":
+                break
+            time.sleep(0.2)
+        video = os.path.join(self.dir, "video.mkv")   # a real file: lavfi sources report no usable duration
+        subprocess.run(["mpv", "--no-config", "av://lavfi:testsrc=duration=120:size=64x36:rate=2", "--o=" + video],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        self.ipc("loadfile", video)
+        for _ in range(50):
+            if get("time-pos") is not None and get("user-data/streambox/mode") == "media":
+                break
+            time.sleep(0.1)
+        start = get("time-pos")
+        for _ in range(2):
+            self.ipc("script-message", "streambox-input", "TEST", "right")
+            time.sleep(0.3)
+        fx = get("user-data/streambox/seekfx")
+        self.assertTrue(get("pause"))
+        self.assertAlmostEqual(fx["target"], start + 20, delta=1.5)
+        self.assertEqual(fx["text"], "+20 s")
+        self.ipc("script-message", "streambox-input", "TEST", "ok")
+        time.sleep(0.8)
+        self.assertFalse(get("pause"))
+        self.assertAlmostEqual(get("time-pos"), fx["target"], delta=2)
+        there = get("time-pos")
+        time.sleep(1)   # a new streak
+        self.ipc("script-message", "streambox-input", "TEST", "left")
+        time.sleep(0.3)
+        self.assertTrue(get("pause"))
+        self.ipc("script-message", "streambox-input", "TEST", "back")
+        time.sleep(0.5)
+        self.assertFalse(get("pause"))   # playing again, where it was
+        self.assertAlmostEqual(get("time-pos"), there, delta=3)
+        self.assertEqual(get("user-data/streambox/mode"), "media")   # Back gave up the scrub, did not stop the video
+        self.ipc("stop")
+        self.assertEqual(self.lua_errors(), [])
+
 
 if __name__ == "__main__":
     unittest.main()

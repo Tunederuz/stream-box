@@ -636,9 +636,13 @@ title over a light image.
 
 ### Video playback bar (Qt app)
 
-- Fast-forward that speeds up (stream-box.lua `media_seek`): presses close together (< 0.8 s) or key held down (at most
-  8 jumps/s) → 10 s ×3, then 30 s, then 1 min; total published in `user-data/streambox/seekfx` {text, n}, bubble
-  "+2 min 30" above the cursor (InfoBar.qml). Also works with mpv alone (without the bubble).
+- Scrubbing (stream-box.lua `media_seek`, `scrub`): ← → in a video pause it and move a target (presses close together,
+  < 0.8 s, or key held down, at most 8 jumps/s → 10 s ×3, then 30 s, then 1 min); `user-data/streambox/seekfx`
+  {text: offset from where it started, n, target}: InfoBar.qml puts the cursor, the time and the preview on the
+  target and keeps the "+2 min 30" bubble while scrubbing. OK (`scrub_end(true)`) seeks there and plays; Back or any
+  other key gives up: back where it was, playing or paused as before (seekfx {n} without text). The −10 s / +10 s
+  buttons of the row jump at once (`media_seek(dir, true)`). Also works with mpv alone (cursor on the target, no
+  bubble).
 - Row of buttons: ↓ goes down to it (focus on Pause/Play), ← → and OK, ↑ selects the title, Back goes back up;
   Subtitles, −10 s, Pause/Play, +10 s, Quality (YouTube), Next chapter (if there are chapters), Next
   episode (Jellyfin). Row centered on Pause/Play (InfoBar.qml `playIndex`). `ctrl_focus`,

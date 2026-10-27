@@ -1,7 +1,7 @@
 // Bottom bar (Qt app), shown when stream-box.lua decides so (OK during a live, ←/→ or pause in a video):
 // live (photo, title, game, viewers, live duration, time-shift buffer and "LIVE" or the delay) or playback bar of a
 // video (title, channel or series, chapter, position, buffered part, chapter marks, YouTube preview above the
-// cursor, seek in progress "+30 s", remaining time and end time, row of buttons). Slides up.
+// cursor, seek in progress "+30 s" or scrubbing target, remaining time and end time, row of buttons). Slides up.
 import QtQuick
 import QtQuick.Effects
 import "fmt.js" as Fmt
@@ -20,7 +20,7 @@ Item {
     property var avatars: ({})
     // Bar: in a live, the time-shift buffer (its right end is live); in a video, the duration
     readonly property real span: live ? (pb.window ? pb.window[1] - pb.window[0] : 0) : (pb.duration || 0)
-    readonly property real at: live ? (pb.window ? (pb.pos || 0) - pb.window[0] : 0) : (pb.pos || 0)
+    readonly property real at: live ? (pb.window ? (pb.pos || 0) - pb.window[0] : 0) : scrubbing ? fx.target : (pb.pos || 0)
     readonly property real delay: live && pb.window ? pb.window[1] - (pb.pos || 0) : 0
     // Bar color depending on the source: YouTube red, Jellyfin blue (link to its server: /Videos/…), Plex amber
     // (/library/parts/…), otherwise Twitch purple
@@ -41,10 +41,15 @@ Item {
     readonly property string details: (meta.source === "youtube" ? [meta.channel, meta.date, meta.views ? tr("{n} views", { n: Fmt.big(meta.views, tr) }) : ""]
         : meta.source === "jellyfin" || meta.source === "plex" ? [meta.year, meta.rating ? "★ " + Fmt.decimal(meta.rating, tr) : ""]   // series and episode: already in the title
         : []).concat([chapterTitle]).filter(function (t) { return !!t }).join("  ·  ")
-    // YouTube preview and "+30 s" bubble: only while seeking forward or back (not when the bar is just shown)
+    // Preview and "+30 s" bubble: only while seeking forward or back (not when the bar is just shown). Scrubbing (← →
+    // in a video, stream-box.lua): the video is paused, the cursor, preview and offset stay on the target until OK / Back
+    readonly property bool scrubbing: !live && fx.target !== undefined
     property bool seeking: false
     property int lastSeekN: -1
-    onFxChanged: if (fx.n !== undefined && fx.n !== lastSeekN) { lastSeekN = fx.n; seeking = true; seekEnd.restart() }
+    onFxChanged: {
+        if (fx.n !== undefined && fx.n !== lastSeekN) { lastSeekN = fx.n; seeking = true; seekEnd.restart() }
+        if (!fx.text) seeking = false   // scrubbing over
+    }
     Timer { id: seekEnd; interval: 1500; onTriggered: root.seeking = false }
     property date now: new Date()
     Timer { interval: 15000; repeat: true; running: root.visible; triggeredOnStart: true; onTriggered: root.now = new Date() }
@@ -213,7 +218,7 @@ Item {
                     return null
                 }
                 readonly property real s: 280 / Math.max(1, bd.width || 160)
-                visible: ok && !!tile && root.seeking
+                visible: ok && !!tile && (root.seeking || root.scrubbing)
                 width: (bd.width || 160) * s
                 height: (bd.height || 90) * s
                 x: Math.max(0, Math.min(track.width - width, track.width * track.played - width / 2))
@@ -249,10 +254,11 @@ Item {
             Connections {
                 target: root
                 function onFxChanged() {
+                    if (!root.fx.text) { fxHide.stop(); seekBubble.opacity = 0; return }   // scrubbing over
                     if (root.fx.n !== undefined && root.fx.n !== seekBubble.lastN) {
                         seekBubble.lastN = root.fx.n
                         seekBubble.opacity = 1
-                        fxHide.restart()
+                        if (root.scrubbing) fxHide.stop(); else fxHide.restart()
                     }
                 }
             }
