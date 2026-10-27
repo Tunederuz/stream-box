@@ -46,10 +46,14 @@ for part in $(lsblk -lnpo NAME "$DEV" | tail -n +2); do
   umount -R "$part" 2> /dev/null || true
 done
 wipefs -aq "$DEV"
-sfdisk -q --wipe always "$DEV" << 'PARTS'
+# System A takes the label of the running system partition (stream-box_<version>): its UKI, copied below, boots it by
+# that label (root=PARTLABEL=…), and systemd-sysupdate reads the version from it
+ROOT_LABEL=$(blkid -p -o value -s PART_ENTRY_NAME "$(findmnt -no SOURCE / | sed 's/\[.*//')" 2> /dev/null)
+[[ "$ROOT_LABEL" =~ ^[A-Za-z0-9_.~+-]+$ ]] || ROOT_LABEL=root-x86-64
+sfdisk -q --wipe always "$DEV" << PARTS
 label: gpt
 size=512MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="esp"
-size=5GiB, type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="root-x86-64"
+size=5GiB, type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="$ROOT_LABEL"
 size=5GiB, type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="_empty", attrs="GUID:63"
 type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="data"
 PARTS

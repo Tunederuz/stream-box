@@ -1,0 +1,24 @@
+# Stream Box A/B: the UKI of the latest release (stream-box_<version>.efi) into the ESP, with 3 tries: systemd-boot
+# starts the newest one, systemd-bless-boot keeps it once boot-complete.target is reached (stream-box-boot-check:
+# the box's server answers), otherwise after 3 failed boots systemd-boot goes back to the previous one.
+[Transfer]
+ProtectVersion=%A
+
+[Source]
+Type=url-file
+Path=https://github.com/Tunederuz/stream-box/releases/latest/download/
+MatchPattern=stream-box_@v.efi
+
+[Target]
+Type=regular-file
+Path=/EFI/Linux
+PathRelativeTo=boot
+MatchPattern=stream-box_@v+@l-@d.efi \
+             stream-box_@v+@l.efi \
+             stream-box_@v.efi
+# 0644, not 0444: a read-only file on the FAT ESP gets the read-only attribute, and systemd-boot then cannot
+# rename it to count the tries (no LoaderBootCountPath: the new version would never be kept nor rolled back)
+Mode=0644
+TriesLeft=3
+TriesDone=0
+InstancesMax=2

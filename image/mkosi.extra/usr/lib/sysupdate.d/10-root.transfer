@@ -1,0 +1,17 @@
+# Stream Box A/B: the system partition of the latest release (stream-box_<version>.root-x86-64.raw.xz, listed in its
+# SHA256SUMS, signed: /etc/systemd/import-pubring.pgp) written into the system partition not in use, labelled
+# stream-box_<version> (the UKI of that version boots it: root=PARTLABEL=…). Two slots: the one running is protected.
+[Transfer]
+ProtectVersion=%A
+
+[Source]
+Type=url-file
+Path=https://github.com/Tunederuz/stream-box/releases/latest/download/
+MatchPattern=stream-box_@v.root-x86-64.raw.xz
+
+[Target]
+Type=partition
+Path=auto
+MatchPattern=stream-box_@v
+MatchPartitionType=root
+InstancesMax=2

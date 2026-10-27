@@ -923,6 +923,37 @@ boot: 5 GB system, data partition, binds), settings made there (language, develo
 blank disk (A, B no-auto, data), boot from the disk alone (same settings, same SSH host key), then /etc state removed
 (sudo of the developer mode, media's password, sshd disabled) and put back at the next boot.
 
+### A/B system updates (step 2: release files, sysupdate, rollback)
+Versioned build: `VERSION` (release workflow: the tag without its v; otherwise `git describe`, e.g. 0.1.1-15-gabc)
+→ `mkosi --image-version` (IMAGE_VERSION in os-release), system partition labelled `stream-box_<version>`
+(mkosi.repart/10-root.conf, `%A`), UKI booting it by that label (`root=PARTLABEL=stream-box_%v` in
+KernelCommandLine): each UKI goes with its own system partition, falling back to the previous UKI falls back to the
+previous system. `SplitArtifacts=uki,partitions`: `bash image/build.sh release` (after build; `FROM=stream-box-test`
+for the test image) makes mkosi.output/release: stream-box.raw.xz (disk image, to install),
+stream-box_<version>.root-x86-64.raw.xz, stream-box_<version>.efi, SHA256SUMS. The workflow signs SHA256SUMS
+(SHA256SUMS.gpg) with the secret RELEASE_SIGNING_KEY (ed25519 key "Stream Box releases", fingerprint
+21B56DA5485308DDF1F7E8585167D4557A63D205; public part in image/release-signing-key.asc and, binary, in
+/etc/systemd/import-pubring.pgp of the image, which systemd-sysupdate checks) and stops before building without it.
+On the box: /usr/lib/sysupdate.d/10-root.transfer (latest release's system partition → the root partition not in use,
+`InstancesMax=2`, `ProtectVersion=%A`: the running one is never touched; label stream-box_<version>)
+and 20-uki.transfer (UKI → ESP /EFI/Linux, `TriesLeft=3`: stream-box_<version>+3-0.efi). Source:
+github.com/Tunederuz/stream-box/releases/latest/download/. systemd-boot starts the newest UKI; systemd-bless-boot
+keeps it once boot-complete.target is reached, which requires stream-box-boot-check.service (boot-check: remote.py
+answers within 3 min; otherwise, on a boot that is counted — LoaderBootCountPath EFI variable, the selected entry's
+name has no tries in it — reboot, and after 3 failures systemd-boot goes back to the previous UKI and system). The UKI
+is written 0644: 0444 sets the FAT read-only attribute and systemd-boot then cannot rename it to count (no
+LoaderBootCountPath, the new version is neither kept nor rolled back). mkosi names the UKI in the ESP
+stream-box_<version>.efi (`UnifiedKernelImageFormat=%i_%v`; default: after the kernel version, which sysupdate would
+not count as an installed instance). systemd-sysupdate is /usr/lib/systemd/systemd-sysupdate (not in PATH).
+Tested in QEMU with two test builds (0.2.0-test1 installed from a stick, 0.2.0-test2 served locally, SHA256SUMS signed
+with the real key): update into slot B (signature checked, 37 s), reboot on test2 from B (file system grown, data and
+developer mode back), kept by systemd-bless-boot; then test2 broken (remote.py removed) and put back on trial: the
+box rebooted after 3 min and came back on test1 from slot A by itself, test2 marked bad (+0-1). A system partition written by an update has a file system
+shrunk to the minimum: `persist mount` grows it (`btrfs filesystem resize max /`). The installer labels system A like
+the running system partition (its UKI boots it by label). Limit: two disks with the same `stream-box_<version>`
+partition (the USB drive left plugged in after installing the same version) make `root=PARTLABEL` ambiguous: remove
+the stick after installing.
+
 ### System update (image)
 "Update now" (System menu, companion app) and the weekly update run update.sh (media: venvs, token server, cast
 receiver), which ends by starting `stream-box-system-update.service` (root; polkit rule 56 lets media start it, nothing

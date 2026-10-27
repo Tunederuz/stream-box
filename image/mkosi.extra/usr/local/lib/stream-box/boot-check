@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Stream Box: is the box working? (stream-box-boot-check.service, required by boot-complete.target). A/B updates: a
+# new system starts with 3 tries (UKI stream-box_<version>+3-0.efi); systemd-bless-boot keeps it for good only once
+# boot-complete.target is reached, so only once this succeeds: the box's server (remote.py, in the session) answers.
+# Otherwise, on a system still being tried, the PC restarts: after 3 failed boots systemd-boot goes back to the
+# previous version. On a system already kept, nothing (no restart loop).
+set -uo pipefail
+for _ in $(seq 90); do   # up to 3 min: the first boot of a new system does more (partition grown, keys…)
+  curl -sf -m 3 -o /dev/null http://127.0.0.1:8080/api/state && exit 0
+  sleep 2
+done
+echo "the box's server does not answer"
+# Boot counting on this boot (systemd-boot sets LoaderBootCountPath only then; the selected entry's name has no tries
+# in it): a try that failed
+if compgen -G "/sys/firmware/efi/efivars/LoaderBootCountPath-*" > /dev/null; then
+  echo "system on trial: restart, the previous version takes over after 3 failures"
+  systemctl reboot
+fi
+exit 1

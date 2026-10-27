@@ -11,6 +11,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   your settings, accounts, Bluetooth pairings and Wi-Fi networks when the system is replaced. Boxes already installed
   keep working as they are.
 - The streamer list moved into the settings folder (moved by itself, nothing to do).
+- Releases now also contain the system partition and the kernel as separate files, with a signed checksum list: what
+  A/B updates will download.
 
 ## [0.1.1]
 

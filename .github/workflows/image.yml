@@ -1,5 +1,9 @@
-# Disk image on every version tag (v1.0, v1.1…): image/build.sh (mkosi in a privileged Arch container), compressed,
-# published as a GitHub release with its checksum. Release files are limited to 2 GB: the .xz is about 1.6 GB.
+# Release on every version tag (v0.2.0…): image/build.sh (mkosi in a privileged Arch container) with the tag's version,
+# then its release files (build.sh release): the disk image to install (stream-box.raw.xz), the system partition and
+# the UKI for A/B updates (stream-box_<version>.root-x86-64.raw.xz, stream-box_<version>.efi: systemd-sysupdate on the
+# boxes), SHA256SUMS and its signature SHA256SUMS.gpg (secret RELEASE_SIGNING_KEY, the private key of
+# image/release-signing-key.asc; the boxes check it with /etc/systemd/import-pubring.pgp). Release files are limited
+# to 2 GB: each .xz is about 1.5 GB.
 name: image
 on:
   push:
@@ -18,12 +22,20 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
-      - run: bash image/build.sh
-      - run: bash image/build.sh xz
-      - name: Checksum
+      - name: Signing key   # before the 20 min build: an unsigned release would be refused by the boxes anyway
+        env:
+          KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
         run: |
-          cp image/mkosi.output/stream-box.raw.xz .
-          sha256sum stream-box.raw.xz > stream-box.raw.xz.sha256
+          [ -n "$KEY" ] || { echo "::error::secret RELEASE_SIGNING_KEY missing (Settings → Secrets → Actions)"; exit 1; }
+          echo "$KEY" | gpg --batch --import
+      - run: VERSION="${GITHUB_REF_NAME#v}" bash image/build.sh
+      - run: VERSION="${GITHUB_REF_NAME#v}" bash image/build.sh release
+      - name: Sign
+        run: |
+          sudo chown -R "$(id -u)" image/mkosi.output/release
+          cd image/mkosi.output/release
+          gpg --batch --yes --detach-sign -o SHA256SUMS.gpg SHA256SUMS
+          ls -la
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -36,8 +48,8 @@ jobs:
           install='Flash `stream-box.raw.xz` on a USB stick (balenaEtcher, Rufus), boot the PC on it, then TV menu → System → "Install on this PC". See the README'"'"'s Installation section.'
           notes=$(printf '%s\n\n### Install\n%s\n' "$changes" "$install")
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" stream-box.raw.xz stream-box.raw.xz.sha256 --clobber
+            gh release upload "$GITHUB_REF_NAME" image/mkosi.output/release/* --clobber
             gh release edit "$GITHUB_REF_NAME" --draft=false --title "Stream Box $GITHUB_REF_NAME" --notes "$notes"
           else
-            gh release create "$GITHUB_REF_NAME" stream-box.raw.xz stream-box.raw.xz.sha256 --title "Stream Box $GITHUB_REF_NAME" --notes "$notes"
+            gh release create "$GITHUB_REF_NAME" image/mkosi.output/release/* --title "Stream Box $GITHUB_REF_NAME" --notes "$notes"
           fi

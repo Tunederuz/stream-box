@@ -40,6 +40,9 @@ data_partition() {   # partition labelled "data" on the disk of /
 
 case "${1:-}" in
   mount)
+    # System partition written by an A/B update: its file system was shrunk to the minimum for the release, grown here
+    # to the partition (does nothing once done)
+    if [ "$(findmnt -no FSTYPE /)" = btrfs ]; then btrfs filesystem resize max / > /dev/null 2>&1 || true; fi
     part=$(data_partition)
     [ -n "$part" ] || { echo "no data partition: settings stay on the system partition"; exit 0; }
     mkdir -p "$DATA"
