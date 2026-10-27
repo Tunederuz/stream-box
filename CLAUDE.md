@@ -896,6 +896,24 @@ by `qml/shaders/build.sh` (Docker, PySide6 of the same version as the box: Essen
 half resolution (`layer.textureSize`, `ShaderLayer` component). Measured cost: ~25 % of a core for ui.py whatever
 the background, menu included.
 
+### System update (image)
+"Update now" (System menu, companion app) and the weekly update run update.sh (media: venvs, token server, cast
+receiver), which ends by starting `stream-box-system-update.service` (root; polkit rule 56 lets media start it, nothing
+else). `/usr/local/lib/stream-box/system-update`: its own root-owned clone (`/var/lib/stream-box/src`, from GitHub:
+what is installed as root never comes from media's copy) → latest `v*` tag → system files of `image/mkosi.extra`
+installed when their sha256 differs, those a release dropped removed (`/var/lib/stream-box/system-files`: list of the
+previous one; none before the first run), daemon-reload, units of /etc/systemd/system/stream-box-* with an [Install]
+section enabled → media's code fast-forwarded to the tag (`runuser -u media`, `fetch --tags --force`: a moved tag
+such as page-v1 made the fetch fail), never backwards (`ahead`: kept) → session restarted when something changed and
+`/api/state` says `home`, otherwise `restart: pending` (next restart). Result in
+`/var/lib/stream-box/system-update.json` {ok, message ("failed: <step>"), version, files, code: updated | same |
+ahead, restart: now | pending | no, date}: `/api/health` → `update.system` {running, last}; TV: value of the "Update
+now" row (version, "restart to finish", "System: failed"); companion app: under the update log. Not the Arch packages
+nor the kernel. A box installed from an image without it (v0.1) needs the three files installed once by hand
+(developer mode: system-update, its service, rule 56). Tested in QEMU: polkit, ahead, behind → fast-forward and
+restart, the whole chain from `POST /api/update`. update.sh lists the changed packages with `comm` (the image has
+no diffutils: `diff` made it log "failed").
+
 ### On a USB drive (flash-mode, image)
 `/usr/local/lib/stream-box/flash-mode` (`stream-box-flash-mode.service`, at each boot before greetd): when `/` is on a
 USB disk (`lsblk -dno TRAN` = usb: the image on a stick, before "Install on this PC" or kept there), fewer writes to

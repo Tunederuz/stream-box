@@ -18,7 +18,8 @@ update() {
     echo "$1: pip failed, nothing changed?"
   fi
   if bash -c "$test" > /dev/null 2>&1; then
-    local changed; changed=$(diff <(sort "$before") <("$venv/bin/pip" freeze | sort) | grep '^>' | sed "s/^> /$1: /")
+    # (comm and not diff: the image has no diffutils)
+    local changed; changed=$(comm -13 <(sort "$before") <("$venv/bin/pip" freeze | sort) | sed "s/^/$1: /")
     echo "${changed:-$1: already up to date}"
   else
     echo "$1: the test fails after the update, back to the previous versions"

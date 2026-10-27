@@ -70,7 +70,7 @@ done
 step=code
 want=$(git -C "$SRC" rev-parse "refs/tags/$tag^{commit}")
 if [ "$(runuser -u media -- git -C "$BOX" rev-parse HEAD)" != "$want" ]; then
-  runuser -u media -- git -C "$BOX" fetch -q --tags origin
+  runuser -u media -- git -C "$BOX" fetch -q --tags --force origin   # tags moved upstream (page-v1) are taken as they are
   if runuser -u media -- git -C "$BOX" merge-base --is-ancestor HEAD "$want"; then
     runuser -u media -- git -C "$BOX" merge -q --ff-only "$want"
     code=updated
