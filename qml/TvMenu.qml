@@ -807,7 +807,8 @@ Item {
     }
     // Card preview: after a moment on a YouTube card, its video plays muted in the thumbnail (VideoCard.previewWanted
     // → startPreview; link from remote.py, player "cardPreview" of ui.py, drawn by menu/CardPreview.qml). The links of
-    // the cards around the focused one are resolved in advance (about 3 s each otherwise).
+    // the cards around the focused one are resolved in advance (about 3 s each otherwise). Live tab: the live of the
+    // chosen streamer in the banner ("twitch:<login>", streamlink started by ui.py).
     property var previewRect: null   // thumbnail of the previewed card, in menu coordinates; null: no preview
     property string previewFor: ""   // link of the video being previewed (or whose link is being fetched)
     function startPreview(item, picture) {
@@ -815,6 +816,11 @@ Item {
         var url = item.url
         previewFor = url
         var r = picture.mapToItem(menu, 0, 0, picture.width, picture.height)
+        if (url.indexOf("twitch:") === 0) {   // live: ui.py starts its own streamlink
+            previewRect = { x: r.x, y: r.y, width: r.width, height: r.height }
+            cardPreview.play(url, 0)
+            return
+        }
         call("GET", "/api/card_preview?u=" + encodeURIComponent(url), undefined, function (d) {
             if (previewFor !== url || !d || !d.url) return   // the focus moved in the meantime
             previewRect = { x: r.x, y: r.y, width: r.width, height: r.height }
@@ -980,7 +986,9 @@ Item {
         if (k === "down") return sel + cols < count ? sel + cols : (Math.floor(sel / cols) < Math.floor((count - 1) / cols) ? count - 1 : sel)
         return sel
     }
+    property int keyCount: 0   // keys received while open (LiveTab: the banner preview starts again after a key)
     function key(k) {
+        keyCount++
         idleClose.restart()
         startFocus = false
         stopPreview()   // any key: the focus moves, a dialog opens, or the video starts for real

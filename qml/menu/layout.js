@@ -9,5 +9,6 @@ var cardW = 456         // VideoCard: 3 per row (Replays, YouTube, Jellyfin, His
 var cardH = 363         // its height: 16:9 thumbnail, title, info
 var cardStep = 482      // card and spacing in a row, column of History
 var rowH = 430          // row of cards: one full row, the top of the next one showing
+var bannerH = 300      // Live tab: banner of the chosen streamer (16:9 picture, then its live)
 var cellW = 356         // streamer grid (Live, Following): StreamerCard and its margins
 var cellH = 176

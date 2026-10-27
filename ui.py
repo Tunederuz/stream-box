@@ -407,9 +407,13 @@ pip = Pip()
 preview_player = None  # third libmpv player: muted video of the focused TV menu card, created in main()
 
 
+PREVIEW_PORT = 34591   # streamlink of the live previews
+
+
 class CardPreview(QObject):
-    """Muted preview of the focused TV menu card (qml/TvMenu.qml): plays a direct link in preview_player, in a loop;
-    ready once its first frame is there (the card's thumbnail then fades into the video)"""
+    """Muted preview of the focused TV menu card (qml/TvMenu.qml): plays a direct link in preview_player, in a loop,
+    or "twitch:<login>", a live through its own streamlink (360p); ready once its first frame is there (the thumbnail
+    then fades into the video)"""
     changed = Signal()
     _ready_in = Signal(bool)   # from the mpv thread
 
@@ -417,6 +421,11 @@ class CardPreview(QObject):
         super().__init__()
         self._ready = False
         self._ready_in.connect(self._set_ready, Qt.QueuedConnection)
+        self.proc = None
+        self.idle = True   # preview_player has nothing loaded (written from the mpv thread)
+        self.tries = 0
+        self.retry = QTimer(self, interval=1500)   # until streamlink serves the live
+        self.retry.timeout.connect(self.load_live)
 
     ready = Property(bool, lambda self: self._ready, notify=changed)
 
@@ -427,13 +436,38 @@ class CardPreview(QObject):
 
     @Slot(str, float)
     def play(self, url, start):
-        self._set_ready(False)
+        self.stop()
+        login = url[len("twitch:"):] if url.startswith("twitch:") else None
+        if login is not None:
+            if not re.fullmatch(r"[a-z0-9_]{2,25}", login):
+                return
+            self.proc = subprocess.Popen(
+                ["streamlink", "--twitch-low-latency", "--player-external-http", "--player-external-http-interface",
+                 "127.0.0.1", "--player-external-http-port", str(PREVIEW_PORT), f"twitch.tv/{login}",
+                 "360p,480p,worst"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.tries = 0
+            self.retry.start()
+            return
         to_mpv(preview_player._set_property, "start", str(int(start)) if start > 0 else "none")
         to_mpv(preview_player.command, "loadfile", url)
+
+    def load_live(self):
+        self.tries += 1
+        if self._ready or self.tries > 6 or not self.proc:   # playing, or streamlink never served it (offline…)
+            self.retry.stop()
+            return
+        if not self.idle:   # a load is under way
+            return
+        to_mpv(preview_player._set_property, "start", "none")
+        to_mpv(preview_player.command, "loadfile", f"http://127.0.0.1:{PREVIEW_PORT}/")
 
     @Slot()
     def stop(self):
         self._set_ready(False)
+        self.retry.stop()
+        if self.proc:
+            self.proc.terminate()
+            self.proc = None
         to_mpv(preview_player.command, "stop")
 
 
@@ -665,6 +699,7 @@ def main():
                              osd_level="0", input_default_bindings="no", cache="yes", loop_file="inf",
                              demuxer_max_bytes="20MiB", demuxer_max_back_bytes="0")
     preview_player.observe_property("video-params", lambda _n, v: card_preview._ready_in.emit(v is not None))
+    preview_player.observe_property("idle-active", lambda _n, v: setattr(card_preview, "idle", bool(v)))
     main_state = {"channel": "", "mode": "", "corner": "bl"}
 
     def follow(key):
@@ -719,6 +754,8 @@ def main():
         # context held by Qt's render thread, and everything stayed frozen (IPC socket dropping connections, no restart).
         if pip.proc:
             pip.proc.terminate()
+        if card_preview.proc:
+            card_preview.proc.terminate()
         os._exit(0)
     if force_window:
         bridge.ready.connect(lambda: to_mpv(player.command, "set", "force-window", force_window), Qt.QueuedConnection)
