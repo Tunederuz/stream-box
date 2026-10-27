@@ -466,7 +466,9 @@ thread, 4 times per second only when the bar is visible. QML: `InfoBar.qml` (liv
 viewers, "live for" based on `started` = `stream.createdAt` added by remote.py, time-shift memory and
 "LIVE" or delay; video: pause, title, buffered part, duration, and YouTube preview), `Toast.qml` (slides in from
 the right, time-left line), `PollsOverlay.qml` (animated bars, ★ winner, ✓ vote or bet made from the box).
-YouTube preview: at each YouTube playback, remote.py runs `yt-dlp -J` once and publishes the thumbnail sheet
+YouTube preview: at each YouTube playback, remote.py reads the `yt-dlp -J` result of mpv's ytdl_hook
+(`user-data/mpv/ytdl/json-subprocess-result`: no second extraction, it doubled the player requests behind YouTube's
+"not a bot" check) and publishes the thumbnail sheet
 (`storyboard`: image fragments in a rows × columns grid, each covering `duration` s); the cell shown is
 chosen from the position. QML pitfall again: `left` (FINAL) cannot be used as a property name.
 Bar color depending on the source (`InfoBar.source`, from `path` relayed by ui.py): red for YouTube, blue
@@ -641,7 +643,7 @@ title over a light image.
   sheet) and the jump bubble only appear while seeking forward or backward (`seeking`, 1.5 s after the last
   jump), as close as possible to the bar; the title then slides up, the bubble sits on the edge of the preview.
 - Info: `user-data/streambox/meta` published by remote.py (YouTube: channel, date, views, description, from the
-  preview's `yt-dlp -J`; Jellyfin: series, episode, year, rating, overview); chapters (`chapter-list`, `chapter`)
+  ytdl_hook's `yt-dlp -J`; Jellyfin: series, episode, year, rating, overview); chapters (`chapter-list`, `chapter`)
   read by ui.py with the position: marks on the bar, current chapter in the info line. Time left
   and end time ("−21:26 · ends at 02:30").
 - Pause screen (`qml/PauseScreen.qml`): dimmed image, pause icon in the center of the screen (no more overview here).
@@ -748,7 +750,7 @@ search blocks are removed: search is done on the TV. Qt app only (no search
 in the mpv-alone menu).
 Image slimming (5.7 → 3.0 GB): system partition in zstd-compressed btrfs, `Minimize=best` (no empty space
 written, grown at first boot); no deno or nodejs-wheel in the media venv (yt-dlp uses the system
-Node: `--js-runtimes node` in player.sh, remote.py `YTDLP_JS`, update.sh, only if deno is missing; a box
+Node: `--js-runtimes node` in player.sh and update.sh, only if deno is missing; a box
 installed by install.sh keeps deno); token server without its development dependencies (`npm prune
 --omit=dev`); `mkosi.finalize.chroot` removes /usr/include, doc, man, translations other than fr and en, Qt
 development tools from the venv. Firmware, LLVM, Noto fonts and Qt kept (compatibility). Tested in QEMU on a

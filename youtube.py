@@ -20,7 +20,6 @@ yt_feeds, yt_searches = {}, {}   # channel id → (time, videos); query → (tim
 yt_lock = threading.Lock()
 YTDLP = os.path.expanduser("~/.local/bin/yt-dlp")
 # YouTube JavaScript challenges: deno when installed (install.sh), otherwise the system's Node (image, without deno)
-YTDLP_JS = [] if os.path.exists(os.path.expanduser("~/.local/bin/deno")) else ["--js-runtimes", "node"]
 
 
 def yt_channels():
@@ -309,13 +308,31 @@ def fetch_auto_subs(url):
 
 # YouTube video preview on the seek bar (Qt app): thumbnail sheet ("storyboard") given by yt-dlp, published in
 # user-data/streambox/storyboard. Each image of the sheet is a rows × columns grid of thumbnails covering "duration"
-# seconds.
+# seconds. Read from the yt-dlp run of mpv's ytdl_hook (user-data/mpv/ytdl/json-subprocess-result, kept until the
+# end of the file): a second extraction would double the player requests that make YouTube ask "not a bot".
+YTDL_RESULT = "user-data/mpv/ytdl/json-subprocess-result"
 
-def fetch_storyboard(url, ident):
+
+def ytdl_info(ident, wait=90):
+    """yt-dlp's info of the video being opened, once ytdl_hook has it (None: it failed, or another video plays).
+    Until then the property is empty, or still holds the previous video's result."""
+    end = time.time() + wait
+    while time.time() < end and history.now_playing.get("ident") == ident:
+        try:
+            info = json.loads((mpv(["get_property", YTDL_RESULT])[0] or {}).get("stdout") or "null")
+        except (OSError, ValueError, AttributeError):
+            info = None
+        if isinstance(info, dict) and info.get("id") == ident:
+            return info
+        time.sleep(1)
+    return None
+
+
+def fetch_storyboard(ident):
     try:
-        r = subprocess.run([YTDLP, *YTDLP_JS, "-J", "--no-warnings", "--skip-download",
-                            "--no-playlist", url], capture_output=True, text=True, timeout=90)
-        info = json.loads(r.stdout or "{}") or {}   # "null": yt-dlp could not read the video
+        info = ytdl_info(ident)
+        if not info:
+            return
         if history.now_playing.get("ident") == ident:   # info for the seek bar and the pause screen
             d = info.get("upload_date") or ""
             mpv(["set_property", "user-data/streambox/meta",
