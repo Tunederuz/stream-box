@@ -645,7 +645,11 @@ title over a light image.
   other key gives up: back where it was, playing or paused as before (seekfx {n} without text). The −10 s / +10 s
   buttons of the row jump at once (`media_seek(dir, true)`). Also works with mpv alone (cursor on the target, no
   bubble).
-- Row of buttons: ↓ goes down to it (focus on Pause/Play), ← → and OK, ↑ selects the title, Back goes back up;
+- Focus in a video, top to bottom: title (OK: Info panel), the bar itself (← → scrub; focused whenever the bar shows
+  and neither of the others is: InfoBar.qml `barFocus`, track 8 → 12 px, cursor 22 → 28 px and a faint halo), row of
+  buttons. Bar hidden: ↑ or ↓ shows it, focus on the bar; from the bar ↑ the title, ↓ the buttons; from the title ↓,
+  from the buttons ↑ or Back, back to the bar.
+- Row of buttons: ↓ from the bar (focus on Pause/Play), ← → and OK;
   Subtitles, −10 s, Pause/Play, +10 s, Quality (YouTube), Next chapter (if there are chapters), Next
   episode (Jellyfin). Row centered on Pause/Play (InfoBar.qml `playIndex`). `ctrl_focus`,
   `user-data/streambox/controls` {items, focus}; disappears with the bar. Round centered buttons, drawn icons
@@ -1020,7 +1024,7 @@ the key wizard. Not for automatic live restarts (switch, frozen live stream).
 ### Info panel (video)
 `qml/InfoPanel.qml`: slides in from the right, thumbnail (YouTube) or episode image (Jellyfin), title, channel or
 series, date, views or rating, then the full description (`user-data/streambox/meta`: `overview` up to 3000
-characters, `thumb`). Opened from the title: ↑ from the buttons or the bar selects it (`title_focus`, published in `controls.title`,
+characters, `thumb`). Opened from the title: ↑ from the bar selects it (`title_focus`, published in `controls.title`,
 "OK · Info" frame around the title in InfoBar.qml), OK opens the panel, ↓ goes back down to the buttons, ↑ closes the
 bar, Back leaves the title without stopping the video; stream-box.lua `info_open` / `info_scroll` → `user-data/streambox/info` {open, scroll}; ↑ ↓ scroll by 4 lines (bounded by the
 length of the text), Back / OK / ≡ close; closed at the end of the file.

@@ -521,7 +521,9 @@ local function draw_bar()
 end
 
 local ctrl_focus = nil   -- row of buttons under the bar (video, Qt app): chosen button, nil outside the row
-local title_focus = false   -- video title chosen (↑ from the buttons or the bar): OK opens the Info panel
+-- Focus in a video (Qt app), top to bottom: the title (OK: Info panel), the bar itself (← → scrub; focused whenever
+-- the bar shows and neither of the others is), the row of buttons
+local title_focus = false   -- video title chosen (↑ from the bar): OK opens the Info panel
 local function hide_bar()
     if ctrl_focus or title_focus then   -- the button row and the chosen title go away with the bar
         ctrl_focus, title_focus = nil, false
@@ -899,7 +901,7 @@ local function controls_key(key)
     local list = controls_list()
     if key == "left" then ctrl_focus = math.max(1, ctrl_focus - 1)
     elseif key == "right" then ctrl_focus = math.min(#list, ctrl_focus + 1)
-    elseif key == "up" then ctrl_focus, title_focus = nil, true   -- ↑: the title (OK: Info panel)
+    elseif key == "up" then ctrl_focus = nil   -- ↑: back up to the bar
     elseif key == "back" then ctrl_focus = nil
     elseif key == "ok" then
         local id = (list[ctrl_focus] or {}).id
@@ -1019,12 +1021,11 @@ local function on_key(key)
         return
     end
     if title_focus and mode == "media" and key ~= "home" and key ~= "menu" then
-        -- Title chosen: OK opens the Info panel, ↓ goes back down to the buttons, ↑ closes the bar, Back leaves the
+        -- Title chosen: OK opens the Info panel, ↓ goes back down to the bar, ↑ closes the bar, Back leaves the
         -- title (without stopping the video)
         title_focus = false
         if key == "ok" then publish_controls() return open_info() end
         if key == "up" then publish_controls() return hide_bar() end
-        if key == "down" and qt_ui() then ctrl_focus = 3 end   -- on Pause / Play
         show_bar()
         publish_controls()
         return
@@ -1076,8 +1077,8 @@ local function on_key(key)
                 publish_controls()
             elseif bar_visible then hide_bar() else show_bar() end
         elseif key == "down" then
-            if qt_ui() then   -- bar and button row, focus on Pause / Play
-                ctrl_focus = 3
+            if qt_ui() then   -- bar hidden: shows it (focus on the bar); bar focused: the button row, on Pause / Play
+                if bar_visible then ctrl_focus = 3 end
                 show_bar()
                 publish_controls()
             elseif not mp.get_property_native("pause") then

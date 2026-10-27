@@ -44,6 +44,8 @@ Item {
     // Preview and "+30 s" bubble: only while seeking forward or back (not when the bar is just shown). Scrubbing (← →
     // in a video, stream-box.lua): the video is paused, the cursor, preview and offset stay on the target until OK / Back
     readonly property bool scrubbing: !live && fx.target !== undefined
+    // The bar itself has the focus in a video unless the title or a button has it (stream-box.lua): a bit thicker
+    readonly property bool barFocus: !live && shown && (ctl.focus === undefined || ctl.focus < 0) && !ctl.title
     property bool seeking: false
     property int lastSeekN: -1
     onFxChanged: {
@@ -166,16 +168,17 @@ Item {
             id: track
             x: 96; y: root.live ? 200 : 340
             width: parent.width - 192
-            height: 8
+            height: root.barFocus ? 12 : 8
+            Behavior on height { NumberAnimation { duration: 160 } }
             readonly property real played: root.span > 0 ? Math.max(0, Math.min(1, root.at / root.span)) : 0
-            Rectangle { anchors.fill: parent; radius: 4; color: "#40ffffff" }
+            Rectangle { anchors.fill: parent; radius: height / 2; color: root.barFocus ? "#55ffffff" : "#40ffffff" }
             Rectangle {   // buffered part (video)
                 visible: !root.live && root.span > 0 && (root.pb.cached || 0) > root.at
-                height: parent.height; radius: 4; color: "#70ffffff"
+                height: parent.height; radius: height / 2; color: "#70ffffff"
                 width: parent.width * Math.min(1, (root.pb.cached || 0) / Math.max(1, root.span))
             }
             Rectangle {
-                height: parent.height; radius: 4
+                height: parent.height; radius: height / 2
                 width: parent.width * track.played
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
@@ -193,8 +196,17 @@ Item {
                     color: "#d0ffffff"
                 }
             }
+            Rectangle {   // halo of the cursor while the bar has the focus
+                width: 46; height: 46; radius: 23; color: "white"
+                opacity: root.barFocus ? 0.18 : 0
+                Behavior on opacity { NumberAnimation { duration: 160 } }
+                x: track.width * track.played - width / 2
+                anchors.verticalCenter: parent.verticalCenter
+                Behavior on x { NumberAnimation { duration: 240 } }
+            }
             Rectangle {   // cursor
-                width: 22; height: 22; radius: 11; color: "white"
+                width: root.barFocus ? 28 : 22; height: width; radius: width / 2; color: "white"
+                Behavior on width { NumberAnimation { duration: 160 } }
                 x: track.width * track.played - width / 2
                 anchors.verticalCenter: parent.verticalCenter
                 Behavior on x { NumberAnimation { duration: 240 } }
