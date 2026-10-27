@@ -1,0 +1,27 @@
+# Text of an existing release rewritten from CHANGELOG.md (main's), without rebuilding its image: Actions tab →
+# release-notes → Run workflow, with the tag (v0.1.0…). The image workflow writes it the same way for new tags.
+name: release-notes
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (v0.1.0…)"
+        required: true
+
+permissions:
+  contents: write   # edit the release
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          version=${TAG#v}
+          changes=$(awk -v v="## [$version]" 'index($0, v) == 1 { on = 1; next } on && /^## \[/ { exit } on' CHANGELOG.md)
+          [ -n "$changes" ] || { echo "no CHANGELOG.md section for $version"; exit 1; }
+          install='Flash `stream-box.raw.xz` on a USB stick (balenaEtcher, Rufus), boot the PC on it, then TV menu → System → "Install on this PC". See the README'"'"'s Installation section.'
+          gh release edit "$TAG" --notes "$(printf '%s\n\n### Install\n%s\n' "$changes" "$install")"

@@ -682,7 +682,10 @@ so `off` and never `unavailable`. The other entities: available if `status` = on
 
 `bash image/build.sh` builds `image/mkosi.output/stream-box.raw` (~3 GB, to write to a disk or a USB stick;
 `bash image/build.sh xz`: stream-box.raw.xz, ~1.6 GB, the version to download; built and published as a GitHub
-release with its sha256 by `.github/workflows/image.yml` on every `v*` tag, release files being limited to 2 GB)
+release with its sha256 by `.github/workflows/image.yml` on every `v*` tag, release files being limited to 2 GB; the
+release text is the version's section of CHANGELOG.md (`## [x.y.z]`, important changes only, written before tagging),
+then how to install; `.github/workflows/release-notes.yml` (run by hand from the Actions tab) rewrites the text of an
+existing release from main's CHANGELOG.md without rebuilding; versions are SemVer: tags vX.Y.Z)
 in an Arch Docker container with mkosi 27 (nothing installed on the machine); `bash image/build.sh vm` boots it
 in QEMU. Arch base (not CachyOS), UEFI, systemd-boot + UKI. greetd starts media's cage session at boot
 (no keyboard/login screen choice like boot-mode.py). `mkosi.prepare.chroot` (with network): user
