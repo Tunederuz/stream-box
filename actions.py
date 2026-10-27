@@ -200,6 +200,7 @@ ACTIONS = {
                                            int(body.get("points", 0))),
     "player": lambda body: settings.set_player(str(body.get("mode", ""))),
     "jellyfin_play": lambda body: jellyfin.jellyfin_play(str(body.get("id", "")), bool(body.get("from_start"))),
+    "jellyfin_link": jellyfin.link_action,   # Quick Connect sign-in ({address}), cancel, forget the server
     "plex_play": lambda body: plex.plex_play(str(body.get("id", "")), bool(body.get("from_start"))),
     "plex": lambda body: plex.set_plex(str(body.get("address", "")), str(body.get("token", ""))),   # server (empty: forget)
     # Plex account by code (plex.tv/link): start, or give up

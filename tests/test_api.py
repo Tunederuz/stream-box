@@ -116,6 +116,12 @@ class Api(unittest.TestCase):
         status, body = self.request("POST", "/api/plex", {"address": "127.0.0.1:9"})   # nothing listens there
         self.assertEqual(status, 400)
         self.assertIn("error", body)
+        self.assertEqual(self.request("GET", "/api/jellyfin_link"),
+                         (200, {"configured": False, "address": "", "name": "", "pending": None}))
+        # Quick Connect: the server is checked before the shim is touched
+        status, body = self.request("POST", "/api/jellyfin_link", {"address": "127.0.0.1:9"})
+        self.assertEqual(status, 400)
+        self.assertIn("error", body)
 
     def test_unknown_action(self):
         self.assertGreaterEqual(self.request("POST", "/api/no_such_action", {})[0], 400)

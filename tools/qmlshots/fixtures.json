@@ -1736,6 +1736,23 @@
   ],
   "first": 2
  },
+ "/api/jellyfin_link": {
+  "configured": false,
+  "address": "",
+  "name": "",
+  "pending": {
+   "server": "http://192.168.1.10:8096",
+   "name": "Jellyfin",
+   "code": "482915",
+   "error": null
+  },
+  "servers": [
+   {
+    "address": "http://192.168.1.10:8096",
+    "name": "Jellyfin"
+   }
+  ]
+ },
  "/api/plex_link": {
   "configured": false,
   "name": "",

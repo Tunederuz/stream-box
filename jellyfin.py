@@ -1,7 +1,7 @@
 """Stream Box: Jellyfin library for the companion app and the TV menu (server paired with jellyfin-mpv-shim), playback
 of its videos and progress reports to the server. Standard library only.
 """
-import json, os, re, threading, time, urllib.parse, urllib.request
+import json, os, re, shutil, socket, subprocess, threading, time, urllib.parse, urllib.request
 
 import history   # history.py: the box's history and the video being played
 from common import mpv
@@ -13,6 +13,8 @@ from i18n import tr
 # server during playback (Sessions/Playing, /Progress, /Stopped): "watched" and resume follow everywhere.
 
 JF_USERS = os.path.expanduser("~/.config/jellyfin-mpv-shim/users.json")
+SHIM = os.path.expanduser("~/.local/bin/jellyfin-mpv-shim")
+SHIM_LOG = "/tmp/jellyfin-shim.log"
 JF_CACHE = 30
 jf_cache = {}
 
@@ -192,3 +194,163 @@ def jf_report(what, item_id, position, paused=False):
         pass
     if what == "/Stopped":
         jf_cache.pop("home", None)
+
+
+# Connection to a server by Quick Connect, from the TV or the companion app. The box looks for servers on the local
+# network (Jellyfin answers "who is JellyfinServer?" on UDP 7359; a server in Docker without the host network does not:
+# then its address is given in the companion app). jellyfin-mpv-shim then signs in itself (--quick-connect: it prints a
+# 6-digit code to approve in Jellyfin, user menu → Quick Connect, and writes its users.json, a format it owns), and
+# stays running as the box's player. Its previous users.json is put back if that fails or is cancelled.
+
+QC_WAIT = 300   # seconds before giving up on the code
+qc = {}         # sign-in in progress: server, name, code, error, proc, backup, started
+qc_lock = threading.Lock()
+
+
+def discover(timeout=1.5):
+    """Jellyfin servers that answer on the local network: [{address, name}]"""
+    found = {}
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            s.settimeout(0.3)
+            s.sendto(b"who is JellyfinServer?", ("255.255.255.255", 7359))
+            end = time.time() + timeout
+            while time.time() < end:
+                try:
+                    data, (ip, _) = s.recvfrom(4096)
+                    d = json.loads(data)
+                except (socket.timeout, ValueError):
+                    continue
+                # the address it gives can be internal (Docker): the one it answered from, with its scheme and port
+                announced = urllib.parse.urlsplit(d.get("Address") or "")
+                address = f"{announced.scheme or 'http'}://{ip}:{announced.port or 8096}"
+                found[d.get("Id") or address] = {"address": address, "name": d.get("Name") or address}
+    except OSError:
+        pass
+    return list(found.values())
+
+
+def server_info(address):
+    """Public information of a server (name, Quick Connect), or ValueError"""
+    try:
+        with urllib.request.urlopen(address.rstrip("/") + "/System/Info/Public", timeout=5) as r:
+            return json.load(r)
+    except (OSError, ValueError) as e:
+        raise ValueError(tr("Jellyfin unreachable: {error}", error=e))
+
+
+def restart_shim():
+    """The usual shim (as player.sh starts it), after a sign-in"""
+    subprocess.run(["pkill", "-u", str(os.getuid()), "-f", "[j]ellyfin-mpv-shim"], capture_output=True)
+    with open(SHIM_LOG, "a") as log:
+        subprocess.Popen([SHIM, "--no-gui"], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                         start_new_session=True)
+
+
+def qc_start(address):
+    address = (address or "").strip().rstrip("/")
+    if not re.match(r"https?://", address):
+        address = "http://" + address
+    if not urllib.parse.urlsplit(address).port and urllib.parse.urlsplit(address).scheme == "http":
+        address += ":8096"
+    info = server_info(address)
+    qc_cancel()
+    backup = JF_USERS + ".before-quick-connect"
+    if os.path.exists(JF_USERS):
+        shutil.copy2(JF_USERS, backup)
+    subprocess.run(["pkill", "-u", str(os.getuid()), "-f", "[j]ellyfin-mpv-shim"], capture_output=True)
+    # "clear": this server replaces the previous one (put back if the sign-in fails)
+    proc = subprocess.Popen([SHIM, "--no-gui", "--server", address, "--quick-connect", "clear"], stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True)
+    with qc_lock:
+        qc.clear()
+        qc.update(server=address, name=info.get("ServerName") or address, proc=proc, started=time.time(),
+                  backup=backup if os.path.exists(backup) else None)
+    threading.Thread(target=qc_follow, args=(proc,), daemon=True).start()
+
+
+def qc_follow(proc):
+    """Reads the shim's output: its code, then whether it signed in; the output then goes on to its log"""
+    with open(SHIM_LOG, "a") as log:
+        for line in proc.stdout:
+            log.write(line)
+            log.flush()
+            m = re.fullmatch(r"\s*(\d{6})\s*", line)
+            with qc_lock:
+                if qc.get("proc") is not proc:
+                    continue
+                if m and not qc.get("code"):
+                    qc["code"] = m.group(1)
+                srv = jf_server()
+                if qc.get("code") and srv and srv["address"].rstrip("/") == qc["server"] and not qc.get("done"):
+                    qc["done"] = True   # signed in: the shim carries on as the player
+                    jf_cache.clear()
+    with qc_lock:
+        if qc.get("proc") is proc and not qc.get("done") and not qc.get("cancelled"):
+            qc["error"] = tr("Quick Connect refused or expired")
+    qc_restore(proc)
+
+
+def qc_restore(proc):
+    """Sign-in that did not go through: the previous connection and the usual shim come back"""
+    with qc_lock:
+        if qc.get("proc") is not proc or qc.get("done"):
+            return
+        backup = qc.pop("backup", None)
+    if backup and os.path.exists(backup):
+        shutil.copy2(backup, JF_USERS)
+    restart_shim()
+    with qc_lock:
+        if qc.get("proc") is proc and qc.get("cancelled"):
+            qc.clear()   # given up on purpose: nothing left to show
+
+
+def qc_cancel():
+    with qc_lock:
+        proc = qc.get("proc")
+        done = qc.get("done")
+        if proc and not done:
+            qc["cancelled"] = True
+    if proc and not done and proc.poll() is None:
+        proc.terminate()   # qc_follow then puts the previous connection back
+        try:
+            proc.wait(3)
+        except subprocess.TimeoutExpired:   # the shim waiting for its code does not always stop on TERM
+            proc.kill()
+            proc.wait(3)
+
+
+def forget():
+    """Disconnects the box from its server: the shim has no account any more (it stops)"""
+    qc_cancel()
+    if os.path.exists(JF_USERS):
+        os.remove(JF_USERS)
+    jf_cache.clear()
+    subprocess.run(["pkill", "-u", str(os.getuid()), "-f", "[j]ellyfin-mpv-shim"], capture_output=True)
+
+
+def link_action(body):
+    """POST /api/jellyfin_link: {address} signs in by Quick Connect, {action: cancel | forget}"""
+    if body.get("action") == "cancel":
+        qc_cancel()
+    elif body.get("action") == "forget":
+        forget()
+    else:
+        qc_start(str(body.get("address", "")))
+
+
+def link_state(find=False):
+    """Connected server, servers found on the network (find), sign-in in progress"""
+    with qc_lock:
+        expired = qc and qc.get("proc") and not qc.get("done") and time.time() - qc["started"] > QC_WAIT
+        pending = {k: qc.get(k) for k in ("server", "name", "code", "error")} if qc and not qc.get("done") else None
+    if expired:
+        qc_cancel()
+    srv = jf_server()
+    out = {"configured": bool(srv), "address": srv["address"] if srv else "", "name": srv["name"] if srv else "",
+           "pending": pending}
+    if find:
+        out["servers"] = discover()
+    return out
+

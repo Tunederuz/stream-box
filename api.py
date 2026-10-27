@@ -67,6 +67,7 @@ def state():
         # Video libraries connected to the box: their TV menu tab only shows when they are
         "libraries": {"jellyfin": jellyfin.jf_server() is not None, "plex": plex.px_config() is not None},
         "plex_server": (plex.px_config() or {}).get("address", ""),
+        "jellyfin_server": (jellyfin.jf_server() or {}).get("address", ""),
         # TV menu search keyboard open (forgotten after 10 min, menu closed in the meantime)
         "keyboard": (actions.keyboard if actions.keyboard.get("open") and time.time() - actions.keyboard.get("at", 0) < 600
                      else None),
@@ -181,6 +182,9 @@ class Handler(BaseHTTPRequestHandler):
                         self.send(200, jellyfin.jellyfin_series(q.get("id", [""])[0]))
                 except (OSError, ValueError, KeyError) as e:
                     self.send(400, {"error": str(e)})
+            elif self.path.split("?")[0] == "/api/jellyfin_link":
+                # Jellyfin server, Quick Connect in progress; ?find=1: the servers that answer on the network
+                self.send(200, jellyfin.link_state(find="find=1" in self.path))
             elif self.path == "/api/plex":
                 try:
                     self.send(200, plex.plex_home())

@@ -60,7 +60,8 @@ STEPS = (
     + scene(6, "right down down left ok back")                    # History
     + scene(7, "down down down down down down down right down down down down down down down down")
     + keys("right down up up up up")                              # Settings: audio output, resolution
-    + scene(8, "down ok ok back")                                 # System: Plex, sign-in by code (dialog)
+    + scene(8, "down ok") + [("pause", 300)] + keys("ok back")    # System: Jellyfin, servers found, Quick Connect code
+    + keys("down ok ok back")                                     # Plex, sign-in by code (dialog)
     + keys("down ok down ok back")                                # YouTube account, sync dialog
     + keys("down right down down ok back down down down down ok down back")   # Bluetooth, developer mode
     + keys("down ok ok back down ok back down down down down ok down ok")     # install, backup, restart

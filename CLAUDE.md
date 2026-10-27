@@ -136,8 +136,8 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   mpv; in this mode it never closes mpv. Connected to the user's Jellyfin account (Quick Connect; credentials
   in `~media/.config/jellyfin-mpv-shim/users.json`), so that progress follows that account. Restarted by `start.sh`
   each time mpv is (re)started (it does not reattach to a restarted mpv on its own), log in `/tmp/jellyfin-shim.log`.
-  mpv's pause survives a file change: `load_stream` removes it, otherwise the live stream stays frozen. To reconnect: `jellyfin-mpv-shim clear`, then
-  `jellyfin-mpv-shim --no-gui --server https://jellyfin.example.com --quick-connect` and approve the code shown.
+  mpv's pause survives a file change: `load_stream` removes it, otherwise the live stream stays frozen. To reconnect: System → Jellyfin on the TV, or
+  Settings → Jellyfin in the companion app (Quick Connect, see "Jellyfin (QML menu tab and page)").
 - **Who is live**: `remote.py` queries Twitch (GQL, the website's public client-id) every minute for the whole
   list (with profile pictures, `avatars` of `/api/state`, and the live thumbnail, `thumb`, for the page), publishes the result in `user-data/streambox/live` (TV menu: red dot + viewers) and returns it
   in `/api/state` (page: viewers, game, title). After an mpv restart, the menu receives it at the next poll.
@@ -581,6 +581,19 @@ around for the glow) that stops under the title and above the help at the bottom
 according to the targeted row. QML pitfall: a function must not reuse the name of a property
 (`setSel` existed: the tab's keys failed silently, except in the log).
 Page: Jellyfin block of the Remote tab (chips per row, search, episodes of a series).
+Sign-in by Quick Connect (`jellyfin.py`, the shim does it): `POST /api/jellyfin_link {address}` (`qc_start`: address
+completed with `http://` and `:8096`, checked with `/System/Info/Public`, `users.json` saved as
+`users.json.before-quick-connect`, then `jellyfin-mpv-shim --no-gui --server <address> --quick-connect clear`, which
+prints the 6-digit code alone on a line, writes `users.json` once approved and goes on as the usual player; it needs
+the mpv socket). `qc_follow` reads its output (code, then done when `jf_server()` is that server); if it ends without
+signing in, or on `{action: "cancel"}` (`qc_cancel`: terminate, kill after 3 s), the saved `users.json` is put back
+and the usual shim restarted (`qc_restore`); given up after 5 min. `{action: "forget"}` removes `users.json` and stops
+the shim. `GET /api/jellyfin_link[?find=1]` (`link_state`: configured, address, name, pending {server, name, code,
+error}, `servers` found by UDP broadcast "who is JellyfinServer?" on 7359, address = the IP that answered: the one
+announced can be a Docker one). TV: "Jellyfin" row of the System menu (`jellyfinMenu`: servers found, disconnect;
+none found: the companion app), code in `CodeDialog` (`jfLink`, polled every 2 s, Back cancels); companion app:
+Jellyfin section of Settings (address, Connect, code, Cancel, Disconnect). Test server: Docker `jellyfin/jellyfin`,
+`-p 8096:8096 -p 7359:7359/udp` (broadcasts do not reach it through Docker's NAT: give the address).
 
 ### Subtitles and audio during a video (≡ key, Qt app)
 

@@ -14,8 +14,8 @@ Item {
         Repeater {
             model: [
                 { name: "Jellyfin", color: "#1565c0", steps: [
-                    "On your phone or computer, open a video in the Jellyfin app.",
-                    "Tap \"Play on…\" (the cast icon) and choose Stream Box.",
+                    "System → Jellyfin: choose your server, then approve the code in Jellyfin (user menu, Quick Connect).",
+                    "Or in the companion app (QR code below): Settings → Jellyfin, the server's address.",
                     "The Jellyfin tab then shows here, with your library." ] },
                 { name: "Plex", color: "#e5a00d", steps: [
                     "System → Plex: sign in with your Plex account, with a code to type on plex.tv/link.",

@@ -71,6 +71,8 @@ Item {
     // Plex account: code to enter on plex.tv/link (/api/plex_link: { pending: { code, error }, configured, name }), QR
     property var plexLink: null
     property var plexLinkQr: null
+    // Jellyfin by Quick Connect: code to approve in Jellyfin (/api/jellyfin_link: { pending: { name, code, error } })
+    property var jfLink: null
     // Dialog of the sign-ins by code (menu/CodeDialog.qml): title, where to go, code, error, help, QR code of the page
     readonly property var codeDialog: {
         if (ytAuth) {
@@ -82,6 +84,13 @@ Item {
                      help: ytAuth.tv ? tr("Google shows \"YouTube on TV\": the box presents itself as the YouTube app for TVs, to read and send back progress.")
                                      : tr("Google warns that the app isn't verified: \"Advanced\", then \"Go to Stream Box\". Read-only."),
                      qr: ytAuthQr }
+        }
+        if (jfLink) {
+            var j = jfLink.pending
+            return { title: tr("Connect Jellyfin"), where: tr("In Jellyfin (app or website): your user menu, Quick Connect, then enter:"),
+                     code: j && j.code && !j.error ? j.code : "",
+                     error: j && j.error ? tr("Failed: {error}", { error: j.error }) : "",
+                     help: j && j.name ? tr("Server: {server}.", { server: j.name }) : "", qr: null }
         }
         if (plexLink) {
             var q = plexLink.pending
@@ -322,6 +331,44 @@ Item {
         if (plexLink && plexLink.pending && !plexLink.pending.error) call("POST", "/api/plex_link", { action: "cancel" })
         plexLink = null
     }
+    // "Jellyfin" row of the System menu: the servers that answer on the network (Quick Connect), or forget the server
+    function jellyfinMenu() {
+        var on = !!(st.libraries || {}).jellyfin
+        openModal(tr("Looking for Jellyfin servers on the network…"), [{ label: tr("Cancel"), ok: function () {} }])
+        var searching = modal
+        call("GET", "/api/jellyfin_link?find=1", undefined, function (d) {
+            if (modal !== searching || !d) return   // closed in the meantime
+            var items = (d.servers || []).map(function (srv) {
+                return { label: "▶  " + srv.name + "  ·  " + srv.address.replace(/^https?:\/\//, ""), ok: function () { jfConnect(srv.address) } }
+            })
+            var found = items.length
+            if (on) items.push({ label: tr("✕  Disconnect Jellyfin"), danger: true, ok: function () {
+                call("POST", "/api/jellyfin_link", { action: "forget" }, function () { refresh() }) } })
+            items.push({ label: tr("Close"), ok: function () {} })
+            openModal(found ? tr("Connect to which Jellyfin server?")
+                      : tr("No Jellyfin server found on the network: give its address in the companion app (Settings → Jellyfin)."), items)
+        })
+    }
+    function jfConnect(address) {
+        jfLink = { pending: null }
+        call("POST", "/api/jellyfin_link", { address: address }, function (d) {
+            if (!d) jfLink = { pending: { error: tr("Jellyfin unreachable") } }
+            else loadJfLink()
+        })
+    }
+    function loadJfLink() {
+        if (!jfLink) return
+        call("GET", "/api/jellyfin_link", undefined, function (d) {
+            if (!jfLink || !d) return
+            if (!d.pending && d.configured) { jfLink = null; refresh(); return }   // signed in: the Jellyfin tab shows
+            jfLink = d
+            if (d.pending && !d.pending.error) jfLinkPoll.restart()
+        })
+    }
+    function closeJfLink() {
+        if (jfLink && jfLink.pending && !jfLink.pending.error) call("POST", "/api/jellyfin_link", { action: "cancel" })
+        jfLink = null
+    }
     // "Plex" row of the System menu: sign in by code, or forget the server
     function plexMenu() {
         var on = !!(st.libraries || {}).plex
@@ -477,6 +524,7 @@ Item {
     Timer { interval: 4000; repeat: true; running: menu.isOpen; onTriggered: menu.refresh() }
     Timer { id: ytAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadYtAuth() }
     Timer { id: plexLinkPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadPlexLink() }
+    Timer { id: jfLinkPoll; interval: 2000; onTriggered: if (menu.isOpen) menu.loadJfLink() }
     Timer { id: followsPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadFollows() }
     Timer { interval: 10000; repeat: true; running: menu.isOpen; triggeredOnStart: true; onTriggered: menu.now = new Date() }
     Timer { id: idleClose; interval: 90000; onTriggered: menu.close() }   // TV screen: no still image
@@ -523,6 +571,7 @@ Item {
         if (!isOpen) return
         stopPreview()
         closePlexLink()
+        closeJfLink()
         isOpen = false
         modal = null
         kbOpen = false
@@ -681,6 +730,10 @@ Item {
         return [
             { label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
               hint: login ? tr("No ads on the channels you're subscribed to") : tr("Sign in from the companion app on your phone") },
+            { label: "Jellyfin", value: (st.libraries || {}).jellyfin ? tr("Connected") : tr("Not connected"),
+              hint: (st.libraries || {}).jellyfin ? String(st.jellyfin_server || "").replace(/^https?:\/\//, "")
+                                                  : tr("Your movies and series of a Jellyfin server"),
+              ok: function () { jellyfinMenu() } },
             { label: "Plex", value: (st.libraries || {}).plex ? tr("Connected") : tr("Not connected"),
               hint: (st.libraries || {}).plex ? String(st.plex_server || "").replace(/^https?:\/\//, "")
                                               : tr("Your movies and series of a Plex server"),
@@ -1066,6 +1119,7 @@ Item {
         }
         if (ytAuth) { if (k === "back" || k === "left" || k === "ok") ytAuth = null; return }
         if (plexLink) { if (k === "back" || k === "left" || k === "ok") closePlexLink(); return }
+        if (jfLink) { if (k === "back" || k === "left" || k === "ok") closeJfLink(); return }
         if (area === "rail") {
             if (railHome) {   // "Home screen": global, above the tabs
                 if (k === "down") railHome = false
