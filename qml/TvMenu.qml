@@ -68,6 +68,31 @@ Item {
     property var ytAuth: null
     property var ytAuthQr: null
     property var ytAccount: null             // same state, for the "YouTube account" row of the System menu
+    // Plex account: code to enter on plex.tv/link (/api/plex_link: { pending: { code, error }, configured, name }), QR
+    property var plexLink: null
+    property var plexLinkQr: null
+    // Dialog of the sign-ins by code (menu/CodeDialog.qml): title, where to go, code, error, help, QR code of the page
+    readonly property var codeDialog: {
+        if (ytAuth) {
+            var p = ytAuth.pending
+            return { title: ytAuth.tv ? tr("Sync YouTube progress") : tr("Connect my YouTube account"),
+                     where: tr("On your phone, open google.com/device and enter:"),
+                     code: p && p.user_code && !p.error ? p.user_code : "",
+                     error: p && p.error ? tr("Authorization denied: {error}", { error: p.error }) : "",
+                     help: ytAuth.tv ? tr("Google shows \"YouTube on TV\": the box presents itself as the YouTube app for TVs, to read and send back progress.")
+                                     : tr("Google warns that the app isn't verified: \"Advanced\", then \"Go to Stream Box\". Read-only."),
+                     qr: ytAuthQr }
+        }
+        if (plexLink) {
+            var q = plexLink.pending
+            return { title: tr("Sign in with a Plex account"), where: tr("On your phone, open plex.tv/link and enter:"),
+                     code: q && q.code && !q.error ? q.code : "",
+                     error: q && q.error ? tr("Failed: {error}", { error: q.error }) : "",
+                     help: tr("The box then takes the first server of the account it reaches, local ones first."),
+                     qr: plexLinkQr }
+        }
+        return null
+    }
     // Colors per tab: purple for Twitch (live, following, replays), red for YouTube, neutral (charcoal, white glow)
     // for what belongs to no service (history, settings, system), blue for Jellyfin, amber for Plex
     readonly property string theme: ["youtube", "jellyfin", "plex"].indexOf(tabId) >= 0 ? tabId
@@ -273,6 +298,40 @@ Item {
             }
         })
     }
+    function plexConnect() {
+        plexLink = { pending: null }
+        call("POST", "/api/plex_link", {}, function (d) {
+            if (!d) plexLink = { pending: { error: tr("plex.tv unreachable") } }
+            else loadPlexLink()
+        })
+        if (!plexLinkQr)
+            call("GET", "/api/qr?text=" + encodeURIComponent("https://plex.tv/link"), undefined, function (q) {
+                plexLinkQr = q ? { rows: q.rows } : null
+            })
+    }
+    function loadPlexLink() {
+        if (!plexLink) return
+        call("GET", "/api/plex_link", undefined, function (d) {
+            if (!plexLink || !d) return
+            if (!d.pending && d.configured) { plexLink = null; refresh(); return }   // done: the Plex tab shows
+            plexLink = d
+            if (d.pending && !d.pending.error) plexLinkPoll.restart()
+        })
+    }
+    function closePlexLink() {
+        if (plexLink && plexLink.pending && !plexLink.pending.error) call("POST", "/api/plex_link", { action: "cancel" })
+        plexLink = null
+    }
+    // "Plex" row of the System menu: sign in by code, or forget the server
+    function plexMenu() {
+        var on = !!(st.libraries || {}).plex
+        var items = [{ label: tr(on ? "↻  Sign in with another Plex account" : "+  Sign in with a Plex account"),
+                       ok: function () { plexConnect() } }]
+        if (on)
+            items.push({ label: tr("✕  Disconnect Plex"), danger: true, ok: function () {
+                call("POST", "/api/plex", { address: "" }, function () { refresh() }) } })
+        openModal(on ? tr("Plex: {server}", { server: st.plex_server }) : "Plex", items)
+    }
     function ytAccountMenu() {
         var a = ytAccount
         if (!a) return
@@ -417,6 +476,7 @@ Item {
     }
     Timer { interval: 4000; repeat: true; running: menu.isOpen; onTriggered: menu.refresh() }
     Timer { id: ytAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadYtAuth() }
+    Timer { id: plexLinkPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadPlexLink() }
     Timer { id: followsPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadFollows() }
     Timer { interval: 10000; repeat: true; running: menu.isOpen; triggeredOnStart: true; onTriggered: menu.now = new Date() }
     Timer { id: idleClose; interval: 90000; onTriggered: menu.close() }   // TV screen: no still image
@@ -462,6 +522,7 @@ Item {
     function close() {
         if (!isOpen) return
         stopPreview()
+        closePlexLink()
         isOpen = false
         modal = null
         kbOpen = false
@@ -620,6 +681,10 @@ Item {
         return [
             { label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
               hint: login ? tr("No ads on the channels you're subscribed to") : tr("Sign in from the companion app on your phone") },
+            { label: "Plex", value: (st.libraries || {}).plex ? tr("Connected") : tr("Not connected"),
+              hint: (st.libraries || {}).plex ? String(st.plex_server || "").replace(/^https?:\/\//, "")
+                                              : tr("Your movies and series of a Plex server"),
+              ok: function () { plexMenu() } },
             { label: tr("YouTube account"), visible: !!(ytAccount && (ytAccount.configured || (ytAccount.tv && !ytAccount.tv.unavailable))),
               value: ytAccount && ytAccount.authorized
                    ? tr("Connected") + (ytAccount.channels !== null ? " · " + tr("{n} subscriptions", { n: ytAccount.channels }) : "")
@@ -1000,6 +1065,7 @@ Item {
             return
         }
         if (ytAuth) { if (k === "back" || k === "left" || k === "ok") ytAuth = null; return }
+        if (plexLink) { if (k === "back" || k === "left" || k === "ok") closePlexLink(); return }
         if (area === "rail") {
             if (railHome) {   // "Home screen": global, above the tabs
                 if (k === "down") railHome = false
@@ -1226,6 +1292,6 @@ Item {
         CardPreview { menu: menu }
     }
     SearchKeyboard { menu: menu }
-    YtAuthDialog { menu: menu }
+    CodeDialog { menu: menu }
     ActionDialog { menu: menu }
 }

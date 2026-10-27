@@ -1,15 +1,16 @@
 """Stream Box: Plex library for the companion app and the TV menu, playback of its videos (direct play) and progress
 reports to the server. Standard library only.
 """
-import json, os, re, time, urllib.error, urllib.parse, urllib.request, uuid
+import json, os, re, threading, time, urllib.error, urllib.parse, urllib.request, uuid
 
 import history   # history.py: the box's history and the video being played
 from common import COOKIES_DIR, mpv, read_json_file, write_private_json
 from i18n import tr
 
-# Plex: a server of the local network (~/.config/stream-box/plex.json: address, token, name; written from the companion
-# app). Without a token, the server must let the box in without signing in (Plex setting "List of IP addresses and
-# networks that are allowed without auth"). The box reads On Deck (resume and next episodes), the recent additions of
+# Plex: a server of the local network (~/.config/stream-box/plex.json: address, token, name), chosen in two ways: signing
+# in with a Plex account by code (below: the account's servers, the first one the box reaches), or its address given in
+# the companion app. Without a token, the server must let the box in without signing in (Plex setting "List of IP
+# addresses and networks that are allowed without auth"). The box reads On Deck (resume and next episodes), the recent additions of
 # each library, searches, the episodes of a series, plays the file as is (no transcoding) and reports the position
 # (/:/progress) and the end (/:/scrobble): "watched" and resume follow on the other Plex apps.
 
@@ -32,7 +33,7 @@ def px_client():
     return c["client"]
 
 
-def set_plex(address, token=""):
+def set_plex(address, token="", account=""):
     """Server chosen in the companion app: checked (/identity, then the libraries with the token) before being kept"""
     address = (address or "").strip().rstrip("/")
     if not address:   # forget the server
@@ -53,10 +54,105 @@ def set_plex(address, token=""):
     except (OSError, ValueError, KeyError) as e:
         raise ValueError(tr("Plex unreachable: {error}", error=e))
     c = read_json_file(PLEX_FILE) or {}
-    c.update(address=address, token=(token or "").strip(), name=name)
+    c.update(address=address, token=(token or "").strip(), name=name, account=account)
     write_private_json(PLEX_FILE, c)
     px_cache.clear()
     return {"configured": True, "name": name}
+
+
+# Sign-in with a Plex account by code: the box asks plex.tv for a 4-character code, shown on the TV and in the companion
+# app, to type on plex.tv/link; a thread waits for it (every 3 s), then reads the account's servers (plex.tv resources)
+# and keeps the first one the box reaches: its own servers first, local addresses first (plain http to the LAN
+# address, then the plex.direct https one), with the server's access token.
+
+PLEX_TV = "https://plex.tv/api/v2"
+LINK_URL = "https://plex.tv/link"
+link_pending = {}   # code, url, expires_at, error
+link_lock = threading.Lock()
+
+
+def plex_tv(method, path, params=None, token=None):
+    headers = {"Accept": "application/json", "X-Plex-Product": "Stream Box", "X-Plex-Client-Identifier": px_client(),
+               "X-Plex-Device-Name": "Stream Box"}
+    if token:
+        headers["X-Plex-Token"] = token
+    query = urllib.parse.urlencode(params or {})
+    data = query.encode() if method == "POST" else None
+    url = PLEX_TV + path + ("?" + query if query and method != "POST" else "")
+    with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method=method), timeout=15) as r:
+        return json.loads(r.read() or b"{}")
+
+
+def link_start():
+    try:
+        d = plex_tv("POST", "/pins", {"strong": "false"})
+    except (OSError, ValueError) as e:
+        raise ValueError(tr("plex.tv unreachable: {error}", error=e))
+    expires_at = time.time() + int(d.get("expiresIn") or 900)
+    with link_lock:
+        link_pending.clear()
+        link_pending.update(code=d["code"], url=LINK_URL, expires_at=expires_at)
+    threading.Thread(target=link_wait, args=(d["id"], expires_at), daemon=True).start()
+
+
+def link_wait(pin_id, expires_at):
+    while time.time() < expires_at:
+        time.sleep(3)
+        with link_lock:
+            if not link_pending:   # cancelled, or another code asked for since
+                return
+        try:
+            token = plex_tv("GET", f"/pins/{pin_id}").get("authToken")
+        except (OSError, ValueError):
+            continue
+        if not token:
+            continue
+        try:
+            link_servers(token)
+            with link_lock:
+                link_pending.clear()
+        except ValueError as e:
+            with link_lock:
+                link_pending.update(error=str(e))
+        return
+    with link_lock:
+        link_pending.update(error=tr("code expired"))
+
+
+def link_servers(token):
+    """Keeps the first server of the account the box reaches"""
+    try:
+        resources = plex_tv("GET", "/resources", {"includeHttps": 1, "includeRelay": 0}, token)
+        user = plex_tv("GET", "/user", token=token)
+    except (OSError, ValueError) as e:
+        raise ValueError(tr("plex.tv unreachable: {error}", error=e))
+    servers = sorted((r for r in resources if "server" in (r.get("provides") or "")), key=lambda r: not r.get("owned"))
+    for r in servers:
+        for c in sorted(r.get("connections") or [], key=lambda c: not c.get("local")):
+            addresses = [f"http://{c['address']}:{c['port']}"] if c.get("local") and c.get("address") else []
+            for address in addresses + ([c["uri"]] if c.get("uri") else []):
+                try:
+                    set_plex(address, r.get("accessToken") or token, user.get("username") or user.get("title") or "")
+                    return
+                except ValueError:
+                    continue
+    raise ValueError(tr("No Plex server of this account answers the box") if servers
+                     else tr("This Plex account has no server"))
+
+
+def link_state():
+    with link_lock:
+        if link_pending and link_pending.get("expires_at", 0) > time.time() - 60:
+            pending = {k: link_pending.get(k) for k in ("code", "url", "error")}
+        else:
+            pending = None
+    c = px_config() or {}
+    return {"configured": bool(c), "name": c.get("name") or "", "account": c.get("account") or "", "pending": pending}
+
+
+def link_cancel():
+    with link_lock:
+        link_pending.clear()
 
 
 def px_request(address, token, path, params=None):

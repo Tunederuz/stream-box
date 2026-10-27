@@ -540,7 +540,14 @@ library), `/api/plex_search` (`/hubs/search`), `/api/plex_series` (`allLeaves`),
 of the file, `/library/parts/…`, no transcoding). Progress: `/:/timeline` and `/:/progress` every 10 s
 (`playback.history_loop`), `/:/scrobble` at the end (`px_report`); links `plex:<ratingKey>` in the history. Next
 episode: `next_up` with `service: "plex"` and the `path` being played (Plex files hold no item id). Colors: amber
-(`#e5a00d`), bar and loading screen too. Plex.tv sign-in by code (`plex.tv/link`) not done yet.
+(`#e5a00d`), bar and loading screen too.
+Sign-in with a Plex account by code: `POST /api/plex_link` (`plex.link_start`: plex.tv PIN, 4 characters, 15 min),
+`GET /api/plex_link` (`link_state`: configured, name, account, pending {code, error}); a thread polls the PIN every
+3 s, then reads the account's servers (`/resources`), owned ones first, and keeps the first the box reaches (local
+connections first, plain `http://<LAN address>:<port>` before the plex.direct https one) through `set_plex`, with the
+server's access token and the account name. TV: "Plex" row of the System menu (`plexMenu`: sign in, disconnect), code
+dialog `CodeDialog` (shared with the YouTube account: `menu.codeDialog` gives its texts, QR code of plex.tv/link);
+companion app: "Sign in with a Plex account" button in the Plex section (polls while a code is shown).
 TV menu: Jellyfin and Plex share the code of the library tabs (`libs[id]`: home, results, preview, searching, row, sel;
 `libRows`, `libChoose`, `libPlay`; `/api/<id>…`). A library tab only shows when it is connected (`st.libraries`);
 while none is, a "Libraries" tab (`LibrariesTab`) tells how to connect Jellyfin or Plex, with the QR code. `tabs` is

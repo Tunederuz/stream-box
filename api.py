@@ -95,6 +95,7 @@ JSON_ROUTES = {
     "/api/youtube": youtube.youtube_home,
     "/api/youtube_channels": lambda: {"channels": youtube.yt_channels()},
     "/api/youtube_account": youtube.yt_account_status,
+    "/api/plex_link": plex.link_state,   # Plex server, and the sign-in code being waited for
     "/api/bluetooth": btsetup.status,
     "/api/audio": audio_status,
     "/api/wifi": netsetup.status,

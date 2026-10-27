@@ -18,8 +18,8 @@ Item {
                     "Tap \"Play on…\" (the cast icon) and choose Stream Box.",
                     "The Jellyfin tab then shows here, with your library." ] },
                 { name: "Plex", color: "#e5a00d", steps: [
-                    "Open the companion app on your phone (QR code below).",
-                    "Settings → Plex: give your server's address.",
+                    "System → Plex: sign in with your Plex account, with a code to type on plex.tv/link.",
+                    "Or in the companion app (QR code below): Settings → Plex, a server's address.",
                     "The Plex tab then shows here, with your library." ] }]
             Rectangle {
                 width: 560; height: 350; radius: 24

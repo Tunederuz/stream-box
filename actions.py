@@ -202,6 +202,8 @@ ACTIONS = {
     "jellyfin_play": lambda body: jellyfin.jellyfin_play(str(body.get("id", "")), bool(body.get("from_start"))),
     "plex_play": lambda body: plex.plex_play(str(body.get("id", "")), bool(body.get("from_start"))),
     "plex": lambda body: plex.set_plex(str(body.get("address", "")), str(body.get("token", ""))),   # server (empty: forget)
+    # Plex account by code (plex.tv/link): start, or give up
+    "plex_link": lambda body: plex.link_cancel() if body.get("action") == "cancel" else plex.link_start(),
     "youtube_channels": lambda body: youtube.edit_yt_channels(str(body.get("action", "")),
                                                               str(body.get("channel", "")), int(body.get("delta", 0))),
     "update": lambda body: system.start_update(),

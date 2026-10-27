@@ -531,7 +531,14 @@
     <h2>Plex</h2>
     <p style="margin-top: 0">Your Plex server in the TV menu (a Plex tab): resume, next episodes, recent additions,
       search. Progress follows on your other Plex apps.</p>
-    <label class="setting" for="plex-address">Server address</label>
+    <p id="plex-connected" hidden></p>
+    <button id="plex-link" class="current" style="width: 100%">Sign in with a Plex account</button>
+    <div id="plex-code" hidden style="margin-top: 12px; text-align: center">
+      <p style="margin-bottom: 6px">On <b>plex.tv/link</b>, enter this code:</p>
+      <div id="plex-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
+      <a href="https://plex.tv/link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the link page</a>
+    </div>
+    <label class="setting" for="plex-address">Or the address of a server of the local network</label>
     <div class="field">
       <input id="plex-address" type="url" autocomplete="off" placeholder="http://192.168.1.10:32400">
     </div>
@@ -1041,12 +1048,39 @@ document.querySelectorAll("[data-key]").forEach((b) => {
 });
 $("remote-url-save").onclick = () => send("remote_url", { url: $("remote-url").value.trim() });
 
-// Plex server (plex.py): checked by the box before being kept; the token is never shown again
+// Plex server (plex.py): signing in with a Plex account by code (plex.tv/link, also started from the TV), or the
+// address of a server; checked by the box before being kept; the token is never shown again
 function renderPlex(s) {
   if (document.activeElement !== $("plex-address")) $("plex-address").value = s.plex_server || "";
   $("plex-forget").hidden = !s.plex_server;
   $("plex-save").textContent = s.plex_server ? tr("Change") : tr("Connect");
 }
+let plexTimer = null;
+async function refreshPlexLink() {
+  clearTimeout(plexTimer);
+  try {
+    const r = await fetch("/api/plex_link");
+    const d = await r.json();
+    const p = d.pending;
+    $("plex-code").hidden = !p || !!p.error;
+    if (p && !p.error) $("plex-user-code").textContent = p.code;
+    $("plex-connected").hidden = !d.configured;
+    $("plex-connected").textContent = d.configured ? (d.account ? tr("Connected to {server} (account {account}).",
+      { server: d.name, account: d.account }) : tr("Connected to {server}.", { server: d.name })) : "";
+    $("plex-link").textContent = p && !p.error ? tr("New code") : tr("Sign in with a Plex account");
+    if (p && p.error) $("plex-status").textContent = p.error;
+    if (p && !p.error) plexTimer = setTimeout(refreshPlexLink, 3000);   // waiting for the code
+    else if (!p) refresh();
+  } catch (e) {
+    $("plex-status").textContent = e.message || tr("Box unreachable");
+  }
+}
+$("plex-link").onclick = async () => {
+  $("plex-status").textContent = "";
+  await send("plex_link");
+  refreshPlexLink();
+};
+refreshPlexLink();
 $("plex-save").onclick = async () => {
   $("plex-status").textContent = tr("Checking with the server…");
   try {
@@ -1059,10 +1093,12 @@ $("plex-save").onclick = async () => {
     $("plex-status").textContent = e.message || tr("Box unreachable");
   }
   refresh();
+  refreshPlexLink();
 };
-$("plex-forget").onclick = () => {
+$("plex-forget").onclick = async () => {
   $("plex-status").textContent = "";
-  send("plex", { address: "" });
+  await send("plex", { address: "" });
+  refreshPlexLink();
 };
 // Poll and prediction: fetched every 3 s while the page shows a live stream
 let events = null, eventsTimer = null;
