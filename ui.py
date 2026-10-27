@@ -526,6 +526,8 @@ class Osd(QObject):
 
     def _set(self, key, value):
         self.data[key] = json.loads(value)
+        if key == "bar" and not self.data[key]:
+            self.data["playback"] = {}   # shown again later, maybe for another video: never with this one's state
         self.changed.emit()
 
     def receive(self, key):

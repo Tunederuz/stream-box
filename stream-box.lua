@@ -540,6 +540,8 @@ local function show_bar(seconds)
     draw_bar()
 end
 
+mp.register_event("start-file", function() if bar_visible then hide_bar() end end)   -- not over the next video's loading
+
 mp.add_periodic_timer(0.5, function()
     if not bar_visible then return end
     if mp.get_property_native("idle-active") or (not mp.get_property_native("pause") and mp.get_time() > bar_until) then

@@ -43,6 +43,12 @@ Item {
         : []).concat([chapterTitle]).filter(function (t) { return !!t }).join("  ·  ")
     // Preview and "+30 s" bubble: only while seeking forward or back (not when the bar is just shown). Scrubbing (← →
     // in a video, stream-box.lua): the video is paused, the cursor, preview and offset stay on the target until OK / Back
+    // Progress animated only once the bar shows a video it already showed: on appearing or on another video (another
+    // path), the bar and the cursor go straight to their place instead of sliding from the previous one's
+    property bool animate: false
+    property string animPath: ""
+    onPbChanged: if ((pb.path || "") !== animPath) { animate = false; animPath = pb.path || ""; settle.restart() }
+    Timer { id: settle; interval: 300; onTriggered: root.animate = root.shown }
     readonly property bool scrubbing: !live && fx.target !== undefined
     // The bar itself has the focus in a video unless the title or a button has it (stream-box.lua): a bit thicker
     readonly property bool barFocus: !live && shown && (ctl.focus === undefined || ctl.focus < 0) && !ctl.title
@@ -61,7 +67,10 @@ Item {
     opacity: shown ? 1 : 0
     visible: opacity > 0
     Behavior on opacity { NumberAnimation { duration: 220 } }
-    onShownChanged: if (shown && live && !avatars[b.channel]) loadAvatars()
+    onShownChanged: {
+        if (!shown) { animate = false; animPath = "" }
+        else if (live && !avatars[b.channel]) loadAvatars()
+    }
 
     function loadAvatars() {
         var x = new XMLHttpRequest()
@@ -185,7 +194,7 @@ Item {
                     GradientStop { position: 0; color: root.colors[0] }
                     GradientStop { position: 1; color: root.colors[1] }
                 }
-                Behavior on width { NumberAnimation { duration: 240 } }
+                Behavior on width { enabled: root.animate; NumberAnimation { duration: 240 } }
             }
             Repeater {   // chapter marks
                 model: root.live || root.span <= 0 ? 0 : root.chapters.length
@@ -202,14 +211,14 @@ Item {
                 Behavior on opacity { NumberAnimation { duration: 160 } }
                 x: track.width * track.played - width / 2
                 anchors.verticalCenter: parent.verticalCenter
-                Behavior on x { NumberAnimation { duration: 240 } }
+                Behavior on x { enabled: root.animate; NumberAnimation { duration: 240 } }
             }
             Rectangle {   // cursor
                 width: root.barFocus ? 28 : 22; height: width; radius: width / 2; color: "white"
                 Behavior on width { NumberAnimation { duration: 160 } }
                 x: track.width * track.played - width / 2
                 anchors.verticalCenter: parent.verticalCenter
-                Behavior on x { NumberAnimation { duration: 240 } }
+                Behavior on x { enabled: root.animate; NumberAnimation { duration: 240 } }
             }
             // YouTube preview above the cursor: one tile of the thumbnail sheet
             Item {
