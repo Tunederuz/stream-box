@@ -46,7 +46,11 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   `~/.config/stream-box/no-hdmi-audio` disables this. WirePlumber then remembers profile and volume
   (`~media/.local/state/wireplumber/`).
 - **Network**: preferably Ethernet with a static IP (`install.sh --static-ip … --gateway …`), required for
-  Wake-on-LAN (`--wol`, and the matching option in the BIOS).
+  Wake-on-LAN (`--wol`, and the matching option in the BIOS). The image enables it on every Ethernet connection
+  (`/etc/NetworkManager/conf.d/50-stream-box-wol.conf`: `ethernet.wake-on-lan=magic`): without it the r8169 driver
+  powers the port down at shutdown (link light off, no wake-up from Home Assistant). NetworkManager applies it when
+  the connection is activated (`nmcli device reapply` does not); check with `/sys/class/net/<if>/device/power/wakeup`
+  (`enabled`).
 - **Firewall**: if ufw is active, the companion app's port 8080 must be open to the reverse proxy
   (`install.sh --allow-from <proxy-ip>`).
 - **HTTPS**: a reverse proxy (for example Nginx Proxy Manager) to `http://<box-ip>:8080` with a certificate,
