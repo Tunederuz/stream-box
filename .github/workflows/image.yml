@@ -1,0 +1,32 @@
+# Disk image on every version tag (v1.0, v1.1…): image/build.sh (mkosi in a privileged Arch container), compressed,
+# published as a GitHub release with its checksum. Release files are limited to 2 GB: the .xz is about 1.6 GB.
+name: image
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # create the release
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4   # mkosi.prepare.chroot clones this checkout into the image
+      - name: Free disk space   # the build tree and the 3 GB image do not fit next to the runner's preinstalled tools
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - run: bash image/build.sh
+      - run: bash image/build.sh xz
+      - name: Checksum
+        run: |
+          cp image/mkosi.output/stream-box.raw.xz .
+          sha256sum stream-box.raw.xz > stream-box.raw.xz.sha256
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" stream-box.raw.xz stream-box.raw.xz.sha256 --title "Stream Box $GITHUB_REF_NAME" \
+            --notes "Disk image built from $GITHUB_REF_NAME. Flash stream-box.raw.xz on a USB stick (balenaEtcher, Rufus), boot the PC on it, then TV menu → System → \"Install on this PC\". See the README's Installation section."

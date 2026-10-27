@@ -681,7 +681,8 @@ so `off` and never `unavailable`. The other entities: available if `status` = on
 ### Installable disk image (image/, mkosi)
 
 `bash image/build.sh` builds `image/mkosi.output/stream-box.raw` (~3 GB, to write to a disk or a USB stick;
-`bash image/build.sh xz`: stream-box.raw.xz, ~1.8 GB, the version to download)
+`bash image/build.sh xz`: stream-box.raw.xz, ~1.6 GB, the version to download; built and published as a GitHub
+release with its sha256 by `.github/workflows/image.yml` on every `v*` tag, release files being limited to 2 GB)
 in an Arch Docker container with mkosi 27 (nothing installed on the machine); `bash image/build.sh vm` boots it
 in QEMU. Arch base (not CachyOS), UEFI, systemd-boot + UKI. greetd starts media's cage session at boot
 (no keyboard/login screen choice like boot-mode.py). `mkosi.prepare.chroot` (with network): user

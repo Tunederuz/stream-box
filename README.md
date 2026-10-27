@@ -66,12 +66,61 @@ that can be installed on a phone (PWA).
 | `tests/`, `tools/check.sh`, `tools/qmlshots/` | Automated tests and checks (also run on GitHub on each push); screenshots of the TV menu without a box |
 | `CLAUDE.md` | Detailed technical documentation (decisions, pitfalls, how to test) |
 
-## Installation (summary)
+## Installation
 
-Designed for an Arch distribution (tested on CachyOS) with Plasma Login as the display manager. SDDM, from which
-Plasma Login is derived, is supported by the script but has not been tried yet.
+### What you need
 
-From an admin account, in a copy of the repository:
+- A small x86-64 PC that boots in UEFI, plugged into the TV over HDMI. Tested on an Intel mini PC (UHD 630 graphics);
+  AMD and NVIDIA graphics drivers are in the image but untried.
+- A USB stick of 8 GB or more, and an internal disk of 16 GB or more (it is entirely erased).
+- Ethernet, or a Wi-Fi card (the box then offers its own Wi-Fi network to set it up from a phone).
+- A phone for the first setup, and a Bluetooth remote, a gamepad or a keyboard to use it.
+
+### 1. Get the image
+
+Download `stream-box.raw.xz` from the [releases](https://github.com/Tunederuz/stream-box/releases), or build it
+(Linux and Docker; nothing else is installed on the machine, everything happens in an Arch container):
+
+```
+git clone https://github.com/Tunederuz/stream-box.git && cd stream-box
+bash image/build.sh        # image/mkosi.output/stream-box.raw (about 3 GB)
+bash image/build.sh xz     # stream-box.raw.xz, the compressed version
+bash image/build.sh vm     # optional: try it in a virtual machine first
+```
+
+### 2. Flash it on a USB stick
+
+With [balenaEtcher](https://etcher.balena.io/) or [Rufus](https://rufus.ie/) (both take the `.xz` as is), or on Linux:
+`xzcat stream-box.raw.xz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync`.
+
+### 3. Boot the PC on the stick
+
+Choose the stick in the PC's boot menu. The box runs right away from the stick, everything works: you can try it
+before installing anything.
+
+The first time, the TV shows QR codes: connect the phone to the box's Wi-Fi network if there is no cable, then open
+the setup page (language, Wi-Fi, streamers). The companion app stays available at `http://<box address>:8080`.
+
+### 4. Install it on the PC's disk
+
+TV menu → System → "Install on this PC" → choose the disk → confirm. Everything on that disk is erased; the settings
+made from the stick come along. Then remove the stick and restart.
+
+If the installer finds no disk while the PC has an NVMe SSD, the BIOS has the disk controller in RAID mode (Intel RST,
+common on Dell): set it to AHCI (Dell: SATA Operation → AHCI). The installer says so when it detects it.
+
+### Afterwards
+
+- Twitch account, Jellyfin, Plex, YouTube account: from the TV menu (System) or the companion app (Settings).
+- Wake-on-LAN is on for Ethernet in the image: enable it in the BIOS too to wake the box from the network.
+- Home Assistant: [docs/home-assistant.md](docs/home-assistant.md).
+- Developer mode (TV menu → System): passwordless sudo and SSH for the `media` user. The image has no other root
+  access.
+
+### Advanced: on an existing Arch installation
+
+`install.sh` installs the box on top of an Arch distribution with Plasma Login (SDDM is supported by the script but
+untried) as the login manager. From an admin account, in a copy of the repository:
 
 ```
 git clone https://github.com/Tunederuz/stream-box.git && cd stream-box
@@ -102,8 +151,8 @@ The simplest way: TV System menu → "Backup and restore" (on a USB stick), or S
 
 On the command line, `sudo bash backup.sh` creates an archive of everything specific to the box: streamer list,
 settings, Twitch token, Jellyfin connection, MQTT and weather configuration, sound, Bluetooth pairings. It contains
-secrets: it is readable only by whoever creates it, and does not belong in the repository. After reinstalling the
-system:
+secrets: it is readable only by whoever creates it, and does not belong in the repository. After reinstalling with
+`install.sh`:
 
 ```
 sudo bash install.sh --restore stream-box-backup-YYYY-MM-DD.tar.gz --static-ip … --gateway … --wol --allow-from …
