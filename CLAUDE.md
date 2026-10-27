@@ -896,6 +896,16 @@ by `qml/shaders/build.sh` (Docker, PySide6 of the same version as the box: Essen
 half resolution (`layer.textureSize`, `ShaderLayer` component). Measured cost: ~25 % of a core for ui.py whatever
 the background, menu included.
 
+### On a USB drive (flash-mode, image)
+`/usr/local/lib/stream-box/flash-mode` (`stream-box-flash-mode.service`, at each boot before greetd): when `/` is on a
+USB disk (`lsblk -dno TRAN` = usb: the image on a stick, before "Install on this PC" or kept there), fewer writes to
+it: journal in memory (`/run/systemd/journald.conf.d/50-stream-box-usb.conf`, `Storage=volatile`, 64 MB, then
+journald restarted), `/` remounted `commit=120,noatime`, `~media/.cache` in a 1 GB tmpfs, marker
+`/run/stream-box/usb-root`: history.py then writes the history at most once a minute (`WRITE_EVERY`, positions kept
+in `pending`, written by `flush()` from history_loop, and at once on SIGTERM of remote.py; removals and clearing at
+once). Nothing on an internal disk, nothing kept (all in /run or in memory). Tested in QEMU with the disk as
+`usb-storage`: all applied; at rest, writes come in bursts at each btrfs commit (~0.4 MB/min on average).
+
 ### Installer (installer.py, image)
 The image boots from a USB stick (live, everything works, settings included); System menu → "Install on this PC"
 (QML `installMenu`, visible if `/api/install` says `available`: disk of `/` on USB / removable, and image with

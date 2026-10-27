@@ -96,7 +96,8 @@ With [balenaEtcher](https://etcher.balena.io/) or [Rufus](https://rufus.ie/) (bo
 ### 3. Boot the PC on the stick
 
 Choose the stick in the PC's boot menu. The box runs right away from the stick, everything works: you can try it
-before installing anything.
+before installing anything. On a USB drive it writes as little as possible (journal and caches in memory, history once a
+minute), but a cheap stick is still not meant to run it for good: install it on the PC's disk.
 
 The first time, the TV shows QR codes: connect the phone to the box's Wi-Fi network if there is no cable, then open
 the setup page (language, Wi-Fi, streamers). The companion app stays available at `http://<box address>:8080`.
