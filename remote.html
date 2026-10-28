@@ -508,29 +508,9 @@
 
   <section>
     <h2>Followed channels</h2>
-    <!-- Twitch does not give this list to the website's token: it takes your own Twitch app and an authorization by code -->
-    <div id="follows-setup" hidden>
-      <p>For the <b>Following</b> tab of the TV menu, the box needs your own Twitch app (free, one time).</p>
-      <details>
-        <summary>Create the app</summary>
-        <ol>
-          <li>Go to <code>dev.twitch.tv/console/apps</code> → <b>Register Your Application</b> (two-factor
-            authentication must be enabled on your account).</li>
-          <li>Any name (unique on Twitch), OAuth Redirect URL <code>http://localhost</code>, category
-            <b>Other</b>.</li>
-          <li>Client type <b>Public</b>: only the Client ID is needed. With <b>Confidential</b>, also paste the secret.</li>
-          <li>Copy the <b>Client ID</b> here.</li>
-        </ol>
-      </details>
-      <div class="stack">
-        <input id="app-id" autocomplete="off" autocapitalize="none" placeholder="Client ID" aria-label="Client ID">
-        <input id="app-secret" type="password" autocomplete="off" placeholder="Secret (confidential app only)"
-               aria-label="App secret">
-        <button id="app-save" class="current">Save</button>
-      </div>
-    </div>
+    <!-- Twitch does not give this list to the website's token: the box's Twitch app and an authorization by code -->
     <div id="follows-auth" hidden>
-      <p>App saved. Allow the box to read your followed channels (read-only).</p>
+      <p>For the <b>Following</b> tab of the TV menu, allow the box to read your followed channels (read-only).</p>
       <button id="follows-login" class="current" style="width: 100%">Authorize the box</button>
       <div id="follows-code" hidden style="margin-top: 12px; text-align: center">
         <p style="margin-bottom: 6px">On <b>twitch.tv/activate</b>, enter this code:</p>
@@ -540,10 +520,29 @@
     </div>
     <div id="follows-ok" hidden>
       <p id="follows-summary"></p>
-      <div class="row">
-        <button id="follows-logout">Disconnect</button>
-        <button id="app-change">Change app</button>
-      </div>
+      <button id="follows-logout" style="width: 100%">Disconnect</button>
+    </div>
+    <!-- Optional: your own Twitch app instead of the box's (removed: back to the box's) -->
+    <div id="follows-app" style="margin-top: 12px">
+      <details>
+        <summary>Use your own Twitch app</summary>
+        <p>Optional: the box has its own. Changing the app asks for the authorization again.</p>
+        <ol>
+          <li>Go to <code>dev.twitch.tv/console/apps</code> → <b>Register Your Application</b> (two-factor
+            authentication must be enabled on your account).</li>
+          <li>Any name (unique on Twitch), OAuth Redirect URL <code>http://localhost</code>, category
+            <b>Other</b>.</li>
+          <li>Client type <b>Public</b>: only the Client ID is needed. With <b>Confidential</b>, also paste the secret.</li>
+          <li>Copy the <b>Client ID</b> here.</li>
+        </ol>
+        <div class="stack">
+          <input id="app-id" autocomplete="off" autocapitalize="none" placeholder="Client ID" aria-label="Client ID">
+          <input id="app-secret" type="password" autocomplete="off" placeholder="Secret (confidential app only)"
+                 aria-label="App secret">
+          <button id="app-save" class="current">Save</button>
+          <button id="app-reset" hidden>Back to the box's app</button>
+        </div>
+      </details>
     </div>
     <div class="status" id="follows-status"></div>
   </section>
@@ -1538,8 +1537,8 @@ $("poweroff").onclick = async () => {
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); refreshAccount(); } });
 refreshAccount();
 
-// Followed channels: Twitch app, authorization by code, status
-let followsTimer = null, followsChanging = false;
+// Followed channels: authorization by code, status
+let followsTimer = null;
 async function refreshFollows() {
   clearTimeout(followsTimer);
   try {
@@ -1547,9 +1546,9 @@ async function refreshFollows() {
     const f = await r.json();
     if (!r.ok) throw new Error(f.error);
     const pending = f.pending && !f.authorized;
-    $("follows-setup").hidden = f.configured && !followsChanging;
-    $("follows-auth").hidden = !f.configured || f.authorized || followsChanging;
-    $("follows-ok").hidden = !f.authorized || followsChanging;
+    $("follows-auth").hidden = f.authorized;
+    $("follows-ok").hidden = !f.authorized;
+    $("app-reset").hidden = !f.own_app;
     $("follows-code").hidden = !pending || !!f.pending.error;
     if (pending) {
       $("follows-user-code").textContent = f.pending.user_code;
@@ -1559,7 +1558,8 @@ async function refreshFollows() {
     $("follows-status").textContent = f.pending?.error ? tr("Authorization denied: {error}", { error: f.pending.error }) : "";
     if (f.authorized) {
       $("follows-summary").textContent = tr("Authorized · {total} followed channels, {live} live.",
-                                            { total: f.live.length + f.offline.length, live: f.live.length });
+                                            { total: f.live.length + f.offline.length, live: f.live.length })
+        + (f.own_app ? " " + tr("With your own Twitch app.") : "");
     }
     if (pending && !f.pending.error) followsTimer = setTimeout(refreshFollows, 3000);   // waiting for the code
   } catch (e) {
@@ -1585,13 +1585,17 @@ async function followsAction(action, body = {}, done = "") {   // done: line sho
   refreshFollows();
 }
 $("app-save").onclick = async () => {
-  followsChanging = false;
-  await followsAction("follows_app", { client_id: $("app-id").value, client_secret: $("app-secret").value });
+  if (!$("app-id").value.trim()) return;
+  if (!confirm(tr("Use this Twitch app? The followed channels will have to be authorized again."))) return;
+  await followsAction("follows_app", { client_id: $("app-id").value, client_secret: $("app-secret").value }, tr("App saved."));
   $("app-secret").value = "";
+};
+$("app-reset").onclick = () => {
+  if (confirm(tr("Go back to the box's Twitch app? The followed channels will have to be authorized again.")))
+    followsAction("follows_app", { client_id: "", client_secret: "" }, tr("Back to the box's app."));
 };
 $("follows-login").onclick = () => followsAction("follows_login");
 $("follows-logout").onclick = () => { if (confirm(tr("Disconnect the followed channels?"))) followsAction("follows_logout"); };
-$("app-change").onclick = () => { followsChanging = true; refreshFollows(); };
 settingsLoaders.push(refreshFollows);
 if (!$("tab-settings").hidden) refreshFollows();
 

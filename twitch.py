@@ -1,5 +1,5 @@
 """Stream Box: Twitch for the companion app. Streamer list (streamers.txt), who is live, polls and predictions of the
-watched channel, replays and clips, followed channels (own Twitch app, device code), and the Twitch account.
+watched channel, replays and clips, followed channels (the box's Twitch app, device code), and the Twitch account.
 
 Twitch account: the site's token (auth-token cookie) is stored in streamlink's Twitch config, which streamlink reads
 by itself. Twitch only removes ads for subscriptions with that token.
@@ -361,12 +361,16 @@ def twitch_save_position(video_id, position):
 
 
 # Followed channels (Following tab of the TV menu). Twitch refuses this list to the site's token (GQL: "service error",
-# Helix: the user:read:follows scope is missing): you need your own Twitch app (dev.twitch.tv), of type Public (no
-# secret) or Confidential (with secret), and a code authorization ("device code flow"): the TV or the page
-# show a code to type on twitch.tv/activate. Config in twitch-app.json ({"client_id", "client_secret"?}),
-# tokens in twitch-follows-token.json, both 600 in ~/.config/stream-box.
+# Helix: the user:read:follows scope is missing): it takes a Twitch app and a code authorization ("device code
+# flow"): the TV or the page show a code to type on twitch.tv/activate. The Stream Box app by default
+# (TWITCH_CLIENT_ID, the same for every box: nothing to create). It is of type Public: no secret, its Client ID is
+# public by nature (it travels in the clear with every request), like the ones streamlink or yt-dlp carry. Your own
+# app instead, if you want (companion app, "Use your own Twitch app"): twitch-app.json ({"client_id",
+# "client_secret"?}, also the boxes from before the built-in app), removed to go back to the box's. Tokens in
+# twitch-follows-token.json, both 600 in ~/.config/stream-box.
 
 TWITCH_APP_FILE = os.path.join(COOKIES_DIR, "twitch-app.json")
+TWITCH_CLIENT_ID = "y2pihopq29jojaskixpelop4gnaisa"
 FOLLOWS_TOKEN_FILE = os.path.join(COOKIES_DIR, "twitch-follows-token.json")
 FOLLOWS_SCOPE = "user:read:follows"
 FOLLOWS_CACHE = 60   # seconds between two polls of the list
@@ -391,7 +395,7 @@ def twitch_oauth(path, fields):
 def app_fields():
     app = read_json_file(TWITCH_APP_FILE)
     if not app.get("client_id"):
-        raise ValueError(tr("no Twitch app configured"))
+        return {"client_id": TWITCH_CLIENT_ID}
     fields = {"client_id": app["client_id"]}
     if app.get("client_secret"):
         fields["client_secret"] = app["client_secret"]
@@ -432,7 +436,7 @@ def follows_poll(device_code, interval, expires_at):
 def follows_start():
     code, d = twitch_oauth("device", {"client_id": app_fields()["client_id"], "scopes": FOLLOWS_SCOPE})
     if code != 200 or not d.get("device_code"):
-        raise ValueError(tr("Twitch rejects the app: {error} (check the Client ID)", error=d.get("message") or code))
+        raise ValueError(tr("Twitch refuses the request: {error}", error=d.get("message") or code))
     expires_at = time.time() + int(d.get("expires_in") or 1800)
     with follows_lock:
         follows_pending.clear()
@@ -502,15 +506,12 @@ def validate_helix(token):
 
 
 def follows_status():
-    """State for the page and the menu: app configured, authorization in progress, list."""
-    app = read_json_file(TWITCH_APP_FILE)
-    out = {"configured": bool(app.get("client_id")), "confidential": bool(app.get("client_secret")),
-           "authorized": False, "pending": None, "live": [], "offline": []}
+    """State for the page and the menu: own app (instead of the box's), authorization in progress, list."""
+    out = {"own_app": bool(read_json_file(TWITCH_APP_FILE).get("client_id")), "authorized": False, "pending": None,
+           "live": [], "offline": []}
     with follows_lock:
         if follows_pending and follows_pending.get("expires_at", 0) > time.time():
             out["pending"] = {k: follows_pending.get(k) for k in ("user_code", "verification_uri", "error")}
-    if not out["configured"]:
-        return out
     token = follows_token()
     if not token:
         return out
@@ -528,21 +529,23 @@ def follows_logins():
 
 
 def set_twitch_app(client_id, client_secret):
+    """Your own Twitch app instead of the box's; an empty Client ID goes back to the box's"""
     client_id = client_id.strip()
-    if not re.fullmatch(r"[a-z0-9]{20,40}", client_id):
+    if client_id and not re.fullmatch(r"[a-z0-9]{20,40}", client_id):
         raise ValueError(tr("This is not a Twitch Client ID (30 letters and digits)."))
-    app = {"client_id": client_id}
-    if client_secret.strip():
-        app["client_secret"] = client_secret.strip()
-    write_private_json(TWITCH_APP_FILE, app)
-    for path in (FOLLOWS_TOKEN_FILE,):   # new app: the old authorization no longer applies
+    if client_id:
+        app = {"client_id": client_id}
+        if client_secret.strip():
+            app["client_secret"] = client_secret.strip()
+        write_private_json(TWITCH_APP_FILE, app)
+    else:
         try:
-            os.remove(path)
+            os.remove(TWITCH_APP_FILE)
         except FileNotFoundError:
             pass
+    follows_logout()   # another app: the old authorization no longer applies
     with follows_lock:
         follows_pending.clear()
-        follows_cache.update(at=0.0, data=None)
 
 
 def follows_logout():
