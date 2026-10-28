@@ -361,7 +361,8 @@ Twitch / YouTube by Qt and rounded by `MultiEffect`; weather and QR code through
 `Marquee` (text clipped at rest, two copies that scroll on focus), `FocusFrame`, `StreamerCard`, `VideoCard`,
 `SettingRow`, `QrCode`, `fmt.js`.
 Settings tab (one tab; "System menu" below means it): `settingsRows()` is the list of sections (`sectionIds`, each
-row with `sectionSummary`, OK or ▶ opens it, `open: true`) then the power rows (sleep, restart, shut down); a section
+row with `sectionHint` (what it holds, grey line) and `sectionAlert` (only when something needs attention: update
+ready or failed, no network, installation running), OK or ▶ opens it, `open: true`) then the power rows (sleep, restart, shut down); a section
 open (`section`, `sectionRows(id)`: picture, playback, chat, look, accounts, network, devices, updates, backup,
 advanced), its rows, title in the header (`sectionTitle`); Back or ◀ (on a row without a value) returns to the list
 on that section (`leaveSection`, `rootSel`). The Lua menu of the simplified version keeps its own System menu.

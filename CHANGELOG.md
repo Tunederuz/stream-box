@@ -6,6 +6,10 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+### Changed
+- TV menu, Settings: each section says what it holds, and shows a notice only when something needs attention
+  (update ready, no network…) instead of a few of its values.
+
 ## [0.3.0]
 
 ### Changed

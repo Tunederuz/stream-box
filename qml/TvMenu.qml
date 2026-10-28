@@ -657,7 +657,8 @@ Item {
         return rows
     }
     function prettyMode(m) { return String(m).replace("x", " × ").replace("@", " · ") + " Hz" }
-    // Settings tab: sections (one page each, Back or ◀ returns to the list), with a summary of what is in them; the
+    // Settings tab: sections (one page each, Back or ◀ returns to the list), each with what it holds and an alert when
+    // something needs attention (update ready, no network…); the
     // power actions stay on the list itself. Box status and the companion app's QR code beside the list
     readonly property var sectionIds: ["picture", "playback", "chat", "look", "accounts", "network", "devices", "updates",
                                        "backup", "advanced"]
@@ -666,27 +667,28 @@ Item {
                      accounts: "Accounts and libraries", network: "Network", devices: "Devices", updates: "Updates",
                      backup: "Backup and installation", advanced: "Advanced" })[id] || "")
     }
-    function sectionSummary(id) {
-        var s = st
+    // What a section holds (grey line under its title)
+    function sectionHint(id) {
+        return tr(({ picture: "Resolution, audio output, volume, night mode",
+                     playback: "Subtitles, auto switch, polls and predictions",
+                     chat: "Chat on the TV, corner, background, text size", look: "Background, colors, language",
+                     accounts: "Twitch, YouTube, Jellyfin, Plex", network: "Wi-Fi, companion app QR code",
+                     devices: "Remotes, controllers, keys, power button", updates: "Version, update from a USB stick",
+                     backup: "Settings backup, installation on this PC", advanced: "Version, SSH, developer mode" })[id] || "")
+    }
+    // Something to notice in a section, shown on its row ("" most of the time: only "›")
+    function sectionAlert(id) {
         switch (id) {
-        case "picture":
-            return [display ? (display.setting === "auto" ? tr("Auto ({mode})", { mode: prettyMode(display.auto) }) : prettyMode(display.setting)) : "",
-                    s.mute ? tr("muted") : (s.volume || 0) + " %"].filter(Boolean).join("  ·  ")
-        case "playback": return tr("Subtitles {n} %", { n: s.sub_size || 100 })
-        case "chat": return s.chat_visible ? tr(corners[s.corner] || "") : tr("Hidden")
-        case "look": return (s.languages || {})[s.lang] || "English"
-        case "accounts":
-            var on = [account && account.login ? "Twitch" : "", ytAccount && ytAccount.authorized ? "YouTube" : "",
-                      (s.libraries || {}).jellyfin ? "Jellyfin" : "", (s.libraries || {}).plex ? "Plex" : ""].filter(Boolean)
-            return on.length ? on.join(" · ") : tr("Not connected")
-        case "network": return wifiValue()
-        case "devices":
-            return bt ? tr(bt.paired.length > 1 ? "{n} devices paired" : "{n} device paired", { n: bt.paired.length }) : ""
-        case "updates": return updateVersion()
+        case "updates":
+            var u = health && health.update
+            if (u && (u.running || (u.system && u.system.running))) return tr("Update in progress…")
+            if (updateWaiting()) return tr("Update ready")
+            var l = u && u.system && u.system.last
+            return (u && u.last && !u.last.ok) || (l && !l.ok) ? tr("Update failed") : ""
+        case "network":
+            return wifi && wifi.device && (wifi.mode === "hotspot" || (!wifi.network && !wifi.connecting)) ? wifiValue() : ""
         case "backup":
             return install && install.progress && install.progress.state === "running" ? install.progress.percent + " %" : ""
-        case "advanced":
-            return (st.player === "mpv" ? tr("Simplified version") : tr("Full version")) + (dev && dev.enabled ? "  ·  " + tr("dev") : "")
         }
         return ""
     }
@@ -699,8 +701,9 @@ Item {
         if (section)
             return sectionRows(section).filter(function (r) { return r.visible !== false })
         var rows = sectionIds.map(function (id) {
-            var sum = sectionSummary(id)
-            return { label: sectionTitle(id), value: (sum ? sum + "   " : "") + "›", ok: function () { openSection(id) }, open: true }
+            var alert = sectionAlert(id)
+            return { label: sectionTitle(id), hint: sectionHint(id), value: (alert ? alert + "   " : "") + "›",
+                     ok: function () { openSection(id) }, open: true }
         })
         return rows.concat([
             { header: tr("Power options") },
