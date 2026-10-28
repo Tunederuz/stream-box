@@ -14,7 +14,10 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   "Update dependencies" in Settings → Advanced forces it. The direct update of developer mode, renamed "Direct update
   (source)", has its own status in Settings → Updates.
 - Every button shows at once that it was pressed (dialogs open right away, "Checking…", "In progress…") instead of
-  changing a few seconds later.
+  changing a few seconds later: settings switches, favorite channels, reloading subscriptions, disconnecting a
+  library, authorizing followed channels on the TV; in the companion app, account buttons, list rows, shutdown,
+  backup download and image upload (greyed out until the box answers, no double press).
+- TV menu: the Twitch account row says where to sign in (the companion app) instead of doing nothing.
 - TV menu, Settings: each section says what it holds, and shows a notice only when something needs attention
   (update ready, no network…) instead of a few of its values.
 - TV menu: entering YouTube, Jellyfin or Plex puts the focus on the first row of videos (the search is just above).

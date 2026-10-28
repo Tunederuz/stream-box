@@ -37,7 +37,9 @@ Item {
             Behavior on scale { NumberAnimation { duration: 160 } }
             FocusFrame { active: parent.foc; radius: 37 }
             Rectangle { anchors.fill: parent; radius: 37; color: "#9146ff" }
-            Text { anchors.centerIn: parent; text: menu.tr("Authorize the box"); color: "white"; font.pixelSize: 25; font.bold: true }
+            // asked, the code not there yet (TvMenu sets pending {} at once)
+            Text { anchors.centerIn: parent; text: page.pend && !page.pend.error ? menu.tr("Requesting the code…") : menu.tr("Authorize the box")
+                   color: "white"; font.pixelSize: 25; font.bold: true }
         }
         Text {
             visible: !!(page.pend && page.pend.error)

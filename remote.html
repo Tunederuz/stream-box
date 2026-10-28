@@ -942,6 +942,16 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (b && !b.dataset.key) pressed = { button: b, at: Date.now() };
 }, true);
+// Handlers doing their own request: the pressed button greyed and disabled until it answers (no double press)
+async function pressing(work) {
+  const b = Date.now() - pressed.at < 500 ? pressed.button : null;
+  if (b) { b.classList.add("busy"); b.disabled = true; }
+  try {
+    return await work();
+  } finally {
+    if (b) { b.classList.remove("busy"); b.disabled = false; }
+  }
+}
 async function send(action, body = {}) {   // → true when the box accepted it
   const b = Date.now() - pressed.at < 500 ? pressed.button : null;
   if (b) b.classList.add("busy");
@@ -1039,7 +1049,7 @@ async function editStreamers(action, login, delta = 0) {
   const status = $("manage-status");
   status.className = "status";
   status.textContent = action === "add" ? tr("Checking on Twitch…") : "";
-  try {
+  await pressing(async () => { try {
     const r = await fetch("/api/streamers", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, login, delta }),
     });
@@ -1050,7 +1060,7 @@ async function editStreamers(action, login, delta = 0) {
   } catch (e) {
     status.className = "status error";
     status.textContent = e.message || tr("Box unreachable");
-  }
+  } });
   await refresh();
   renderManage();
 }
@@ -1410,7 +1420,13 @@ $("reboot").onclick = async () => {
   if (await send("reboot")) goingDown(tr("The box is restarting (about a minute)…"), tr("Restarting…"));
 };
 // Backup: restore of a file downloaded earlier (the box restores everything and restarts)
-$("backup-download").onclick = () => { location.href = "/api/backup/download"; };
+$("backup-download").onclick = () => {   // the box builds the archive first: a few seconds with no sign otherwise
+  $("backup-download").disabled = true;
+  $("backup-status").className = "status";
+  $("backup-status").textContent = tr("Preparing the backup…");
+  setTimeout(() => { $("backup-download").disabled = false; $("backup-status").textContent = ""; }, 6000);
+  location.href = "/api/backup/download";
+};
 $("backup-restore").onclick = () => $("backup-file").click();
 $("backup-file").onchange = async () => {
   const file = $("backup-file").files[0];
@@ -1434,6 +1450,9 @@ let powerAction = "poweroff";   // "Power button" setting: sleep or full shutdow
 $("poweroff").onclick = async () => {
   const sleep = powerAction === "suspend";
   if (!confirm(sleep ? tr("Put the box to sleep?") : tr("Turn off the box?"))) return;
+  $("poweroff").disabled = true;
+  $("status").className = "status";
+  $("status").textContent = sleep ? tr("Putting the box to sleep…") : tr("Turning off the box…");
   try {
     const r = await fetch("/api/poweroff", { method: "POST" });
     if (!r.ok) throw new Error((await r.json()).error);
@@ -1441,6 +1460,7 @@ $("poweroff").onclick = async () => {
                     : tr("Box turned off. Turn it back on with its power button."),
               sleep ? tr("Box asleep") : tr("Box turned off"));
   } catch (e) {
+    $("poweroff").disabled = false;
     showError(e.message || tr("Box unreachable"));
   }
 };
@@ -1476,18 +1496,21 @@ async function refreshFollows() {
     $("follows-status").textContent = e.message || tr("Box unreachable");
   }
 }
-async function followsAction(action, body = {}) {
+async function followsAction(action, body = {}, done = "") {   // done: line shown once it worked
   $("follows-status").className = "status";
-  $("follows-status").textContent = "";
-  try {
-    const r = await fetch(`/api/${action}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-    });
-    if (!r.ok) throw new Error((await r.json()).error);
-  } catch (e) {
-    $("follows-status").className = "status error";
-    $("follows-status").textContent = e.message || tr("Box unreachable");
-  }
+  $("follows-status").textContent = tr("Please wait…");
+  await pressing(async () => {
+    try {
+      const r = await fetch(`/api/${action}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json()).error);
+      $("follows-status").textContent = done;
+    } catch (e) {
+      $("follows-status").className = "status error";
+      $("follows-status").textContent = e.message || tr("Box unreachable");
+    }
+  });
   refreshFollows();
 }
 $("app-save").onclick = async () => {
@@ -1532,18 +1555,21 @@ async function refreshYtAccount() {
     $("ytacc-status").textContent = e.message || tr("Box unreachable");
   }
 }
-async function ytaccAction(action, body = {}) {
+async function ytaccAction(action, body = {}, done = "") {   // done: line shown once it worked
   $("ytacc-status").className = "status";
-  $("ytacc-status").textContent = "";
-  try {
-    const r = await fetch(`/api/${action}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-    });
-    if (!r.ok) throw new Error((await r.json()).error);
-  } catch (e) {
-    $("ytacc-status").className = "status error";
-    $("ytacc-status").textContent = e.message || tr("Box unreachable");
-  }
+  $("ytacc-status").textContent = tr("Please wait…");
+  await pressing(async () => {
+    try {
+      const r = await fetch(`/api/${action}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json()).error);
+      $("ytacc-status").textContent = done;
+    } catch (e) {
+      $("ytacc-status").className = "status error";
+      $("ytacc-status").textContent = e.message || tr("Box unreachable");
+    }
+  });
   refreshYtAccount();
 }
 $("ytapp-save").onclick = async () => {
@@ -1552,7 +1578,7 @@ $("ytapp-save").onclick = async () => {
   $("ytapp-secret").value = "";
 };
 $("ytacc-login").onclick = () => ytaccAction("youtube_login");
-$("ytacc-sync").onclick = () => ytaccAction("youtube_sync");
+$("ytacc-sync").onclick = () => ytaccAction("youtube_sync", {}, tr("Subscriptions reloaded."));
 $("ytacc-logout").onclick = () => { if (confirm(tr("Disconnect the YouTube account?"))) ytaccAction("youtube_logout"); };
 $("ytapp-change").onclick = () => { ytaccChanging = true; refreshYtAccount(); };
 settingsLoaders.push(refreshYtAccount);
@@ -1591,7 +1617,7 @@ async function editYoutube(action, channel, delta = 0) {
   const status = $("yt-manage-status");
   status.className = "status";
   status.textContent = action === "add" ? tr("Looking up the channel…") : "";
-  try {
+  await pressing(async () => { try {
     const r = await fetch("/api/youtube_channels", { method: "POST", headers: { "Content-Type": "application/json" },
                                                      body: JSON.stringify({ action, channel, delta }) });
     if (!r.ok) throw new Error((await r.json()).error);
@@ -1599,7 +1625,7 @@ async function editYoutube(action, channel, delta = 0) {
   } catch (e) {
     status.className = "status error";
     status.textContent = e.message || tr("Box unreachable");
-  }
+  } });
   loadYoutube();
 }
 $("add-yt").onclick = () => { if ($("new-yt").value.trim()) editYoutube("add", $("new-yt").value); };
@@ -1832,6 +1858,8 @@ $("lu-send").onclick = async () => {
   const extra = [...$("lu-sums").files];
   const sums = extra.find((f) => f.name === "SHA256SUMS"), sig = extra.find((f) => f.name === "SHA256SUMS.gpg");
   $("lu-send").disabled = true;
+  $("lu-status").className = "status";
+  $("lu-status").textContent = tr("Sending the image… {percent} %", { percent: 0 });
   try {
     await sendFile("image", image, (p) => { $("lu-status").textContent = tr("Sending the image… {percent} %", { percent: Math.floor(100 * p) }); });
     if (sums) await sendFile("sums", sums);

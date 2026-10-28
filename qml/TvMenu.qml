@@ -348,6 +348,7 @@ Item {
             })
             var found = items.length
             if (on) items.push({ label: tr("✕  Disconnect Jellyfin"), danger: true, ok: function () {
+                st = Object.assign({}, st, { libraries: Object.assign({}, st.libraries, { jellyfin: false }) })   // at once
                 call("POST", "/api/jellyfin_link", { action: "forget" }, function () { refresh() }) } })
             items.push({ label: tr("Close"), ok: function () {} })
             openModal(found ? tr("Connect to which Jellyfin server?")
@@ -381,6 +382,7 @@ Item {
                        ok: function () { plexConnect() } }]
         if (on)
             items.push({ label: tr("✕  Disconnect Plex"), danger: true, ok: function () {
+                st = Object.assign({}, st, { libraries: Object.assign({}, st.libraries, { plex: false }) })   // at once
                 call("POST", "/api/plex", { address: "" }, function () { refresh() }) } })
         openModal(on ? tr("Plex: {server}", { server: st.plex_server }) : "Plex", items)
     }
@@ -392,7 +394,11 @@ Item {
             items.push({ label: tr("+  Connect my subscriptions"), ok: function () { ytConnect(false) } })
         if (a.authorized) {
             items.push({ label: tr("↻  Reload my subscriptions"), ok: function () {
-                call("POST", "/api/youtube_sync", {}, function () { yt = null; loadYoutube() }) } })
+                loadingModal("", tr("Reloading your subscriptions…"))
+                call("POST", "/api/youtube_sync", {}, function (d) {
+                    yt = null; loadYoutube(); loadYtAccount()
+                    openModal(d ? tr("Subscriptions reloaded") : tr("YouTube unreachable for now"), [{ label: tr("OK"), ok: function () {} }])
+                }) } })
         }
         if (a.tv && !a.tv.unavailable)
             items.push(a.tv.connected
@@ -413,11 +419,16 @@ Item {
             { label: tr("▶  See latest videos"), ok: function () { ytOpenChannel(c) } },
             { label: tr(fav ? "✕  Remove from favorites" : "★  Add to favorites"), ok: function () { ytToggleSaved(c) } }])
     }
+    // Favorite on or off: the mark changes at once (back if the box refuses), the channel rows follow
     function ytToggleSaved(c) {
-        call("POST", "/api/youtube_channels", { action: c.saved ? "remove" : "add", channel: c.id }, function (d) {
-            if (d && ytResults)
+        function mark(saved) {
+            if (ytResults)
                 ytResults = Object.assign({}, ytResults, { channels: ytResults.channels.map(function (x) {
-                    return x.id === c.id ? Object.assign({}, x, { saved: !c.saved }) : x }) })
+                    return x.id === c.id ? Object.assign({}, x, { saved: saved }) : x }) })
+        }
+        mark(!c.saved)
+        call("POST", "/api/youtube_channels", { action: c.saved ? "remove" : "add", channel: c.id }, function (d) {
+            if (!d) mark(c.saved)
             loadYoutube()
         })
     }
@@ -777,7 +788,7 @@ Item {
                   } },
                 { label: tr("Volume"), value: s.mute ? tr("muted") : (s.volume || 0) + " %", step: function (d) { act("volume", { delta: 5 * d }) } },
                 { label: tr("Night mode"), hint: tr("Loud sounds softened, voices boosted"), toggle: !!s.night,
-                  ok: function () { act("flag", { key: "night", enabled: !s.night }) } },
+                  ok: function () { setFlag("flag", { key: "night", enabled: !s.night }, { night: !s.night }) } },
             ]
         case "playback":
             return [
@@ -789,13 +800,13 @@ Item {
                     act("set", { key: "sub_bg", value: Math.max(0, Math.min(100, (s.sub_bg || 0) + 10 * d)) })
                 } },
                 { label: tr("Auto switch"), hint: tr("Switch to a live streamer if yours is offline"),
-                  toggle: !!s.auto_switch, ok: function () { act("auto_switch", { enabled: !s.auto_switch }) } },
+                  toggle: !!s.auto_switch, ok: function () { setFlag("auto_switch", { enabled: !s.auto_switch }, { auto_switch: !s.auto_switch }) } },
                 { label: tr("Polls and predictions"), hint: tr("At the top of the TV during a live stream"), toggle: !!s.events,
-                  ok: function () { act("flag", { key: "events", enabled: !s.events }) } },
+                  ok: function () { setFlag("flag", { key: "events", enabled: !s.events }, { events: !s.events }) } },
             ]
         case "chat":
             return [
-                { label: tr("Chat on the TV"), toggle: !!s.chat_visible, ok: function () { act("chat") } },
+                { label: tr("Chat on the TV"), toggle: !!s.chat_visible, ok: function () { setFlag("chat", {}, { chat_visible: !s.chat_visible }) } },
                 { label: tr("Chat corner"), value: tr(corners[s.corner] || ""), step: function (d) {
                     // the API can only move forward one corner: three steps forward make one step back
                     for (var n = 0; n < (d > 0 ? 1 : 3); n++) act("corner")
@@ -826,7 +837,12 @@ Item {
             var login = account && account.login
             return [
                 { label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
-                  hint: login ? tr("No ads on the channels you're subscribed to") : tr("Sign in from the companion app on your phone") },
+                  hint: login ? tr("No ads on the channels you're subscribed to") : tr("Sign in from the companion app on your phone"),
+                  ok: function () {   // (signing in needs typing: the companion app, its QR code beside the list)
+                      openModal(login ? tr("Twitch account: {login}. To change it or log out: the companion app (Settings → Accounts and libraries).", { login: login })
+                                      : tr("Sign in to Twitch from the companion app on your phone (Settings → Accounts and libraries)."),
+                                [{ label: tr("Close"), ok: function () {} }])
+                  } },
                 { label: tr("YouTube account"), visible: !!(ytAccount && (ytAccount.configured || (ytAccount.tv && !ytAccount.tv.unavailable))),
                   value: ytAccount && ytAccount.authorized
                        ? tr("Connected") + (ytAccount.channels !== null ? " · " + tr("{n} subscriptions", { n: ytAccount.channels }) : "")
@@ -870,8 +886,10 @@ Item {
                 { label: tr("Set up keys"), hint: tr("Learn the keys of a remote or a controller, one by one"),
                   ok: function () { act("keymap", { action: "wizard" }); close() } },
                 { label: tr("Default keys"), ok: function () {
-                    act("keymap", { action: "reset" })
-                    openModal(tr("Keys back to their defaults"), [{ label: tr("OK"), ok: function () {} }])   // (nothing else shows it)
+                    loadingModal("", tr("Default keys…"))
+                    call("POST", "/api/keymap", { action: "reset" }, function (d) {   // (nothing else shows it)
+                        openModal(d ? tr("Keys back to their defaults") : tr("Couldn't do it."), [{ label: tr("OK"), ok: function () {} }])
+                    })
                 } },
                 { label: tr("Power button"), hint: tr("Remote, phone and Home Assistant"),
                   value: s.power_action === "suspend" ? tr("Sleep") : tr("Full shutdown"),
@@ -941,6 +959,7 @@ Item {
                       if (dev.enabled) { call("POST", "/api/dev", { enabled: false }, function () { loadSsh() }); dev = Object.assign({}, dev, { enabled: false }); return }
                       openModal(tr("Enable developer mode? media will get passwordless sudo, and SSH turns on"), [
                           { label: tr("Enable"), danger: true, ok: function () {
+                              dev = Object.assign({}, dev, { enabled: true })   // on screen right away
                               call("POST", "/api/dev", { enabled: true }, function () { loadSsh() }) } },
                           { label: tr("Cancel"), ok: function () {} }])
                   } },
@@ -1069,6 +1088,11 @@ Item {
     })
     readonly property var bd: st.backdrop || ({ base: "aurora", overlay: "none", color: "violet" })
     // "Animated background", "Overlay", "Home screen colors" settings
+    // Settings switches: the new value on screen at once, the box's state read again right after (act → refreshSoon)
+    function setFlag(name, body, change) {
+        st = Object.assign({}, st, change)
+        act(name, body)
+    }
     function stepBackdrop(key, d) {
         var ids = Object.keys(backdropNames[key])
         var next = ids[(Math.max(0, ids.indexOf(bd[key])) + d + ids.length) % ids.length]
@@ -1469,7 +1493,10 @@ Item {
         if (!follows.authorized) {
             var p = follows.pending
             if (k === "left") area = "rail"
-            else if (k === "ok" && !(p && p.user_code && !p.error)) call("POST", "/api/follows_login", {}, function () { loadFollows() })
+            else if (k === "ok" && !(p && p.user_code && !p.error)) {
+                follows = Object.assign({}, follows, { pending: {} })   // "Requesting the code…" at once
+                call("POST", "/api/follows_login", {}, function () { loadFollows() })
+            }
             return
         }
         var list = followList()
