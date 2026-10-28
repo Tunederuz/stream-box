@@ -1845,6 +1845,8 @@ async function refreshHealth() {
     $("update-now").textContent = u.system && u.system.running && !u.system.direct ? tr("Update in progress…")
       : u.system && u.system.checking ? tr("Checking…") : updateWaiting ? tr("↻  Restart now")
       : updateOffered ? tr("Install version {version}", { version: updateOffered }) : tr("Check for updates");
+    // the box running from its USB stick: no system update there (install it on the PC, from the TV)
+    if (u.system && u.system.usb && !updateWaiting && !updateOffered) $("update-now").hidden = true;
     // A/B box: version running, newer one installed in the other slot; older box: system files and code
     const sysText = !sys ? "" : !sys.ok ? tr("System: {error} ({date})", { error: sys.message, date: frDate(sys.date) })
       : sys.kind === "direct" ? tr("Developer mode: the box's files from the source, {version} ({date}), {files} system files changed; the system itself is not updated.",
@@ -1856,7 +1858,10 @@ async function refreshHealth() {
              : sys.message ? "" : " " + tr("Up to date."))
       : tr("System: {version} ({date}), {files} system files changed.", { version: sys.version, date: frDate(sys.date), files: sys.files })
           + " " + tr({ updated: "Code updated.", ahead: "Code newer than the release, kept." }[sys.code] || "Code up to date.");
-    $("update-status").textContent = !sys ? "" : sysText + (updateWaiting ? " " + tr("Restart the box to finish.") : "")
+    // (on a USB stick: a direct update's result stays shown)
+    $("update-status").textContent = u.system && u.system.usb && !(sys && sys.kind === "direct")
+      ? tr("The box runs from a USB stick: install it on the PC (TV menu, Settings → Backup) to get system updates.")
+      : !sys ? "" : sysText + (updateWaiting ? " " + tr("Restart the box to finish.") : "")
       + (updateOffered ? " " + tr("Version {version} is available.", { version: updateOffered })
          : sys.checked && sys.ok ? " " + tr("Checked {date}.", { date: frDate(sys.checked) }) : "");
     $("update-log").textContent = u.last ? u.last.lines.join("\n") : tr("No update recorded.");
