@@ -17,9 +17,14 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install ruff
-      - run: ruff check .
-      - run: python -m compileall -q .
+      - run: ruff check .   # syntax errors included
       - run: python -m unittest discover -s tests -t . -v   # tests needing mpv or luajit are skipped here
+
+  page:   # companion app: remote.html in jsdom against a fake API, no script error (tests/page/check-page.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: cd tests/page && npm ci --no-audit --no-fund && node check-page.js ../..
 
   lua:   # same mpv as the box image (Arch)
     runs-on: ubuntu-latest

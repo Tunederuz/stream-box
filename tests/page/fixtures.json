@@ -1,0 +1,6 @@
+{
+  "/api/youtube_channels": {"channels": [
+    {"id": "UCaaaaaaaaaaaaaaaaaaaaaa", "name": "Chaîne A", "handle": "@chainea", "avatar": "/img/336699"},
+    {"id": "UCbbbbbbbbbbbbbbbbbbbbbb", "name": "Chaîne B", "handle": "@chaineb", "avatar": "/img/993366"}
+  ]}
+}

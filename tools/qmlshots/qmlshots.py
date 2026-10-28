@@ -4,7 +4,7 @@ Mocks the context properties of ui.py (box, pip, i18n with locales/fr.json), ser
 127.0.0.1:8080 (the remote.py API the menu calls), opens the menu in a 1920x1080 window and plays a scripted key
 sequence through box.keyPressed, grabbing the window after each step. Also writes to console.log the Qt console
 (warnings), the state of the menu after each step and the requests made. Meant to run in Docker (see run.sh):
-    qmlshots.py shoot <qml dir> <out dir>      screenshots NNN-step.png + console.log
+    qmlshots.py shoot <qml dir> <out dir>      screenshots NNN-step.png + console.log (QMLSHOTS_NOSHOTS=1: console.log only)
     qmlshots.py diff <dir A> <dir B>           pixel comparison of two sets of screenshots
 """
 import datetime
@@ -24,6 +24,7 @@ from urllib.parse import urlparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 WAIT = int(os.environ.get("QMLSHOTS_WAIT", "900"))   # ms after each step: animations and images done
+NOSHOTS = bool(os.environ.get("QMLSHOTS_NOSHOTS"))   # the scenario and console.log only (checks: no screenshot)
 
 # Key sequence: ("key", name), ("open",), ("power",), ("text", text, submit), ("video", bool), ("close",),
 # ("pause", ms): nothing more than waiting (the live preview starts after a moment on a live streamer).
@@ -300,11 +301,11 @@ def shoot(qml_dir, out):
         # clock of the header: always 12:00 (the timer of the menu writes the real time every 10 s)
         menu = view.rootObject().findChild(QObject, "tvMenu")
         menu.setProperty("now", QDateTime(QDate(2026, 10, 26), QTime(12, 0)))
-        img = view.grabWindow()
+        label = "-".join(str(s) for s in step).replace(" ", "_")
+        if not NOSHOTS:
+            view.grabWindow().save(os.path.join(out, "%03d-%s.png" % (i, label)))
         if os.environ.get("QMLSHOTS_DEBUG"):
             print("step %d: wait %.2f s, grab %.2f s" % (i, t1 - t0, time.monotonic() - t1), flush=True)
-        label = "-".join(str(s) for s in step).replace(" ", "_")
-        img.save(os.path.join(out, "%03d-%s.png" % (i, label)))
         # state of the menu after the step (same keys, same state: compared with the console)
         state = {k: menu.property(k) for k in ("isOpen", "tab", "area", "kbOpen", "kbText", "mRow", "rpRow")}
         modal = menu.property("modal")
@@ -312,7 +313,8 @@ def shoot(qml_dir, out):
         console.append("--- step %03d %s %s" % (i, label, json.dumps(state, ensure_ascii=False, default=str)))
     with open(os.path.join(out, "console.log"), "w") as f:
         f.write("\n".join(console + ["", "# requests (sorted: they come from several threads)"] + sorted(posts) + ["", "# box"] + box.calls) + "\n")
-    print("%d screenshots in %s, %d console lines" % (len(steps), out, sum(1 for c in console if not c.startswith("---"))))
+    print("%d steps%s in %s, %d console lines" % (len(steps), "" if NOSHOTS else " (screenshots)", out,
+                                                  sum(1 for c in console if not c.startswith("---"))))
 
 
 def diff(a, b):

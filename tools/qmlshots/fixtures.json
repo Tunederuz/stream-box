@@ -1392,16 +1392,51 @@
    "running": false,
    "last": {
     "ok": true,
-    "date": "2026-10-23 11:48:14"
+    "date": "2026-10-23 11:48:14",
+    "lines": [
+     "streamlink: already up to date",
+     "media-venv: yt-dlp==2026.10.20",
+     "system: update started"
+    ]
    },
-   "next": "Tue 2026-10-27 05:07:37 CET"
+   "next": "Tue 2026-10-27 05:07:37 CET",
+   "system": {
+    "running": false,
+    "version": "0.3.0",
+    "last": {
+     "ok": true,
+     "message": "",
+     "version": "v0.3.0",
+     "files": 0,
+     "code": "image",
+     "restart": "no",
+     "new": "",
+     "kind": "ab",
+     "date": "2026-10-28T05:10:00"
+    }
+   },
+   "dev": false
   }
  },
  "/api/wifi": {
   "device": "wlan0",
   "network": "Home",
   "mode": "client",
-  "wired": false
+  "wired": false,
+  "networks": [
+   {
+    "ssid": "Home",
+    "signal": 82,
+    "secure": true
+   },
+   {
+    "ssid": "Voisin",
+    "signal": 40,
+    "secure": true
+   }
+  ],
+  "connecting": null,
+  "error": null
  },
  "/api/audio": {
   "outputs": [

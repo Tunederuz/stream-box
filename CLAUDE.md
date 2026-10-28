@@ -285,12 +285,18 @@ when Twitch changes something. Update: `~/.local/share/streamlink-venv/bin/pip i
 - Workflow: work on a branch, merged into main through a pull request; `.github/workflows/checks.yml` runs on pull
   requests to main only (and by hand), testing the branch merged into main: squash-merge once they pass, after
   bringing the branch up to date with main if main moved since. Before pushing, the parts of `tools/check.sh` that the
-  change touches (`python` for Python, the page or the translations; `shell`; `qml`), all of them for a broad change.
+  change touches (`python` for Python or the translations; `page` for remote.html; `shell`; `qml`), all of them for a
+  broad change; each part exits non-zero on a failure (gate the commit on it).
 - `tools/check.sh` runs locally, in Docker, what `.github/workflows/checks.yml` runs: `python` (ruff with
-  the pyflakes rules of `ruff.toml`, compile, `python3 -m unittest discover -s tests -t .`), `lua` (`tests/test_lua.py`
+  the pyflakes rules of `ruff.toml`, syntax errors included, `python3 -m unittest discover -s tests -t .`), `page`
+  (`tests/page/check-page.js`: remote.html in jsdom against a fake API, `tools/qmlshots/fixtures.json` and
+  `tests/page/fixtures.json`, on both tabs with every Settings group open; fails on a thrown or rejected error, a
+  `console.error` or a "status error" shown; the page's silent `catch` blocks call `bug(e)`, which logs mistakes in
+  the code but not the box being unreachable), `lua` (`tests/test_lua.py`
   in the same mpv as the box image: Lua modules under luajit, then `stream-box.lua` loaded in a real mpv **in French**
-  and driven through its IPC), `shell` (shellcheck), `qml` (qmllint `[syntax]`, then the 233 steps of
-  `tools/qmlshots` without ReferenceError / TypeError / binding loop). Tests needing mpv or luajit are skipped without them.
+  and driven through its IPC), `shell` (shellcheck), `qml` (qmllint `[syntax]`, then the steps of
+  `tools/qmlshots` without ReferenceError / TypeError / binding loop, `QMLSHOTS_NOSHOTS=1`: no screenshot there).
+  The fixtures follow the real API's shape (both menus read them: a missing field is a false error). Tests needing mpv or luajit are skipped without them.
 - `tests/`: translations (`test_locales.py`: same placeholders, every literal `tr()` translated, no stale key: remove
   the keys of texts you delete), `input.py` key repeat on a fake input device, `i18n.py`, `history.media_key`, the
   remote.py API started for real (`test_api.py`: throwaway HOME, fake mpv socket; skipped on a running box).

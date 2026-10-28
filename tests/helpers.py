@@ -20,5 +20,6 @@ def tracked_files(pattern):
     try:
         out = subprocess.run(["git", "-C", REPO, "ls-files"], capture_output=True, text=True, check=True).stdout.split()
     except (OSError, subprocess.CalledProcessError):
-        out = [os.path.relpath(os.path.join(d, f), REPO) for d, _, fs in os.walk(REPO) if ".git" not in d for f in fs]
+        out = [os.path.relpath(os.path.join(d, f), REPO) for d, _, fs in os.walk(REPO)
+               if ".git" not in d and "node_modules" not in d for f in fs]
     return [os.path.join(REPO, f) for f in out if re.search(pattern, f) and os.path.exists(os.path.join(REPO, f))]

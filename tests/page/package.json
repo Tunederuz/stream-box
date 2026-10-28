@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "Companion app page check (check-page.js): remote.html in jsdom",
+  "dependencies": {
+    "jsdom": "24.1.3"
+  }
+}

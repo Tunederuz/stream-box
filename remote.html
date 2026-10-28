@@ -754,6 +754,12 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+// Caught errors that the page shows nowhere (box unreachable: kept quiet): a mistake in the code still reaches the
+// console (and fails tests/page/check-page.js); the box being unreachable or restarting does not
+function bug(e) {
+  if (e instanceof ReferenceError || e instanceof SyntaxError || e instanceof RangeError
+      || (e instanceof TypeError && !/fetch|network|load failed/i.test(e.message))) console.error(e);
+}
 
 // Interface language (see i18n.py): texts are written in English; I18N holds the translations of the current language
 // (/locales/<lang>.json). Texts built by the script go through tr(); the page's own static texts (and their
@@ -790,7 +796,7 @@ async function setLanguage(lang) {
   if (lang === LANG) return;
   try {
     I18N = lang === "en" ? {} : await (await fetch(`/locales/${lang}.json`)).json();
-  } catch (e) { return; }
+  } catch (e) { bug(e); return; }
   LANG = lang;
   document.documentElement.lang = lang;
   try { localStorage.setItem("lang", lang); } catch (e) { /* storage unavailable */ }
@@ -927,7 +933,7 @@ async function refreshAccount() {
     $("account-intro").textContent = a.expired
       ? tr("The login has expired: paste a new token to get your subscriptions without ads back.")
       : tr("Connect your account to enjoy your subscriptions without ads.");
-  } catch (e) { /* the box status already shows the error */ }
+  } catch (e) { bug(e); /* the box status already shows the error */ }
 }
 
 async function accountAction(action, body = {}) {
@@ -1269,7 +1275,7 @@ async function refreshEvents() {
   try {
     const r = await fetch("/api/events");
     if (r.ok) { events = await r.json(); renderEvents(); }
-  } catch (e) { /* the page already shows the box status */ }
+  } catch (e) { bug(e); /* the page already shows the box status */ }
   eventsTimer = setTimeout(refreshEvents, 3000);
 }
 function renderEvents() {
@@ -1519,7 +1525,7 @@ let ytHome = null;
 async function loadYoutube() {   // channel list, for Settings
   try {
     ytHome = await (await fetch("/api/youtube_channels")).json();   // the list only, without the videos
-  } catch (e) { return; }
+  } catch (e) { bug(e); return; }
   renderYoutubeManage();
 }
 function renderYoutubeManage() {
@@ -1563,7 +1569,7 @@ $("new-yt").onkeydown = (e) => { if (e.key === "Enter") $("add-yt").click(); };
 // Sound output: automatic or a specific output (audio.py); reloaded when Settings opens
 async function refreshAudio() {
   let a;
-  try { a = await (await fetch("/api/audio")).json(); } catch (e) { return; }
+  try { a = await (await fetch("/api/audio")).json(); } catch (e) { bug(e); return; }
   if (!a.outputs) return;
   const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
   const now = a.outputs.find((o) => o.id === a.current);
@@ -1584,7 +1590,7 @@ $("audio-out").onchange = async () => {
 const onSetupHotspot = location.hostname === "10.42.0.1";
 async function refreshWifi() {
   let w;
-  try { w = await (await fetch("/api/wifi")).json(); } catch (e) { return; }
+  try { w = await (await fetch("/api/wifi")).json(); } catch (e) { bug(e); return; }
   $("wifi").hidden = !w.device;
   if (!w.device) return;
   $("wifi-state").textContent = w.connecting ? tr("Connecting to \"{network}\"…", { network: w.connecting })
@@ -1626,7 +1632,7 @@ if (onSetupHotspot) {
 }
 
 // Box status (Settings → Status and updates), reloaded every 5 s while the tab is shown
-let healthTimer = null;
+var healthTimer = null;   // var: refreshHealth can run before this line (page opened on Settings: showTab)
 const bytes = (n) => n >= 1e9 ? tr("{n} GB", { n: (n / 1e9).toFixed(1).replace(".", LANG === "fr" ? "," : ".") }) : tr("{n} MB", { n: Math.round(n / 1e6) });
 const bits = (n) => n == null ? "…" : n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", LANG === "fr" ? "," : ".")} Mbit/s` : `${Math.round(n / 1e3)} kbit/s`;
 const since = (s) => { const h = Math.floor(s / 3600), d = Math.floor(h / 24);
@@ -1698,7 +1704,7 @@ async function refreshHealth() {
           + " " + tr({ updated: "Code updated.", ahead: "Code newer than the release, kept." }[sys.code] || "Code up to date.");
     $("update-log").textContent = (u.last ? u.last.lines.join("\n") : tr("No update recorded."))
       + (sys ? "\n\n" + sysText + (updateWaiting ? " " + tr("Restart the box to finish.") : "") : "");
-  } catch (e) { /* the page already shows the box status */ }
+  } catch (e) { bug(e); /* the page already shows the box status */ }
   healthTimer = setTimeout(refreshHealth, 5000);
 }
 let updateWaiting = false;   // installed, waiting for "Restart now" (a plain restart keeps the running A/B version)
@@ -1730,7 +1736,7 @@ async function refreshLocalUpdate() {
     else if (j && j.state === "error") $("lu-status").textContent = tr("Failed: {error}", { error: j.error });
     $("lu-send").disabled = d.busy;
     if (d.busy) luTimer = setTimeout(refreshLocalUpdate, 2000);
-  } catch (e) { luTimer = setTimeout(refreshLocalUpdate, 5000); }   // the box restarting
+  } catch (e) { bug(e); luTimer = setTimeout(refreshLocalUpdate, 5000); }   // the box restarting
 }
 settingsLoaders.push(refreshLocalUpdate);
 function sendFile(kind, file, onProgress) {   // XMLHttpRequest: fetch has no upload progress
