@@ -15,6 +15,7 @@ import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import images     # images.py: TV preview
 import installer  # installer.py: installation to an internal disk
 import jellyfin   # jellyfin.py: library
+import localupdate  # localupdate.py: system update from a local image (USB stick, file sent)
 import plex       # plex.py: library
 import netsetup   # netsetup.py: Wi-Fi
 import playback   # playback.py: videos shared from the phone
@@ -104,6 +105,7 @@ JSON_ROUTES = {
     "/api/dev": system.dev_status,
     "/api/install": installer.status,
     "/api/backup": backup.status,
+    "/api/local_update": localupdate.status,   # system update from a local image: drives, copy, progress
 }
 
 
@@ -244,6 +246,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(404, {"error": tr("not found")})
         try:
             length = int(self.headers.get("Content-Length") or 0)
+            if self.path.startswith("/api/local_update_upload?"):   # companion app: a file of a local system update
+                kind = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("file", [""])[0]
+                localupdate.receive(kind, self.rfile, length)
+                return self.send(200, {"ok": True})
             if self.path == "/api/backup_restore":   # companion app: raw backup file, then restart
                 if length > backup.MAX_SIZE:
                     raise ValueError(tr("File too large for a backup."))

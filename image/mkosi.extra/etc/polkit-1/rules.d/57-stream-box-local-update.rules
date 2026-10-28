@@ -1,0 +1,8 @@
+// Stream Box: media starts the system update from a local image (stream-box-local-update.service, nothing else); the
+// image must be signed by the release key, or the developer mode on
+polkit.addRule(function (action, subject) {
+    if (subject.user == "media" && action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("verb") == "start" && action.lookup("unit") == "stream-box-local-update.service") {
+        return polkit.Result.YES;
+    }
+});

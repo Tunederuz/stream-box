@@ -594,6 +594,17 @@
       <summary>Last update log</summary>
       <pre id="update-log"></pre>
     </details>
+    <details id="local-update" hidden style="margin-top: 10px">
+      <summary>Update from a file</summary>
+      <p>The image of a release (stream-box.raw.xz, the one used to install), with its SHA256SUMS and SHA256SUMS.gpg
+        (unsigned images: developer mode only). The box installs it next to the running system, then restarts onto it.</p>
+      <label class="setting" for="lu-image">Image (stream-box.raw.xz)</label>
+      <input id="lu-image" type="file" accept=".xz">
+      <label class="setting" for="lu-sums">SHA256SUMS and SHA256SUMS.gpg</label>
+      <input id="lu-sums" type="file" multiple>
+      <button id="lu-send" style="width: 100%; margin-top: 8px">Send and install</button>
+      <div class="status" id="lu-status"></div>
+    </details>
   </section>
 
   <section>
@@ -1615,6 +1626,58 @@ $("update-now").onclick = async () => {
   setTimeout(refreshHealth, 1500);
 };
 refreshHealth();
+// System update from a file (localupdate.py, A/B boxes): the image and its signature files sent as raw bodies
+// (POST /api/local_update_upload?file=image|sums|sig), then installed (POST /api/local_update {action: start}); the
+// box's progress read from GET /api/local_update until it restarts
+let luTimer = null;
+async function refreshLocalUpdate() {
+  clearTimeout(luTimer);
+  try {
+    const d = await (await fetch("/api/local_update")).json();
+    $("local-update").hidden = !d.available;
+    const j = d.job;
+    if (d.copy && d.copy.name) $("lu-status").textContent = tr("Copying the image… {percent} %", { percent: Math.floor(100 * d.copy.done / Math.max(1, d.copy.total)) });
+    else if (j && j.state === "running") $("lu-status").textContent = tr("Updating… {percent} %  ·  {step}", { percent: j.percent, step: tr(j.step) });
+    else if (j && j.state === "done") $("lu-status").textContent = tr("Version {version} installed: the box restarts", { version: j.version });
+    else if (d.copy && d.copy.error) $("lu-status").textContent = tr("Failed: {error}", { error: d.copy.error });
+    else if (j && j.state === "error") $("lu-status").textContent = tr("Failed: {error}", { error: j.error });
+    $("lu-send").disabled = d.busy;
+    if (d.busy) luTimer = setTimeout(refreshLocalUpdate, 2000);
+  } catch (e) { luTimer = setTimeout(refreshLocalUpdate, 5000); }   // the box restarting
+}
+settingsLoaders.push(refreshLocalUpdate);
+function sendFile(kind, file, onProgress) {   // XMLHttpRequest: fetch has no upload progress
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", `/api/local_update_upload?file=${kind}`);
+    x.upload.onprogress = (e) => onProgress && e.lengthComputable && onProgress(e.loaded / e.total);
+    x.onload = () => {
+      if (x.status === 200) return resolve();
+      try { reject(new Error(JSON.parse(x.responseText).error)); } catch { reject(new Error(x.statusText)); }
+    };
+    x.onerror = () => reject(new Error(tr("Box unreachable")));
+    x.send(file);
+  });
+}
+$("lu-send").onclick = async () => {
+  const image = $("lu-image").files[0];
+  if (!image) { $("lu-status").textContent = tr("Choose the image (stream-box.raw.xz)."); return; }
+  const extra = [...$("lu-sums").files];
+  const sums = extra.find((f) => f.name === "SHA256SUMS"), sig = extra.find((f) => f.name === "SHA256SUMS.gpg");
+  $("lu-send").disabled = true;
+  try {
+    await sendFile("image", image, (p) => { $("lu-status").textContent = tr("Sending the image… {percent} %", { percent: Math.floor(100 * p) }); });
+    if (sums) await sendFile("sums", sums);
+    if (sig) await sendFile("sig", sig);
+    const r = await fetch("/api/local_update", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "start" }) });
+    if (!r.ok) throw new Error((await r.json()).error);
+    $("lu-status").textContent = tr("Checking the image");
+  } catch (e) {
+    $("lu-status").textContent = tr("Failed: {error}", { error: e.message || tr("Box unreachable") });
+  }
+  setTimeout(refreshLocalUpdate, 1000);
+};
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});   // HTTPS only
 refresh();
 </script>

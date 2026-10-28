@@ -61,6 +61,7 @@ Item {
     property var ssh: null                   // /api/ssh: SSH access (maintenance) on or off
     property var dev: null                   // /api/dev: developer mode (sudo for media, SSH)
     property var install: null               // /api/install: box booted from its USB stick, internal disks, progress
+    property var localUpd: null              // /api/local_update: A/B box?, images on USB sticks, copy and progress
     property string btPhase: ""              // /api/audio: audio outputs, choice ("auto" or an output), current output                  // /api/wifi, same ("Wi-Fi" row: setup mode)
     // YouTube: channels of the list (/api/youtube), search results, row and choice per row
     property var yt: null
@@ -807,6 +808,8 @@ Item {
                           call("POST", "/api/dev", { enabled: true }, function () { loadSsh() }) } },
                       { label: tr("Cancel"), ok: function () {} }])
               } },
+            { label: tr("Update from a USB stick"), visible: !!(localUpd && localUpd.available), value: localUpdValue(),
+              hint: tr("A release's image (stream-box.raw.xz), without the Internet"), ok: function () { localUpdateMenu() } },
             { label: tr("Install on this PC"), visible: !!(install && install.available),
               value: install && install.progress && install.progress.state === "running" ? install.progress.percent + " %" : "",
               hint: tr("The box runs from its USB stick: copy it, settings included, to the internal disk"),
@@ -1105,6 +1108,56 @@ Item {
         })
     }
     Timer { interval: 2000; repeat: true; running: !!menu.modal && menu.modal.kind === "install"; onTriggered: menu.installMenu(true) }
+    // System update from a local image (localupdate.py): the images on the USB sticks, then the copy and the root job's
+    // progress (it restarts the box onto the new system)
+    function localUpdValue() {
+        var d = localUpd, j = d && d.job
+        if (d && d.copy && d.copy.name) return tr("Copying {percent} %", { percent: Math.floor(100 * d.copy.done / Math.max(1, d.copy.total)) })
+        if (j && j.state === "running") return j.percent + " %"
+        return ""
+    }
+    function localUpdateMenu(again) {
+        call("GET", "/api/local_update", undefined, function (d) {
+            if (!d || (again && !(modal && modal.kind === "local"))) return
+            localUpd = d
+            var j = d.job, title, items = []
+            if (d.copy && d.copy.name) {
+                title = tr("Copying the image… {percent} %", { percent: Math.floor(100 * d.copy.done / Math.max(1, d.copy.total)) })
+                items.push({ label: tr("Hide (the update continues)"), ok: function () {} })
+            } else if (j && j.state === "running") {
+                title = tr("Updating… {percent} %  ·  {step}", { percent: j.percent, step: tr(j.step) })
+                items.push({ label: tr("Hide (the update continues)"), ok: function () {} })
+            } else if (j && j.state === "done") {
+                title = tr("Version {version} installed: the box restarts", { version: j.version })
+            } else {
+                var err = d.copy && d.copy.error ? d.copy.error : j && j.state === "error" ? j.error : ""
+                var found = []
+                d.usb.forEach(function (u) { u.images.forEach(function (im) { found.push({ drive: u, image: im }) }) })
+                title = err ? tr("Failed: {error}", { error: err })
+                      : found.length ? tr("Install which image?")
+                      : tr("No image on a USB stick: put stream-box.raw.xz of a release at its root, with SHA256SUMS and SHA256SUMS.gpg")
+                found.forEach(function (f) {
+                    var signed = f.image.signed
+                    items.push({ label: "▶  " + f.image.name + "  ·  " + tr("{size} GB", { size: (f.image.size / 1e9).toFixed(1) })
+                                        + "  ·  " + (signed ? tr("signed") : tr("unsigned")) + "  ·  " + f.drive.drive,
+                                 ok: function () {
+                        if (!signed && !d.dev) return openModal(tr("Unsigned image: put SHA256SUMS and SHA256SUMS.gpg of its release next to it (unsigned images: developer mode only)"),
+                                                                [{ label: tr("Close"), ok: function () {} }])
+                        openModal(tr("Install {name}? The box restarts onto it; the current version stays as a fallback.", { name: f.image.name }), [
+                            { label: tr("Yes, install"), ok: function () {
+                                call("POST", "/api/local_update", { action: "usb", path: f.drive.path, name: f.image.name }, function () { localUpdateMenu() }) } },
+                            { label: tr("Cancel"), ok: function () { localUpdateMenu() } }])
+                    } })
+                })
+                items.push({ label: tr("Close"), ok: function () {} })
+            }
+            var same = modal && modal.kind === "local"
+            var sel = modalSel
+            modal = { title: title, items: items, kind: "local" }
+            modalSel = same ? Math.min(sel, items.length - 1) : 0
+        })
+    }
+    Timer { interval: 2000; repeat: true; running: !!menu.modal && menu.modal.kind === "local"; onTriggered: menu.localUpdateMenu(true) }
     function loadSsh() {
         call("GET", "/api/ssh", undefined, function (d) { if (d) ssh = d })
         call("GET", "/api/dev", undefined, function (d) { if (d) dev = d })
@@ -1112,7 +1165,11 @@ Item {
     function loadAudio() { call("GET", "/api/audio", undefined, function (d) { if (d && d.outputs) audioOut = d }) }
     function loadTab(id) {
         if (id === "settings") loadAudio()
-        if (id === "system") { loadBt(); loadYtAccount(); loadSsh(); call("GET", "/api/install", undefined, function (d) { if (d) install = d }) }
+        if (id === "system") {
+            loadBt(); loadYtAccount(); loadSsh()
+            call("GET", "/api/install", undefined, function (d) { if (d) install = d })
+            call("GET", "/api/local_update", undefined, function (d) { if (d) localUpd = d })
+        }
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
         if (id === "youtube") loadYoutube()   // previous rows shown in the meantime

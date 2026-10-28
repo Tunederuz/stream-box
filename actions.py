@@ -13,6 +13,7 @@ import history    # history.py: history edits
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import installer  # installer.py: installation to an internal disk from the USB stick
 import jellyfin   # jellyfin.py: Jellyfin playback
+import localupdate  # localupdate.py: system update from a local image
 import netsetup   # netsetup.py: Wi-Fi networks, setup access point
 import playback   # playback.py: videos started from a link
 import plex       # plex.py: Plex server, playback
@@ -236,6 +237,10 @@ ACTIONS = {
     # TV System menu: {"disk": "nvme0n1"}; the disk is entirely erased
     "install": lambda body: installer.start(str(body.get("disk", ""))[:32]),
     "backup": backup_usb,
+    # System update from a local image: {"action": "usb", "path", "name"} (copied from the drive, then installed), or
+    # {"action": "start"} once the companion app sent the files
+    "local_update": lambda body: localupdate.from_usb(str(body.get("path", ""))[:100], str(body.get("name", ""))[:120])
+                    if body.get("action") == "usb" else localupdate.start(),
     "keymap": keymap,
     # Sound output: "auto" or the identifier of an output from GET /api/audio
     "audio": lambda body: audio.set_choice(str(body.get("output", "auto"))[:200]),

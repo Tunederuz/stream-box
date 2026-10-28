@@ -976,6 +976,23 @@ not offered again until a newer release): it reboots onto it when /api/state say
 ("restart to finish"). system-update.json: `kind: ab`, `version` = running, `new` = the version waiting. On a USB drive
 (one slot): nothing, message "install the box on the PC". Boxes from before A/B (one system partition, label
 root-x86-64) keep the git path. Tested in QEMU (see the A/B sections).
+Local update (A/B boxes, without the Internet): the full disk image of a release (stream-box.raw.xz, the one used to
+install) with its SHA256SUMS and SHA256SUMS.gpg; unsigned: developer mode only. From a USB stick (TV System menu
+"Update from a USB stick", images at the root of the drive, listed once per drive like the backups) or sent from the
+companion app (Settings → System → "Update from a file": raw bodies, `POST /api/local_update_upload?file=image|sums|sig`,
+XMLHttpRequest for the upload progress, then `POST /api/local_update {action: start}`). localupdate.py (media) puts
+the files in ~/.local/state/stream-box/local-update (on the data partition; free space checked: image + 700 MB) and
+starts stream-box-local-update.service (polkit rule 57); `/usr/local/lib/stream-box/local-update` (root, Python):
+files renamed into /data/local-update (root only: not swappable once checked), signature (gpgv with
+/etc/systemd/import-pubring.pgp, sha256 of the image in SHA256SUMS), version from the label of the image's system
+partition (GPT read from the first MB), newer than the running one (`systemd-analyze compare-versions`: systemd-boot
+boots the newest), one decompression pass (lzma, as a stream: the ESP into a file, the system partition straight into
+the slot not in use, labelled `_empty` while written, then `stream-box_<version>`, no-auto cleared), UKI copied from
+the ESP image (loop mount) as stream-box_<version>+3-0.efi (0644), reboot; boot-check and systemd-boot roll back as for
+an online update. Progress in /run/stream-box-local-update.json ({state, step, percent, version, signed, error}),
+`GET /api/local_update` ({available, dev, busy, copy, job, usb}). Tested in QEMU: unsigned image without developer mode refused;
+the real v0.2.0 release files (signed) accepted, then refused as not newer than the running 0.2.0-test1; developer
+mode, image on a FAT32 USB key: copied, written into slot B and restarted onto it in 30 s, kept by the boot check.
 Monthly rebuild (.github/workflows/image.yml, 1st of the month 01:00 UTC, or by hand): the latest release's code
 (checkout of its tag) rebuilt with the Arch packages of the day as the next patch version, published only if the
 package manifest (mkosi `ManifestFormat=json`, stream-box_<version>.manifest.json in each release) differs from the

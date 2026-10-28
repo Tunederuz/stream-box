@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""Stream Box: system update from a local image (stream-box-local-update.service, started by remote.py: a USB stick or a
+file sent from the companion app, see localupdate.py). A/B boxes only.
+
+The full disk image of a release (stream-box.raw.xz, the one used to install) left by remote.py in media's staging
+folder (~/.local/state/stream-box/local-update, on the data partition), with the release's SHA256SUMS and
+SHA256SUMS.gpg next to it:
+  - moved into a root-only folder first (same partition: a rename), so that it can't be swapped once checked;
+  - checked: SHA256SUMS signed by the release key (/etc/systemd/import-pubring.pgp, the online updates' one) and the
+    image's sha256 in it; an unsigned image only in developer mode (your own builds);
+  - its version (label of its system partition, stream-box_<version>) must be newer than the running one: systemd-boot
+    starts the newest UKI;
+  - decompressed once, as a stream: its system partition written straight into the slot not in use (labelled _empty
+    while it is written, stream-box_<version> once done), its ESP into a file, from which the UKI is copied into the
+    ESP with 3 tries (stream-box_<version>+3-0.efi); then the box restarts onto it. stream-box-boot-check and
+    systemd-boot fall back to the previous version if it doesn't work, as for an online update.
+Progress and result in /run/stream-box-local-update.json (read by remote.py).
+"""
+import glob, hashlib, json, lzma, os, shutil, subprocess, sys, time, uuid
+
+STAGE = "/data/home/media/.local/state/stream-box/local-update"   # media's ~/.local/state is bound from /data
+WORK = "/data/local-update"
+STATUS = "/run/stream-box-local-update.json"
+KEYRING = "/etc/systemd/import-pubring.pgp"
+DEV_MARK = "/var/lib/stream-box/dev-mode"
+IMAGE, SUMS, SIG = "stream-box.raw.xz", "SHA256SUMS", "SHA256SUMS.gpg"
+ROOT_TYPE = uuid.UUID("4f68bce3-e8cd-4db1-96e7-fbcaf984b709")
+ESP_TYPE = uuid.UUID("c12a7328-f81f-11d2-ba4b-00a0c93ec93b")
+CHUNK = 4 << 20
+
+state = {"state": "running", "step": "Checking the image", "percent": 0, "version": None, "signed": None, "error": None}
+
+
+def status(**changes):
+    state.update(changes)
+    tmp = STATUS + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(state, f)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, STATUS)
+
+
+def out(*cmd):
+    return subprocess.run(cmd, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def fail(message):
+    raise RuntimeError(message)
+
+
+def layout():
+    """(disk, running system partition, [system partitions: (device, number, label)]) of the disk of /"""
+    root = out("findmnt", "-no", "SOURCE", "/").split("[")[0]
+    disk = out("lsblk", "-no", "PKNAME", root).splitlines()[0]
+    slots = []
+    for part in sorted(glob.glob(f"/sys/block/{disk}/{disk}*")):
+        if not os.path.exists(f"{part}/partition"):
+            continue
+        dev = "/dev/" + os.path.basename(part)
+        info = dict(l.split("=", 1) for l in out("blkid", "-p", "-o", "export", dev).splitlines() if "=" in l)
+        if info.get("PART_ENTRY_TYPE", "").lower() == str(ROOT_TYPE):
+            slots.append((dev, int(open(f"{part}/partition").read()), info.get("PART_ENTRY_NAME", "")))
+    return f"/dev/{disk}", root, slots
+
+
+def running_version():
+    with open("/usr/lib/os-release") as f:
+        return next((l.split("=", 1)[1].strip().strip('"') for l in f if l.startswith("IMAGE_VERSION=")), "")
+
+
+def newer(a, b):   # version a newer than b (UAPI version comparison, as systemd-boot sorts the UKIs)
+    return subprocess.run(["systemd-analyze", "compare-versions", a, "gt", b], capture_output=True).returncode == 0
+
+
+def take_files():
+    """Files moved from the staging folder (media's) into WORK (root's): checked there, nobody can swap them"""
+    shutil.rmtree(WORK, ignore_errors=True)
+    os.makedirs(WORK, mode=0o700)
+    if not os.path.isfile(os.path.join(STAGE, IMAGE)):
+        fail("no image to install")
+    for name in (IMAGE, SUMS, SIG):
+        if os.path.isfile(os.path.join(STAGE, name)):
+            os.replace(os.path.join(STAGE, name), os.path.join(WORK, name))
+            os.chown(os.path.join(WORK, name), 0, 0)
+    for f in glob.glob(os.path.join(STAGE, "*")):   # leftovers (an unfinished upload…)
+        os.remove(f)
+
+
+def verify():
+    image, sums, sig = (os.path.join(WORK, n) for n in (IMAGE, SUMS, SIG))
+    if os.path.exists(sums) and os.path.exists(sig):
+        r = subprocess.run(["gpgv", "--keyring", KEYRING, sig, sums], capture_output=True, text=True)
+        if r.returncode != 0:
+            fail("the signature of SHA256SUMS is not the releases' one")
+        wanted = next((l.split()[0] for l in open(sums) if l.split()[1:] in ([IMAGE], ["*" + IMAGE])), None)
+        if not wanted:
+            fail(f"{IMAGE} is not in SHA256SUMS")
+        h, size, done = hashlib.sha256(), os.path.getsize(image), 0
+        with open(image, "rb") as f:
+            while chunk := f.read(CHUNK):
+                h.update(chunk)
+                done += len(chunk)
+                status(percent=int(15 * done / size))
+        if h.hexdigest() != wanted:
+            fail("the image does not match SHA256SUMS (damaged or another file)")
+        status(signed=True)
+    elif os.path.exists(DEV_MARK):
+        status(signed=False)   # developer mode: your own builds
+    else:
+        fail("unsigned image: give SHA256SUMS and SHA256SUMS.gpg of the release with it, or enable developer mode")
+
+
+def partitions(head):
+    """GPT of the image (its first bytes): {type: (first byte, size, name)}"""
+    if head[512:520] != b"EFI PART":
+        fail("not a Stream Box disk image (no GPT)")
+    entries_lba = int.from_bytes(head[512 + 72:512 + 80], "little")
+    count = int.from_bytes(head[512 + 80:512 + 84], "little")
+    size = int.from_bytes(head[512 + 84:512 + 88], "little")
+    found = {}
+    for i in range(count):
+        e = head[entries_lba * 512 + i * size:entries_lba * 512 + (i + 1) * size]
+        if len(e) < 128 or not any(e[:16]):
+            continue
+        first, last = int.from_bytes(e[32:40], "little"), int.from_bytes(e[40:48], "little")
+        name = e[56:128].decode("utf-16-le").rstrip("\0")
+        found.setdefault(uuid.UUID(bytes_le=bytes(e[:16])), (first * 512, (last - first + 1) * 512, name))
+    return found
+
+
+def write(disk, slots, running_root):
+    image = os.path.join(WORK, IMAGE)
+    total = os.path.getsize(image)
+    # First pass on the first MB only: the image's GPT
+    d = lzma.LZMADecompressor()
+    head = b""
+    with open(image, "rb") as f:
+        while len(head) < (1 << 20) and (chunk := f.read(1 << 16)):
+            head += d.decompress(chunk, max_length=(1 << 20) - len(head))
+    parts = partitions(head)
+    if ROOT_TYPE not in parts or ESP_TYPE not in parts:
+        fail("not a Stream Box disk image (no system partition or ESP)")
+    root_off, root_size, root_name = parts[ROOT_TYPE]
+    esp_off, esp_size, _ = parts[ESP_TYPE]
+    if not root_name.startswith("stream-box_"):
+        fail("not an A/B Stream Box image (0.2.0 or later)")
+    version = root_name[len("stream-box_"):]
+    status(version=version)
+    if not newer(version, running_version()):
+        fail(f"{version} is not newer than the running {running_version()}")
+    target = next(s for s in slots if s[0] != running_root)
+    if root_size > int(out("blockdev", "--getsize64", target[0])):
+        fail("system partition of the image larger than the slot")
+    esp = out("bootctl", "--print-esp-path")
+    # The slot's previous version: its UKI goes, and the slot reads as empty while it is written (a half-written slot
+    # must not pass for a version)
+    old = target[2][len("stream-box_"):] if target[2].startswith("stream-box_") else None
+    if old and old != running_version():
+        for f in glob.glob(f"{esp}/EFI/Linux/stream-box_{old}.efi") + glob.glob(f"{esp}/EFI/Linux/stream-box_{old}+*.efi"):
+            os.remove(f)
+    out("sfdisk", "-q", "--part-label", disk, str(target[1]), "_empty")
+    # One decompression pass: the ESP into a file, the system partition straight into the slot
+    status(step="Writing the system", percent=15)
+    d, pos, read = lzma.LZMADecompressor(), 0, 0
+    esp_img = os.path.join(WORK, "esp.img")
+    with open(image, "rb") as src, open(esp_img, "wb") as esp_f, open(target[0], "r+b") as slot:
+        while not d.eof and (chunk := src.read(CHUNK)):
+            read += len(chunk)
+            data = d.decompress(chunk)
+            for off, size, dst in ((esp_off, esp_size, esp_f), (root_off, root_size, slot)):
+                a, b = max(pos, off), min(pos + len(data), off + size)
+                if a < b:
+                    dst.seek(a - off)
+                    dst.write(data[a - pos:b - pos])
+            pos += len(data)
+            status(percent=15 + int(75 * read / total))
+            if pos >= root_off + root_size and pos >= esp_off + esp_size:
+                break
+        slot.flush()
+        os.fsync(slot.fileno())
+    if pos < root_off + root_size:
+        fail("image cut short")
+    out("sfdisk", "-q", "--part-label", disk, str(target[1]), f"stream-box_{version}")
+    out("sfdisk", "-q", "--part-attrs", disk, str(target[1]), "")
+    # Its UKI, with 3 tries
+    status(step="Installing the kernel", percent=92)
+    mnt = os.path.join(WORK, "esp")
+    os.makedirs(mnt)
+    subprocess.run(["mount", "-o", "loop,ro", esp_img, mnt], check=True)
+    try:
+        uki = os.path.join(mnt, "EFI/Linux", f"stream-box_{version}.efi")
+        if not os.path.exists(uki):
+            fail("no UKI of this version in the image")
+        dest = os.path.join(esp, "EFI/Linux", f"stream-box_{version}+3-0.efi")
+        shutil.copyfile(uki, dest + ".part")
+        os.chmod(dest + ".part", 0o644)   # not 0444: FAT read-only attribute, systemd-boot could not count the tries
+        os.replace(dest + ".part", dest)
+    finally:
+        subprocess.run(["umount", mnt])
+    subprocess.run(["sync"])
+    return version
+
+
+def main():
+    status()
+    try:
+        disk, root, slots = layout()
+        if not any(s[0] == root and s[2].startswith("stream-box_") for s in slots) or len(slots) < 2 \
+                or not os.path.ismount("/data"):
+            fail("this box has no A/B layout: install it again from a 0.2.0 or later image")
+        take_files()
+        verify()
+        version = write(disk, slots, root)
+    except (RuntimeError, OSError, subprocess.CalledProcessError, lzma.LZMAError) as e:
+        status(state="error", error=str(e))
+        print(f"local-update: {e}", file=sys.stderr)
+        return 1
+    finally:
+        shutil.rmtree(WORK, ignore_errors=True)
+    status(state="done", step="Restarting onto the new system", percent=100)
+    print(f"local-update: {version} installed, restarting")
+    time.sleep(3)
+    subprocess.run(["systemctl", "reboot"])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

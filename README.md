@@ -119,7 +119,9 @@ common on Dell): set it to AHCI (Dell: SATA Operation → AHCI). The installer s
 - Updates: TV menu → System → "Update now", and every week by itself: streamlink, yt-dlp and the other tools, then the
   whole system of the latest release, installed next to the running one (the box restarts onto it when nothing plays,
   and goes back to the previous version by itself if it doesn't work). A release is rebuilt every month with the
-  latest Arch packages. Boxes installed before 0.2.0 only get the box's code and system files.
+  latest Arch packages. Boxes installed before 0.2.0 only get the box's code and system files. Without the Internet:
+  the image of a release (`stream-box.raw.xz` with `SHA256SUMS` and `SHA256SUMS.gpg`) from a USB stick (System menu)
+  or sent from the companion app.
 - Developer mode (TV menu → System): passwordless sudo and SSH for the `media` user. The image has no other root
   access.
 
