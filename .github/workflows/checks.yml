@@ -38,7 +38,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - run: git ls-files '*.sh' | xargs shellcheck -S warning
+      # .sh files, and the image's scripts without an extension (system-update, install-to-disk…)
+      - run: "{ git ls-files '*.sh'; git grep -lE '^#!(/usr/bin/env bash|/bin/(ba)?sh)' -- image/mkosi.extra; } | sort -u | xargs shellcheck -S warning"
 
   qml:   # qmllint and the qmlshots scenario (tools/qmlshots, Docker: PySide6 of the box, Xvfb, Mesa)
     runs-on: ubuntu-latest

@@ -27,7 +27,7 @@ cleanup() {
   [ -n "${COPY_PID:-}" ] && kill "$COPY_PID" 2> /dev/null
   umount -R "$WORK/esp" "$WORK/root" "$WORK/data" 2> /dev/null || true
 }
-trap 'cleanup; [ "$(python3 -c "import json; print(json.load(open(\"$STATUS\"))[\"state\"])" 2> /dev/null)" = done ] || fail "${ERR:-error during: ${STEP:-Preparing}}"' EXIT
+trap 'cleanup; [ "$(python3 -c "import json; print(json.load(open(\"$STATUS\"))[\"state\"])" 2> /dev/null)" = "done" ] || fail "${ERR:-error during: ${STEP:-Preparing}}"' EXIT
 
 STEP="Checking the disk"
 status running "$STEP" 0
@@ -104,4 +104,4 @@ STEP="Finishing"
 status running "$STEP" 97
 sync
 umount -R "$WORK/esp" "$WORK/root" "$WORK/data"
-status done "Installed" 100
+status "done" "Installed" 100

@@ -116,9 +116,10 @@ common on Dell): set it to AHCI (Dell: SATA Operation → AHCI). The installer s
 - Twitch account, Jellyfin, Plex, YouTube account: from the TV menu (Settings → Accounts and libraries) or the companion app (Settings).
 - Wake-on-LAN is on for Ethernet in the image: enable it in the BIOS too to wake the box from the network.
 - Home Assistant: [docs/home-assistant.md](docs/home-assistant.md).
-- Updates: TV menu → Settings → Updates → "Update now", and every week by itself: streamlink, yt-dlp and the other
-  tools, then the whole system of the latest release, installed next to the running one (the TV menu then asks whether
-  to restart onto it; the box goes back to the previous version by itself if it doesn't work). A release is rebuilt every month with the
+- Updates: the box checks every day for a new release and the TV menu offers it ("Update now?"); Settings → Updates
+  checks at once. Accepted, the whole system is installed next to the running one and the box restarts onto it (it
+  goes back to the previous version by itself if it doesn't work). streamlink, yt-dlp and the other tools update
+  themselves every day (Settings → Advanced → "Update dependencies" to force it). A release is rebuilt every month with the
   latest Arch packages. Boxes installed before 0.2.0 only get the box's code and system files. Without the Internet:
   the image of a release (`stream-box.raw.xz` with `SHA256SUMS` and `SHA256SUMS.gpg`) from a USB stick (Settings →
   Updates) or sent from the companion app.

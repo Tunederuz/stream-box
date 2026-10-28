@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Stream Box: weekly update of streamlink, yt-dlp and jellyfin-mpv-shim (they break when Twitch or YouTube change
-# something). Each venv is tested after the update; on failure, the exact previous versions are put back.
-# Started by stream-box-update.timer (systemd --user). Log: ~/.local/state/stream-box/update.log
+# Stream Box: update of the dependencies, streamlink, yt-dlp, jellyfin-mpv-shim… (they break when Twitch or YouTube
+# change something), every day by itself and without a word, or by hand (Settings → Advanced → "Update dependencies").
+# Each venv is tested after the update; on failure, the exact previous versions are put back. Not the box's system
+# (system-update: checked every day, installed when the user accepts). Started by stream-box-update.timer (systemd
+# --user). Log: ~/.local/state/stream-box/update.log
 set -uo pipefail
 
 LOG="$HOME/.local/state/stream-box/update.log"
@@ -67,16 +69,5 @@ if [ -f "$CAST_DIR/package-lock.json" ] && [ "$CAST_DIR/package-lock.json" -nt "
     echo "cast receiver: modules up to date (restarted at the next session start)"
   else
     echo "cast receiver: npm ci FAILED"
-  fi
-fi
-
-# System: code and system files of the latest release (root: stream-box-system-update.service, see
-# /usr/local/lib/stream-box/system-update; image only). Last, since it may restart the session; its result is in
-# /var/lib/stream-box/system-update.json
-if systemctl cat stream-box-system-update.service > /dev/null 2>&1; then
-  if systemctl start --no-block stream-box-system-update.service; then
-    echo "system: update started"
-  else
-    echo "system: update FAILED to start"
   fi
 fi

@@ -7,12 +7,23 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 ## [Unreleased]
 
 ### Changed
+- Updates: the box checks every day whether a new version exists and the TV menu offers it ("Version X is available.
+  Update now?"); nothing is downloaded until you accept. Settings → Updates shows the version and when it was last
+  checked, with one button that checks, installs or restarts as needed; no more "next update" date.
+- The tools that keep YouTube and Twitch working (yt-dlp, streamlink…) update themselves every day without a word;
+  "Update dependencies" in Settings → Advanced forces it. The direct update of developer mode moved there too, with
+  its own status.
+- Every button shows at once that it was pressed (dialogs open right away, "Checking…", "In progress…") instead of
+  changing a few seconds later.
 - TV menu, Settings: each section says what it holds, and shows a notice only when something needs attention
   (update ready, no network…) instead of a few of its values.
 - TV menu: entering YouTube, Jellyfin or Plex puts the focus on the first row of videos (the search is just above).
 - TV menu, grids (Live, Following, History): ▶ on the last card of a line goes on to the next line.
 
 ### Fixed
+- Bluetooth pairing: the "Pairing…" dialog closes as soon as the device is paired, instead of about a minute later.
+- Install on this PC: the dialog opens at once and stays during the start of the installation; the percentage on its
+  row keeps moving once the dialog is hidden.
 - Playback bar: the buttons under it no longer disappear when the bar hides while one of them is chosen; the bar
   stays while the video title is chosen.
 - Leaving a video with Back reopens the menu on the tab it was started from (YouTube…) instead of Live.

@@ -28,7 +28,9 @@ for part in $parts; do
          if [ $rc -ne 0 ]; then cat /tmp/log; else tail -n 3 /tmp/log; fi; exit $rc'
       ;;
     shell)
-      git ls-files '*.sh' | sed 's|^|/r/|' | xargs docker run --rm -v "$REPO":/r:ro koalaman/shellcheck:stable -S warning
+      # .sh files, and the image's scripts without an extension (system-update, install-to-disk…)
+      { git ls-files '*.sh'; git grep -lE '^#!(/usr/bin/env bash|/bin/(ba)?sh)' -- image/mkosi.extra; } | sort -u |
+        sed 's|^|/r/|' | xargs docker run --rm -v "$REPO":/r:ro koalaman/shellcheck:stable -S warning
       echo "shellcheck: ok"
       ;;
     qml)      # syntax (qmllint), then every step of the qmlshots scenario without QML errors
