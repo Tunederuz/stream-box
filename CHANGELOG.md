@@ -6,6 +6,14 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+## [0.4.1]
+
+### Fixed
+- Built-in screens mounted sideways (Steam Deck) show the box the right way up instead of on its side.
+- A box running from its USB stick no longer offers to check for system updates it cannot install: Settings →
+  Updates (and the companion app) say to install it on the PC to get them.
+- README: flash the image with balenaEtcher or dd; a stick written with Rufus did not finish booting.
+
 ## [0.4.0]
 
 ### Changed
