@@ -312,6 +312,8 @@ def update_item():
         return item(tr("Install version {version}", version=s["offered"]),
                     run(system.start_update, tr("Downloading version {version}. The box restarts by itself once it is installed (not during a video).",
                                                 version=s["offered"])))
+    if s.get("usb"):   # running from a USB stick: install it on the PC to get system updates (full version)
+        return item(tr("Install on this PC to get updates"), dim=True)
     return item(tr("Check for updates"), run(system.check_update, tr("Checking…")),
                 info="v" + s["version"] if s.get("version") else "")
 
