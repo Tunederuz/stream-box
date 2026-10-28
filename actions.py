@@ -224,6 +224,7 @@ ACTIONS = {
     "pause": lambda body: mpv(["cycle", "pause"]),
     "login": lambda body: twitch.login(str(body.get("token", ""))),
     "logout": lambda body: twitch.logout(),
+    "login_code": lambda body: twitch.account_start(),   # sign-in by code on twitch.tv/activate
     "follows_app": lambda body: twitch.set_twitch_app(str(body.get("client_id", "")),
                                                       str(body.get("client_secret", ""))),
     "follows_login": lambda body: twitch.follows_start(),

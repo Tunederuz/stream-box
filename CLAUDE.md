@@ -94,10 +94,16 @@ Installation and update: `install.sh` (see the README); settings backup: TV Sett
   - `ambient.py`: weather, Twitch schedules, companion app URL and QR code, first setup, `ambient_loop`;
   - `images.py`: TV preview; `settings.py`: player, power button action, backdrop; `system.py`: power, power key
     lock, wake-up, SSH, developer mode, health, update.
-- Twitch account (section of the page, `POST /api/login|logout`, `GET /api/account`): the website's token (cookie
-  `auth-token`) is written to `~media/.config/streamlink/config.twitch` (`twitch-api-header=Authorization=OAuth …`,
-  mode 600), which streamlink reads on its own. It is the only token that removes ads on channels you are subscribed to
-  (third-party app OAuth tokens do not). It is checked via `id.twitch.tv/oauth2/validate` when saved, then every
+- Twitch account (TV: Settings → Accounts and libraries → Twitch account; section of the page; `POST
+  /api/login_code|login|logout`, `GET /api/account` {login, expired, pending}): signed in with a code on
+  twitch.tv/activate as the Twitch app for TVs (`TWITCH_TV_CLIENT_ID`, device code flow, `user:read:follows`, token
+  without expiry), or (backup) the website's token pasted from the `auth-token` cookie. Either is written to
+  `~media/.config/streamlink/config.twitch` (`twitch-api-header=Authorization=OAuth …`, mode 600), which streamlink
+  reads on its own. Twitch takes the TV app's token with the site's Client-ID (GQL, streamlink: the account is
+  recognized on the playback token, `user_id`); whether it removes ads on subscribed channels like the site's token
+  is to be checked during a live (third-party app OAuth tokens do not). The sign-in by code also saves the token for
+  the followed channels (`twitch-follows-token.json` with `client_id`: Helix wants the TV app's), so one sign-in gives
+  both; logging out drops both. It is checked via `id.twitch.tv/oauth2/validate` when saved, then every
   30 min. **A rejected token blocks all playback** ("Unauthorized"): if it expires, `remote.py` deletes it and restarts
   the stream anonymously. Without a token, streamlink skips the ads and the picture freezes for their duration. The
   token is also written as a cookie for yt-dlp (`~media/.config/stream-box/twitch-cookies.txt`, `cookies` option of

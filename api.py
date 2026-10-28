@@ -235,8 +235,7 @@ class Handler(BaseHTTPRequestHandler):
                 text = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("text", [""])[0]
                 self.send(200, {"rows": ambient.qr_rows(text)})
             elif self.path == "/api/account":
-                with twitch.account_lock:
-                    self.send(200, dict(twitch.account))
+                self.send(200, twitch.account_status())
             else:
                 self.send(404, {"error": tr("not found")})
         except (OSError, ValueError) as e:

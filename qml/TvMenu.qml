@@ -67,6 +67,8 @@ Item {
     property var yt: null
     // YouTube account: dialog with the code to enter on google.com/device (/api/youtube_account), and its QR code
     property var ytAuth: null
+    property var twAuth: null                // Twitch account: sign-in by code on twitch.tv/activate (/api/account pending)
+    property var twAuthQr: null
     property var ytAuthQr: null
     property var ytAccount: null             // same state, for the "YouTube account" row (Settings → Accounts and libraries)
     // Plex account: code to enter on plex.tv/link (/api/plex_link: { pending: { code, error }, configured, name }), QR
@@ -76,6 +78,15 @@ Item {
     property var jfLink: null
     // Dialog of the sign-ins by code (menu/CodeDialog.qml): title, where to go, code, error, help, QR code of the page
     readonly property var codeDialog: {
+        if (twAuth) {
+            var t = twAuth.pending
+            return { title: tr("Connect my Twitch account"),
+                     where: tr("On your phone, open twitch.tv/activate and enter:"),
+                     code: t && t.user_code && !t.error ? t.user_code : "",
+                     error: t && t.error ? tr("Authorization denied: {error}", { error: t.error }) : "",
+                     help: tr("The box presents itself as the Twitch app for TVs: your subscriptions without ads, and your followed channels."),
+                     qr: twAuthQr }
+        }
         if (ytAuth) {
             var p = ytAuth.pending
             return { title: tr("Connect my YouTube account"),
@@ -312,6 +323,31 @@ Item {
             }
         })
     }
+    // Twitch account: code to enter on twitch.tv/activate; the dialog reloads every 3 s until signed in
+    function twConnect() {
+        twAuth = { pending: null }
+        call("POST", "/api/login_code", {}, function (d) {
+            if (!d) twAuth = { pending: { error: tr("Twitch unreachable for now") } }
+            else loadTwAuth()
+        })
+    }
+    function loadTwAuth() {
+        if (!twAuth) return
+        call("GET", "/api/account", undefined, function (d) {
+            if (!twAuth || !d) return
+            account = d
+            if (d.login) { twAuth = null; follows = null; loadFollows(); return }
+            var p = d.pending
+            twAuth = { pending: p }
+            if (p && p.verification_uri && !p.error) {
+                if (!twAuthQr || twAuthQr.text !== p.verification_uri)
+                    call("GET", "/api/qr?text=" + encodeURIComponent(p.verification_uri), undefined, function (q) {
+                        twAuthQr = q ? { text: p.verification_uri, rows: q.rows } : null
+                    })
+                twAuthPoll.restart()
+            }
+        })
+    }
     function plexConnect() {
         plexLink = { pending: null }
         call("POST", "/api/plex_link", {}, function (d) {
@@ -388,6 +424,20 @@ Item {
                     call("POST", "/api/plex", { address: "" }, function () { refresh() }) }) } })
         items.push({ label: tr("Close"), ok: function () {} })
         openModal(on ? tr("Plex: {server}", { server: st.plex_server }) : "Plex", items)
+    }
+    function twitchAccountMenu() {
+        var login = account && account.login
+        var items = [{ label: tr(login ? "+  Sign in with another Twitch account" : "+  Connect my Twitch account"),
+                       ok: function () { twConnect() } }]
+        if (login)
+            items.push({ label: tr("✕  Disconnect Twitch"), danger: true, ok: function () {
+                confirmModal(tr("Disconnect your Twitch account? The stream restarts"), tr("✕  Disconnect Twitch"), function () {
+                    account = Object.assign({}, account, { login: null })   // at once
+                    call("POST", "/api/logout", {}, function () {
+                        call("GET", "/api/account", undefined, function (d) { if (d) account = d })
+                        follows = null; loadFollows() }) }) } })
+        items.push({ label: tr("Close"), ok: function () {} })
+        openModal(login ? tr("Twitch account: {login}", { login: login }) : tr("Twitch account"), items)
     }
     function ytAccountMenu() {
         var a = ytAccount
@@ -541,6 +591,7 @@ Item {
     }
     Timer { interval: 4000; repeat: true; running: menu.isOpen; onTriggered: menu.refresh() }
     Timer { id: ytAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadYtAuth() }
+    Timer { id: twAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadTwAuth() }
     Timer { id: plexLinkPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadPlexLink() }
     Timer { id: jfLinkPoll; interval: 2000; onTriggered: if (menu.isOpen) menu.loadJfLink() }
     Timer { id: followsPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadFollows() }
@@ -622,6 +673,7 @@ Item {
         closePlexLink()
         closeJfLink()
         ytAuth = null   // (Google's code expires by itself; reopening the menu must not show a stale one)
+        twAuth = null
         isOpen = false
         modal = null
         btPhase = ""
@@ -854,12 +906,8 @@ Item {
             var login = account && account.login
             return [
                 { open: true, label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
-                  hint: login ? tr("No ads on the channels you're subscribed to") : tr("Sign in from the companion app on your phone"),
-                  ok: function () {   // (signing in needs typing: the companion app, its QR code beside the list)
-                      openModal(login ? tr("Twitch account: {login}. To change it or log out: the companion app (Settings → Accounts and libraries).", { login: login })
-                                      : tr("Sign in to Twitch from the companion app on your phone (Settings → Accounts and libraries)."),
-                                [{ label: tr("Close"), ok: function () {} }])
-                  } },
+                  hint: login ? tr("No ads on the channels you're subscribed to") : tr("Subscriptions without ads, and your followed channels"),
+                  ok: function () { twitchAccountMenu() } },
                 { open: true, label: tr("YouTube account"), visible: !!(ytAccount && !ytAccount.unavailable),
                   value: ytAccount && ytAccount.authorized ? tr("Connected") : tr("Not connected"),
                   hint: tr("Subscriptions, recommendations, and progress synced with your account"),
@@ -1455,6 +1503,7 @@ Item {
             return
         }
         if (ytAuth) { if (k === "back" || k === "left" || k === "ok") ytAuth = null; return }
+        if (twAuth) { if (k === "back" || k === "left" || k === "ok") twAuth = null; return }
         if (plexLink) { if (k === "back" || k === "left" || k === "ok") closePlexLink(); return }
         if (jfLink) { if (k === "back" || k === "left" || k === "ok") closeJfLink(); return }
         if (area === "rail") {
@@ -1530,6 +1579,9 @@ Item {
         if (!follows.authorized) {
             var p = follows.pending
             if (k === "left") area = "rail"
+            // Not signed in to Twitch: the account's sign-in by code gives the followed channels too; signed in with a
+            // pasted token (backup): the followed channels' own authorization
+            else if (k === "ok" && !(account && account.login)) twConnect()
             else if (k === "ok" && !(p && p.user_code && !p.error)) {
                 follows = Object.assign({}, follows, { pending: {} })   // "Requesting the code…" at once
                 call("POST", "/api/follows_login", {}, function () { loadFollows() })
