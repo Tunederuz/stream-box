@@ -1,5 +1,6 @@
-// TV menu: header of the tab (title, subtitle), weather and clock at the top right
+// TV menu: header of the tab (title, subtitle), weather, battery (if any) and clock at the top right
 import QtQuick
+import ".."
 import "layout.js" as Layout
 
 Item {
@@ -16,6 +17,7 @@ Item {
             text: visible ? menu.ambient.weather.temp + "°  " + (menu.ambient.weather.text || "") : ""
             color: "#b4afc2"; font.pixelSize: 25
         }
+        BatteryIcon { anchors.verticalCenter: parent.verticalCenter; size: 25 }
         Text { text: Qt.formatTime(menu.now, "hh:mm"); color: "white"; font.pixelSize: 31 }
     }
 }
