@@ -212,13 +212,18 @@ def last_update():
     return {"date": date.strip(), "lines": lines[-12:], "ok": not failed}
 
 
-def system_update():
-    """System update (image only): None without it; otherwise running, the version of the running system (os-release
-    IMAGE_VERSION: an A/B box restarted onto a new one since the last result) and the last result (version, ok, message,
-    code, restart: now | pending | no, kind: ab | files, new)"""
-    r = subprocess.run(["systemctl", "show", "stream-box-system-update.service", "-p", "LoadState", "-p", "ActiveState"],
+def unit_state(unit):
+    r = subprocess.run(["systemctl", "show", unit, "-p", "LoadState", "-p", "ActiveState"],
                        capture_output=True, text=True, timeout=10)
-    props = dict(l.split("=", 1) for l in r.stdout.splitlines() if "=" in l)
+    return dict(l.split("=", 1) for l in r.stdout.splitlines() if "=" in l)
+
+
+def system_update():
+    """System update (image only): None without it; otherwise running (installing), checking (daily check, "Check for
+    updates"), the version of the running system (os-release IMAGE_VERSION: an A/B box restarted onto a new one since
+    the last result), the last result (version, ok, message, code, restart: now | pending | no, kind: ab | files |
+    direct, new; available and checked: the daily check) and offered: the newer release to offer, "" when none"""
+    props = unit_state("stream-box-system-update.service")
     if props.get("LoadState") != "loaded":
         return None
     try:
@@ -232,7 +237,15 @@ def system_update():
             version = next((l.split("=", 1)[1].strip().strip('"') for l in f if l.startswith("IMAGE_VERSION=")), None)
     except OSError:
         pass
-    return {"running": props.get("ActiveState") == "activating", "last": last, "version": version}
+    running = props.get("ActiveState") == "activating"
+    last_ = last or {}
+    have = version or (last_.get("version") or "").lstrip("v").split("+")[0]
+    pending_new = last_.get("new") if last_.get("restart") == "pending" else ""
+    available = last_.get("available") or ""
+    offered = available if available and available not in (have, pending_new) and not running else ""
+    return {"running": running, "direct": running and last_.get("run") == "direct",   # direct: "Direct update (main)"
+            "checking": unit_state("stream-box-update-check.service").get("ActiveState") == "activating",
+            "last": last, "version": version, "offered": offered}
 
 
 def health():
@@ -257,13 +270,11 @@ def health():
             services[label] = user_systemctl("is-active", unit) or tr("unknown")
         except (OSError, subprocess.SubprocessError):
             services[label] = tr("unknown")
-    try:
+    try:   # dependencies (update.sh, every day without a word)
         props = dict(l.split("=", 1) for l in user_systemctl(
             "show", "stream-box-update.service", "-p", "ActiveState").splitlines() if "=" in l)
-        timer = user_systemctl("show", "stream-box-update.timer", "-p", "NextElapseUSecRealtime")
-        next_run = timer.split("=", 1)[1] if "=" in timer else ""
     except (OSError, subprocess.SubprocessError):
-        props, next_run = {}, ""
+        props = {}
     return {
         "temps": temperatures(), "cpu": health_rates["cpu"], "load": os.getloadavg()[0], "cores": os.cpu_count(),
         "memory": {"total": mem.get("MemTotal", 0) * 1024, "available": mem.get("MemAvailable", 0) * 1024},
@@ -275,7 +286,8 @@ def health():
         "player": {"choice": settings.player_choice(), "running": "qt" if vo == "libmpv" else "mpv", "hwdec": hwdec,
                    "dropped": drops, "fps": fps, "size": f"{width}x{height}" if width else None},
         "services": services,
-        "update": {"running": props.get("ActiveState") == "activating", "next": next_run, "last": last_update(),
+        # running, last: the dependencies (update.sh); system: the box's system (releases)
+        "update": {"running": props.get("ActiveState") == "activating", "last": last_update(),
                    "system": system_update(), "dev": dev_status()["enabled"]},
     }
 
@@ -285,15 +297,31 @@ UPDATE_DIRECT = os.path.expanduser("~/.local/state/stream-box/update-direct")
 UPDATE_DISMISSED = os.path.expanduser("~/.local/state/stream-box/update-dismissed")   # "Don't ask again": that update
 
 
+def start_root(unit):
+    r = subprocess.run(["systemctl", "start", "--no-block", unit], capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        raise ValueError((r.stderr or r.stdout).strip() or tr("Couldn't start the update."))
+
+
 def start_update(direct=False):
-    """"Update now": marked as started by hand, so that system-update applies it at once (when nothing plays); the
-    weekly update never restarts by itself. direct ("Direct update (main)", developer mode only): the code and system
-    files of the main branch, not the system"""
+    """Install the newer release (the user accepted: TV menu question, Settings → Updates, companion app): marked as
+    started by hand, so that system-update applies it at once when nothing plays. direct ("Direct update (main)",
+    developer mode only): the code and system files of the main branch, not the system"""
     if direct and not dev_status()["enabled"]:
         raise ValueError(tr("Direct update: developer mode only."))
     os.makedirs(os.path.dirname(UPDATE_MANUAL), exist_ok=True)
     with open(UPDATE_DIRECT if direct else UPDATE_MANUAL, "w") as f:
         f.write(str(time.time()))
+    start_root("stream-box-system-update.service")
+
+
+def check_update():
+    """"Check for updates": the daily check, now (root, polkit rule 56)"""
+    start_root("stream-box-update-check.service")
+
+
+def update_deps():
+    """"Update dependencies" (Settings → Advanced): update.sh now, as every day"""
     user_systemctl("start", "--no-block", "stream-box-update.service")
 
 
@@ -307,10 +335,13 @@ def waiting_update():
 
 
 def update_prompt():
-    """Update waiting for the user (system-update.json restart "pending", and for A/B not the running version):
-    {pending, dismissed, id, new, kind}; id changes at each boot and wake-up, the TV menu asks once per id, unless
-    "Don't ask again" was chosen for that update (dismissed: a newer one asks again)"""
+    """What the TV menu asks about at each start and wake-up: an update installed, waiting for a restart (pending: "restart
+    to apply?"), or else a newer release found by the daily check (available: "update now?"). {pending, available,
+    dismissed, id, new, kind}; id changes at each boot and wake-up (and with the release offered), the menu asks once
+    per id, unless "Don't ask again" was chosen for that version (dismissed: a newer one asks again)"""
     pending, last, key = waiting_update()
+    available = "" if pending else (system_update() or {}).get("offered") or ""
+    key = key if pending else available
     try:
         with open("/proc/sys/kernel/random/boot_id") as f:
             boot = f.read().strip()
@@ -318,17 +349,18 @@ def update_prompt():
         boot = ""
     try:
         with open(UPDATE_DISMISSED) as f:
-            dismissed = pending and f.read().strip() == key
+            dismissed = bool(key) and f.read().strip() == key
     except OSError:
         dismissed = False
-    return {"pending": pending, "dismissed": dismissed, "id": f"{boot}:{wakes}", "new": last.get("new") or "",
-            "kind": last.get("kind") or ""}
+    return {"pending": pending, "available": available, "dismissed": dismissed, "id": f"{boot}:{wakes}:{key}",
+            "new": last.get("new") or "", "kind": last.get("kind") or ""}
 
 
 def dismiss_update():
-    """"Don't ask again" of that question: not asked again for this update (System → Update now still applies it)"""
+    """"Don't ask again" of that question: not asked again for this version (Settings → Updates still offers it)"""
     pending, _, key = waiting_update()
-    if pending:
+    key = key if pending else (system_update() or {}).get("offered") or ""
+    if key:
         os.makedirs(os.path.dirname(UPDATE_DISMISSED), exist_ok=True)
         with open(UPDATE_DISMISSED, "w") as f:
             f.write(key)

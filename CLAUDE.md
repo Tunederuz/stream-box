@@ -228,8 +228,8 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   960 px by `-s`); without grim, mpv's `screenshot-to-file … window` scaled down by ffmpeg. One
   capture at a time, kept for 1 s for several phones. The page asks for another one 1.5 s after each response,
   only while the block is open and visible. Without grim and without video: 204 response.
-- **Updates**: `update.sh` (systemd user timer `stream-box-update.timer`, Monday ~5 am, caught up at boot)
-  updates streamlink, yt-dlp, Deno, Node, the token plugin and jellyfin-mpv-shim (and rebuilds the token server if its version changes), tests each venv and restores the previous versions if the test
+- **Dependencies**: `update.sh` (systemd user timer `stream-box-update.timer`, every day ~5 am, caught up at boot,
+  without a word; by hand: Settings → Advanced → "Update dependencies", `POST /api/update_deps`) updates streamlink, yt-dlp, Deno, Node, the token plugin and jellyfin-mpv-shim (and rebuilds the token server if its version changes), tests each venv and restores the previous versions if the test
   fails. Log: `~media/.local/state/stream-box/update.log`.
 - **git**: `/home/media/stream-box` is a git repository (no secrets in it: Twitch token and Jellyfin credentials
   are elsewhere). Commit after each change.
@@ -512,7 +512,12 @@ actually running, decoding, size, frames/s, dropped frames), user services (MQTT
 the Settings tab is shown; tiles in orange or red beyond thresholds (70 °C, 85 °C, memory, disk,
 stopped service, CPU decoding).
 Same status in the System tab of the QML TV menu (tiles under the rows, `/api/health` reread every 5 s while
-the tab is shown), with an "Update now" row (last and next update).
+the tab is shown).
+- **UI rule: a press always shows something at once.** TV menu: change the bound data optimistically (`updateAct`,
+  `display.setting`, `wifi.connecting`…), open dialogs at once and fill them when the box answers (`loadingModal`), then
+  read the real state shortly after (`healthSoon` → `readBox`) instead of at the next 5 s reading. Companion app: the
+  pressed button is greyed out (`.busy`) while its `send()` runs; handlers that fetch by themselves set their text or
+  status line before awaiting. Check it for every new button.
 
 ### YouTube (channels and search)
 
@@ -987,8 +992,20 @@ partition (the USB drive left plugged in after installing the same version) make
 the stick after installing.
 
 ### System update (image)
-Developer mode updates as any box (weekly, "Update now"). Direct update, by hand only and in developer mode ("Direct
-update (main)" in the TV System menu and the companion app: `POST /api/update {direct: true}`, system.start_update leaves
+Checked every day, installed when the user accepts. `stream-box-update-check.timer` (root, 04:00 + up to 1 h,
+Persistent) runs `system-update check`: A/B, `systemd-sysupdate --json=short check-new` (`{"available": v | null}`, exit
+code 1 when nothing is newer: the JSON tells success apart; no network: nothing written); before A/B, the latest `v*`
+tag of its clone against the files installed; writes `available` and `checked` into system-update.json (report()
+carries them over; an install clears `available`). system.system_update() → `offered` (available, not running, not
+installed and waiting, no update running), `checking`, `direct` (`run: direct` written by system-update while a direct
+update runs: its status shows on its own row, never on the release one). The TV menu offers it at start and wake-up
+(update_prompt `available`, id `boot:wake-ups:version`: "Version X is available. Update now?" / "Later" / "Don't ask
+again") and Settings → Updates has one row whose action follows the state ("Check for updates" → `update_check`
+(stream-box-update-check.service, polkit rule 56), "Install version X" → `update`, "Restart to apply version X");
+companion app: one button, same states. Accepting runs stream-box-system-update.service directly (no update.sh any
+more) with the update-manual marker: applied at once when nothing plays, otherwise it waits and asks.
+Developer mode updates as any box. Direct update, by hand only and in developer mode ("Direct
+update (main)" in Settings → Advanced and the companion app: `POST /api/update {direct: true}`, system.start_update leaves
 ~/.local/state/stream-box/update-direct, used up by system-update within 2 h, applied at once like "Update now"), any
 box: the git path below, from main
 (root clone `fetch origin main`, media's code fast-forwarded to it) instead of the latest release, no system image;
@@ -1001,8 +1018,7 @@ not offered again until a newer release): it reboots onto it when /api/state say
 ("restart to finish"). system-update.json: `kind: ab`, `version` = running, `new` = the version waiting. On a USB drive
 (one slot): nothing, message "install the box on the PC". Boxes from before A/B (one system partition, label
 root-x86-64) keep the git path. Tested in QEMU (see the A/B sections).
-Applying an update: never by itself on an automatic run (the weekly update, possibly caught up when the box is turned
-on). A/B: system-update installs the new system, then pins the boot on the running version (`bootctl set-default
+Applying an update: never by itself on a run nobody asked for. A/B: system-update installs the new system, then pins the boot on the running version (`bootctl set-default
 stream-box_<running>.efi`) and writes `restart: pending`; files path: no session restart, `pending`. "Update now"
 (system.start_update leaves ~/.local/state/stream-box/update-manual, used up by system-update within 2 h) applies at
 once when nothing plays (`bootctl set-default ""` and reboot, or session restart). At each boot,
@@ -1011,7 +1027,7 @@ the running one, not given up) and the pin; files, `pending` cleared (the boot a
 {pending, id = boot_id:wake-ups (system.resume_loop counts them), new, kind}: the TV menu asks once per id when it
 opens ("Version X is ready. Restart now to apply it?" / "Later" / "Don't ask again": `dismiss_update` writes the update's
 key, its A/B version or files date, to ~/.local/state/stream-box/update-dismissed, then `dismissed` until a newer one);
-a plain restart does not apply an A/B update (pinned boot): while one waits, System → Update now (TV, askUpdate(true))
+a plain restart does not apply an A/B update (pinned boot): while one waits, Settings → Updates (TV, askUpdate(true))
 and the companion app's button become "Restart now"; "Restart now" → `POST /api/apply_update` →
 stream-box-apply-update.service (polkit rule 58, apply-update: A/B unpin and reboot, files session restart). Disk tile
 (TV, companion app): the data partition on an A/B box, the system partition (5 GB slot) aside (`health.disk.system`).
@@ -1038,9 +1054,8 @@ package manifest (mkosi `ManifestFormat=json`, stream-box_<version>.manifest.jso
 latest release's, with the updated packages as release text; its tag is created on that commit by `gh release create
 --target` (a tag pushed with the workflow's token starts no other workflow). Releases from before A/B (no `build.sh
 release`) are not rebuilt.
-"Update now" (System menu, companion app) and the weekly update run update.sh (media: venvs, token server, cast
-receiver), which ends by starting `stream-box-system-update.service` (root; polkit rule 56 lets media start it, nothing
-else). `/usr/local/lib/stream-box/system-update`: its own root-owned clone (`/var/lib/stream-box/src`, from GitHub:
+Accepting an update (TV menu, companion app) starts `stream-box-system-update.service` (root; polkit rule 56 lets media
+start it and stream-box-update-check.service, nothing else); update.sh (dependencies) no longer starts it. `/usr/local/lib/stream-box/system-update`: its own root-owned clone (`/var/lib/stream-box/src`, from GitHub:
 what is installed as root never comes from media's copy) → latest `v*` tag → system files of `image/mkosi.extra`
 installed when their sha256 differs, those a release dropped removed (`/var/lib/stream-box/system-files`: list of the
 previous one; none before the first run), daemon-reload, units of /etc/systemd/system/stream-box-* with an [Install]

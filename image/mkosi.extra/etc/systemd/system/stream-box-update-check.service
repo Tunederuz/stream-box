@@ -1,0 +1,9 @@
+# Stream Box: whether a newer release exists (system-update check), every day (stream-box-update-check.timer) and by
+# hand ("Check for updates": remote.py, polkit rule 56); nothing downloaded, the TV menu offers it
+[Unit]
+Description=Stream Box: check for a system update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/stream-box/system-update check
+TimeoutStartSec=3min

@@ -4,7 +4,7 @@ Used by remote.py (GET / POST /api/bluetooth), itself driven by the TV System me
 (NoInputNoOutput agent: "Just Works" remotes, gamepads, keyboards), then the device is marked as trusted (it reconnects
 on its own) and connected.
 """
-import os, re, subprocess, threading
+import os, re, subprocess, threading, time
 
 from i18n import tr
 
@@ -81,6 +81,29 @@ def scan():
     threading.Thread(target=run, daemon=True).start()
 
 
+def until(args, done, seconds):
+    """bluetoothctl <args> in the background, given up to `seconds`, ended as soon as done() is true (checked every
+    second): with --timeout, bluetoothctl stays for the whole duration even once the device is paired or connected,
+    and the TV dialog with it"""
+    proc = subprocess.Popen(["bluetoothctl", *args], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            if done():
+                return True
+            if proc.poll() is not None:   # ended by itself (failure, or a bluetoothctl that returns once done)
+                return done()
+            time.sleep(1)
+        return done()
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+
 def pair(mac):
     if not re.fullmatch(r"[0-9A-F:]{17}", mac):
         raise ValueError(tr("invalid address"))
@@ -92,15 +115,14 @@ def pair(mac):
             name = info(mac)["name"]
             state.update(busy=mac, message=tr("Pairing {name}…", name=name))
             try:
-                ctl("--agent", "NoInputNoOutput", "--timeout", "40", "pair", mac, timeout=50)
                 # Only BlueZ's state counts: bluetoothctl can end without error while pairing did not succeed
                 # (remote left pairing mode, USB receiver resetting along the way…)
-                if not info(mac)["paired"]:
+                if not until(["--agent", "NoInputNoOutput", "--timeout", "40", "pair", mac], lambda: info(mac)["paired"], 40):
                     state["message"] = tr("Couldn't pair {name}: put it back in pairing mode and try again.", name=name)
                     return
                 ctl("trust", mac)
-                ctl("--timeout", "15", "connect", mac, timeout=25)
-                state["message"] = (tr("{name} paired and connected.", name=name) if info(mac)["connected"] else
+                connected = until(["--timeout", "15", "connect", mac], lambda: info(mac)["connected"], 15)
+                state["message"] = (tr("{name} paired and connected.", name=name) if connected else
                                     tr("{name} paired: press one of its buttons to connect it.", name=name))
             except (OSError, subprocess.SubprocessError):
                 state["message"] = tr("Couldn't pair {name}.", name=name)

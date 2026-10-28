@@ -522,10 +522,7 @@ Item {
     Timer {
         interval: 5000; repeat: true; triggeredOnStart: true
         running: menu.isOpen && menu.tabId === "settings"
-        onTriggered: {
-            menu.call("GET", "/api/health", undefined, function (d) { if (d && d.temps) menu.health = d })
-            menu.call("GET", "/api/wifi", undefined, function (d) { if (d) menu.wifi = d })
-        }
+        onTriggered: menu.readBox()
     }
     Timer { interval: 4000; repeat: true; running: menu.isOpen; onTriggered: menu.refresh() }
     Timer { id: ytAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadYtAuth() }
@@ -576,21 +573,33 @@ Item {
         idleClose.restart()
     }
     // Update waiting for the user (installed by the weekly update, which never restarts by itself): asked once per
-    // start and per wake-up (/api/update_prompt id), at the menu's first opening; "Later" asks again next time,
-    // "Don't ask again" not for this update (System → Update now still offers it; a newer one asks again)
+    // start and per wake-up (/api/update_prompt id), at the menu's first opening: a version installed and waiting for a
+    // restart, or else a newer release found by the daily check (installed only if accepted); "Later" asks again next
+    // time, "Don't ask again" not for this version (Settings → Updates still offers it; a newer one asks again)
     property string updateAsked: ""
     function askUpdate(always) {
         call("GET", "/api/update_prompt", undefined, function (d) {
-            if (!d || !d.pending || modal || !isOpen) return
+            if (!d || !(d.pending || d.available) || modal || !isOpen) return
             if (!always && (d.dismissed || d.id === updateAsked)) return
             updateAsked = d.id
-            var items = [{ label: tr("↻  Restart now"), ok: function () { act("apply_update"); close() } },
-                         { label: tr("Later"), ok: function () {} }]
+            var later = [{ label: tr("Later"), ok: function () {} }]
             if (!always)
-                items.push({ label: tr("Don't ask again"), ok: function () { act("dismiss_update") } })
-            openModal(d.kind === "ab" ? tr("Version {version} is ready. Restart now to apply it?", { version: d.new })
-                                      : tr("An update of the box is ready. Restart now to apply it?"), items)
+                later.push({ label: tr("Don't ask again"), ok: function () { act("dismiss_update") } })
+            if (d.pending)
+                openModal(d.kind === "ab" ? tr("Version {version} is ready. Restart now to apply it?", { version: d.new })
+                                          : tr("An update of the box is ready. Restart now to apply it?"),
+                          [{ label: tr("↻  Restart now"), ok: function () { act("apply_update"); close() } }].concat(later))
+            else
+                openModal(tr("Version {version} is available. Update now?", { version: d.available }),
+                          [{ label: tr("⤓  Update now"), ok: function () { installUpdate(d.available) } }].concat(later))
         })
+    }
+    // Accepted: downloaded and installed next to the running system, then the box restarts by itself (system-update,
+    // started by hand: not while something plays; then it asks)
+    function installUpdate(version) {
+        updateAct("update", {}, function (u) { u.system.running = true; u.system.offered = "" })
+        openModal(tr("Downloading version {version}. The box restarts by itself once it is installed (not during a video).",
+                     { version: version }), [{ label: tr("OK"), ok: function () {} }])
     }
     function close() {
         if (!isOpen) return
@@ -674,18 +683,18 @@ Item {
                      playback: "Subtitles, auto switch, polls and predictions",
                      chat: "Chat on the TV, corner, background, text size", look: "Background, colors, language",
                      accounts: "Twitch, YouTube, Jellyfin, Plex", network: "Wi-Fi, companion app QR code",
-                     devices: "Remotes, controllers, keys, power button", updates: "Version, update from a USB stick",
-                     backup: "Settings backup, installation on this PC", advanced: "Version, SSH, developer mode" })[id] || "")
+                     devices: "Remotes, controllers, keys, power button", updates: "Version, check for updates, USB stick",
+                     backup: "Settings backup, installation on this PC", advanced: "Version, SSH, developer mode, dependencies" })[id] || "")
     }
     // Something to notice in a section, shown on its row ("" most of the time: only "›")
     function sectionAlert(id) {
         switch (id) {
-        case "updates":
-            var u = health && health.update
-            if (u && (u.running || (u.system && u.system.running))) return tr("Update in progress…")
+        case "updates":   // the box's system only (the dependencies update without a word)
+            var sys = health && health.update && health.update.system
+            if (sys && sys.running && !sys.direct) return tr("Update in progress…")
             if (updateWaiting()) return tr("Update ready")
-            var l = u && u.system && u.system.last
-            return (u && u.last && !u.last.ok) || (l && !l.ok) ? tr("Update failed") : ""
+            if (sys && sys.offered) return tr("Version {version} available", { version: sys.offered })
+            return sys && sys.last && !sys.last.ok && sys.last.kind !== "direct" ? tr("Update failed") : ""
         case "network":
             return wifi && wifi.device && (wifi.mode === "hotspot" || (!wifi.network && !wifi.connecting)) ? wifiValue() : ""
         case "backup":
@@ -747,6 +756,7 @@ Item {
                   ok: function () {
                       if (!pendingDisplay || !display || pendingDisplay === display.setting) return
                       act("display", { mode: pendingDisplay })
+                      display = Object.assign({}, display, { setting: pendingDisplay })   // the chosen mode stays shown
                       pendingDisplay = ""
                       displayReload.restart()
                   } },
@@ -840,7 +850,12 @@ Item {
                           ssid: wifi.hotspot.ssid, password: wifi.hotspot.password,
                           url: String(wifi.hotspot.url).replace(/^http:\/\//, "").replace(/\/$/, "") })
                       : tr("OK: setup mode, to choose another network from the phone"),
-                  ok: function () { if (wifi && wifi.mode !== "hotspot") act("wifi", { action: "hotspot" }) } },
+                  ok: function () {
+                      if (!wifi || wifi.mode === "hotspot") return
+                      act("wifi", { action: "hotspot" })
+                      wifi = Object.assign({}, wifi, { connecting: true })   // "connecting…" at once
+                      healthSoon.restart()
+                  } },
                 { label: tr("Companion app QR code"), value: tr(qrModes[qi][1]), step: function (d) {
                     act("qr", { mode: qrModes[Math.max(0, Math.min(qrModes.length - 1, qi + d))][0] })
                 } },
@@ -852,29 +867,36 @@ Item {
                   hint: tr("Pair, unpair"), ok: function () { btMenu() } },
                 { label: tr("Set up keys"), hint: tr("Learn the keys of a remote or a controller, one by one"),
                   ok: function () { act("keymap", { action: "wizard" }); close() } },
-                { label: tr("Default keys"), ok: function () { act("keymap", { action: "reset" }) } },
+                { label: tr("Default keys"), ok: function () {
+                    act("keymap", { action: "reset" })
+                    openModal(tr("Keys back to their defaults"), [{ label: tr("OK"), ok: function () {} }])   // (nothing else shows it)
+                } },
                 { label: tr("Power button"), hint: tr("Remote, phone and Home Assistant"),
                   value: s.power_action === "suspend" ? tr("Sleep") : tr("Full shutdown"),
                   step: function (d) { act("power_action", { mode: s.power_action === "suspend" ? "poweroff" : "suspend" }) } },
             ]
         case "updates":
+            // One row whose action follows the state: check (every day by itself), install the release found, or
+            // restart onto the one installed
+            var sys = health && health.update && health.update.system
+            var l = sys && sys.last
             return [
-                { label: tr("Update now"), value: updateVersion(),
-                  hint: health && health.update ? (health.update.running || (health.update.system && health.update.system.running)
-                                                   ? tr("Update in progress…")
-                        : (health.update.last ? tr(health.update.last.ok ? "Last: {date}" : "Failed: {date}",
-                                                   { date: frDate(health.update.last.date) }) : tr("Never"))
-                          + (health.update.next ? "  ·  " + tr("next: {date}", { date: frDate(health.update.next) }) : "")) : undefined,
+                { label: updateWaiting() ? (l.new ? tr("Restart to apply version {version}", { version: l.new }) : tr("Restart to apply the update"))
+                       : sys && sys.offered ? tr("Install version {version}", { version: sys.offered }) : tr("Check for updates"),
+                  visible: !!sys, value: updateVersion(),
+                  // (a direct update shows on its own row, Settings → Advanced)
+                  hint: !sys ? undefined : sys.running && !sys.direct ? tr("Update in progress…") : sys.checking ? tr("Checking…")
+                      : l && !l.ok && l.kind !== "direct" ? tr("Failed: {date}", { date: frDate(l.date) })
+                      : sys.offered ? tr("Downloaded and installed next to the running system, then the box restarts")
+                      : l && l.checked ? tr("Up to date · checked {date}", { date: frDate(l.checked) }) : tr("Checked every day"),
                   ok: function () {
-                      if (health && health.update && health.update.running) return
+                      if (!sys || sys.running || sys.checking) return
                       if (updateWaiting()) askUpdate(true)
-                      else act("update")
+                      else if (sys.offered) installUpdate(sys.offered)
+                      else updateAct("update_check", {}, function (u) { u.system.checking = true })
                   } },
                 { label: tr("Update from a USB stick"), visible: !!(localUpd && localUpd.available), value: localUpdValue(),
                   hint: tr("A release's image (stream-box.raw.xz), without the Internet"), ok: function () { localUpdateMenu() } },
-                { label: tr("Direct update (main)"), visible: !!(dev && dev.enabled),
-                  hint: tr("Developer mode: the code and system files of the main branch, not the system"),
-                  ok: function () { if (!(health && health.update && health.update.running)) act("update", { direct: true }) } },
             ]
         case "backup":
             return [
@@ -917,6 +939,16 @@ Item {
                               call("POST", "/api/dev", { enabled: true }, function () { loadSsh() }) } },
                           { label: tr("Cancel"), ok: function () {} }])
                   } },
+                // Dependencies (update.sh: yt-dlp, streamlink…): every day by themselves, without a word
+                { label: tr("Update dependencies"),
+                  value: health && health.update ? (health.update.running ? tr("In progress…")
+                       : health.update.last && !health.update.last.ok ? tr("failed") : "") : "",
+                  hint: tr("yt-dlp, streamlink…: updated by themselves every day")
+                      + (health && health.update && health.update.last ? "  ·  " + tr("Last: {date}", { date: frDate(health.update.last.date) }) : ""),
+                  ok: function () { if (!(health && health.update && health.update.running)) updateAct("update_deps", {}, function (u) { u.running = true }) } },
+                { label: tr("Direct update (main)"), visible: !!(dev && dev.enabled), value: directValue(),
+                  hint: tr("Developer mode: the code and system files of the main branch, not the system"),
+                  ok: function () { if (!(health && health.update && health.update.system && health.update.system.running)) updateAct("update", { direct: true }, function (u) { u.system.running = true; u.system.direct = true }) } },
             ]
         }
         return []
@@ -931,18 +963,42 @@ Item {
         for (var i = 0; i < rows.length; i++) if (!rows[i].header) out.push(i)
         return out
     }
-    // System update (image): installed release, "restart to finish" when it could not restart the session
+    // System version: the running one (A/B: os-release; restarted onto a new one since), or the files installed (box
+    // from before A/B); a direct update's version (<release>+<commit>) shows on its own row (directValue)
     function updateVersion() {
         var s = health && health.update && health.update.system
         var l = s && s.last
-        if (!l) return s && s.version ? "v" + s.version : ""
-        if (!l.ok) return tr("System: failed")
-        // Developer mode: direct update of the files from main (system version + commit)
-        if (l.kind === "direct")
-            return l.version + "  ·  " + tr("dev") + (l.restart === "pending" ? "  ·  " + tr("restart to finish") : "")
-        // A/B: the running version (restarted onto the new one since); waiting only while it is not the running one
-        var running = s.version ? "v" + s.version : (l.version || "")
-        return running + (updateWaiting() ? "  ·  " + tr("restart to finish") : "")
+        if (s && s.version) return "v" + s.version
+        return l && l.kind !== "direct" ? l.version || "" : ""
+    }
+    // Update buttons: the change shows at once (in progress, checking…), then the real state is read again shortly after
+    // instead of at the next 5 s reading
+    function updateAct(name, body, change) {
+        act(name, body)
+        var h = JSON.parse(JSON.stringify(health || {}))
+        h.update = h.update || {}
+        h.update.system = h.update.system || {}
+        change(h.update)
+        health = h
+        healthSoon.restart()
+    }
+    Timer { id: healthSoon; interval: 1500; onTriggered: menu.readBox() }
+    // Settings tab, every 5 s and shortly after a press: box status, Wi-Fi, installation and local update progress
+    // (values of their rows while their dialog is closed)
+    function readBox() {
+        call("GET", "/api/health", undefined, function (d) { if (d && d.temps) health = d })
+        call("GET", "/api/wifi", undefined, function (d) { if (d) wifi = d })
+        if (install && install.available) call("GET", "/api/install", undefined, function (d) { if (d) install = d })
+        if (localUpd && localUpd.available) call("GET", "/api/local_update", undefined, function (d) { if (d) localUpd = d })
+    }
+    // "Direct update (main)": in progress, or the last one (version, failed, restart to finish)
+    function directValue() {
+        var s = health && health.update && health.update.system
+        var l = s && s.last
+        if (s && s.direct) return tr("In progress…")
+        if (!l || l.kind !== "direct") return ""
+        if (!l.ok) return tr("failed")
+        return l.version + (l.restart === "pending" ? "  ·  " + tr("restart to finish") : "")
     }
     // Installed, waiting for "Restart now" (a plain restart keeps the running A/B version: its boot is pinned)
     function updateWaiting() {
@@ -952,7 +1008,7 @@ Item {
     }
     // "2026-10-23 11:48:14" or "Mon 2026-10-26 05:07:37 CET" → "Fri 23 Oct at 11:48"
     function frDate(text) {
-        var m = /(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d)/.exec(text || "")
+        var m = /(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d)/.exec(text || "")
         if (!m) return text || ""
         var d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])
         return tr("{date} at {time}", { date: d.toLocaleDateString(Qt.locale(i18n.lang === "fr" ? "fr_FR" : "en_US"), "ddd d MMM"),
@@ -1113,6 +1169,7 @@ Item {
     // "Remotes and controllers" dialog: paired devices (OK: unpair), "Pair a device"
     function btMenu() {
         btPhase = ""
+        loadingModal("", tr("Bluetooth devices…"))
         loadBt(function (d) {
             var items = d.paired.map(function (p) {
                 return { label: p.name + (p.connected ? "  ·  " + tr("connected") : ""), ok: function () {
@@ -1159,17 +1216,27 @@ Item {
     Timer { interval: 2000; repeat: true; running: menu.btPhase !== "" && !!menu.modal; onTriggered: menu.btRefresh() }
     // "Backup and restore" dialog: per plugged-in USB stick, "Back up" then its latest backups
     // (OK: restore, after confirmation); reloaded every 2 s (stick plugged in, backup finished)
+    // Dialog opened at once, filled when the box answers (a press always shows something: disks or drives looked for,
+    // a job starting…); kind: the dialog it becomes (its 2 s refresh keeps it)
+    function loadingModal(kind, title) {
+        modal = { title: title || tr("Loading…"), items: [{ label: tr("Close"), ok: function () {} }], kind: kind }
+        modalSel = 0
+    }
     function backupMenu(again) {
+        if (!again && !(modal && modal.kind === "backup")) loadingModal("backup", tr("Looking for USB drives…"))
+        var opened = modal   // (closed before the answer: stays closed)
         call("GET", "/api/backup", undefined, function (d) {
-            if (!d || (again && !(modal && modal.kind === "backup"))) return   // closed, or confirmation opened in the meantime
+            if (!d || (!again && modal !== opened) || (again && !(modal && modal.kind === "backup"))) return   // closed, or confirmation opened in the meantime
             var items = []
             if (!d.busy) d.usb.forEach(function (u) {
                 items.push({ label: tr("↓  Back up to {name}", { name: u.name }), ok: function () {
+                    loadingModal("backup", tr("Backing up to {name}…", { name: u.name }))
                     call("POST", "/api/backup", { action: "save_usb", path: u.path }, function () { backupMenu() }) } })
                 u.backups.forEach(function (b) {
                     items.push({ label: tr("↺  Restore the one from {date}", { date: frDate(b.date) }), ok: function () {
                         openModal(tr("Replace the settings with those from {date}? The box restarts afterwards", { date: frDate(b.date) }), [
                             { label: tr("↺  Restore and restart"), danger: true, ok: function () {
+                                loadingModal("backup", tr("Restoring…"))
                                 call("POST", "/api/backup", { action: "restore_usb", path: u.path, name: b.name }, function () { backupMenu() }) } },
                             { label: tr("Cancel"), ok: function () { backupMenu() } }])
                     } })
@@ -1188,8 +1255,10 @@ Item {
     // "Install on this PC" dialog: internal disks (OK: confirmation, everything is erased), then progress reloaded
     // every 2 s, and at the end "remove the stick, restart"
     function installMenu(again) {
+        if (!again && !(modal && modal.kind === "install")) loadingModal("install", tr("Looking for disks…"))
+        var opened = modal   // (closed before the answer: stays closed)
         call("GET", "/api/install", undefined, function (d) {
-            if (!d || (again && !(modal && modal.kind === "install"))) return
+            if (!d || (!again && modal !== opened) || (again && !(modal && modal.kind === "install"))) return
             install = d
             var p = d.progress, title, items = []
             if (p && p.state === "running") {
@@ -1207,6 +1276,7 @@ Item {
                     items.push({ label: k.label + (k.data ? "  ·  " + tr("contains: {data}", { data: k.data }) : ""), ok: function () {
                         openModal(tr("Erase everything on {disk} and install the box on it?", { disk: k.label }), [
                             { label: tr("Yes, erase and install"), danger: true, ok: function () {
+                                loadingModal("install", tr("Starting the installation…"))
                                 call("POST", "/api/install", { disk: k.name }, function () { installMenu() }) } },
                             { label: tr("Cancel"), ok: function () { installMenu() } }])
                     } })
@@ -1229,8 +1299,10 @@ Item {
         return ""
     }
     function localUpdateMenu(again) {
+        if (!again && !(modal && modal.kind === "local")) loadingModal("local", tr("Looking for images on the USB drives…"))
+        var opened = modal   // (closed before the answer: stays closed)
         call("GET", "/api/local_update", undefined, function (d) {
-            if (!d || (again && !(modal && modal.kind === "local"))) return
+            if (!d || (!again && modal !== opened) || (again && !(modal && modal.kind === "local"))) return
             localUpd = d
             var j = d.job, title, items = []
             if (d.copy && d.copy.name) {
@@ -1257,6 +1329,7 @@ Item {
                                                                 [{ label: tr("Close"), ok: function () {} }])
                         openModal(tr("Install {name}? The box restarts onto it; the current version stays as a fallback.", { name: f.image.name }), [
                             { label: tr("Yes, install"), ok: function () {
+                                loadingModal("local", tr("Copying the image…"))
                                 call("POST", "/api/local_update", { action: "usb", path: f.drive.path, name: f.image.name }, function () { localUpdateMenu() }) } },
                             { label: tr("Cancel"), ok: function () { localUpdateMenu() } }])
                     } })

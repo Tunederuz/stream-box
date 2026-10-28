@@ -114,6 +114,8 @@
   }
   button:active { transform: scale(.97); background: var(--surface-3); }
   button:disabled { opacity: .4; }
+  button.busy { opacity: .6; cursor: progress; animation: busy 1s ease-in-out infinite alternate; }
+  @keyframes busy { from { opacity: .45; } to { opacity: .8; } }
   button.current { background: var(--grad); border-color: transparent; font-weight: 600;
                    box-shadow: 0 6px 18px rgba(145, 70, 255, .30); }
   button.ghost { background: transparent; border-color: transparent; box-shadow: none; }
@@ -707,11 +709,14 @@
     <h2>System</h2>
     <div class="setting" style="margin-top: 0">Box status</div>
     <div class="health" id="health"></div>
-    <button id="update-now" style="width: 100%; margin-top: 10px">Update now</button>
+    <button id="update-now" style="width: 100%; margin-top: 10px">Check for updates</button>
+    <div class="status" id="update-status"></div>
     <button id="update-direct" hidden style="width: 100%; margin-top: 8px">Direct update (main)</button>
     <button id="reboot" style="width: 100%; margin-top: 8px">Restart the box</button>
     <details style="margin-top: 10px">
-      <summary>Last update log</summary>
+      <summary>Dependencies</summary>
+      <p>yt-dlp, streamlink and the other tools that YouTube and Twitch changes break: updated by themselves every day.</p>
+      <button id="update-deps" style="width: 100%">Update dependencies</button>
       <pre id="update-log"></pre>
     </details>
     <details id="local-update" hidden style="margin-top: 10px">
@@ -908,7 +913,16 @@ async function refresh() {
   if (!document.hidden) refreshTimer = setTimeout(refresh, 3000);   // page in the background: resumed by visibilitychange
 }
 
+// The button just pressed (not the remote's keys, pressed in a row): greyed out while its request runs, whatever it
+// does next (a press always shows something at once)
+let pressed = { button: null, at: 0 };
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (b && !b.dataset.action) pressed = { button: b, at: Date.now() };
+}, true);
 async function send(action, body = {}) {
+  const b = Date.now() - pressed.at < 500 ? pressed.button : null;
+  if (b) b.classList.add("busy");
   try {
     const r = await fetch(`/api/${action}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -916,6 +930,8 @@ async function send(action, body = {}) {
     if (!r.ok) throw new Error((await r.json()).error);
   } catch (e) {
     showError(e.message || tr("Box unreachable"));
+  } finally {
+    if (b) b.classList.remove("busy");
   }
   setTimeout(refresh, 300);   // mpv applies script-messages asynchronously
 }
@@ -1639,7 +1655,7 @@ const since = (s) => { const h = Math.floor(s / 3600), d = Math.floor(h / 24);
   return d ? tr("{d} d {h} h", { d, h: h % 24 }) : h ? `${h} h ${String(Math.floor(s / 60) % 60).padStart(2, "0")}` : `${Math.floor(s / 60)} min`; };
 // "2026-10-23 11:48:14" or "Mon 2026-10-26 05:07:37 CET" → "Fri, Oct 23 at 11:48"
 const frDate = (text) => {
-  const m = /(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d)/.exec(text || "");
+  const m = /(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d)/.exec(text || "");
   if (!m) return text || "";
   const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
   return tr("{date} at {time}", { date: d.toLocaleDateString(LANG, { weekday: "short", day: "numeric", month: "short" }),
@@ -1681,16 +1697,29 @@ async function refreshHealth() {
                        { size: p.size.replace("x", " × "), fps: Math.round(p.fps || 0), dropped: p.dropped ?? 0 })
                   : tr("nothing playing"),
            p.size && (!p.hwdec || p.hwdec === "no") ? "warn" : "", true),
-      tile(tr("Updates"), u.running ? tr("In progress…") : u.last ? `${u.last.ok ? "✓" : "✕"} ${frDate(u.last.date)}` : tr("never"),
-           u.next ? tr("next: {date}", { date: frDate(u.next) }) : "", u.last && !u.last.ok ? "bad" : "", true),
+      // the box's system (releases): the running version, or the one found by the daily check
+      tile(tr("Updates"), !u.system ? "–" : u.system.running && !u.system.direct ? tr("In progress…")
+             : u.system.offered ? tr("v{version} available", { version: u.system.offered })
+             : u.system.version ? "v" + u.system.version : (u.system.last || {}).version || "–",
+           u.system && u.system.last && u.system.last.checked ? tr("checked {date}", { date: frDate(u.system.last.checked) }) : "",
+           u.system && u.system.offered ? "warn" : u.system && u.system.last && !u.system.last.ok ? "bad" : "", true),
     );
-    const busy = u.running || !!(u.system && u.system.running);
-    $("update-now").disabled = busy;
+    const sysBusy = !!(u.system && (u.system.running || u.system.checking));
     $("update-direct").hidden = !u.dev;   // developer mode: the code and system files of main, not the system
-    $("update-direct").disabled = busy;
+    $("update-direct").disabled = sysBusy;
+    $("update-direct").textContent = u.system && u.system.direct ? tr("In progress…") : tr("Direct update (main)");
+    $("update-deps").disabled = !!u.running;
+    $("update-deps").textContent = u.running ? tr("In progress…") : tr("Update dependencies");
     const sys = u.system && u.system.last;   // system update (image): release installed
     updateWaiting = !!(sys && sys.ok && sys.restart === "pending" && !(sys.kind === "ab" && sys.new === u.system.version));
-    $("update-now").textContent = busy ? tr("Update in progress…") : updateWaiting ? tr("↻  Restart now") : tr("Update now");
+    updateOffered = (u.system && u.system.offered) || "";
+    // One button whose action follows the state: check (every day by itself), install the release found, restart
+    $("update-now").hidden = !u.system;
+    $("update-now").disabled = sysBusy;
+    // (a direct update shows on its own button)
+    $("update-now").textContent = u.system && u.system.running && !u.system.direct ? tr("Update in progress…")
+      : u.system && u.system.checking ? tr("Checking…") : updateWaiting ? tr("↻  Restart now")
+      : updateOffered ? tr("Install version {version}", { version: updateOffered }) : tr("Check for updates");
     // A/B box: version running, newer one installed in the other slot; older box: system files and code
     const sysText = !sys ? "" : !sys.ok ? tr("System: {error} ({date})", { error: sys.message, date: frDate(sys.date) })
       : sys.kind === "direct" ? tr("Developer mode: the box's files from main, {version} ({date}), {files} system files changed; the system itself is not updated.",
@@ -1702,19 +1731,31 @@ async function refreshHealth() {
              : sys.message ? "" : " " + tr("Up to date."))
       : tr("System: {version} ({date}), {files} system files changed.", { version: sys.version, date: frDate(sys.date), files: sys.files })
           + " " + tr({ updated: "Code updated.", ahead: "Code newer than the release, kept." }[sys.code] || "Code up to date.");
-    $("update-log").textContent = (u.last ? u.last.lines.join("\n") : tr("No update recorded."))
-      + (sys ? "\n\n" + sysText + (updateWaiting ? " " + tr("Restart the box to finish.") : "") : "");
+    $("update-status").textContent = !sys ? "" : sysText + (updateWaiting ? " " + tr("Restart the box to finish.") : "")
+      + (updateOffered ? " " + tr("Version {version} is available.", { version: updateOffered })
+         : sys.checked && sys.ok ? " " + tr("Checked {date}.", { date: frDate(sys.checked) }) : "");
+    $("update-log").textContent = u.last ? u.last.lines.join("\n") : tr("No update recorded.");
   } catch (e) { bug(e); /* the page already shows the box status */ }
   healthTimer = setTimeout(refreshHealth, 5000);
 }
 let updateWaiting = false;   // installed, waiting for "Restart now" (a plain restart keeps the running A/B version)
+let updateOffered = "";      // newer release found by the daily check, not installed yet
+// Update buttons: the change shows at once, the real state read again shortly after (not at the next 5 s reading)
 $("update-now").onclick = async () => {
   $("update-now").disabled = true;
-  await send(updateWaiting ? "apply_update" : "update");
+  $("update-now").textContent = updateWaiting ? tr("Restarting…") : updateOffered ? tr("Update in progress…") : tr("Checking…");
+  await send(updateWaiting ? "apply_update" : updateOffered ? "update" : "update_check");
+  setTimeout(refreshHealth, 1500);
+};
+$("update-deps").onclick = async () => {
+  $("update-deps").disabled = true;
+  $("update-deps").textContent = tr("In progress…");
+  await send("update_deps");
   setTimeout(refreshHealth, 1500);
 };
 $("update-direct").onclick = async () => {
   $("update-direct").disabled = true;
+  $("update-direct").textContent = tr("In progress…");
   await send("update", { direct: true });
   setTimeout(refreshHealth, 1500);
 };
