@@ -7,3 +7,4 @@ cast/node_modules/
 image/test-key
 image/test-key.pub
 image/mkosi.profiles/test/mkosi.extra/etc/ssh/stream-box-test-keys
+tests/page/node_modules/

@@ -1,4 +1,7 @@
-# Python checks (tools/check.sh, CI): pyflakes rules only (undefined names, unused imports and variables…)
+# Python checks (tools/check.sh, CI): pyflakes rules only (undefined names, unused imports and variables…); ruff also
+# reports syntax errors, so there is no separate compile step. Python scripts without .py, of the image, included
+extend-include = ["image/mkosi.extra/usr/local/lib/stream-box/local-update"]
+
 [lint]
 select = ["F"]
 exclude = ["cast"]
