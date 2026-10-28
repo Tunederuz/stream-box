@@ -1,7 +1,7 @@
 """Stream Box: the box as a machine: sleep and shutdown, power key lock, wake-up, SSH access and developer mode,
 status (temperatures, processor, memory, network, services) and system updates. Standard library only.
 """
-import json, os, shutil, socket, subprocess, time
+import functools, json, os, shutil, socket, subprocess, time
 
 import settings  # settings.py: chosen player
 from common import lan_ip, mpv
@@ -218,11 +218,27 @@ def unit_state(unit):
     return dict(l.split("=", 1) for l in r.stdout.splitlines() if "=" in l)
 
 
+@functools.cache
+def single_slot():
+    """The box's disk has one system partition (GPT type root-x86-64): the image flashed on a USB drive, no room for
+    the next version next to the running one (system-update does nothing there: install the box on the PC)"""
+    try:
+        root = subprocess.run(["findmnt", "-no", "SOURCE", "/"], capture_output=True, text=True, timeout=5).stdout
+        r = subprocess.run(["lsblk", "-no", "PKNAME", root.split("[")[0].strip()], capture_output=True, text=True, timeout=5)
+        disk = r.stdout.split()[0]
+        types = subprocess.run(["lsblk", "-nlo", "PARTTYPE", f"/dev/{disk}"], capture_output=True, text=True,
+                               timeout=5).stdout.split()
+    except (OSError, subprocess.SubprocessError, IndexError):
+        return False
+    return [t.lower() for t in types].count("4f68bce3-e8cd-4db1-96e7-fbcaf984b709") == 1
+
+
 def system_update():
     """System update (image only): None without it; otherwise running (installing), checking (daily check, "Check for
     updates"), the version of the running system (os-release IMAGE_VERSION: an A/B box restarted onto a new one since
     the last result), the last result (version, ok, message, code, restart: now | pending | no, kind: ab | files |
-    direct, new; available and checked: the daily check) and offered: the newer release to offer, "" when none"""
+    direct, new; available and checked: the daily check), offered: the newer release to offer, "" when none, and usb:
+    the image running from a USB drive, which gets no system update"""
     props = unit_state("stream-box-system-update.service")
     if props.get("LoadState") != "loaded":
         return None
@@ -245,7 +261,7 @@ def system_update():
     offered = available if available and available not in (have, pending_new) and not running else ""
     return {"running": running, "direct": running and last_.get("run") == "direct",   # direct: "Direct update (source)"
             "checking": unit_state("stream-box-update-check.service").get("ActiveState") == "activating",
-            "last": last, "version": version, "offered": offered}
+            "last": last, "version": version, "offered": offered, "usb": bool(version) and single_slot()}
 
 
 def health():

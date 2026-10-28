@@ -70,7 +70,7 @@ if [ "$SKIP_SYSTEM" -eq 0 ]; then
 fi
 
 step "System packages"
-pacman -S --needed --noconfirm mpv ffmpeg grim cage wlr-randr python git curl polkit libpulse bluez bluez-utils udisks2
+pacman -S --needed --noconfirm mpv ffmpeg grim cage wlr-randr libdrm cairo python git curl polkit libpulse bluez bluez-utils udisks2
 
 step "User $BOX_USER"
 id "$BOX_USER" > /dev/null 2>&1 || useradd -m -s /bin/bash "$BOX_USER"

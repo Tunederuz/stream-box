@@ -931,10 +931,12 @@ Item {
             var l = sys && sys.last
             return [
                 { label: updateWaiting() ? (l.new ? tr("Restart to apply version {version}", { version: l.new }) : tr("Restart to apply the update"))
-                       : sys && sys.offered ? tr("Install version {version}", { version: sys.offered }) : tr("Check for updates"),
+                       : sys && sys.offered ? tr("Install version {version}", { version: sys.offered })
+                       : sys && sys.usb ? tr("Install on this PC to get updates") : tr("Check for updates"),
                   visible: !!sys, value: updateVersion(),
                   // (a direct update shows on its own row, below)
                   hint: !sys ? undefined : sys.running && !sys.direct ? tr("Update in progress…") : sys.checking ? tr("Checking…")
+                      : sys.usb ? tr("The box runs from a USB stick: install it on this PC (Settings → Backup) to get system updates")
                       : l && !l.ok && l.kind !== "direct" ? tr("Failed: {date}", { date: frDate(l.date) })
                       : sys.offered ? tr("Downloaded and installed next to the running system, then the box restarts")
                       : l && l.checked ? tr("Up to date · checked {date}", { date: frDate(l.checked) }) : tr("Checked every day"),
@@ -942,6 +944,7 @@ Item {
                       if (!sys || sys.running || sys.checking) return
                       if (updateWaiting()) askUpdate(true)
                       else if (sys.offered) installUpdate(sys.offered)
+                      else if (sys.usb) { if (install && install.available) installMenu() }
                       else updateAct("update_check", {}, function (u) { u.system.checking = true })
                   } },
                 { open: true, label: tr("Update from a USB stick"), visible: !!(localUpd && localUpd.available), value: localUpdValue(),
