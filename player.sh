@@ -16,7 +16,8 @@ YTDL_FORMAT='bestvideo[height<=?1440][vcodec!^=av01]+bestaudio/best'
 
 # hwdec: hardware decoding when it is safe (VA-API, NVDEC…). French and English subtitles, manual and automatic,
 # without the automatic translations ("French from Arabic"… over 100 tracks).
-# player_client: the TV client chosen by default gets refused streams (403); tv_simply and android_vr work.
+# player_client: mweb first: its streams play to the end; tv_simply's stop after the first megabytes (HTTP 403 further
+# on, so a video resumed in the middle fails at once; checked 2026-10-28), kept as a fallback
 # fetch_pot: anti-bot token (stream-box-pot service) for every request, otherwise YouTube blocks the subtitles
 # shellcheck disable=SC2054  # (commas inside mpv option values, not array separators)
 MPV_ARGS=(
@@ -27,7 +28,7 @@ MPV_ARGS=(
   --ytdl-raw-options-append=sub-langs=fr,fr-FR,fr-orig,en,en-US,en-GB,en-orig
   --ytdl-raw-options-append=write-subs= --ytdl-raw-options-append=write-auto-subs=
   --ytdl-raw-options-append=cookies="$HOME/.config/stream-box/twitch-cookies.txt"
-  --ytdl-raw-options-append='extractor-args=youtube:player_client=tv_simply,android_vr;fetch_pot=always'
+  --ytdl-raw-options-append='extractor-args=youtube:player_client=mweb,tv_simply;fetch_pot=always'
 )
 # YouTube JavaScript challenges: deno if installed (install.sh), otherwise the system Node (image)
 [ -x "$HOME/.local/bin/deno" ] || MPV_ARGS+=(--ytdl-raw-options-append=js-runtimes=node)
