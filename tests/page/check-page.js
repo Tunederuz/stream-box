@@ -22,7 +22,7 @@ function load(tab) {
     beforeParse(w) {
       w.localStorage.setItem("tab", tab);
       w.localStorage.setItem("lang", "fr");
-      w.localStorage.setItem("groups", JSON.stringify(["channels", "accounts", "picture", "look", "network", "updates", "backup"]));
+      w.localStorage.setItem("groups", JSON.stringify(["channels", "accounts", "playback", "picture", "look", "network", "updates", "backup"]));
       w.fetch = async (url, opts = {}) => {
         const u = new URL(url, "http://box.local:8080/");
         let body = {};

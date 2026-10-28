@@ -411,9 +411,12 @@ end)
 
 -- Menu
 
-local function toggle_corner()
+local function toggle_corner(target)   -- the next corner clockwise, or the corner given (tl, tr, br, bl)
     for i, c in ipairs(CORNERS) do
-        if c == corner then
+        if target and c == target then
+            corner = target
+            break
+        elseif not target and c == corner then
             corner = CORNERS[i % #CORNERS + 1]
             break
         end
@@ -1127,7 +1130,7 @@ mp.register_script_message("streambox-channel", function(name)
     start_channel(name)
 end)
 mp.register_script_message("streambox-toggle-chat", toggle_chat)
-mp.register_script_message("streambox-cycle-corner", toggle_corner)
+mp.register_script_message("streambox-cycle-corner", function(target) toggle_corner(target) end)
 mp.register_script_message("streambox-play", play_media)
 mp.register_script_message("streambox-home", show_home)
 mp.register_script_message("streambox-setup-done", home_menu)

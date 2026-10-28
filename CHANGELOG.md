@@ -7,6 +7,15 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 ## [Unreleased]
 
 ### Changed
+- The same rules everywhere (TV menu, companion app, simplified version): disconnecting an account, forgetting the
+  learned keys, turning SSH or developer mode off and leaving the Wi-Fi network ask first; restart and shut down ask
+  a second OK; one name and one symbol per action (↻ Restart, ⏻ Shut down, ☾ Sleep…), and every dialog has a way out.
+- TV menu: OK on a card plays at once when there is nothing to choose (Jellyfin, Plex), and ≡ opens the options of
+  any card; OK on a ◀ ▶ setting no longer changes it by accident, the interface language is applied with OK like
+  the resolution; rows that open a dialog show "›" and open with ▶ too; the chat corner moves both ways in one step.
+- Companion app: a "Chat and playback" group with the TV's chat, subtitle, night mode, auto switch and polls
+  settings; "Disconnect" for every account; a Plex sign-in code can be cancelled; installing or applying an update
+  asks first.
 - Updates: the box checks every day whether a new version exists and the TV menu offers it ("Version X is available.
   Update now?"); nothing is downloaded until you accept. Settings → Updates shows the version and when it was last
   checked, with one button that checks, installs or restarts as needed; no more "next update" date.
