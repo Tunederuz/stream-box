@@ -204,7 +204,7 @@ Item {
             if (startFocus) {   // on open, before any key: tab of the current media
                 liveSel = Math.max(0, d.streamers.indexOf(d.channel))
                 var t = mediaTab(d)
-                for (var i = 0; i < tabs.length; i++) if (tabs[i].id === t && tab !== i) { tab = i; area = "content" }
+                for (var i = 0; t && i < tabs.length; i++) if (tabs[i].id === t && tab !== i) { tab = i; area = "content" }
                 if (area === "rail" && canEnter(tabs[tab].id)) area = "content"
             }
             checkArea()
@@ -540,18 +540,19 @@ Item {
     // Opening, closing
 
     // Tab matching the current media: live → Live, YouTube video → YouTube, Jellyfin → Jellyfin, Twitch replay or
-    // clip → Replays, other link → History
+    // clip → Replays, other link → History; nothing playing: "" (the menu stays on its tab: back from a video, the
+    // one it was started from)
     function mediaTab(d) {
-        if (d.mode !== "media") return "live"
+        if (d.mode === "twitch") return "live"
+        if (d.mode !== "media") return ""
         return { youtube: "youtube", jellyfin: "jellyfin", plex: "plex", "twitch-vod": "replays", "twitch-clip": "replays" }[d.media_kind] || "history"
     }
     function open() {
         powerOnly = false
         if (isOpen) return
-        // Tab of the current media (mediaTab, adjusted when the state arrives); YouTube and Jellyfin keep their row and
-        // their card; the data is reloaded
-        var t = mediaTab(st)
-        for (var i = 0; i < tabs.length; i++) if (tabs[i].id === t) tab = i
+        // Tab of the current media once the state arrives (refresh, startFocus: st may be from the last opening),
+        // otherwise the tab it was on; YouTube and Jellyfin keep their row and their card; the data is reloaded
+        var t = tabs[tab].id
         area = "rail"; railHome = false
         shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0; rebootUntil = 0
         follows = null; replays = ({}); history = null; rpLogin = ""; rpRow = 0; rpSel = [0, 0, 0]
@@ -1296,7 +1297,7 @@ Item {
     function grid(sel, count, cols, k) {   // move in a grid: new position, or -1 to exit on the left
         var col = sel % cols
         if (k === "left") return col === 0 ? -1 : sel - 1
-        if (k === "right") return col < cols - 1 && sel < count - 1 ? sel + 1 : sel
+        if (k === "right") return sel < count - 1 ? sel + 1 : sel   // at the end of a line: first of the next one
         if (k === "up") return sel >= cols ? sel - cols : sel
         if (k === "down") return sel + cols < count ? sel + cols : (Math.floor(sel / cols) < Math.floor((count - 1) / cols) ? count - 1 : sel)
         return sel
@@ -1363,7 +1364,8 @@ Item {
     function enterContent() {
         var id = tabs[tab].id   // and not tabId: right after a tab change, its binding may not be recomputed yet
         if (!canEnter(id)) return
-        if (id === "youtube" || id === "jellyfin" || id === "plex") { area = "content"; setRow(0); return }
+        // YouTube, Jellyfin, Plex: on the first row of videos (the search above it, ▲), the search when there is none yet
+        if (id === "youtube" || id === "jellyfin" || id === "plex") { area = "content"; setRow(mediaRows().length > 1 ? 1 : 0); return }
         area = "content"
         checkArea()
         if (id === "replays") { rpRow = 0; rpSel = [Math.max(0, (st.streamers || []).indexOf(rpLogin)), rpSel[1], rpSel[2]] }

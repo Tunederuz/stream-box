@@ -9,6 +9,14 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 ### Changed
 - TV menu, Settings: each section says what it holds, and shows a notice only when something needs attention
   (update ready, no network…) instead of a few of its values.
+- TV menu: entering YouTube, Jellyfin or Plex puts the focus on the first row of videos (the search is just above).
+- TV menu, grids (Live, Following, History): ▶ on the last card of a line goes on to the next line.
+
+### Fixed
+- Playback bar: the buttons under it no longer disappear when the bar hides while one of them is chosen; the bar
+  stays while the video title is chosen.
+- Leaving a video with Back reopens the menu on the tab it was started from (YouTube…) instead of Live.
+- A YouTube video refused by YouTube's robot check now says so, instead of "Can't play this video".
 
 ## [0.3.0]
 
