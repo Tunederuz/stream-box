@@ -276,10 +276,13 @@ def power_screen():
             except (OSError, ValueError) as e:
                 mpv(["show-text", str(e), 5000])
         return run
+    # Restart and shut down ask a second OK (a screen of their own; Back cancels), as in the full TV menu
+    def confirm(label, fn):
+        return lambda: screen(label, lambda: [item(label, act(fn))])
     return screen(tr("Turn off or restart"), lambda: [
-        item(tr("Sleep"), act(lambda: system.power("suspend"))),
-        item(tr("Turn off the box"), act(lambda: system.power("poweroff"))),
-        item(tr("Restart"), act(lambda: actions.reboot({}))),
+        item(tr("☾  Sleep"), act(lambda: system.power("suspend"))),
+        item(tr("↻  Restart"), confirm(tr("↻  Restart"), lambda: actions.reboot({}))),
+        item(tr("⏻  Shut down"), confirm(tr("⏻  Shut down"), lambda: system.power("poweroff"))),
     ])
 
 

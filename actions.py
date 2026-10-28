@@ -183,7 +183,9 @@ def reboot(body):
 ACTIONS = {
     "channel": channel,
     "chat": lambda body: mpv(["script-message", "streambox-toggle-chat"]),
-    "corner": lambda body: mpv(["script-message", "streambox-cycle-corner"]),
+    # the next corner clockwise, or {corner: tl | tr | br | bl}
+    "corner": lambda body: mpv(["script-message", "streambox-cycle-corner"]
+                               + ([body["corner"]] if body.get("corner") in ("tl", "tr", "br", "bl") else [])),
     "play": play_url,
     "history": lambda body: history.edit_history(str(body.get("action", "")), str(body.get("key", ""))),
     "twitch": lambda body: mpv(["script-message", "streambox-twitch"]),

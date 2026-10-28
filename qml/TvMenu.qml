@@ -173,6 +173,7 @@ Item {
     property string rpLogin: ""
     property string pendingDisplay: ""
     property string pendingPlayer: ""        // player chosen with the arrows, applied by OK (the player restarts)
+    property string pendingLang: ""          // interface language chosen with the arrows, applied by OK
     property real poweroffUntil: 0
     property real rebootUntil: 0             // "Restart the box": second OK within 4 s
     property bool powerOnly: false           // "Box" dialog alone, without the menu behind (power held)
@@ -274,7 +275,8 @@ Item {
     function ytChannelMenu(c) {
         openModal(c.name + (c.followers ? " · " + tr("{n} subscribers", { n: Fmt.big(c.followers, tr) }) : ""), [
             { label: tr("▶  See latest videos"), ok: function () { ytOpenChannel(c) } },
-            { label: tr(c.saved ? "✕  Remove from favorites" : "★  Add to favorites"), ok: function () { ytToggleSaved(c) } }])
+            { label: tr(c.saved ? "✕  Remove from favorites" : "★  Add to favorites"), danger: !!c.saved, ok: function () { ytToggleSaved(c) } },
+            { label: tr("Cancel"), ok: function () {} }])
     }
     function ytOpenChannel(c) {
         ytPreview = { id: c.id, name: c.name, avatar: c.avatar, videos: null }
@@ -344,12 +346,13 @@ Item {
         call("GET", "/api/jellyfin_link?find=1", undefined, function (d) {
             if (modal !== searching || !d) return   // closed in the meantime
             var items = (d.servers || []).map(function (srv) {
-                return { label: "▶  " + srv.name + "  ·  " + srv.address.replace(/^https?:\/\//, ""), ok: function () { jfConnect(srv.address) } }
+                return { label: "+  " + srv.name + "  ·  " + srv.address.replace(/^https?:\/\//, ""), ok: function () { jfConnect(srv.address) } }
             })
             var found = items.length
             if (on) items.push({ label: tr("✕  Disconnect Jellyfin"), danger: true, ok: function () {
-                st = Object.assign({}, st, { libraries: Object.assign({}, st.libraries, { jellyfin: false }) })   // at once
-                call("POST", "/api/jellyfin_link", { action: "forget" }, function () { refresh() }) } })
+                confirmModal(tr("Disconnect Jellyfin? Its tab goes away"), tr("✕  Disconnect Jellyfin"), function () {
+                    st = Object.assign({}, st, { libraries: Object.assign({}, st.libraries, { jellyfin: false }) })   // at once
+                    call("POST", "/api/jellyfin_link", { action: "forget" }, function () { refresh() }) }) } })
             items.push({ label: tr("Close"), ok: function () {} })
             openModal(found ? tr("Connect to which Jellyfin server?")
                       : tr("No Jellyfin server found on the network: give its address in the companion app (Settings → Jellyfin)."), items)
@@ -378,12 +381,14 @@ Item {
     // "Plex" row (Settings → Accounts and libraries): sign in by code, or forget the server
     function plexMenu() {
         var on = !!(st.libraries || {}).plex
-        var items = [{ label: tr(on ? "↻  Sign in with another Plex account" : "+  Sign in with a Plex account"),
+        var items = [{ label: tr(on ? "+  Sign in with another Plex account" : "+  Sign in with a Plex account"),
                        ok: function () { plexConnect() } }]
         if (on)
             items.push({ label: tr("✕  Disconnect Plex"), danger: true, ok: function () {
-                st = Object.assign({}, st, { libraries: Object.assign({}, st.libraries, { plex: false }) })   // at once
-                call("POST", "/api/plex", { address: "" }, function () { refresh() }) } })
+                confirmModal(tr("Disconnect Plex? Its tab goes away"), tr("✕  Disconnect Plex"), function () {
+                    st = Object.assign({}, st, { libraries: Object.assign({}, st.libraries, { plex: false }) })   // at once
+                    call("POST", "/api/plex", { address: "" }, function () { refresh() }) }) } })
+        items.push({ label: tr("Close"), ok: function () {} })
         openModal(on ? tr("Plex: {server}", { server: st.plex_server }) : "Plex", items)
     }
     function ytAccountMenu() {
@@ -403,11 +408,14 @@ Item {
         if (a.tv && !a.tv.unavailable)
             items.push(a.tv.connected
                 ? { label: tr("✕  Stop syncing progress"), danger: true, ok: function () {
-                    call("POST", "/api/youtube_tv_logout", {}, function () { yt = null; loadYtAccount() }) } }
-                : { label: tr("⟳  Sync progress"), ok: function () { ytConnect(true) } })
+                    confirmModal(tr("Stop syncing the progress with your YouTube account?"), tr("✕  Stop syncing progress"), function () {
+                        call("POST", "/api/youtube_tv_logout", {}, function () { yt = null; loadYtAccount() }) }) } }
+                : { label: tr("↻  Sync progress"), ok: function () { ytConnect(true) } })
         if (a.authorized)
             items.push({ label: tr("✕  Disconnect subscriptions"), danger: true, ok: function () {
-                call("POST", "/api/youtube_logout", {}, function () { yt = null; loadYtAccount() }) } })
+                confirmModal(tr("Disconnect your YouTube subscriptions?"), tr("✕  Disconnect subscriptions"), function () {
+                    call("POST", "/api/youtube_logout", {}, function () { yt = null; loadYtAccount() }) }) } })
+        items.push({ label: tr("Close"), ok: function () {} })
         openModal(tr("YouTube account") + (a.channels !== null ? " · " + tr("{n} subscriptions", { n: a.channels }) : ""), items)
     }
     // Options on a subscription video: play, channel as favorite (a row of its own)
@@ -417,7 +425,8 @@ Item {
         openModal(v.channel, [
             { label: tr("▶  Play the video"), ok: function () { chooseVideo(v) } },
             { label: tr("▶  See latest videos"), ok: function () { ytOpenChannel(c) } },
-            { label: tr(fav ? "✕  Remove from favorites" : "★  Add to favorites"), ok: function () { ytToggleSaved(c) } }])
+            { label: tr(fav ? "✕  Remove from favorites" : "★  Add to favorites"), danger: fav, ok: function () { ytToggleSaved(c) } },
+            { label: tr("Cancel"), ok: function () {} }])
     }
     // Favorite on or off: the mark changes at once (back if the box refuses), the channel rows follow
     function ytToggleSaved(c) {
@@ -483,7 +492,8 @@ Item {
         call("POST", "/api/" + tabId + "_play", { id: item.id, from_start: !!fromStart }, function () { refreshSoon.restart() })
         close()
     }
-    function libChoose(item) {
+    // OK on a card: plays at once when there is a single choice, otherwise a dialog; always (≡): the dialog
+    function libChoose(item, always) {
         if (item.type === "Series" || item.type === "Season") return libOpenSeries(item)
         var name = item.episode ? item.title + " · " + item.episode : item.title
         var items = []
@@ -493,7 +503,8 @@ Item {
         } else items.push({ label: tr(item.finished ? "↺  Watch again" : "▶  Play"), ok: function () { libPlay(item, true) } })
         if (item.type === "Episode" && item.series && !(lib.preview && lib.preview.id === item.series))
             items.push({ label: tr("☰  All episodes"), ok: function () { libOpenSeries({ series: item.series, title: item.title }) } })
-        openModal(name, items)
+        if (items.length === 1 && !always) return items[0].ok()
+        openModal(name, items.concat([{ label: tr("Cancel"), ok: function () {} }]))
     }
     // Info line of a card in the row-based tabs
     function hm(t) {
@@ -599,10 +610,10 @@ Item {
             if (d.pending)
                 openModal(d.kind === "ab" ? tr("Version {version} is ready. Restart now to apply it?", { version: d.new })
                                           : tr("An update of the box is ready. Restart now to apply it?"),
-                          [{ label: tr("↻  Restart now"), ok: function () { act("apply_update"); close() } }].concat(later))
+                          [{ label: tr("↻  Restart"), ok: function () { act("apply_update"); close() } }].concat(later))
             else
                 openModal(tr("Version {version} is available. Update now?", { version: d.available }),
-                          [{ label: tr("⤓  Update now"), ok: function () { installUpdate(d.available) } }].concat(later))
+                          [{ label: tr("⤓  Install version {version}", { version: d.available }), ok: function () { installUpdate(d.available) } }].concat(later))
         })
     }
     // Accepted: downloaded and installed next to the running system, then the box restarts by itself (system-update,
@@ -715,14 +726,17 @@ Item {
         }
         return ""
     }
-    function openSection(id) { section = id; rootSel = setSel; setSel = 0; pendingDisplay = ""; pendingPlayer = "" }
+    function openSection(id) { section = id; rootSel = setSel; setSel = 0; pendingDisplay = ""; pendingPlayer = ""; pendingLang = "" }
     function leaveSection() {
         var i = sectionIds.indexOf(section)
-        section = ""; setSel = i >= 0 ? i : rootSel; pendingDisplay = ""; pendingPlayer = ""
+        section = ""; setSel = i >= 0 ? i : rootSel; pendingDisplay = ""; pendingPlayer = ""; pendingLang = ""
     }
     function settingsRows() {
+        // Rows that open a dialog (open: true) show "›" and also open with ▶, as the sections themselves
         if (section)
-            return sectionRows(section).filter(function (r) { return r.visible !== false })
+            return sectionRows(section).filter(function (r) { return r.visible !== false }).map(function (r) {
+                return r.open ? Object.assign({}, r, { value: (r.value ? r.value + "   " : "") + "›" }) : r
+            })
         var rows = sectionIds.map(function (id) {
             var alert = sectionAlert(id)
             return { label: sectionTitle(id), hint: sectionHint(id), value: (alert ? alert + "   " : "") + "›",
@@ -730,15 +744,15 @@ Item {
         })
         return rows.concat([
             { header: tr("Power options") },
-            { label: tr("Put to sleep"), hint: tr("Wake up with the remote, Home Assistant or the power button"),
+            { label: tr("☾  Sleep"), hint: tr("Wake up with the remote, Home Assistant or the power button"),
               ok: function () { act("poweroff", { mode: "suspend" }); close() } },
-            { label: tr("Restart the box"),
+            { label: tr("↻  Restart"),
               hint: rebootUntil > 0 ? tr("Press OK again to restart") : undefined,
               ok: function () {
                   if (rebootUntil > 0) { act("reboot"); close() }
                   else { rebootUntil = 1; rebootReset.restart() }
               } },
-            { label: tr("Shut down the box"), danger: true,
+            { label: tr("⏻  Shut down"), danger: true,
               hint: poweroffUntil > 0 ? tr("Press OK again to shut down") : undefined,
               ok: function () {
                   if (poweroffUntil > 0) { act("poweroff", { mode: "full" }); close() }
@@ -808,8 +822,9 @@ Item {
             return [
                 { label: tr("Chat on the TV"), toggle: !!s.chat_visible, ok: function () { setFlag("chat", {}, { chat_visible: !s.chat_visible }) } },
                 { label: tr("Chat corner"), value: tr(corners[s.corner] || ""), step: function (d) {
-                    // the API can only move forward one corner: three steps forward make one step back
-                    for (var n = 0; n < (d > 0 ? 1 : 3); n++) act("corner")
+                    var order = ["tl", "tr", "br", "bl"]   // clockwise, as stream-box.lua
+                    var next = order[(Math.max(0, order.indexOf(s.corner)) + d + 4) % 4]
+                    setFlag("corner", { corner: next }, { corner: next })
                 } },
                 { label: tr("Chat background"), value: (s.chat_bg || 0) + " %", step: function (d) {
                     act("set", { key: "chat_bg", value: Math.max(0, Math.min(100, (s.chat_bg || 0) + 10 * d)) })
@@ -828,33 +843,42 @@ Item {
                 { label: tr("Home screen colors"), hint: tr("The menu itself takes the color of each tab"),
                   value: tr(backdropNames.color[bd.color || "violet"] || ""), step: function (d) { stepBackdrop("color", d) } },
                 // names in their own language; the TV and the companion app switch right away (streambox-language)
-                { label: tr("Interface language"), value: (s.languages || {})[s.lang] || "English", step: function (d) {
-                    var i = Math.max(0, langs.indexOf(s.lang))
-                    act("language", { lang: langs[(i + d + langs.length) % langs.length] })
-                } },
+                // ◀ ▶ choose, OK applies (the whole interface changes language: as the resolution and the version)
+                { label: tr("Interface language"), value: (s.languages || {})[pendingLang || s.lang] || "English",
+                  hint: pendingLang && pendingLang !== s.lang ? tr("OK to apply") : undefined,
+                  step: function (d) {
+                      var i = Math.max(0, langs.indexOf(pendingLang || s.lang))
+                      pendingLang = langs[(i + d + langs.length) % langs.length]
+                  },
+                  ok: function () {
+                      if (!pendingLang || pendingLang === s.lang) return
+                      act("language", { lang: pendingLang })
+                      st = Object.assign({}, st, { lang: pendingLang })
+                      pendingLang = ""
+                  } },
             ]
         case "accounts":
             var login = account && account.login
             return [
-                { label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
+                { open: true, label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
                   hint: login ? tr("No ads on the channels you're subscribed to") : tr("Sign in from the companion app on your phone"),
                   ok: function () {   // (signing in needs typing: the companion app, its QR code beside the list)
                       openModal(login ? tr("Twitch account: {login}. To change it or log out: the companion app (Settings → Accounts and libraries).", { login: login })
                                       : tr("Sign in to Twitch from the companion app on your phone (Settings → Accounts and libraries)."),
                                 [{ label: tr("Close"), ok: function () {} }])
                   } },
-                { label: tr("YouTube account"), visible: !!(ytAccount && (ytAccount.configured || (ytAccount.tv && !ytAccount.tv.unavailable))),
+                { open: true, label: tr("YouTube account"), visible: !!(ytAccount && (ytAccount.configured || (ytAccount.tv && !ytAccount.tv.unavailable))),
                   value: ytAccount && ytAccount.authorized
                        ? tr("Connected") + (ytAccount.channels !== null ? " · " + tr("{n} subscriptions", { n: ytAccount.channels }) : "")
                        : tr("Not connected"),
                   hint: ytAccount && ytAccount.tv && ytAccount.tv.connected ? tr("Progress synced with your account (phone, computer)")
                       : tr("Subscriptions, and progress synced with your account"),
                   ok: function () { ytAccountMenu() } },
-                { label: "Jellyfin", value: (s.libraries || {}).jellyfin ? tr("Connected") : tr("Not connected"),
+                { open: true, label: "Jellyfin", value: (s.libraries || {}).jellyfin ? tr("Connected") : tr("Not connected"),
                   hint: (s.libraries || {}).jellyfin ? String(s.jellyfin_server || "").replace(/^https?:\/\//, "")
                                                      : tr("Your movies and series of a Jellyfin server"),
                   ok: function () { jellyfinMenu() } },
-                { label: "Plex", value: (s.libraries || {}).plex ? tr("Connected") : tr("Not connected"),
+                { open: true, label: "Plex", value: (s.libraries || {}).plex ? tr("Connected") : tr("Not connected"),
                   hint: (s.libraries || {}).plex ? String(s.plex_server || "").replace(/^https?:\/\//, "")
                                                  : tr("Your movies and series of a Plex server"),
                   ok: function () { plexMenu() } },
@@ -868,11 +892,14 @@ Item {
                           ssid: wifi.hotspot.ssid, password: wifi.hotspot.password,
                           url: String(wifi.hotspot.url).replace(/^http:\/\//, "").replace(/\/$/, "") })
                       : tr("OK: setup mode, to choose another network from the phone"),
-                  ok: function () {
+                  ok: function () {   // (the box leaves its network: asked first)
                       if (!wifi || wifi.mode === "hotspot") return
-                      act("wifi", { action: "hotspot" })
-                      wifi = Object.assign({}, wifi, { connecting: true })   // "connecting…" at once
-                      healthSoon.restart()
+                      confirmModal(tr("Leave the current network and start setup mode? Choose the new one from the phone"),
+                                   tr("Start setup mode"), function () {
+                          act("wifi", { action: "hotspot" })
+                          wifi = Object.assign({}, wifi, { connecting: true })   // "connecting…" at once
+                          healthSoon.restart()
+                      })
                   } },
                 { label: tr("Companion app QR code"), value: tr(qrModes[qi][1]), step: function (d) {
                     act("qr", { mode: qrModes[Math.max(0, Math.min(qrModes.length - 1, qi + d))][0] })
@@ -880,15 +907,17 @@ Item {
             ]
         case "devices":
             return [
-                { label: tr("Remotes and controllers"),
+                { open: true, label: tr("Remotes and controllers"),
                   value: bt ? tr(bt.paired.length > 1 ? "{n} devices paired" : "{n} device paired", { n: bt.paired.length }) : "",
                   hint: tr("Pair, unpair"), ok: function () { btMenu() } },
                 { label: tr("Set up keys"), hint: tr("Learn the keys of a remote or a controller, one by one"),
                   ok: function () { act("keymap", { action: "wizard" }); close() } },
-                { label: tr("Default keys"), ok: function () {
-                    loadingModal("", tr("Default keys…"))
-                    call("POST", "/api/keymap", { action: "reset" }, function (d) {   // (nothing else shows it)
-                        openModal(d ? tr("Keys back to their defaults") : tr("Couldn't do it."), [{ label: tr("OK"), ok: function () {} }])
+                { label: tr("Default keys"), hint: tr("Forget the keys learned with \"Set up keys\""), ok: function () {
+                    confirmModal(tr("Forget the learned keys and go back to the default ones?"), tr("↺  Default keys"), function () {
+                        loadingModal("", tr("Default keys…"))
+                        call("POST", "/api/keymap", { action: "reset" }, function (d) {   // (nothing else shows it)
+                            openModal(d ? tr("Keys back to their defaults") : tr("Couldn't do it."), [{ label: tr("OK"), ok: function () {} }])
+                        })
                     })
                 } },
                 { label: tr("Power button"), hint: tr("Remote, phone and Home Assistant"),
@@ -915,7 +944,7 @@ Item {
                       else if (sys.offered) installUpdate(sys.offered)
                       else updateAct("update_check", {}, function (u) { u.system.checking = true })
                   } },
-                { label: tr("Update from a USB stick"), visible: !!(localUpd && localUpd.available), value: localUpdValue(),
+                { open: true, label: tr("Update from a USB stick"), visible: !!(localUpd && localUpd.available), value: localUpdValue(),
                   hint: tr("A release's image (stream-box.raw.xz), without the Internet"), ok: function () { localUpdateMenu() } },
                 { label: tr("Direct update (source)"), visible: !!(dev && dev.enabled), value: directValue(),
                   hint: tr("Developer mode: the code and system files of the main branch, not the system"),
@@ -923,9 +952,9 @@ Item {
             ]
         case "backup":
             return [
-                { label: tr("Backup and restore"), hint: tr("On a USB stick, or as a file from the companion app"),
+                { open: true, label: tr("Backup and restore"), hint: tr("On a USB stick, or as a file from the companion app"),
                   ok: function () { backupMenu() } },
-                { label: tr("Install on this PC"), visible: !!(install && install.available),
+                { open: true, label: tr("Install on this PC"), visible: !!(install && install.available),
                   value: install && install.progress && install.progress.state === "running" ? install.progress.percent + " %" : "",
                   hint: tr("The box runs from its USB stick: copy it, settings included, to the internal disk"),
                   ok: function () { installMenu() } },
@@ -948,15 +977,22 @@ Item {
                       : "ssh " + (ssh.address || tr("media@<box address>"))
                         + "  ·  " + (ssh.password ? tr("password: {password}", { password: ssh.password }) : tr("by key")),
                   ok: function () {
-                      var on = !ssh.enabled
-                      ssh = Object.assign({}, ssh, { enabled: on })   // on screen right away
-                      call("POST", "/api/ssh", { enabled: on }, function () { loadSsh() })
+                      function set(on) {
+                          ssh = Object.assign({}, ssh, { enabled: on })   // on screen right away
+                          call("POST", "/api/ssh", { enabled: on }, function () { loadSsh() })
+                      }
+                      if (!ssh.enabled) return set(true)
+                      confirmModal(tr("Turn SSH access off? No more remote command-line access"), tr("✕  Turn off"), function () { set(false) })
                   } },
                 { label: tr("Developer mode"), visible: !!(dev && dev.available), toggle: !!(dev && dev.enabled),
                   hint: dev && dev.enabled ? tr("Passwordless sudo for media, over SSH (password above)")
                                            : tr("Root access to develop and test the box"),
                   ok: function () {
-                      if (dev.enabled) { call("POST", "/api/dev", { enabled: false }, function () { loadSsh() }); dev = Object.assign({}, dev, { enabled: false }); return }
+                      if (dev.enabled) {
+                          confirmModal(tr("Turn developer mode off? No more sudo for media"), tr("✕  Turn off"), function () {
+                              call("POST", "/api/dev", { enabled: false }, function () { loadSsh() }); dev = Object.assign({}, dev, { enabled: false }) })
+                          return
+                      }
                       openModal(tr("Enable developer mode? media will get passwordless sudo, and SSH turns on"), [
                           { label: tr("Enable"), danger: true, ok: function () {
                               dev = Object.assign({}, dev, { enabled: true })   // on screen right away
@@ -1075,7 +1111,7 @@ Item {
     // Power held 1 s: sleep, restart, shutdown (no second confirmation: the gesture is deliberate)
     function powerMenu() {
         powerOnly = true
-        openModal("Box", [
+        openModal(tr("The box"), [
             { label: tr("☾  Sleep"), ok: function () { act("poweroff", { mode: "suspend" }); close() } },
             { label: tr("↻  Restart"), ok: function () { act("reboot"); close() } },
             { label: tr("⏻  Shut down"), danger: true, ok: function () { act("poweroff", { mode: "full" }); close() } },
@@ -1088,6 +1124,10 @@ Item {
     })
     readonly property var bd: st.backdrop || ({ base: "aurora", overlay: "none", color: "violet" })
     // "Animated background", "Overlay", "Home screen colors" settings
+    // Rule: what disconnects, erases or resets asks first (danger item + Cancel); power asks a second OK instead
+    function confirmModal(title, label, action) {
+        openModal(title, [{ label: label, danger: true, ok: action }, { label: tr("Cancel"), ok: function () {} }])
+    }
     // Settings switches: the new value on screen at once, the box's state read again right after (act → refreshSoon)
     function setFlag(name, body, change) {
         st = Object.assign({}, st, change)
@@ -1107,11 +1147,15 @@ Item {
         return Qt.hsla((c.hslHue + dh + 1) % 1, c.hslSaturation, c.hslLightness * light, 1)
     }
     function openModal(title, items) { modal = { title: title, items: items }; modalSel = 0 }
-    function chooseVideo(item) {
+    function chooseVideo(item, always) {
         if (Fmt.resumable(item.position, item.seconds, item.finished))
             openModal(item.title, [
                 { label: tr("▶  Resume at {time}", { time: Fmt.clock(item.position) }), ok: function () { play(item.url, false, item) } },
-                { label: tr("↺  From the beginning"), ok: function () { play(item.url, true, item) } }])
+                { label: tr("↺  From the beginning"), ok: function () { play(item.url, true, item) } },
+                { label: tr("Cancel"), ok: function () {} }])
+        else if (always)
+            openModal(item.title, [{ label: tr(item.finished ? "↺  Watch again" : "▶  Play"), ok: function () { play(item.url, true, item) } },
+                                   { label: tr("Cancel"), ok: function () {} }])
         else
             play(item.url, true, item)
     }
@@ -1208,6 +1252,7 @@ Item {
                 } }
             })
             items.push({ label: tr("+  Pair a device"), ok: btScan })
+            items.push({ label: tr("Close"), ok: function () {} })
             openModal(d.paired.length ? tr("Remotes and controllers") : tr("No paired device"), items)
             if (d.message) modal = Object.assign({}, modal, { title: d.message })
         })
@@ -1237,7 +1282,7 @@ Item {
                 modalSel = Math.min(sel, items.length - 1)
             } else if (btPhase === "pair" && !d.busy) {
                 btPhase = ""
-                openModal(d.message || tr("Pairing finished"), [{ label: "OK", ok: btMenu }])
+                openModal(d.message || tr("Pairing finished"), [{ label: tr("OK"), ok: btMenu }])
             }
         })
     }
@@ -1261,9 +1306,9 @@ Item {
                     loadingModal("backup", tr("Backing up to {name}…", { name: u.name }))
                     call("POST", "/api/backup", { action: "save_usb", path: u.path }, function () { backupMenu() }) } })
                 u.backups.forEach(function (b) {
-                    items.push({ label: tr("↺  Restore the one from {date}", { date: frDate(b.date) }), ok: function () {
+                    items.push({ label: tr("↩  Restore the one from {date}", { date: frDate(b.date) }), ok: function () {
                         openModal(tr("Replace the settings with those from {date}? The box restarts afterwards", { date: frDate(b.date) }), [
-                            { label: tr("↺  Restore and restart"), danger: true, ok: function () {
+                            { label: tr("↩  Restore and restart"), danger: true, ok: function () {
                                 loadingModal("backup", tr("Restoring…"))
                                 call("POST", "/api/backup", { action: "restore_usb", path: u.path, name: b.name }, function () { backupMenu() }) } },
                             { label: tr("Cancel"), ok: function () { backupMenu() } }])
@@ -1354,7 +1399,7 @@ Item {
                                         + "  ·  " + (signed ? tr("signed") : tr("unsigned")) + "  ·  " + f.drive.drive,
                                  ok: function () {
                         if (!signed && !d.dev) return openModal(tr("Unsigned image: put SHA256SUMS and SHA256SUMS.gpg of its release next to it (unsigned images: developer mode only)"),
-                                                                [{ label: tr("Close"), ok: function () {} }])
+                                                                [{ label: tr("OK"), ok: function () {} }])
                         openModal(tr("Install {name}? The box restarts onto it; the current version stays as a fallback.", { name: f.image.name }), [
                             { label: tr("Yes, install"), ok: function () {
                                 loadingModal("local", tr("Copying the image…"))
@@ -1445,7 +1490,7 @@ Item {
         case "settings": return keyRows(k, settingsRows())
         }
     }
-    function toRail() { area = "rail"; railHome = false; shortcut = -1; pendingDisplay = ""; pendingPlayer = "" }
+    function toRail() { area = "rail"; railHome = false; shortcut = -1; pendingDisplay = ""; pendingPlayer = ""; pendingLang = "" }
     // Something to focus in the tab (data still loading counts as yes: checkArea goes back to the rail if it is empty)
     function canEnter(id) {
         var list = st.streamers
@@ -1524,6 +1569,7 @@ Item {
                 if (name && name !== rpLogin) { rpLogin = name; rpSel = [sel, 0, 0]; loadReplays(name) }
             } else if (row.items[sel]) chooseVideo(row.items[sel])
         }
+        else if (k === "menu" && row.kind !== "chips" && row.items[sel]) chooseVideo(row.items[sel], true)
     }
     function setRow(v) { if (libTab) setLib(tabId, { row: v }); else ytRow = v }
     function setMediaSel(s) { if (libTab) setLib(tabId, { sel: s }); else ytSel = s }   // (setSel is the chosen row of Settings)
@@ -1542,7 +1588,15 @@ Item {
         else if (k === "down") setRow(Math.min(rows.length - 1, r + 1))
         else if (k === "left") { if (sel === 0) area = "rail"; else { s[row.key] = sel - 1; setMediaSel(s) } }
         else if (k === "right") { s[row.key] = Math.min(row.items.length - 1, sel + 1); setMediaSel(s) }
-        else if (k === "menu" && row.kind === "subs" && row.items[sel]) ytSubOptions(row.items[sel])
+        else if (k === "menu" && row.items[sel]) {   // ≡: the options of the card, whatever the row
+            var it = row.items[sel]
+            var chan = row.kind === "channel" ? row.key : it.channel_id
+            if (row.kind === "chans") ytChannelMenu(it)
+            else if (row.kind === "connect") ytConnect(false)
+            else if (libTab) libChoose(it, true)
+            else if (chan) ytSubOptions(Object.assign({}, it, { channel_id: chan, channel: it.channel || row.title, avatar: it.avatar || row.avatar }))
+            else chooseVideo(it, true)
+        }
         else if (k === "ok" && row.items[sel]) {
             if (row.kind === "chans") ytChannelMenu(row.items[sel])
             else if (row.kind === "connect") ytConnect(false)
@@ -1568,7 +1622,7 @@ Item {
     }
     function keyHistory(k) {
         var list = history || []
-        if (k === "ok" && list[histSel]) {
+        if ((k === "ok" || k === "menu") && list[histSel]) {   // (several choices: always the dialog)
             var e = list[histSel], items = []
             if (Fmt.resumable(e.position, e.duration, e.finished)) {
                 items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(e.position) }), ok: function () { play(e.url) } })
@@ -1580,6 +1634,7 @@ Item {
                 histSel = Math.max(0, Math.min(histSel, h.length - 1))
                 if (!h.length) area = "rail"
             } })
+            items.push({ label: tr("Cancel"), ok: function () {} })
             openModal(e.title, items)
             return
         }
@@ -1590,14 +1645,14 @@ Item {
         var sel = selectable(rows)
         var cur = setSel
         var row = rows[sel[cur]]
-        var set = function (v) { setSel = v; pendingDisplay = ""; pendingPlayer = "" }
+        var set = function (v) { setSel = v; pendingDisplay = ""; pendingPlayer = ""; pendingLang = "" }
         if (k === "up") set(Math.max(0, cur - 1))
         else if (k === "down") set(Math.min(sel.length - 1, cur + 1))
         else if ((k === "left" || k === "right") && row && row.step) row.step(k === "right" ? 1 : -1)
         else if (k === "right" && row && row.open) row.ok()
         else if (k === "left" && section) leaveSection()
         else if (k === "left") area = "rail"
-        else if (k === "ok" && row) { if (row.ok) row.ok(); else if (row.step) row.step(1) }
+        else if (k === "ok" && row && row.ok) row.ok()   // (a ◀ ▶ row without ok: OK does nothing)
     }
 
     // Drawing: one component per tab and per dialog (qml/menu/), all reading this object (menu: data, focus, functions)

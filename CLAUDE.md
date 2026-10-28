@@ -371,7 +371,7 @@ open (`section`, `sectionRows(id)`: picture, playback, chat, look, accounts, net
 advanced), its rows, title in the header (`sectionTitle`); Back or ◀ (on a row without a value) returns to the list
 on that section (`leaveSection`, `rootSel`). The simplified version has its own small menu (quickmenu.py: Settings, System with the system update, power).
 Companion app, Settings tab: the same grouping, folded groups (`.group`, `data-group`: channels, accounts, picture,
-look, network, updates, backup; `openGroup(id)`, the open ones remembered in localStorage `groups`).
+look, network, updates, backup, playback; `openGroup(id)`, the open ones remembered in localStorage `groups`).
 Structure: `TvMenu.qml` keeps the data, the API calls, the timers, open / close, the computed rows (`settingsRows`,
 `ytRows`…), the dialog builders and all the key handling; the drawing lives in `qml/menu/`, one component per part,
 each taking the menu as `required property var menu` (`LiveTab { menu: menu }`; no id lookups across files): `Rail`,
@@ -520,6 +520,16 @@ while the tab is shown, and 1.5 s after an update button: `readBox`).
   read the real state shortly after (`healthSoon` → `readBox`) instead of at the next 5 s reading. Companion app: the
   pressed button is greyed out (`.busy`) while its `send()` runs; handlers that fetch by themselves set their text or
   status line before awaiting. Check it for every new button.
+- **UI rules (TV menu, companion app, quick menu), validated with the user:** what disconnects, erases or resets asks
+  first (TV `confirmModal`: danger item + Cancel; app `confirm()`), power asks a second OK instead (restart, shut
+  down; sleep does not); OK on a ◀ ▶ row does nothing, except the disruptive ones where ◀ ▶ choose and OK applies
+  (resolution, version, language: `pending*`); OK on a card plays at once when there is a single choice, otherwise a
+  dialog, and ≡ always opens the card's options (`libChoose(it, true)`, `chooseVideo(it, true)`, `ytSubOptions`);
+  rows that open a dialog are `open: true` (a "›", ▶ opens them); one label and one glyph per action (↻ restart /
+  refresh, ↺ from the start, ↩ restore, ⤓ install, ✕ + danger remove / disconnect, ☾ sleep, ⏻ shut down; "Cancel"
+  refuses or stops something pending, "Close" leaves an informational dialog, "OK" acknowledges); every dialog has a
+  way out besides Back. The companion app has the same settings as the TV where they make sense (Chat and playback
+  group: `PLAYBACK`, `renderPlayback`).
 
 ### YouTube (channels and search)
 

@@ -483,7 +483,7 @@
     <h2>Twitch account</h2>
     <div id="account-on" hidden>
       <p>Connected: <span class="account-name" id="account-name"></span>. No ads on the channels you're subscribed to.</p>
-      <button id="logout" style="width: 100%">Log out</button>
+      <button id="logout" style="width: 100%">Disconnect</button>
     </div>
     <div id="account-off" hidden>
       <p id="account-intro">Connect your account to enjoy your subscriptions without ads.</p>
@@ -541,7 +541,7 @@
     <div id="follows-ok" hidden>
       <p id="follows-summary"></p>
       <div class="row">
-        <button id="follows-logout">Remove authorization</button>
+        <button id="follows-logout">Disconnect</button>
         <button id="app-change">Change app</button>
       </div>
     </div>
@@ -621,7 +621,8 @@
     <div id="plex-code" hidden style="margin-top: 12px; text-align: center">
       <p style="margin-bottom: 6px">On <b>plex.tv/link</b>, enter this code:</p>
       <div id="plex-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
-      <a href="https://plex.tv/link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the link page</a>
+      <a href="https://plex.tv/link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the activation page</a>
+      <button id="plex-cancel" style="width: 100%; margin-top: 8px">Cancel</button>
     </div>
     <label class="setting" for="plex-address">Or the address of a server of the local network</label>
     <div class="field">
@@ -637,6 +638,19 @@
     <button id="plex-save" style="width: 100%; margin-top: 8px">Connect</button>
     <button id="plex-forget" style="width: 100%; margin-top: 8px" hidden>Disconnect</button>
     <div class="status" id="plex-status"></div>
+  </section>
+
+    </div>
+  </div>
+
+  <div class="group" data-group="playback">
+    <button class="group-head" aria-expanded="false">Chat and playback</button>
+    <div class="group-body" hidden>
+
+  <!-- The TV's Settings → Chat and Playback, the same settings (built by renderPlayback from /api/state) -->
+  <section>
+    <h2>Chat and playback</h2>
+    <div id="playback-settings"></div>
   </section>
 
     </div>
@@ -712,7 +726,7 @@
     <button id="update-now" style="width: 100%; margin-top: 10px">Check for updates</button>
     <div class="status" id="update-status"></div>
     <button id="update-direct" hidden style="width: 100%; margin-top: 8px">Direct update (source)</button>
-    <button id="reboot" style="width: 100%; margin-top: 8px">Restart the box</button>
+    <button id="reboot" style="width: 100%; margin-top: 8px">↻  Restart</button>
     <details style="margin-top: 10px">
       <summary>Dependencies</summary>
       <p>yt-dlp, streamlink and the other tools that YouTube and Twitch changes break: updated by themselves every day.</p>
@@ -847,6 +861,55 @@ function renderNow(s) {
   $("now-title").textContent = home ? "" : info?.title ?? "";
 }
 
+// Chat and playback settings, as on the TV (same actions): one select per setting, rebuilt from the state unless one
+// is being changed; a change is sent at once and shown as chosen
+const PLAYBACK = [
+  { key: "chat_visible", label: "Chat on the TV", onoff: true,
+    send: (v) => send("chat") },   // (a toggle: only sent when it differs)
+  { key: "corner", label: "Chat corner",
+    options: () => [["tl", "↖ top left"], ["tr", "↗ top right"], ["br", "↘ bottom right"], ["bl", "↙ bottom left"]],
+    send: (v) => send("corner", { corner: v }) },
+  { key: "chat_bg", label: "Chat background", options: () => steps(0, 100, 10, (n) => n + " %"),
+    send: (v) => send("set", { key: "chat_bg", value: Number(v) }) },
+  { key: "chat_size", label: "Text size", options: () => steps(20, 60, 2, (n) => n + " px"),
+    send: (v) => send("set", { key: "chat_size", value: Number(v) }) },
+  { key: "sub_size", label: "Subtitle size", options: () => steps(50, 200, 10, (n) => n + " %"),
+    send: (v) => send("set", { key: "sub_size", value: Number(v) }) },
+  { key: "sub_bg", label: "Subtitle background", options: () => steps(0, 100, 10, (n) => n ? n + " %" : tr("None")),
+    send: (v) => send("set", { key: "sub_bg", value: Number(v) }) },
+  { key: "night", label: "Night mode", hint: "Loud sounds softened, voices boosted", onoff: true,
+    send: (v) => send("flag", { key: "night", enabled: v }) },
+  { key: "auto_switch", label: "Auto switch", hint: "Switch to a live streamer if yours is offline", onoff: true,
+    send: (v) => send("auto_switch", { enabled: v }) },
+  { key: "events", label: "Polls and predictions", hint: "At the top of the TV during a live stream", onoff: true,
+    send: (v) => send("flag", { key: "events", enabled: v }) },
+];
+function steps(from, to, by, label) {
+  const out = [];
+  for (let n = from; n <= to; n += by) out.push([String(n), label(n)]);
+  return out;
+}
+function renderPlayback(s) {
+  const box = $("playback-settings");
+  if (!box.children.length) {
+    for (const p of PLAYBACK) {
+      const id = "pb-" + p.key;
+      const label = Object.assign(document.createElement("label"), { className: "setting", htmlFor: id, textContent: tr(p.label) });
+      const sel = Object.assign(document.createElement("select"), { id });
+      const opts = p.onoff ? [["true", tr("On")], ["false", tr("Off")]] : p.options();
+      sel.replaceChildren(...opts.map(([v, t]) => Object.assign(document.createElement("option"), { value: v, textContent: tr(t) })));
+      sel.onchange = () => { sel.dataset.sent = Date.now(); p.send(p.onoff ? sel.value === "true" : sel.value); };
+      box.append(label, sel);
+      if (p.hint) box.append(Object.assign(document.createElement("p"), { textContent: tr(p.hint) }));
+    }
+  }
+  for (const p of PLAYBACK) {
+    const sel = $("pb-" + p.key);
+    // (the state follows a change about 0.3 s later: not overwritten meanwhile, nor while it is open)
+    if (document.activeElement === sel || Date.now() - (sel.dataset.sent || 0) < 2000) continue;
+    sel.value = String(s[p.key]);
+  }
+}
 function render(s) {
   lastState = s;
   if (s.lang && s.lang !== LANG) setLanguage(s.lang);   // language chosen on the TV or another phone
@@ -854,6 +917,7 @@ function render(s) {
   if (s.first_run && !setupMode) enterSetup();
   else if (!s.first_run && setupMode) location.reload();   // setup finished (here or on another phone)
   if (!$("tab-settings").hidden || setupMode) renderManage();
+  if (!$("tab-settings").hidden) renderPlayback(s);
   const media = s.mode === "media";
   $("dot").className = `dot${s.playing && !media ? " on" : ""}`;
   $("tv-state").textContent = media ? tr("Video playing on the TV") : s.mode === "home" ? tr("Home screen")
@@ -1010,7 +1074,7 @@ async function accountAction(action, body = {}) {
 
 $("login").onclick = () => accountAction("login", { token: $("token").value });
 $("token").onkeydown = (e) => { if (e.key === "Enter") $("login").click(); };
-$("logout").onclick = () => accountAction("logout");
+$("logout").onclick = () => { if (confirm(tr("Disconnect the Twitch account? The stream restarts"))) accountAction("logout"); };
 $("play").onclick = async () => {
   $("media-status").className = "status";
   $("media-status").textContent = tr("Loading on the TV…");
@@ -1257,6 +1321,7 @@ $("jf-cancel").onclick = async () => {
   refreshJfLink();
 };
 $("jf-forget").onclick = async () => {
+  if (!confirm(tr("Disconnect Jellyfin? Its tab goes away"))) return;
   $("jf-status").textContent = "";
   $("jf-address").value = "";
   await send("jellyfin_link", { action: "forget" });
@@ -1312,8 +1377,14 @@ $("plex-save").onclick = async () => {
   refreshPlexLink();
 };
 $("plex-forget").onclick = async () => {
+  if (!confirm(tr("Disconnect Plex? Its tab goes away"))) return;
   $("plex-status").textContent = "";
   await send("plex", { address: "" });
+  refreshPlexLink();
+};
+$("plex-cancel").onclick = async () => {   // (as Cancel of the Jellyfin code)
+  $("plex-status").textContent = "";
+  await send("plex_link", { action: "cancel" });
   refreshPlexLink();
 };
 // Poll and prediction: fetched every 3 s while the page shows a live stream
@@ -1519,7 +1590,7 @@ $("app-save").onclick = async () => {
   $("app-secret").value = "";
 };
 $("follows-login").onclick = () => followsAction("follows_login");
-$("follows-logout").onclick = () => { if (confirm(tr("Remove the authorization for followed channels?"))) followsAction("follows_logout"); };
+$("follows-logout").onclick = () => { if (confirm(tr("Disconnect the followed channels?"))) followsAction("follows_logout"); };
 $("app-change").onclick = () => { followsChanging = true; refreshFollows(); };
 settingsLoaders.push(refreshFollows);
 if (!$("tab-settings").hidden) refreshFollows();
@@ -1796,6 +1867,9 @@ let updateWaiting = false;   // installed, waiting for "Restart now" (a plain re
 let updateOffered = "";      // newer release found by the daily check, not installed yet
 // Update buttons: the change shows at once, the real state read again shortly after (not at the next 5 s reading)
 $("update-now").onclick = async () => {
+  if (updateWaiting && !confirm(tr("Restart the box now onto the new version?"))) return;
+  if (!updateWaiting && updateOffered && !confirm(tr("Install version {version}? The box restarts by itself once it is installed (not during a video).",
+                                                     { version: updateOffered }))) return;
   $("update-now").disabled = true;
   $("update-now").textContent = updateWaiting ? tr("Restarting…") : updateOffered ? tr("Update in progress…") : tr("Checking…");
   const restart = updateWaiting;
