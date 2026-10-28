@@ -6,7 +6,7 @@ Item {
     required property var menu
     anchors.fill: parent
 
-    Text { x: Layout.contentX; y: 100 - height / 2; text: menu.tr(menu.tabs[menu.tab].label); color: "white"; font.pixelSize: 41; font.bold: true }
+    Text { x: Layout.contentX; y: 100 - height / 2; text: menu.tabId === "settings" && menu.section ? menu.sectionTitle(menu.section) : menu.tr(menu.tabs[menu.tab].label); color: "white"; font.pixelSize: 41; font.bold: true }
     Text { x: Layout.contentX; y: 158 - height / 2; text: menu.subtitle(); color: "#b4afc2"; font.pixelSize: 25 }
     Row {
         anchors.right: parent.right; anchors.rightMargin: 80; y: 100 - height / 2; spacing: 28

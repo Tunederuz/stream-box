@@ -350,11 +350,16 @@ Twitch / YouTube by Qt and rounded by `MultiEffect`; weather and QR code through
 `box.ambient` (observed property), opaque veil without video (`box.videoActive`). Components: `RoundImage`,
 `Marquee` (text clipped at rest, two copies that scroll on focus), `FocusFrame`, `StreamerCard`, `VideoCard`,
 `SettingRow`, `QrCode`, `fmt.js`.
+Settings tab (one tab; "System menu" below means it): `settingsRows()` is the list of sections (`sectionIds`, each
+row with `sectionSummary`, OK or ▶ opens it, `open: true`) then the power rows (sleep, restart, shut down); a section
+open (`section`, `sectionRows(id)`: picture, playback, chat, look, accounts, network, devices, updates, backup,
+advanced), its rows, title in the header (`sectionTitle`); Back or ◀ (on a row without a value) returns to the list
+on that section (`leaveSection`, `rootSel`). The Lua menu of the simplified version keeps its own System menu.
 Structure: `TvMenu.qml` keeps the data, the API calls, the timers, open / close, the computed rows (`settingsRows`,
 `ytRows`…), the dialog builders and all the key handling; the drawing lives in `qml/menu/`, one component per part,
 each taking the menu as `required property var menu` (`LiveTab { menu: menu }`; no id lookups across files): `Rail`,
 `Header`, `LiveTab`, `FollowsTab`, `ReplaysTab`, `MediaTab` (YouTube and Jellyfin page), `HistoryTab`, `RowsTab`
-(Settings or System list, `which`), `SystemStatus` (QR code and status tiles), `SearchKeyboard`, `YtAuthDialog`,
+(Settings list), `SystemStatus` (QR code and status tiles, beside the list of sections), `SearchKeyboard`, `YtAuthDialog`,
 `ActionDialog`, and `CardRow`, the horizontal card row (clip wrapper, ListView scrolling card by card with its
 `first` / `fits` window). Layout numbers in `qml/menu/layout.js` (content x and width, card size and step, row
 height…). `CardRow` pitfalls: callers bind `view.model`, `view.currentIndex`, `view.delegate`, `view.visible`

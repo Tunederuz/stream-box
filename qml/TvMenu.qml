@@ -32,7 +32,7 @@ Item {
         { id: "jellyfin", label: "Jellyfin", library: true }, { id: "plex", label: "Plex", library: true },
         { id: "libraries", label: "Libraries" },
         { id: "history", label: "History" },
-        { id: "settings", label: "Settings" }, { id: "system", label: "System" }]
+        { id: "settings", label: "Settings" }]
     // Video libraries only when connected to the box (/api/state libraries), otherwise one "Libraries" tab that tells how
     // to connect them; the chosen tab stays the same one
     readonly property bool anyLibrary: !!((st.libraries || {}).jellyfin || (st.libraries || {}).plex)
@@ -53,7 +53,7 @@ Item {
     property var display: null
     property var account: null
     property var followsQr: null
-    property var health: null                // /api/health, reloaded every 5 s on the System tab
+    property var health: null                // /api/health, reloaded every 5 s on the Settings tab
     property var wifi: null
     property var audioOut: null
     // Bluetooth (System menu): /api/bluetooth, and current step of the dialog ("", scan, pair)
@@ -166,7 +166,8 @@ Item {
     property int followSel: 0
     property int histSel: 0
     property int setSel: 0                   // index in settingsRows (selectable rows only)
-    property int sysSel: 0
+    property string section: ""              // Settings: section open ("" = the list of sections)
+    property int rootSel: 0                  // Settings: row of the list, kept while a section is open
     property int rpRow: 0                    // 0 chips, 1 replays, 2 clips (if any)
     property var rpSel: [0, 0, 0]
     property string rpLogin: ""
@@ -520,7 +521,7 @@ Item {
     Timer { id: refreshSoon; interval: 300; onTriggered: menu.refresh() }
     Timer {
         interval: 5000; repeat: true; triggeredOnStart: true
-        running: menu.isOpen && menu.tabId === "system"
+        running: menu.isOpen && menu.tabId === "settings"
         onTriggered: {
             menu.call("GET", "/api/health", undefined, function (d) { if (d && d.temps) menu.health = d })
             menu.call("GET", "/api/wifi", undefined, function (d) { if (d) menu.wifi = d })
@@ -656,87 +657,265 @@ Item {
         return rows
     }
     function prettyMode(m) { return String(m).replace("x", " × ").replace("@", " · ") + " Hz" }
-    function settingsRows() {
+    // Settings tab: sections (one page each, Back or ◀ returns to the list), with a summary of what is in them; the
+    // power actions stay on the list itself. Box status and the companion app's QR code beside the list
+    readonly property var sectionIds: ["picture", "playback", "chat", "look", "accounts", "network", "devices", "updates",
+                                       "backup", "advanced"]
+    function sectionTitle(id) {
+        return tr(({ picture: "Picture and sound", playback: "Playback", chat: "Chat", look: "Appearance",
+                     accounts: "Accounts and libraries", network: "Network", devices: "Devices", updates: "Updates",
+                     backup: "Backup and installation", advanced: "Advanced" })[id] || "")
+    }
+    function sectionSummary(id) {
         var s = st
-        var modes = ["auto"].concat(display ? display.modes : [])
-        var cur = pendingDisplay || (display ? display.setting : "auto")
-        var qi = 0
-        for (var i = 0; i < qrModes.length; i++) if (qrModes[i][0] === s.qr) qi = i
-        var langs = Object.keys(s.languages || { en: "English" })
-        return [
-            { header: tr("Language") },
-            // names in their own language; the TV and the companion app switch right away (streambox-language)
-            { label: tr("Interface language"), value: (s.languages || {})[s.lang] || "English", step: function (d) {
-                var i = Math.max(0, langs.indexOf(s.lang))
-                act("language", { lang: langs[(i + d + langs.length) % langs.length] })
-            } },
-            { header: tr("Chat") },
-            { label: tr("Chat on the TV"), toggle: !!s.chat_visible, ok: function () { act("chat") } },
-            { label: tr("Chat corner"), value: tr(corners[s.corner] || ""), step: function (d) {
-                // the API can only move forward one corner: three steps forward make one step back
-                for (var n = 0; n < (d > 0 ? 1 : 3); n++) act("corner")
-            } },
-            { label: tr("Chat background"), value: (s.chat_bg || 0) + " %", step: function (d) {
-                act("set", { key: "chat_bg", value: Math.max(0, Math.min(100, (s.chat_bg || 0) + 10 * d)) })
-            } },
-            { label: tr("Text size"), value: (s.chat_size || 0) + " px", step: function (d) {
-                act("set", { key: "chat_size", value: Math.max(20, Math.min(60, (s.chat_size || 0) + 2 * d)) })
-            } },
-            { header: tr("Subtitles") },
-            { label: tr("Subtitle size"), value: (s.sub_size || 100) + " %", step: function (d) {
-                act("set", { key: "sub_size", value: Math.max(50, Math.min(200, (s.sub_size || 100) + 10 * d)) })
-            } },
-            { label: tr("Subtitle background"), hint: tr("Black band behind the text, easier to read on a bright picture"),
-              value: s.sub_bg ? s.sub_bg + " %" : tr("None"), step: function (d) {
-                act("set", { key: "sub_bg", value: Math.max(0, Math.min(100, (s.sub_bg || 0) + 10 * d)) })
-            } },
-            { header: tr("Sound") },
-            { label: tr("Audio output"),
-              // automatic: USB or Bluetooth device plugged in, otherwise the TV (audio.py)
-              hint: audioOut && audioCurrentLabel() ? tr("Right now: {output}", { output: audioCurrentLabel() }) : undefined,
-              value: !audioOut ? "…" : audioOut.choice === "auto" ? tr("Automatic")
-                   : (audioOut.outputs.filter(function (o) { return o.id === audioOut.choice })[0] || { label: tr("missing") }).label,
-              step: function (d) {
-                  if (!audioOut) return
-                  var ids = ["auto"].concat(audioOut.outputs.map(function (o) { return o.id }))
-                  var i = Math.max(0, ids.indexOf(audioOut.choice))
-                  var next = ids[(i + d + ids.length) % ids.length]
-                  audioOut = Object.assign({}, audioOut, { choice: next })
-                  call("POST", "/api/audio", { output: next }, function () { loadAudio() })
-              } },
-            { header: tr("Playback") },
-            { label: tr("Auto switch"), hint: tr("Switch to a live streamer if yours is offline"),
-              toggle: !!s.auto_switch, ok: function () { act("auto_switch", { enabled: !s.auto_switch }) } },
-            { label: tr("Polls and predictions"), hint: tr("At the top of the TV during a live stream"), toggle: !!s.events,
-              ok: function () { act("flag", { key: "events", enabled: !s.events }) } },
-            { label: tr("Night mode"), hint: tr("Loud sounds softened, voices boosted"), toggle: !!s.night,
-              ok: function () { act("flag", { key: "night", enabled: !s.night }) } },
-            { label: tr("Volume"), value: s.mute ? tr("muted") : (s.volume || 0) + " %", step: function (d) { act("volume", { delta: 5 * d }) } },
-            { header: tr("Display") },
-            { label: tr("Animated background"), hint: tr("Home screen and menu with no video behind"),
-              value: tr(backdropNames.base[bd.base] || ""), step: function (d) { stepBackdrop("base", d) } },
-            { label: tr("Overlay"), hint: tr("A layer added over the background"),
-              value: tr(backdropNames.overlay[bd.overlay] || ""), step: function (d) { stepBackdrop("overlay", d) } },
-            { label: tr("Home screen colors"), hint: tr("The menu itself takes the color of each tab"),
-              value: tr(backdropNames.color[bd.color || "violet"] || ""), step: function (d) { stepBackdrop("color", d) } },
-            { label: tr("TV resolution"),
-              value: !display ? "…" : cur === "auto" ? tr("Auto ({mode})", { mode: prettyMode(display.auto) }) : prettyMode(cur),
-              hint: pendingDisplay && display && pendingDisplay !== display.setting ? tr("OK to apply") : undefined,
-              step: function (d) {
-                  if (!display) return
-                  var i = Math.max(0, modes.indexOf(cur))
-                  pendingDisplay = modes[Math.max(0, Math.min(modes.length - 1, i + d))]
-              },
+        switch (id) {
+        case "picture":
+            return [display ? (display.setting === "auto" ? tr("Auto ({mode})", { mode: prettyMode(display.auto) }) : prettyMode(display.setting)) : "",
+                    s.mute ? tr("muted") : (s.volume || 0) + " %"].filter(Boolean).join("  ·  ")
+        case "playback": return tr("Subtitles {n} %", { n: s.sub_size || 100 })
+        case "chat": return s.chat_visible ? tr(corners[s.corner] || "") : tr("Hidden")
+        case "look": return (s.languages || {})[s.lang] || "English"
+        case "accounts":
+            var on = [account && account.login ? "Twitch" : "", ytAccount && ytAccount.authorized ? "YouTube" : "",
+                      (s.libraries || {}).jellyfin ? "Jellyfin" : "", (s.libraries || {}).plex ? "Plex" : ""].filter(Boolean)
+            return on.length ? on.join(" · ") : tr("Not connected")
+        case "network": return wifiValue()
+        case "devices":
+            return bt ? tr(bt.paired.length > 1 ? "{n} devices paired" : "{n} device paired", { n: bt.paired.length }) : ""
+        case "updates": return updateVersion()
+        case "backup":
+            return install && install.progress && install.progress.state === "running" ? install.progress.percent + " %" : ""
+        case "advanced":
+            return (st.player === "mpv" ? tr("Simplified version") : tr("Full version")) + (dev && dev.enabled ? "  ·  " + tr("dev") : "")
+        }
+        return ""
+    }
+    function openSection(id) { section = id; rootSel = setSel; setSel = 0; pendingDisplay = ""; pendingPlayer = "" }
+    function leaveSection() {
+        var i = sectionIds.indexOf(section)
+        section = ""; setSel = i >= 0 ? i : rootSel; pendingDisplay = ""; pendingPlayer = ""
+    }
+    function settingsRows() {
+        if (section)
+            return sectionRows(section).filter(function (r) { return r.visible !== false })
+        var rows = sectionIds.map(function (id) {
+            var sum = sectionSummary(id)
+            return { label: sectionTitle(id), value: (sum ? sum + "   " : "") + "›", ok: function () { openSection(id) }, open: true }
+        })
+        return rows.concat([
+            { header: tr("Power options") },
+            { label: tr("Put to sleep"), hint: tr("Wake up with the remote, Home Assistant or the power button"),
+              ok: function () { act("poweroff", { mode: "suspend" }); close() } },
+            { label: tr("Restart the box"),
+              hint: rebootUntil > 0 ? tr("Press OK again to restart") : undefined,
               ok: function () {
-                  if (!pendingDisplay || !display || pendingDisplay === display.setting) return
-                  act("display", { mode: pendingDisplay })
-                  pendingDisplay = ""
-                  displayReload.restart()
+                  if (rebootUntil > 0) { act("reboot"); close() }
+                  else { rebootUntil = 1; rebootReset.restart() }
               } },
-            { label: tr("Companion app QR code"), value: tr(qrModes[qi][1]), step: function (d) {
-                act("qr", { mode: qrModes[Math.max(0, Math.min(qrModes.length - 1, qi + d))][0] })
-            } },
-        ]
+            { label: tr("Shut down the box"), danger: true,
+              hint: poweroffUntil > 0 ? tr("Press OK again to shut down") : undefined,
+              ok: function () {
+                  if (poweroffUntil > 0) { act("poweroff", { mode: "full" }); close() }
+                  else { poweroffUntil = 1; poweroffReset.restart() }
+              } },
+        ])
+    }
+    function wifiValue() {
+        return !(wifi && wifi.device) ? "" : wifi.connecting ? tr("connecting…") : wifi.mode === "hotspot" ? tr("setup mode")
+             : wifi.network ? (wifi.wired ? tr("cable") : wifi.network) : tr("no network")
+    }
+    // Rows of a section (visible: false ones left out)
+    function sectionRows(id) {
+        var s = st
+        switch (id) {
+        case "picture":
+            var modes = ["auto"].concat(display ? display.modes : [])
+            var cur = pendingDisplay || (display ? display.setting : "auto")
+            return [
+                { label: tr("TV resolution"),
+                  value: !display ? "…" : cur === "auto" ? tr("Auto ({mode})", { mode: prettyMode(display.auto) }) : prettyMode(cur),
+                  hint: pendingDisplay && display && pendingDisplay !== display.setting ? tr("OK to apply") : undefined,
+                  step: function (d) {
+                      if (!display) return
+                      var i = Math.max(0, modes.indexOf(cur))
+                      pendingDisplay = modes[Math.max(0, Math.min(modes.length - 1, i + d))]
+                  },
+                  ok: function () {
+                      if (!pendingDisplay || !display || pendingDisplay === display.setting) return
+                      act("display", { mode: pendingDisplay })
+                      pendingDisplay = ""
+                      displayReload.restart()
+                  } },
+                { label: tr("Audio output"),
+                  // automatic: USB or Bluetooth device plugged in, otherwise the TV (audio.py)
+                  hint: audioOut && audioCurrentLabel() ? tr("Right now: {output}", { output: audioCurrentLabel() }) : undefined,
+                  value: !audioOut ? "…" : audioOut.choice === "auto" ? tr("Automatic")
+                       : (audioOut.outputs.filter(function (o) { return o.id === audioOut.choice })[0] || { label: tr("missing") }).label,
+                  step: function (d) {
+                      if (!audioOut) return
+                      var ids = ["auto"].concat(audioOut.outputs.map(function (o) { return o.id }))
+                      var i = Math.max(0, ids.indexOf(audioOut.choice))
+                      var next = ids[(i + d + ids.length) % ids.length]
+                      audioOut = Object.assign({}, audioOut, { choice: next })
+                      call("POST", "/api/audio", { output: next }, function () { loadAudio() })
+                  } },
+                { label: tr("Volume"), value: s.mute ? tr("muted") : (s.volume || 0) + " %", step: function (d) { act("volume", { delta: 5 * d }) } },
+                { label: tr("Night mode"), hint: tr("Loud sounds softened, voices boosted"), toggle: !!s.night,
+                  ok: function () { act("flag", { key: "night", enabled: !s.night }) } },
+            ]
+        case "playback":
+            return [
+                { label: tr("Subtitle size"), value: (s.sub_size || 100) + " %", step: function (d) {
+                    act("set", { key: "sub_size", value: Math.max(50, Math.min(200, (s.sub_size || 100) + 10 * d)) })
+                } },
+                { label: tr("Subtitle background"), hint: tr("Black band behind the text, easier to read on a bright picture"),
+                  value: s.sub_bg ? s.sub_bg + " %" : tr("None"), step: function (d) {
+                    act("set", { key: "sub_bg", value: Math.max(0, Math.min(100, (s.sub_bg || 0) + 10 * d)) })
+                } },
+                { label: tr("Auto switch"), hint: tr("Switch to a live streamer if yours is offline"),
+                  toggle: !!s.auto_switch, ok: function () { act("auto_switch", { enabled: !s.auto_switch }) } },
+                { label: tr("Polls and predictions"), hint: tr("At the top of the TV during a live stream"), toggle: !!s.events,
+                  ok: function () { act("flag", { key: "events", enabled: !s.events }) } },
+            ]
+        case "chat":
+            return [
+                { label: tr("Chat on the TV"), toggle: !!s.chat_visible, ok: function () { act("chat") } },
+                { label: tr("Chat corner"), value: tr(corners[s.corner] || ""), step: function (d) {
+                    // the API can only move forward one corner: three steps forward make one step back
+                    for (var n = 0; n < (d > 0 ? 1 : 3); n++) act("corner")
+                } },
+                { label: tr("Chat background"), value: (s.chat_bg || 0) + " %", step: function (d) {
+                    act("set", { key: "chat_bg", value: Math.max(0, Math.min(100, (s.chat_bg || 0) + 10 * d)) })
+                } },
+                { label: tr("Text size"), value: (s.chat_size || 0) + " px", step: function (d) {
+                    act("set", { key: "chat_size", value: Math.max(20, Math.min(60, (s.chat_size || 0) + 2 * d)) })
+                } },
+            ]
+        case "look":
+            var langs = Object.keys(s.languages || { en: "English" })
+            return [
+                { label: tr("Animated background"), hint: tr("Home screen and menu with no video behind"),
+                  value: tr(backdropNames.base[bd.base] || ""), step: function (d) { stepBackdrop("base", d) } },
+                { label: tr("Overlay"), hint: tr("A layer added over the background"),
+                  value: tr(backdropNames.overlay[bd.overlay] || ""), step: function (d) { stepBackdrop("overlay", d) } },
+                { label: tr("Home screen colors"), hint: tr("The menu itself takes the color of each tab"),
+                  value: tr(backdropNames.color[bd.color || "violet"] || ""), step: function (d) { stepBackdrop("color", d) } },
+                // names in their own language; the TV and the companion app switch right away (streambox-language)
+                { label: tr("Interface language"), value: (s.languages || {})[s.lang] || "English", step: function (d) {
+                    var i = Math.max(0, langs.indexOf(s.lang))
+                    act("language", { lang: langs[(i + d + langs.length) % langs.length] })
+                } },
+            ]
+        case "accounts":
+            var login = account && account.login
+            return [
+                { label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
+                  hint: login ? tr("No ads on the channels you're subscribed to") : tr("Sign in from the companion app on your phone") },
+                { label: tr("YouTube account"), visible: !!(ytAccount && (ytAccount.configured || (ytAccount.tv && !ytAccount.tv.unavailable))),
+                  value: ytAccount && ytAccount.authorized
+                       ? tr("Connected") + (ytAccount.channels !== null ? " · " + tr("{n} subscriptions", { n: ytAccount.channels }) : "")
+                       : tr("Not connected"),
+                  hint: ytAccount && ytAccount.tv && ytAccount.tv.connected ? tr("Progress synced with your account (phone, computer)")
+                      : tr("Subscriptions, and progress synced with your account"),
+                  ok: function () { ytAccountMenu() } },
+                { label: "Jellyfin", value: (s.libraries || {}).jellyfin ? tr("Connected") : tr("Not connected"),
+                  hint: (s.libraries || {}).jellyfin ? String(s.jellyfin_server || "").replace(/^https?:\/\//, "")
+                                                     : tr("Your movies and series of a Jellyfin server"),
+                  ok: function () { jellyfinMenu() } },
+                { label: "Plex", value: (s.libraries || {}).plex ? tr("Connected") : tr("Not connected"),
+                  hint: (s.libraries || {}).plex ? String(s.plex_server || "").replace(/^https?:\/\//, "")
+                                                 : tr("Your movies and series of a Plex server"),
+                  ok: function () { plexMenu() } },
+            ]
+        case "network":
+            var qi = 0
+            for (var i = 0; i < qrModes.length; i++) if (qrModes[i][0] === s.qr) qi = i
+            return [
+                { label: "Wi-Fi", visible: !!(wifi && wifi.device), value: wifiValue(),   // only with a Wi-Fi card
+                  hint: wifi && wifi.mode === "hotspot" ? tr("Wi-Fi \"{ssid}\", password {password}, then {url}", {
+                          ssid: wifi.hotspot.ssid, password: wifi.hotspot.password,
+                          url: String(wifi.hotspot.url).replace(/^http:\/\//, "").replace(/\/$/, "") })
+                      : tr("OK: setup mode, to choose another network from the phone"),
+                  ok: function () { if (wifi && wifi.mode !== "hotspot") act("wifi", { action: "hotspot" }) } },
+                { label: tr("Companion app QR code"), value: tr(qrModes[qi][1]), step: function (d) {
+                    act("qr", { mode: qrModes[Math.max(0, Math.min(qrModes.length - 1, qi + d))][0] })
+                } },
+            ]
+        case "devices":
+            return [
+                { label: tr("Remotes and controllers"),
+                  value: bt ? tr(bt.paired.length > 1 ? "{n} devices paired" : "{n} device paired", { n: bt.paired.length }) : "",
+                  hint: tr("Pair, unpair"), ok: function () { btMenu() } },
+                { label: tr("Set up keys"), hint: tr("Learn the keys of a remote or a controller, one by one"),
+                  ok: function () { act("keymap", { action: "wizard" }); close() } },
+                { label: tr("Default keys"), ok: function () { act("keymap", { action: "reset" }) } },
+                { label: tr("Power button"), hint: tr("Remote, phone and Home Assistant"),
+                  value: s.power_action === "suspend" ? tr("Sleep") : tr("Full shutdown"),
+                  step: function (d) { act("power_action", { mode: s.power_action === "suspend" ? "poweroff" : "suspend" }) } },
+            ]
+        case "updates":
+            return [
+                { label: tr("Update now"), value: updateVersion(),
+                  hint: health && health.update ? (health.update.running || (health.update.system && health.update.system.running)
+                                                   ? tr("Update in progress…")
+                        : (health.update.last ? tr(health.update.last.ok ? "Last: {date}" : "Failed: {date}",
+                                                   { date: frDate(health.update.last.date) }) : tr("Never"))
+                          + (health.update.next ? "  ·  " + tr("next: {date}", { date: frDate(health.update.next) }) : "")) : undefined,
+                  ok: function () {
+                      if (health && health.update && health.update.running) return
+                      if (updateWaiting()) askUpdate(true)
+                      else act("update")
+                  } },
+                { label: tr("Update from a USB stick"), visible: !!(localUpd && localUpd.available), value: localUpdValue(),
+                  hint: tr("A release's image (stream-box.raw.xz), without the Internet"), ok: function () { localUpdateMenu() } },
+                { label: tr("Direct update (main)"), visible: !!(dev && dev.enabled),
+                  hint: tr("Developer mode: the code and system files of the main branch, not the system"),
+                  ok: function () { if (!(health && health.update && health.update.running)) act("update", { direct: true }) } },
+            ]
+        case "backup":
+            return [
+                { label: tr("Backup and restore"), hint: tr("On a USB stick, or as a file from the companion app"),
+                  ok: function () { backupMenu() } },
+                { label: tr("Install on this PC"), visible: !!(install && install.available),
+                  value: install && install.progress && install.progress.state === "running" ? install.progress.percent + " %" : "",
+                  hint: tr("The box runs from its USB stick: copy it, settings included, to the internal disk"),
+                  ok: function () { installMenu() } },
+            ]
+        case "advanced":
+            return [
+                { label: tr("Version"), value: (pendingPlayer || s.player) === "mpv" ? tr("Simplified version") : tr("Full version"),
+                  // simplified: mpv alone, small menu (Twitch streamers); videos sent from the phone still play
+                  hint: pendingPlayer && pendingPlayer !== s.player ? tr("OK to apply: the player restarts")
+                      : tr("Simplified: lighter, only Twitch streamers in the TV menu"),
+                  step: function (d) { pendingPlayer = (pendingPlayer || s.player) === "qt" ? "mpv" : "qt" },
+                  ok: function () {
+                      if (!pendingPlayer || pendingPlayer === s.player) return
+                      act("player", { mode: pendingPlayer })
+                      pendingPlayer = ""
+                      close()
+                  } },
+                { label: tr("SSH access"), visible: !!(ssh && ssh.available), toggle: !!(ssh && ssh.enabled),
+                  hint: !(ssh && ssh.enabled) ? tr("Off: no more remote command-line access")
+                      : "ssh " + (ssh.address || tr("media@<box address>"))
+                        + "  ·  " + (ssh.password ? tr("password: {password}", { password: ssh.password }) : tr("by key")),
+                  ok: function () {
+                      var on = !ssh.enabled
+                      ssh = Object.assign({}, ssh, { enabled: on })   // on screen right away
+                      call("POST", "/api/ssh", { enabled: on }, function () { loadSsh() })
+                  } },
+                { label: tr("Developer mode"), visible: !!(dev && dev.available), toggle: !!(dev && dev.enabled),
+                  hint: dev && dev.enabled ? tr("Passwordless sudo for media, over SSH (password above)")
+                                           : tr("Root access to develop and test the box"),
+                  ok: function () {
+                      if (dev.enabled) { call("POST", "/api/dev", { enabled: false }, function () { loadSsh() }); dev = Object.assign({}, dev, { enabled: false }); return }
+                      openModal(tr("Enable developer mode? media will get passwordless sudo, and SSH turns on"), [
+                          { label: tr("Enable"), danger: true, ok: function () {
+                              call("POST", "/api/dev", { enabled: true }, function () { loadSsh() }) } },
+                          { label: tr("Cancel"), ok: function () {} }])
+                  } },
+            ]
+        }
+        return []
     }
     Timer { id: displayReload; interval: 3000; onTriggered: menu.call("GET", "/api/display", undefined, function (d) { if (d && d.modes) menu.display = d }) }
     function audioCurrentLabel() {
@@ -766,111 +945,6 @@ Item {
         var s = health && health.update && health.update.system
         var l = s && s.last
         return !!(l && l.ok && l.restart === "pending" && !(l.kind === "ab" && l.new === s.version))
-    }
-    function systemRows() {
-        var login = account && account.login
-        return [
-            { label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
-              hint: login ? tr("No ads on the channels you're subscribed to") : tr("Sign in from the companion app on your phone") },
-            { label: "Jellyfin", value: (st.libraries || {}).jellyfin ? tr("Connected") : tr("Not connected"),
-              hint: (st.libraries || {}).jellyfin ? String(st.jellyfin_server || "").replace(/^https?:\/\//, "")
-                                                  : tr("Your movies and series of a Jellyfin server"),
-              ok: function () { jellyfinMenu() } },
-            { label: "Plex", value: (st.libraries || {}).plex ? tr("Connected") : tr("Not connected"),
-              hint: (st.libraries || {}).plex ? String(st.plex_server || "").replace(/^https?:\/\//, "")
-                                              : tr("Your movies and series of a Plex server"),
-              ok: function () { plexMenu() } },
-            { label: tr("YouTube account"), visible: !!(ytAccount && (ytAccount.configured || (ytAccount.tv && !ytAccount.tv.unavailable))),
-              value: ytAccount && ytAccount.authorized
-                   ? tr("Connected") + (ytAccount.channels !== null ? " · " + tr("{n} subscriptions", { n: ytAccount.channels }) : "")
-                   : tr("Not connected"),
-              hint: ytAccount && ytAccount.tv && ytAccount.tv.connected ? tr("Progress synced with your account (phone, computer)")
-                  : tr("Subscriptions, and progress synced with your account"),
-              ok: function () { ytAccountMenu() } },
-            { label: tr("Version"), value: (pendingPlayer || st.player) === "mpv" ? tr("Simplified version") : tr("Full version"),
-              // simplified: mpv alone, small menu (Twitch streamers); videos sent from the phone still play
-              hint: pendingPlayer && pendingPlayer !== st.player ? tr("OK to apply: the player restarts")
-                  : tr("Simplified: lighter, only Twitch streamers in the TV menu"),
-              step: function (d) { pendingPlayer = (pendingPlayer || st.player) === "qt" ? "mpv" : "qt" },
-              ok: function () {
-                  if (!pendingPlayer || pendingPlayer === st.player) return
-                  act("player", { mode: pendingPlayer })
-                  pendingPlayer = ""
-                  close()
-              } },
-            { label: "Wi-Fi", visible: !!(wifi && wifi.device),
-              value: !wifi ? "" : wifi.connecting ? tr("connecting…") : wifi.mode === "hotspot" ? tr("setup mode")
-                   : wifi.network ? (wifi.wired ? tr("cable") : wifi.network) : tr("no network"),
-              hint: wifi && wifi.mode === "hotspot" ? tr("Wi-Fi \"{ssid}\", password {password}, then {url}", {
-                      ssid: wifi.hotspot.ssid, password: wifi.hotspot.password,
-                      url: String(wifi.hotspot.url).replace(/^http:\/\//, "").replace(/\/$/, "") })
-                  : tr("OK: setup mode, to choose another network from the phone"),
-              ok: function () { if (wifi && wifi.mode !== "hotspot") act("wifi", { action: "hotspot" }) } },
-            { label: tr("Remotes and controllers"),
-              value: bt ? tr(bt.paired.length > 1 ? "{n} devices paired" : "{n} device paired", { n: bt.paired.length }) : "",
-              hint: tr("Pair, unpair"), ok: function () { btMenu() } },
-            { label: tr("Set up keys"), hint: tr("Learn the keys of a remote or a controller, one by one"),
-              ok: function () { act("keymap", { action: "wizard" }); close() } },
-            { label: tr("Default keys"), ok: function () { act("keymap", { action: "reset" }) } },
-            { label: tr("SSH access"), visible: !!(ssh && ssh.available), toggle: !!(ssh && ssh.enabled),
-              hint: !(ssh && ssh.enabled) ? tr("Off: no more remote command-line access")
-                  : "ssh " + (ssh.address || tr("media@<box address>"))
-                    + "  ·  " + (ssh.password ? tr("password: {password}", { password: ssh.password }) : tr("by key")),
-              ok: function () {
-                  var on = !ssh.enabled
-                  ssh = Object.assign({}, ssh, { enabled: on })   // on screen right away
-                  call("POST", "/api/ssh", { enabled: on }, function () { loadSsh() })
-              } },
-            { label: tr("Developer mode"), visible: !!(dev && dev.available), toggle: !!(dev && dev.enabled),
-              hint: dev && dev.enabled ? tr("Passwordless sudo for media, over SSH (password above)")
-                                       : tr("Root access to develop and test the box"),
-              ok: function () {
-                  if (dev.enabled) { call("POST", "/api/dev", { enabled: false }, function () { loadSsh() }); dev = Object.assign({}, dev, { enabled: false }); return }
-                  openModal(tr("Enable developer mode? media will get passwordless sudo, and SSH turns on"), [
-                      { label: tr("Enable"), danger: true, ok: function () {
-                          call("POST", "/api/dev", { enabled: true }, function () { loadSsh() }) } },
-                      { label: tr("Cancel"), ok: function () {} }])
-              } },
-            { label: tr("Update from a USB stick"), visible: !!(localUpd && localUpd.available), value: localUpdValue(),
-              hint: tr("A release's image (stream-box.raw.xz), without the Internet"), ok: function () { localUpdateMenu() } },
-            { label: tr("Install on this PC"), visible: !!(install && install.available),
-              value: install && install.progress && install.progress.state === "running" ? install.progress.percent + " %" : "",
-              hint: tr("The box runs from its USB stick: copy it, settings included, to the internal disk"),
-              ok: function () { installMenu() } },
-            { label: tr("Backup and restore"), hint: tr("On a USB stick, or as a file from the companion app"),
-              ok: function () { backupMenu() } },
-            { label: tr("Update now"), value: updateVersion(),
-              hint: health && health.update ? (health.update.running || (health.update.system && health.update.system.running)
-                                               ? tr("Update in progress…")
-                    : (health.update.last ? tr(health.update.last.ok ? "Last: {date}" : "Failed: {date}",
-                                               { date: frDate(health.update.last.date) }) : tr("Never"))
-                      + (health.update.next ? "  ·  " + tr("next: {date}", { date: frDate(health.update.next) }) : "")) : undefined,
-              ok: function () {
-                  if (health && health.update && health.update.running) return
-                  if (updateWaiting()) askUpdate(true)
-                  else act("update")
-              } },
-            { label: tr("Direct update (main)"), visible: !!(dev && dev.enabled),
-              hint: tr("Developer mode: the code and system files of the main branch, not the system"),
-              ok: function () { if (!(health && health.update && health.update.running)) act("update", { direct: true }) } },
-            { label: tr("Power button"), hint: tr("Remote, phone and Home Assistant"),
-              value: st.power_action === "suspend" ? tr("Sleep") : tr("Full shutdown"),
-              step: function (d) { act("power_action", { mode: st.power_action === "suspend" ? "poweroff" : "suspend" }) } },
-            { label: tr("Put to sleep"), hint: tr("Wake up with the remote, Home Assistant or the power button"),
-              ok: function () { act("poweroff", { mode: "suspend" }); close() } },
-            { label: tr("Restart the box"),
-              hint: rebootUntil > 0 ? tr("Press OK again to restart") : undefined,
-              ok: function () {
-                  if (rebootUntil > 0) { act("reboot"); close() }
-                  else { rebootUntil = 1; rebootReset.restart() }
-              } },
-            { label: tr("Shut down the box"), danger: true,
-              hint: poweroffUntil > 0 ? tr("Press OK again to shut down") : undefined,
-              ok: function () {
-                  if (poweroffUntil > 0) { act("poweroff", { mode: "full" }); close() }
-                  else { poweroffUntil = 1; poweroffReset.restart() }
-              } },
-        ].filter(function (r) { return r.visible !== false })   // Wi-Fi: only with a Wi-Fi card
     }
     // "2026-10-23 11:48:14" or "Mon 2026-10-26 05:07:37 CET" → "Fri 23 Oct at 11:48"
     function frDate(text) {
@@ -989,7 +1063,7 @@ Item {
             if (!home.configured) return tr("Your {service} library", { service: libName })
             return tr("{server} · progress follows on all your devices", { server: home.server })
         case "libraries": return tr("Your movies and series from Jellyfin or Plex")
-        case "settings": return tr("◀ ▶ to change a value")
+        case "settings": return section ? tr("◀ ▶ to change a value  ·  Back: the sections") : tr("The box and its settings")
         }
         return ""
     }
@@ -997,6 +1071,7 @@ Item {
     // Displayed tab: data loaded on the first visit
     onTabChanged: {
         tabKept = tabs[tab].id
+        section = ""; setSel = 0
         stopPreview()
         tabEnter.restart()
         loadTab(tabs[tab].id)   // tabs[tab] and not tabId: the tabId binding is not recomputed yet here
@@ -1197,8 +1272,8 @@ Item {
     }
     function loadAudio() { call("GET", "/api/audio", undefined, function (d) { if (d && d.outputs) audioOut = d }) }
     function loadTab(id) {
-        if (id === "settings") loadAudio()
-        if (id === "system") {
+        if (id === "settings") {
+            loadAudio()
             loadBt(); loadYtAccount(); loadSsh()
             call("GET", "/api/install", undefined, function (d) { if (d) install = d })
             call("GET", "/api/local_update", undefined, function (d) { if (d) localUpd = d })
@@ -1253,6 +1328,7 @@ Item {
             else if (k === "back" && st.mode !== "home") close()   // nothing playing: the menu stays the main page
             return
         }
+        if (k === "back" && tabId === "settings" && section) return leaveSection()   // a section: back to the list
         if (k === "back") return toRail()   // Back: to the tabs, then (from the rail) closes the menu
         switch (tabId) {
         case "live": return keyLive(k)
@@ -1261,7 +1337,6 @@ Item {
         case "youtube": case "jellyfin": case "plex": return keyMedia(k)
         case "history": return keyHistory(k)
         case "settings": return keyRows(k, settingsRows())
-        case "system": return keyRows(k, systemRows())
         }
     }
     function toRail() { area = "rail"; railHome = false; shortcut = -1; pendingDisplay = ""; pendingPlayer = "" }
@@ -1403,12 +1478,14 @@ Item {
     }
     function keyRows(k, rows) {
         var sel = selectable(rows)
-        var cur = tabId === "settings" ? setSel : sysSel
+        var cur = setSel
         var row = rows[sel[cur]]
-        var set = function (v) { if (tabId === "settings") setSel = v; else sysSel = v; pendingDisplay = ""; pendingPlayer = "" }
+        var set = function (v) { setSel = v; pendingDisplay = ""; pendingPlayer = "" }
         if (k === "up") set(Math.max(0, cur - 1))
         else if (k === "down") set(Math.min(sel.length - 1, cur + 1))
         else if ((k === "left" || k === "right") && row && row.step) row.step(k === "right" ? 1 : -1)
+        else if (k === "right" && row && row.open) row.ok()
+        else if (k === "left" && section) leaveSection()
         else if (k === "left") area = "rail"
         else if (k === "ok" && row) { if (row.ok) row.ok(); else if (row.step) row.step(1) }
     }
@@ -1464,8 +1541,7 @@ Item {
             MediaTab { menu: menu }   // YouTube, Jellyfin and Plex
             LibrariesTab { menu: menu }
             HistoryTab { menu: menu }
-            RowsTab { menu: menu; which: "settings" }
-            RowsTab { menu: menu; which: "system" }
+            RowsTab { menu: menu }
             SystemStatus { menu: menu }
         }
     }

@@ -60,13 +60,16 @@ STEPS = (
     + keys("right ok back up ok back")                            # episodes, dialog, keyboard closed
     + scene(5, "down right ok back down down right ok")           # Plex: rows, series, episodes
     + scene(6, "right down down left ok back")                    # History
-    + scene(7, "down down down down down down down right down down down down down down down down")
-    + keys("right down up up up up")                              # Settings: audio output, resolution
-    + scene(8, "down ok") + [("pause", 300)] + keys("ok back")    # System: Jellyfin, servers found, Quick Connect code
+    + scene(7, "down down down down down down down down down down down down")   # Settings: sections, power below
+    + keys("up up up up up up up up up up up up ok down right up right")   # Picture and sound: audio output, resolution
+    + keys("back down ok back down ok back down ok")              # Playback, Chat, Appearance
+    + keys("back down ok down down ok") + [("pause", 300)] + keys("ok back")   # Accounts: Jellyfin, Quick Connect code
     + keys("down ok ok back")                                     # Plex, sign-in by code (dialog)
-    + keys("down ok down ok back")                                # YouTube account, sync dialog
-    + keys("down right down down ok back down down down down ok down back")   # Bluetooth, developer mode
-    + keys("down ok ok back down ok back down down down down ok down ok")     # install, backup, restart
+    + keys("up up ok down ok back")                               # YouTube account, sync dialog
+    + keys("back down down ok ok back left")                      # Devices: Bluetooth
+    + keys("down ok left down ok back left")                      # Updates, Backup and installation
+    + keys("down ok down down ok down back back")                 # Advanced: developer mode
+    + keys("down down ok")                                        # Restart: OK again
     + [("key", "home"), ("video", True), ("open",)]               # over a video: veil only
     + keys("back down down back")
     + [("video", False), ("power",)] + keys("down back")          # "Box" dialog alone

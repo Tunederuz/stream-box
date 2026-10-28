@@ -1,4 +1,4 @@
-// TV menu, System tab, right of the rows: QR code of the companion app, box status tiles below it
+// TV menu, Settings tab, right of the list of sections: QR code of the companion app, box status tiles below it
 import QtQuick
 import ".."
 
@@ -6,7 +6,7 @@ Item {
     required property var menu
     anchors.fill: parent
     Flow {   // box status, below the QR code ("Playback" is two tiles wide)
-        visible: menu.tabId === "system"
+        visible: menu.tabId === "settings" && !menu.section
         x: 860; y: 430; width: 520   // stops 80 px from the edge of the screen
         spacing: 10
         Repeater {
@@ -25,7 +25,7 @@ Item {
         }
     }
     Row {   // QR code of the companion app, for everything that requires typing text
-        visible: menu.tabId === "system" && !!(menu.ambient.qr && menu.ambient.qr.rows)
+        visible: menu.tabId === "settings" && !menu.section && !!(menu.ambient.qr && menu.ambient.qr.rows)
         x: 860; y: 210; spacing: 24
         QrCode { size: 190; rows: menu.ambient.qr ? menu.ambient.qr.rows : [] }
         Column {

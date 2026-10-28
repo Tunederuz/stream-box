@@ -105,7 +105,7 @@ the setup page (language, Wi-Fi, streamers). The companion app stays available a
 
 ### 4. Install it on the PC's disk
 
-TV menu → System → "Install on this PC" → choose the disk → confirm. Everything on that disk is erased; the settings
+TV menu → Settings → Backup and installation → "Install on this PC" → choose the disk → confirm. Everything on that disk is erased; the settings
 made from the stick come along. Then remove the stick and restart.
 
 If the installer finds no disk while the PC has an NVMe SSD, the BIOS has the disk controller in RAID mode (Intel RST,
@@ -113,16 +113,16 @@ common on Dell): set it to AHCI (Dell: SATA Operation → AHCI). The installer s
 
 ### Afterwards
 
-- Twitch account, Jellyfin, Plex, YouTube account: from the TV menu (System) or the companion app (Settings).
+- Twitch account, Jellyfin, Plex, YouTube account: from the TV menu (Settings → Accounts and libraries) or the companion app (Settings).
 - Wake-on-LAN is on for Ethernet in the image: enable it in the BIOS too to wake the box from the network.
 - Home Assistant: [docs/home-assistant.md](docs/home-assistant.md).
-- Updates: TV menu → System → "Update now", and every week by itself: streamlink, yt-dlp and the other tools, then the
-  whole system of the latest release, installed next to the running one (the box restarts onto it when nothing plays,
-  and goes back to the previous version by itself if it doesn't work). A release is rebuilt every month with the
+- Updates: TV menu → Settings → Updates → "Update now", and every week by itself: streamlink, yt-dlp and the other
+  tools, then the whole system of the latest release, installed next to the running one (the TV menu then asks whether
+  to restart onto it; the box goes back to the previous version by itself if it doesn't work). A release is rebuilt every month with the
   latest Arch packages. Boxes installed before 0.2.0 only get the box's code and system files. Without the Internet:
-  the image of a release (`stream-box.raw.xz` with `SHA256SUMS` and `SHA256SUMS.gpg`) from a USB stick (System menu)
-  or sent from the companion app.
-- Developer mode (TV menu → System): passwordless sudo and SSH for the `media` user. The image has no other root
+  the image of a release (`stream-box.raw.xz` with `SHA256SUMS` and `SHA256SUMS.gpg`) from a USB stick (Settings →
+  Updates) or sent from the companion app.
+- Developer mode (TV menu → Settings → Advanced): passwordless sudo and SSH for the `media` user. The image has no other root
   access.
 
 ### Advanced: on an existing Arch installation
@@ -154,7 +154,7 @@ At the end, it lists the remaining settings (Twitch account, HTTPS, Jellyfin, Ho
 
 ### Backup and reinstallation
 
-The simplest way: TV System menu → "Backup and restore" (on a USB stick), or Settings → Backup in the companion app
+The simplest way: TV menu → Settings → Backup and installation → "Backup and restore" (on a USB stick), or Settings → Backup in the companion app
 (file downloaded to the phone). Restoring puts everything back, then the box restarts.
 
 On the command line, `sudo bash backup.sh` creates an archive of everything specific to the box: streamer list,
