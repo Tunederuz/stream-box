@@ -1171,7 +1171,6 @@ Item {
         case "follows":
             if (!follows) return tr("Loading…")
             if (follows.error) return tr("Twitch unreachable for now")
-            if (!follows.configured) return tr("Your followed channels on Twitch")
             if (!follows.authorized) return tr("Allow the box to read your followed channels (read-only)")
             return (follows.live.length ? tr("{n} live", { n: follows.live.length }) : tr("Nobody live")) + "  ·  "
                 + tr("{n} followed channels", { n: followList().length })
@@ -1499,7 +1498,7 @@ Item {
         var list = st.streamers
         if (id === "live") return !list || list.length > 0 || shortcuts().length > 0
         if (id === "replays") return !list || list.length > 0
-        if (id === "follows") return !follows || !!follows.configured
+        if (id === "follows") return true
         if (id === "history") return !history || history.length > 0
         if (id === "libraries") return false   // explanations only
         return true

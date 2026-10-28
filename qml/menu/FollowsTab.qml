@@ -1,4 +1,4 @@
-// TV menu, Following tab: Twitch app missing, authorization (code and QR code), or grid of the followed channels
+// TV menu, Following tab: authorization (code and QR code), or grid of the followed channels
 // (after a moment on a live one, its live plays in the menu's background: TvMenu.bgLive)
 import QtQuick
 import "layout.js" as Layout
@@ -12,14 +12,8 @@ Item {
     readonly property var f: menu.follows || {}
     readonly property var pend: f.pending || null
     readonly property bool waiting: !!(pend && pend.user_code && !pend.error)
-    Column {
-        visible: !!menu.follows && !menu.follows.error && !page.f.configured
-        y: 260; spacing: 20
-        Text { text: menu.tr("To show them, the box needs your own Twitch app."); color: "white"; font.pixelSize: 27 }
-        Text { text: menu.tr("Companion app → Settings → Followed channels: everything is explained there."); color: "#b4afc2"; font.pixelSize: 22 }
-    }
     Item {
-        visible: !!page.f.configured && !page.f.authorized
+        visible: !!menu.follows && !menu.follows.error && !page.f.authorized
         anchors.fill: parent
         Column {
             visible: page.waiting

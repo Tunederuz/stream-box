@@ -23,6 +23,17 @@ including the Limited Use requirements.
 See also the [YouTube Terms of Service](https://www.youtube.com/t/terms) and the
 [Google Privacy Policy](https://policies.google.com/privacy).
 
+## Twitch followed channels (Stream Box Twitch app)
+
+To show the channels the owner follows, the box asks Twitch for **read-only** access (`user:read:follows`) through the
+Stream Box Twitch app, with a code typed on twitch.tv/activate.
+
+- Data read: the followed channels (name, picture) and which of them are live (title, game, viewers).
+- Where it goes: nowhere other than the box itself. The token is kept on the box, readable by its user only; the
+  Stream Box app is only an identifier, there is no server behind it and its maintainers see nothing.
+- Removing access: "Disconnect" in the companion app (Settings → Followed channels) deletes the box's token. Access
+  can also be revoked at any time from Twitch (Settings → Connections).
+
 ## Contact
 
 Questions: open an issue on the project repository.
