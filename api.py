@@ -105,8 +105,8 @@ JSON_ROUTES = {
     "/api/dev": system.dev_status,
     "/api/install": installer.status,
     "/api/backup": backup.status,
-    "/api/local_update": localupdate.status,
-    "/api/update_prompt": system.update_prompt,   # update waiting for the user (the TV menu asks at start, wake-up)   # system update from a local image: drives, copy, progress
+    "/api/local_update": localupdate.status,   # system update from a local image: drives, copy, progress
+    "/api/update_prompt": system.update_prompt,   # update to offer or to apply (the TV menu asks at start, wake-up)
 }
 
 

@@ -1,11 +1,12 @@
 """Stream Box: backup and restore of settings and connections, without a command line.
 
-TV System menu → "Backup and restore": backup to a USB drive, or restore of a backup found on it. Companion app
-(Settings → System): download of the file to the phone, and restore of an uploaded file. Used by remote.py
+TV Settings → Backup and installation → "Backup and restore": backup to a USB drive, or restore of a backup found on
+it. Companion app (Settings → Backup and installation): download of the file to the phone, and restore of an uploaded
+file. Used by remote.py
 (GET /api/backup, /api/backup/download; POST /api/backup, /api/backup_restore).
 
 Contents, the same as backup.sh (archive in the same format: install.sh --restore takes it, and vice versa): streamer
-list, box settings and history, Twitch / YouTube accounts, Jellyfin connection, MQTT, sound settings, plus the saved
+list, box settings and history, Twitch / YouTube accounts, Jellyfin and Plex connections, MQTT, sound settings, plus the saved
 Wi-Fi networks (name and password, recreated by NetworkManager). Not the Bluetooth pairings (root only: backup.sh
 keeps them). These are secrets: the file is for your eyes only.
 

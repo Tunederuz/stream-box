@@ -292,7 +292,7 @@
   <div id="setup-slot"></div>
   <section>
     <h2>That's it</h2>
-    <p>Twitch, YouTube and Jellyfin accounts, Home Assistant, sound, chat: in Settings, whenever you like.</p>
+    <p>Twitch and YouTube accounts, Jellyfin and Plex, sound, Wi-Fi: in Settings, whenever you like.</p>
     <button id="setup-done" class="current" style="width: 100%">Finish</button>
   </section>
   </div>
@@ -706,7 +706,7 @@
     <div class="group-body" hidden>
 
   <section>
-    <h2>System</h2>
+    <h2>Box status</h2>
     <div class="setting" style="margin-top: 0">Box status</div>
     <div class="health" id="health"></div>
     <button id="update-now" style="width: 100%; margin-top: 10px">Check for updates</button>
@@ -741,9 +741,9 @@
 
   <section>
     <h2>Backup</h2>
-    <p style="margin-top: 0">Settings, history, favorites, accounts (Twitch, YouTube, Jellyfin, MQTT) and Wi-Fi, to
-      restore them after a reinstall. The file contains your logins: keep it to yourself. Also in the TV's System
-      menu, on a USB stick.</p>
+    <p style="margin-top: 0">Settings, history, favorites, accounts (Twitch, YouTube, Jellyfin, Plex, MQTT) and Wi-Fi, to
+      restore them after a reinstall. The file contains your logins: keep it to yourself. Also in the TV menu
+      (Settings → Backup and installation), on a USB stick.</p>
     <button id="backup-download" style="width: 100%">Download the backup</button>
     <button id="backup-restore" style="width: 100%; margin-top: 8px">Restore from a file…</button>
     <input id="backup-file" type="file" accept=".gz,.tgz,application/gzip" hidden>
@@ -858,8 +858,10 @@ function render(s) {
   $("dot").className = `dot${s.playing && !media ? " on" : ""}`;
   $("tv-state").textContent = media ? tr("Video playing on the TV") : s.mode === "home" ? tr("Home screen")
     : s.playing ? tr("Live on the TV · {channel}", { channel: s.channel }) : tr("Nothing playing right now");
-  $("status").className = "status";
-  $("status").textContent = "";
+  if (Date.now() > statusHold) {   // (an error just shown stays a few seconds)
+    $("status").className = "status";
+    $("status").textContent = "";
+  }
   renderNow(s);
 
   $("media-section").hidden = !media;
@@ -893,11 +895,29 @@ function clock(seconds) {
   return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
 }
 
-function showError(message) {
-  $("dot").className = "dot error";
-  $("tv-state").textContent = tr("Box unreachable");
+// Status line under the header. An error stays 8 s (the state, read every 3 s, no longer wipes it at once); "box
+// unreachable" only when the box did not answer (an action it refused leaves the dot and state as they are). While the
+// box goes down on purpose (restart, shutdown, update applied, backup restored: goingDown), its message stays instead
+let statusHold = 0, boxDown = null;   // boxDown: { message, since }
+function showError(message, unreachable = true) {
+  if (boxDown && unreachable) return showDown();
+  if (unreachable) {
+    $("dot").className = "dot error";
+    $("tv-state").textContent = tr("Box unreachable");
+  }
   $("status").className = "status error";
   $("status").textContent = message;
+  statusHold = Date.now() + 8000;
+}
+function showDown() {
+  $("dot").className = "dot";
+  $("tv-state").textContent = boxDown.state || "";
+  $("status").className = "status";
+  $("status").textContent = boxDown.message;
+}
+function goingDown(message, state = "") {
+  boxDown = { message, state, since: Date.now() };
+  showDown();
 }
 
 async function refresh() {
@@ -906,7 +926,9 @@ async function refresh() {
     const r = await fetch("/api/state");
     const s = await r.json();
     if (!r.ok) throw new Error(s.error);
-    render(s);
+    // going down: the box still answers for a moment; it is back once it answers again after that
+    if (boxDown && Date.now() - boxDown.since < 20000) showDown();
+    else { boxDown = null; render(s); }
   } catch (e) {
     showError(e.message || tr("Box unreachable"));
   }
@@ -918,22 +940,27 @@ async function refresh() {
 let pressed = { button: null, at: 0 };
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
-  if (b && !b.dataset.action) pressed = { button: b, at: Date.now() };
+  if (b && !b.dataset.key) pressed = { button: b, at: Date.now() };
 }, true);
-async function send(action, body = {}) {
+async function send(action, body = {}) {   // → true when the box accepted it
   const b = Date.now() - pressed.at < 500 ? pressed.button : null;
   if (b) b.classList.add("busy");
   try {
     const r = await fetch(`/api/${action}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     });
-    if (!r.ok) throw new Error((await r.json()).error);
+    if (!r.ok) {   // refused by the box (it answered): its message, the box itself is fine
+      showError((await r.json().catch(() => ({}))).error || tr("Couldn't do it."), false);
+      return false;
+    }
+    return true;
   } catch (e) {
     showError(e.message || tr("Box unreachable"));
+    return false;
   } finally {
     if (b) b.classList.remove("busy");
+    setTimeout(refresh, 300);   // mpv applies script-messages asynchronously
   }
-  setTimeout(refresh, 300);   // mpv applies script-messages asynchronously
 }
 
 document.querySelectorAll("button[data-action]").forEach((b) => {
@@ -1380,9 +1407,7 @@ if (new URLSearchParams(location.search).has("partage")) {
 }
 $("reboot").onclick = async () => {
   if (!confirm(tr("Restart the box?"))) return;
-  await send("reboot");
-  $("status").className = "status";
-  $("status").textContent = tr("The box is restarting (about a minute)…");
+  if (await send("reboot")) goingDown(tr("The box is restarting (about a minute)…"), tr("Restarting…"));
 };
 // Backup: restore of a file downloaded earlier (the box restores everything and restarts)
 $("backup-download").onclick = () => { location.href = "/api/backup/download"; };
@@ -1399,6 +1424,7 @@ $("backup-file").onchange = async () => {
     const r = await fetch("/api/backup_restore", { method: "POST", body: file, headers: { "Content-Type": "application/gzip" } });
     if (!r.ok) throw new Error((await r.json()).error);
     st.textContent = tr("Backup restored: the box is restarting (about a minute)…");
+    goingDown(st.textContent, tr("Restarting…"));
   } catch (e) {
     st.className = "status error";
     st.textContent = e.message || tr("Restore failed.");
@@ -1411,12 +1437,9 @@ $("poweroff").onclick = async () => {
   try {
     const r = await fetch("/api/poweroff", { method: "POST" });
     if (!r.ok) throw new Error((await r.json()).error);
-    clearTimeout(refreshTimer);
-    $("dot").className = "dot";
-    $("tv-state").textContent = sleep ? tr("Box asleep") : tr("Box turned off");
-    $("status").className = "status";
-    $("status").textContent = sleep ? tr("Box asleep. Wake it up with Home Assistant (network) or its power button.")
-                                    : tr("Box turned off. Turn it back on with its power button.");
+    goingDown(sleep ? tr("Box asleep. Wake it up with Home Assistant (network) or its power button.")
+                    : tr("Box turned off. Turn it back on with its power button."),
+              sleep ? tr("Box asleep") : tr("Box turned off"));
   } catch (e) {
     showError(e.message || tr("Box unreachable"));
   }
@@ -1604,6 +1627,7 @@ $("audio-out").onchange = async () => {
 // Wi-Fi: shown if the box has a Wi-Fi card. On the setup access point (10.42.0.1), the page opens on this
 // section: after connecting, the phone loses the box (it leaves its access point)
 const onSetupHotspot = location.hostname === "10.42.0.1";
+let wifiTimer = null;
 async function refreshWifi() {
   let w;
   try { w = await (await fetch("/api/wifi")).json(); } catch (e) { bug(e); return; }
@@ -1615,6 +1639,9 @@ async function refreshWifi() {
                                         : tr("Connected to the Wi-Fi \"{network}\".", { network: w.network }))
     : tr("No network.");
   if (w.error) { $("wifi-status").className = "status error"; $("wifi-status").textContent = w.error; }
+  else if ($("wifi-status").className === "status error") $("wifi-status").textContent = "";
+  clearTimeout(wifiTimer);
+  if (w.connecting) wifiTimer = setTimeout(refreshWifi, 2000);   // until the connection's result
   const current = $("wifi-ssid").value;
   const bars = (n) => n >= 70 ? "▂▄▆█" : n >= 45 ? "▂▄▆" : n >= 20 ? "▂▄" : "▂";
   $("wifi-ssid").replaceChildren(...w.networks.map((n) => Object.assign(document.createElement("option"),
@@ -1723,7 +1750,7 @@ async function refreshHealth() {
       : updateOffered ? tr("Install version {version}", { version: updateOffered }) : tr("Check for updates");
     // A/B box: version running, newer one installed in the other slot; older box: system files and code
     const sysText = !sys ? "" : !sys.ok ? tr("System: {error} ({date})", { error: sys.message, date: frDate(sys.date) })
-      : sys.kind === "direct" ? tr("Developer mode: the box's files from main, {version} ({date}), {files} system files changed; the system itself is not updated.",
+      : sys.kind === "direct" ? tr("Developer mode: the box's files from the source, {version} ({date}), {files} system files changed; the system itself is not updated.",
           { version: sys.version, date: frDate(sys.date), files: sys.files })
           + " " + tr({ updated: "Code updated.", ahead: "Code newer than the release, kept." }[sys.code] || "Code up to date.")
       : sys.kind === "ab" ? tr("System: {version} ({date}).", { version: u.system.version ? "v" + u.system.version : sys.version, date: frDate(sys.date) })
@@ -1745,7 +1772,9 @@ let updateOffered = "";      // newer release found by the daily check, not inst
 $("update-now").onclick = async () => {
   $("update-now").disabled = true;
   $("update-now").textContent = updateWaiting ? tr("Restarting…") : updateOffered ? tr("Update in progress…") : tr("Checking…");
-  await send(updateWaiting ? "apply_update" : updateOffered ? "update" : "update_check");
+  const restart = updateWaiting;
+  if (await send(updateWaiting ? "apply_update" : updateOffered ? "update" : "update_check") && restart)
+    goingDown(tr("The box is restarting onto the new version (about a minute)…"), tr("Restarting…"));
   setTimeout(refreshHealth, 1500);
 };
 $("update-deps").onclick = async () => {
@@ -1781,6 +1810,9 @@ async function refreshLocalUpdate() {
   } catch (e) { bug(e); luTimer = setTimeout(refreshLocalUpdate, 5000); }   // the box restarting
 }
 settingsLoaders.push(refreshLocalUpdate);
+if (!$("tab-settings").hidden) refreshLocalUpdate();
+// Accounts and libraries reread each time Settings is shown (a code started or a connection made on the TV meanwhile)
+settingsLoaders.push(refreshJfLink, refreshPlexLink, refreshAccount);
 function sendFile(kind, file, onProgress) {   // XMLHttpRequest: fetch has no upload progress
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();

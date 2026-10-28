@@ -21,6 +21,14 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - TV menu, grids (Live, Following, History): ▶ on the last card of a line goes on to the next line.
 
 ### Fixed
+- TV menu: leaving the Bluetooth search with Back no longer lets its results replace the next dialog; the YouTube
+  sign-in code no longer stays on screen after the menu is closed; a dialog without buttons no longer breaks on OK.
+- An online system update and an update from a USB stick or a file can no longer run at the same time.
+- Simplified version: its System menu offers the system update (check, install, restart to apply), as the full one.
+- Companion app: errors stay visible instead of disappearing at once; "The box is restarting…" (or turned off,
+  asleep) stays until the box is back instead of turning into "Box unreachable"; accounts, Jellyfin, Plex and the
+  update from a file are reread each time Settings opens; a Wi-Fi connection shows its result.
+- Texts that still pointed to the former System menu now point to Settings; the backup texts mention Plex.
 - Bluetooth pairing: the "Pairing…" dialog closes as soon as the device is paired, instead of about a minute later.
 - Install on this PC: the dialog opens at once and stays during the start of the installation; the percentage on its
   row keeps moving once the dialog is hidden.

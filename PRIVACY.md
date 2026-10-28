@@ -13,7 +13,7 @@ their TV, the latest videos of the channels they are subscribed to.
 - Where it goes: nowhere other than the box itself. It is kept in the configuration folder of the box's user,
   readable by that user only, and is not transmitted, sold or shared with anyone.
 - Nothing is changed on the account: the box does not post, comment, subscribe or unsubscribe from anything.
-- Removing access: "✕  Disconnect subscriptions" in the box menu (System → YouTube account) or "Disconnect" in its
+- Removing access: "✕  Disconnect subscriptions" in the box menu (Settings → Accounts and libraries → YouTube account) or "Disconnect" in its
   companion app (Settings → YouTube account) deletes the box's tokens. Access can also be revoked at any time from https://myaccount.google.com/permissions.
 
 The use of data obtained through Google APIs complies with the

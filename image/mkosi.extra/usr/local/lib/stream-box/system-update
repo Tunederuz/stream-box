@@ -90,6 +90,10 @@ nothing_plays() {   # the box's server says the home screen is shown
 
 is_manual="" direct=""
 if [ -z "${1:-}" ]; then   # (not the boot state nor the daily check: they leave the markers)
+  # One system update at a time: this one or a local one (local-update takes the same lock), both write the slot not
+  # in use
+  exec 9> /run/stream-box-system-update.lock
+  if ! flock -n 9; then report 0 "another system update is running"; exit 0; fi
   if manual update-manual; then is_manual=1; fi
   # Direct update: asked by hand, developer mode still on
   if manual update-direct && [ -e "$STATE/dev-mode" ]; then direct=1 is_manual=1; fi

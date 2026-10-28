@@ -14,11 +14,11 @@ Item {
         Repeater {
             model: [
                 { name: "Jellyfin", color: "#1565c0", steps: [
-                    "System → Jellyfin: choose your server, then approve the code in Jellyfin (user menu, Quick Connect).",
+                    "Settings → Accounts and libraries → Jellyfin: choose your server, then approve the code in Jellyfin (user menu, Quick Connect).",
                     "Or in the companion app (QR code below): Settings → Jellyfin, the server's address.",
                     "The Jellyfin tab then shows here, with your library." ] },
                 { name: "Plex", color: "#e5a00d", steps: [
-                    "System → Plex: sign in with your Plex account, with a code to type on plex.tv/link.",
+                    "Settings → Accounts and libraries → Plex: sign in with your Plex account, with a code to type on plex.tv/link.",
                     "Or in the companion app (QR code below): Settings → Plex, a server's address.",
                     "The Plex tab then shows here, with your library." ] }]
             Rectangle {
