@@ -1005,7 +1005,7 @@ again") and Settings → Updates has one row whose action follows the state ("Ch
 companion app: one button, same states. Accepting runs stream-box-system-update.service directly (no update.sh any
 more) with the update-manual marker: applied at once when nothing plays, otherwise it waits and asks.
 Developer mode updates as any box. Direct update, by hand only and in developer mode ("Direct
-update (source)" in Settings → Advanced and the companion app: `POST /api/update {direct: true}`, system.start_update leaves
+update (source)" in Settings → Updates (developer mode) and the companion app: `POST /api/update {direct: true}`, system.start_update leaves
 ~/.local/state/stream-box/update-direct, used up by system-update within 2 h, applied at once like "Update now"), any
 box: the git path below, from main
 (root clone `fetch origin main`, media's code fast-forwarded to it) instead of the latest release, no system image;
