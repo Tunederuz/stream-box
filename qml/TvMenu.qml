@@ -884,7 +884,7 @@ Item {
                 { label: updateWaiting() ? (l.new ? tr("Restart to apply version {version}", { version: l.new }) : tr("Restart to apply the update"))
                        : sys && sys.offered ? tr("Install version {version}", { version: sys.offered }) : tr("Check for updates"),
                   visible: !!sys, value: updateVersion(),
-                  // (a direct update shows on its own row, Settings → Advanced)
+                  // (a direct update shows on its own row, below)
                   hint: !sys ? undefined : sys.running && !sys.direct ? tr("Update in progress…") : sys.checking ? tr("Checking…")
                       : l && !l.ok && l.kind !== "direct" ? tr("Failed: {date}", { date: frDate(l.date) })
                       : sys.offered ? tr("Downloaded and installed next to the running system, then the box restarts")
@@ -897,6 +897,9 @@ Item {
                   } },
                 { label: tr("Update from a USB stick"), visible: !!(localUpd && localUpd.available), value: localUpdValue(),
                   hint: tr("A release's image (stream-box.raw.xz), without the Internet"), ok: function () { localUpdateMenu() } },
+                { label: tr("Direct update (source)"), visible: !!(dev && dev.enabled), value: directValue(),
+                  hint: tr("Developer mode: the code and system files of the main branch, not the system"),
+                  ok: function () { if (!(health && health.update && health.update.system && health.update.system.running)) updateAct("update", { direct: true }, function (u) { u.system.running = true; u.system.direct = true }) } },
             ]
         case "backup":
             return [
@@ -939,16 +942,14 @@ Item {
                               call("POST", "/api/dev", { enabled: true }, function () { loadSsh() }) } },
                           { label: tr("Cancel"), ok: function () {} }])
                   } },
-                // Dependencies (update.sh: yt-dlp, streamlink…): every day by themselves, without a word
+                // Dependencies (update.sh: yt-dlp, streamlink…): every day by themselves, without a word (the direct
+                // update of developer mode is in Updates, with its own status)
                 { label: tr("Update dependencies"),
                   value: health && health.update ? (health.update.running ? tr("In progress…")
                        : health.update.last && !health.update.last.ok ? tr("failed") : "") : "",
                   hint: tr("yt-dlp, streamlink…: updated by themselves every day")
                       + (health && health.update && health.update.last ? "  ·  " + tr("Last: {date}", { date: frDate(health.update.last.date) }) : ""),
                   ok: function () { if (!(health && health.update && health.update.running)) updateAct("update_deps", {}, function (u) { u.running = true }) } },
-                { label: tr("Direct update (main)"), visible: !!(dev && dev.enabled), value: directValue(),
-                  hint: tr("Developer mode: the code and system files of the main branch, not the system"),
-                  ok: function () { if (!(health && health.update && health.update.system && health.update.system.running)) updateAct("update", { direct: true }, function (u) { u.system.running = true; u.system.direct = true }) } },
             ]
         }
         return []
@@ -991,7 +992,7 @@ Item {
         if (install && install.available) call("GET", "/api/install", undefined, function (d) { if (d) install = d })
         if (localUpd && localUpd.available) call("GET", "/api/local_update", undefined, function (d) { if (d) localUpd = d })
     }
-    // "Direct update (main)": in progress, or the last one (version, failed, restart to finish)
+    // "Direct update (source)": in progress, or the last one (version, failed, restart to finish)
     function directValue() {
         var s = health && health.update && health.update.system
         var l = s && s.last

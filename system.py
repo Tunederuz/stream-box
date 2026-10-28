@@ -243,7 +243,7 @@ def system_update():
     pending_new = last_.get("new") if last_.get("restart") == "pending" else ""
     available = last_.get("available") or ""
     offered = available if available and available not in (have, pending_new) and not running else ""
-    return {"running": running, "direct": running and last_.get("run") == "direct",   # direct: "Direct update (main)"
+    return {"running": running, "direct": running and last_.get("run") == "direct",   # direct: "Direct update (source)"
             "checking": unit_state("stream-box-update-check.service").get("ActiveState") == "activating",
             "last": last, "version": version, "offered": offered}
 
@@ -305,7 +305,7 @@ def start_root(unit):
 
 def start_update(direct=False):
     """Install the newer release (the user accepted: TV menu question, Settings → Updates, companion app): marked as
-    started by hand, so that system-update applies it at once when nothing plays. direct ("Direct update (main)",
+    started by hand, so that system-update applies it at once when nothing plays. direct ("Direct update (source)",
     developer mode only): the code and system files of the main branch, not the system"""
     if direct and not dev_status()["enabled"]:
         raise ValueError(tr("Direct update: developer mode only."))
