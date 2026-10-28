@@ -1,6 +1,6 @@
 // TV home screen in QML (Qt app): shown when stream-box.lua decides so (box.ambientOn: channel offline, empty list,
-// home mode). "Aurora" background of drifting blurry blobs, clock, date, drawn weather, upcoming lives (Twitch
-// schedules from remote.py), live streamers, status message, QR code of the companion app.
+// home mode). "Aurora" background of drifting blurry blobs, clock, date, drawn weather, battery (if any), upcoming
+// lives (Twitch schedules from remote.py), live streamers, status message, QR code of the companion app.
 // All the content drifts slowly, so as not to burn in the screen. Coordinates in 1920x1080.
 import QtQuick
 import QtQuick.Effects
@@ -94,6 +94,9 @@ Item {
             NumberAnimation { to: 24; duration: 660000; easing.type: Easing.InOutSine }
             NumberAnimation { to: -24; duration: 660000; easing.type: Easing.InOutSine }
         }
+
+        // Built-in battery (Steam Deck, laptop), top right; nothing on a mini PC
+        BatteryIcon { anchors.right: parent.right; anchors.rightMargin: 90; y: 70; size: 30 }
 
         Column {
             anchors.horizontalCenter: parent.horizontalCenter

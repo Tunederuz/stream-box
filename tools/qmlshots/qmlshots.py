@@ -152,6 +152,7 @@ def shoot(qml_dir, out):
         ambientChanged = Signal()
         videoActiveChanged = Signal()
         homeChanged = Signal()
+        batteryChanged = Signal()
 
         def __init__(self):
             super().__init__()
@@ -164,6 +165,8 @@ def shoot(qml_dir, out):
         ambientOn = Property(bool, lambda self: False, notify=homeChanged)
         statusText = Property(str, lambda self: "", notify=homeChanged)
         qrMode = Property(str, lambda self: "always", notify=homeChanged)
+        # a handheld (Steam Deck): the battery shows in the menu header and on the home screen
+        battery = Property(str, lambda self: json.dumps({"percent": 72, "charging": False}), notify=batteryChanged)
         videoActive = Property(bool, lambda self: self._video, notify=videoActiveChanged)
 
         def set_video(self, v):

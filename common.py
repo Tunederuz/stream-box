@@ -11,6 +11,34 @@ COOKIES_DIR = os.path.expanduser("~/.config/stream-box")
 PUBLISH_EVERY = 10   # seconds between two sends of already known data to mpv: a restarted mpv gets them quickly
 
 
+def battery():
+    """Built-in battery (laptop, handheld such as the Steam Deck): {percent, charging}, None without one. Batteries of
+    remotes, controllers and headsets (scope "Device") are left out."""
+    base = "/sys/class/power_supply"
+
+    def read(name, item):
+        try:
+            with open(f"{base}/{name}/{item}") as f:
+                return f.read().strip()
+        except OSError:
+            return ""
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        return None
+    found, plugged = None, False
+    for n in names:
+        kind = read(n, "type")
+        if kind == "Battery" and read(n, "scope") != "Device" and found is None and read(n, "capacity").isdigit():
+            found = {"percent": int(read(n, "capacity")), "status": read(n, "status")}
+        elif kind in ("Mains", "USB", "USB_PD", "USB_C") and read(n, "online") == "1":
+            plugged = True
+    if not found:
+        return None
+    # (plugged in and full: "Full" or "Not charging", depending on the device)
+    return {"percent": found["percent"], "charging": found["status"] == "Charging" or plugged}
+
+
 def mpv(*commands):
     """Sends commands to mpv; returns the data field of each reply, in order."""
     with socket.socket(socket.AF_UNIX) as s:
