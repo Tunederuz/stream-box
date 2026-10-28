@@ -964,11 +964,12 @@ Item {
         for (var i = 0; i < rows.length; i++) if (!rows[i].header) out.push(i)
         return out
     }
-    // System version: the running one (A/B: os-release; restarted onto a new one since), or the files installed (box
-    // from before A/B); a direct update's version (<release>+<commit>) shows on its own row (directValue)
+    // Version the box runs: after a direct update, its files' (<release>+<commit> · dev); otherwise the running system
+    // (A/B: os-release, restarted onto a new one since) or the files installed (box from before A/B)
     function updateVersion() {
         var s = health && health.update && health.update.system
         var l = s && s.last
+        if (l && l.kind === "direct" && l.ok) return l.version + "  ·  " + tr("dev")
         if (s && s.version) return "v" + s.version
         return l && l.kind !== "direct" ? l.version || "" : ""
     }
@@ -992,14 +993,14 @@ Item {
         if (install && install.available) call("GET", "/api/install", undefined, function (d) { if (d) install = d })
         if (localUpd && localUpd.available) call("GET", "/api/local_update", undefined, function (d) { if (d) localUpd = d })
     }
-    // "Direct update (source)": in progress, or the last one (version, failed, restart to finish)
+    // "Direct update (source)": in progress, failed, or waiting for a restart (its version shows on the Updates row)
     function directValue() {
         var s = health && health.update && health.update.system
         var l = s && s.last
         if (s && s.direct) return tr("In progress…")
         if (!l || l.kind !== "direct") return ""
         if (!l.ok) return tr("failed")
-        return l.version + (l.restart === "pending" ? "  ·  " + tr("restart to finish") : "")
+        return l.restart === "pending" ? tr("restart to finish") : ""
     }
     // Installed, waiting for "Restart now" (a plain restart keeps the running A/B version: its boot is pinned)
     function updateWaiting() {
