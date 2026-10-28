@@ -4,9 +4,14 @@
 #
 # A/B box (installed with two system partitions, the running one labelled stream-box_<version>): the whole system of
 # the latest release through systemd-sysupdate (/usr/lib/sysupdate.d: signed, into the slot not in use, its UKI with 3
-# tries), then a restart onto it when nothing plays ("restart to finish" otherwise; stream-box-boot-check and
-# systemd-boot fall back to the previous version if it doesn't work). A box running from a USB drive (one slot) gets
-# nothing: install it on the PC.
+# tries; stream-box-boot-check and systemd-boot fall back to the previous version if it doesn't work). A box running
+# from a USB drive (one slot) gets nothing: install it on the PC.
+#
+# Applying (restarting onto the new system, or the session for the files): never by itself on an automatic run (the
+# weekly update, possibly caught up when the box is turned on): the boot stays pinned on the running version (bootctl
+# set-default) and the TV menu asks at each start and wake-up ("restart to apply?", apply-update). Started by hand
+# ("Update now": remote.py leaves ~/.local/state/stream-box/update-manual), it applies at once when nothing plays.
+#   system-update state   at boot (stream-box-update-state.service): whether an update is still waiting
 #
 # Developer mode (/var/lib/stream-box/dev-mode), on any box: direct update, the files and not the system: the code and
 # the system files below, from the main branch instead of the latest release; version shown as <system>+<commit> (dev).
@@ -41,9 +46,37 @@ PY
 }
 trap 'report 0 "failed: $step"' ERR
 
+manual() {   # started by "Update now" within the last 2 h (the marker is used up)
+  local mark=/home/media/.local/state/stream-box/update-manual
+  [ -f "$mark" ] || return 1
+  local age=$(( $(date +%s) - $(stat -c %Y "$mark") ))
+  rm -f "$mark"
+  [ "$age" -lt 7200 ]
+}
+
+# Only the fields "waiting" (state at boot: the last update's date and result stay)
+patch() {   # restart new
+  python3 - "$STATE/system-update.json" "$1" "$2" << 'PY'
+import json, os, sys
+path, restart, new = sys.argv[1:]
+try:
+    d = json.load(open(path))
+except (OSError, ValueError):
+    d = {"ok": True, "message": "", "kind": "ab"}
+d.update(restart=restart, new=new)
+with open(path + ".tmp", "w") as f:
+    json.dump(d, f)
+os.chmod(path + ".tmp", 0o644)
+os.replace(path + ".tmp", path)
+PY
+}
+
 nothing_plays() {   # the box's server says the home screen is shown
   [ "$(curl -s -m 5 http://127.0.0.1:8080/api/state | python3 -c 'import json, sys; print(json.load(sys.stdin).get("mode", ""))' 2> /dev/null)" = home ]
 }
+
+is_manual=""
+if [ "${1:-}" != state ] && manual; then is_manual=1; fi
 
 # Layout: system partitions (GPT type root-x86-64) on the disk of /, label of the running one
 root_dev=$(findmnt -no SOURCE / | sed 's/\[.*//')
@@ -67,8 +100,10 @@ if [ -z "$direct" ] && [[ "$root_label" == stream-box_* ]]; then
     report 1 "on a USB drive: install the box on the PC to get system updates"
     exit 0
   fi
-  step=download
-  /usr/lib/systemd/systemd-sysupdate --no-pager update
+  if [ "${1:-}" != state ]; then
+    step=download
+    /usr/lib/systemd/systemd-sysupdate --no-pager update
+  fi
   # Newer system ready: the newest UKI in the ESP above the running version and not given up (+0-…: 3 failed tries,
   # systemd-boot went back to this one; it is not offered again until a newer release)
   step=restart
@@ -84,15 +119,25 @@ if [ -z "$direct" ] && [[ "$root_label" == stream-box_* ]]; then
         done | sort -V | tail -n 1)   # (if, not &&: with pipefail a last false test would fail the whole substitution)
   if [ -n "$new" ]; then
     code=image
-    if nothing_plays; then
+    if [ -n "$is_manual" ] && nothing_plays; then
       restart=now
       report 1 ""
+      bootctl set-default "" 2> /dev/null || true   # the newest version boots
       systemctl reboot
       exit 0
     fi
+    # Waiting for the user: the boot stays on the running version until apply-update
+    bootctl set-default "stream-box_$running.efi" > /dev/null 2>&1 || true
     restart=pending
+  else
+    bootctl set-default "" 2> /dev/null || true
   fi
-  report 1 ""
+  if [ "${1:-}" = state ]; then patch "$restart" "$new"; else report 1 ""; fi
+  exit 0
+fi
+
+if [ "${1:-}" = state ]; then   # files path: a boot applies the files, nothing waits
+  [ -f "$STATE/system-update.json" ] && patch no ""
   exit 0
 fi
 
@@ -160,7 +205,7 @@ echo "code: $code, system files changed: $files"
 
 step=restart
 if [ "$code" = updated ] || [ "$files" -gt 0 ]; then
-  if nothing_plays; then
+  if [ -n "$is_manual" ] && nothing_plays; then
     restart=now
     report 1 ""
     rm -f /run/greetd.run

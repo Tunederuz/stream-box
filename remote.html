@@ -1582,7 +1582,9 @@ async function refreshHealth() {
       tile(tr("Processor"), h.cpu != null ? tr("{n}%", { n: Math.round(h.cpu) }) : "…",
            tr("load {load} · {cores} cores", { load: h.load.toFixed(1).replace(".", LANG === "fr" ? "," : "."), cores: h.cores }), h.cpu >= 85 ? "warn" : ""),
       tile(tr("Memory"), bytes(used), tr("of {total}", { total: bytes(h.memory.total) }), h.memory.available < 5e8 ? "warn" : ""),
-      tile(tr("Disk"), tr("{n} free", { n: bytes(h.disk.free) }), tr("of {total}", { total: bytes(h.disk.total) }), h.disk.free < 5e9 ? "warn" : ""),
+      tile(tr("Disk"), tr("{n} free", { n: bytes(h.disk.free) }),
+           h.disk.system ? tr("of {total} · system {n} free", { total: bytes(h.disk.total), n: bytes(h.disk.system.free) })
+                         : tr("of {total}", { total: bytes(h.disk.total) }), h.disk.free < 2e9 ? "warn" : ""),
       tile(tr("Network"), `↓ ${bits(h.network.rx)}`, h.network.speed > 0
         ? tr("↑ {tx} · {iface} at {speed}", { tx: bits(h.network.tx), iface: h.network.iface || "?",
             speed: h.network.speed >= 1000 ? h.network.speed / 1000 + " Gbit/s" : h.network.speed + " Mbit/s" })

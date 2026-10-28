@@ -1,0 +1,8 @@
+// Stream Box: media applies an update waiting for the user (stream-box-apply-update.service, nothing else): the
+// TV menu's "Restart now" at start or wake-up
+polkit.addRule(function (action, subject) {
+    if (subject.user == "media" && action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("verb") == "start" && action.lookup("unit") == "stream-box-apply-update.service") {
+        return polkit.Result.YES;
+    }
+});

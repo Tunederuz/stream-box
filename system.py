@@ -33,15 +33,20 @@ def hold_power_key():
         print(f"remote.py: power button not held ({e})", flush=True)
 
 
+wakes = 0   # wake-ups since boot: the TV menu asks again about a waiting update after each (update_prompt)
+
+
 def resume_loop():
     """Wake-up after sleep: the connections (streamlink, video stream) are dead and the picture would stay
     frozen. logind signals PrepareForSleep(false) on wake-up (followed by gdbus); mpv then restarts playback."""
+    global wakes
     while True:
         try:
             mon = subprocess.Popen(["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1",
                                     "--object-path", "/org/freedesktop/login1"], stdout=subprocess.PIPE, text=True)
             for line in mon.stdout:
                 if "PrepareForSleep (false" in line:
+                    wakes += 1
                     # Bluetooth dongle (mostly CSR clones) stuck on wake-up: the remote stays "connected" without
                     # its keys arriving. Restart it; the remote reconnects on the first key press
                     for args in (["power", "off"], ["power", "on"]):
@@ -233,7 +238,9 @@ def system_update():
 def health():
     with open("/proc/meminfo") as f:
         mem = {k: int(v.split()[0]) for k, v in (l.split(":", 1) for l in f)}
-    disk = shutil.disk_usage(os.path.expanduser("~"))
+    # Disk: the data partition (settings, history, local update images) on an A/B box; the system partition aside
+    disk = shutil.disk_usage("/data" if os.path.ismount("/data") else os.path.expanduser("~"))
+    root = shutil.disk_usage("/")
     with open("/proc/uptime") as f:
         uptime = float(f.read().split()[0])
     iface = default_iface()
@@ -260,7 +267,9 @@ def health():
     return {
         "temps": temperatures(), "cpu": health_rates["cpu"], "load": os.getloadavg()[0], "cores": os.cpu_count(),
         "memory": {"total": mem.get("MemTotal", 0) * 1024, "available": mem.get("MemAvailable", 0) * 1024},
-        "disk": {"total": disk.total, "free": disk.free}, "uptime": uptime,
+        "disk": {"total": disk.total, "free": disk.free,
+                 "system": {"total": root.total, "free": root.free} if os.path.ismount("/data") else None},
+        "uptime": uptime,
         "network": {"iface": iface, "speed": read_int(f"/sys/class/net/{iface}/speed") if iface else None,
                     "rx": health_rates["rx"], "tx": health_rates["tx"]},
         "player": {"choice": settings.player_choice(), "running": "qt" if vo == "libmpv" else "mpv", "hwdec": hwdec,
@@ -271,5 +280,36 @@ def health():
     }
 
 
+UPDATE_MANUAL = os.path.expanduser("~/.local/state/stream-box/update-manual")
+
+
 def start_update():
+    """"Update now": marked as started by hand, so that system-update applies it at once (when nothing plays); the
+    weekly update never restarts by itself"""
+    os.makedirs(os.path.dirname(UPDATE_MANUAL), exist_ok=True)
+    with open(UPDATE_MANUAL, "w") as f:
+        f.write(str(time.time()))
     user_systemctl("start", "--no-block", "stream-box-update.service")
+
+
+def update_prompt():
+    """Update waiting for the user (system-update.json restart "pending", and for A/B not the running version):
+    {pending, id, new, kind}; id changes at each boot and wake-up, the TV menu asks once per id"""
+    s = system_update() or {}
+    last = s.get("last") or {}
+    pending = bool(last.get("ok") and last.get("restart") == "pending"
+                   and not (last.get("kind") == "ab" and last.get("new") == s.get("version")))
+    try:
+        with open("/proc/sys/kernel/random/boot_id") as f:
+            boot = f.read().strip()
+    except OSError:
+        boot = ""
+    return {"pending": pending, "id": f"{boot}:{wakes}", "new": last.get("new") or "", "kind": last.get("kind") or ""}
+
+
+def apply_update():
+    """"Restart now" of that question: restart onto the new system (A/B) or the session (files), as root"""
+    r = subprocess.run(["systemctl", "start", "--no-block", "stream-box-apply-update.service"],
+                       capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        raise ValueError((r.stderr or r.stdout).strip() or tr("Couldn't start the update."))

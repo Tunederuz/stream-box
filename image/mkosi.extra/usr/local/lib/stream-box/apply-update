@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Stream Box: applies an update that was waiting for the user (stream-box-apply-update.service, started by remote.py
+# when "Restart now" is chosen in the TV menu's question at start or wake-up; see system-update):
+#   A/B: the boot is no longer pinned on the running version, the box restarts onto the newest one (on trial:
+#        stream-box-boot-check and systemd-boot fall back to the previous one if it doesn't work)
+#   files (box from before A/B, developer mode): the session restarts with the new code
+set -euo pipefail
+STATUS=/var/lib/stream-box/system-update.json
+kind=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("kind", ""))' "$STATUS" 2> /dev/null || true)
+python3 - "$STATUS" << 'PY'
+import json, os, sys
+path = sys.argv[1]
+try:
+    d = json.load(open(path))
+except (OSError, ValueError):
+    sys.exit(0)
+d["restart"] = "now"
+with open(path + ".tmp", "w") as f:
+    json.dump(d, f)
+os.chmod(path + ".tmp", 0o644)
+os.replace(path + ".tmp", path)
+PY
+if [ "$kind" = ab ]; then
+  bootctl set-default "" 2> /dev/null || true
+  systemctl reboot
+else
+  rm -f /run/greetd.run
+  systemctl restart greetd
+fi

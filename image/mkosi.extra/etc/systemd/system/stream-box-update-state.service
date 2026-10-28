@@ -1,0 +1,14 @@
+# Stream Box: at boot, whether an update still waits for the user (system-update state): a newer system installed and
+# not given up (A/B), nothing for the files (the boot applied them). The TV menu asks at each start and wake-up.
+[Unit]
+Description=Stream Box: waiting update
+After=local-fs.target
+Before=greetd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/stream-box/system-update state
+
+[Install]
+WantedBy=multi-user.target

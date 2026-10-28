@@ -6,6 +6,11 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+### Changed
+- Automatic updates no longer restart the box by themselves: at each start and wake-up, the TV menu offers to restart
+  onto the waiting version ("Later" asks again next time). "Update now" still applies at once when nothing plays.
+- System status: the Disk tile shows the space left for your data (the system partition aside).
+
 ### Added
 - Local system update, without the Internet: a release's image (stream-box.raw.xz with its SHA256SUMS and
   SHA256SUMS.gpg) from a USB stick (System menu) or sent from the companion app (Settings → System). Unsigned images

@@ -1,0 +1,8 @@
+# Stream Box: applies an update waiting for the user (see /usr/local/lib/stream-box/apply-update). Started by remote.py
+# (media, allowed by /etc/polkit-1/rules.d/58-stream-box-apply-update.rules).
+[Unit]
+Description=Stream Box: apply the waiting update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/stream-box/apply-update

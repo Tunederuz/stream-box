@@ -4,7 +4,7 @@
 set -euo pipefail
 systemctl enable greetd.service NetworkManager.service bluetooth.service systemd-timesyncd.service \
   stream-box-bt-disconnect.service stream-box-flash-mode.service stream-box-persist.service stream-box-restore.service \
-  stream-box-boot-check.service
+  stream-box-boot-check.service stream-box-update-state.service
 # SSH off by default: it is enabled from the System menu ("SSH access", "Developer mode"), password shown
 if [ -f /etc/ssh/stream-box-test-keys ]; then   # test image: SSH with the test key, for VM tests
   systemctl enable sshd.service

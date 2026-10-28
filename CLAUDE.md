@@ -976,6 +976,17 @@ not offered again until a newer release): it reboots onto it when /api/state say
 ("restart to finish"). system-update.json: `kind: ab`, `version` = running, `new` = the version waiting. On a USB drive
 (one slot): nothing, message "install the box on the PC". Boxes from before A/B (one system partition, label
 root-x86-64) keep the git path. Tested in QEMU (see the A/B sections).
+Applying an update: never by itself on an automatic run (the weekly update, possibly caught up when the box is turned
+on). A/B: system-update installs the new system, then pins the boot on the running version (`bootctl set-default
+stream-box_<running>.efi`) and writes `restart: pending`; files path: no session restart, `pending`. "Update now"
+(system.start_update leaves ~/.local/state/stream-box/update-manual, used up by system-update within 2 h) applies at
+once when nothing plays (`bootctl set-default ""` and reboot, or session restart). At each boot,
+stream-box-update-state.service (before greetd) runs `system-update state`: A/B, recomputes `new` (newest UKI above
+the running one, not given up) and the pin; files, `pending` cleared (the boot applied them). `GET /api/update_prompt`
+{pending, id = boot_id:wake-ups (system.resume_loop counts them), new, kind}: the TV menu asks once per id when it
+opens ("Version X is ready. Restart now to apply it?" / "Later"); "Restart now" → `POST /api/apply_update` →
+stream-box-apply-update.service (polkit rule 58, apply-update: A/B unpin and reboot, files session restart). Disk tile
+(TV, companion app): the data partition on an A/B box, the system partition (5 GB slot) aside (`health.disk.system`).
 Local update (A/B boxes, without the Internet): the full disk image of a release (stream-box.raw.xz, the one used to
 install) with its SHA256SUMS and SHA256SUMS.gpg; unsigned: developer mode only. From a USB stick (TV System menu
 "Update from a USB stick", images at the root of the drive, listed once per drive like the backups) or sent from the

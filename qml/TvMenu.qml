@@ -570,7 +570,21 @@ Item {
         refresh()
         call("GET", "/api/display", undefined, function (d) { if (d && d.modes) display = d })
         call("GET", "/api/account", undefined, function (d) { account = d })
+        askUpdate()
         idleClose.restart()
+    }
+    // Update waiting for the user (installed by the weekly update, which never restarts by itself): asked once per
+    // start and per wake-up (/api/update_prompt id), at the menu's first opening; "Later" asks again next time
+    property string updateAsked: ""
+    function askUpdate() {
+        call("GET", "/api/update_prompt", undefined, function (d) {
+            if (!d || !d.pending || d.id === updateAsked || modal || !isOpen) return
+            updateAsked = d.id
+            openModal(d.kind === "ab" ? tr("Version {version} is ready. Restart now to apply it?", { version: d.new })
+                                      : tr("An update of the box is ready. Restart now to apply it?"), [
+                { label: tr("↻  Restart now"), ok: function () { act("apply_update"); close() } },
+                { label: tr("Later"), ok: function () {} }])
+        })
     }
     function close() {
         if (!isOpen) return
@@ -872,7 +886,10 @@ Item {
             [tr("Processor"), h.cpu !== null ? Math.round(h.cpu) + " %" : "…", tr("load {load} · {n} cores", { load: dec1(h.load), n: h.cores }),
              h.cpu >= 85 ? "warn" : ""],
             [tr("Memory"), bytes(h.memory.total - h.memory.available), tr("of {total}", { total: bytes(h.memory.total) }), h.memory.available < 5e8 ? "warn" : ""],
-            [tr("Disk"), tr("{n} free", { n: bytes(h.disk.free) }), tr("of {total}", { total: bytes(h.disk.total) }), h.disk.free < 5e9 ? "warn" : ""],
+            // A/B box: the data partition (settings, history, update images), the system partition (5 GB slot) aside
+            [tr("Disk"), tr("{n} free", { n: bytes(h.disk.free) }),
+             h.disk.system ? tr("of {total} · system {n} free", { total: bytes(h.disk.total), n: bytes(h.disk.system.free) })
+                           : tr("of {total}", { total: bytes(h.disk.total) }), h.disk.free < 2e9 ? "warn" : ""],
             [tr("Network"), "↓ " + bits(net.rx), "↑ " + bits(net.tx) + (net.speed > 0 ? " · " + tr("link {speed}", { speed: net.speed >= 1000 ? net.speed / 1000 + " Gbit/s" : net.speed + " Mbit/s" }) : ""), ""],
             [tr("Up for"), since(h.uptime), "MQTT " + ok(h.services.mqtt) + " · " + tr("YouTube tokens {ok}", { ok: ok(h.services.youtube_tokens) }),
              h.services.mqtt !== "active" || h.services.youtube_tokens !== "active" ? "warn" : ""],
