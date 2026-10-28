@@ -1700,6 +1700,7 @@ async function refreshHealth() {
       // the box's system (releases): the running version, or the one found by the daily check
       tile(tr("Updates"), !u.system ? "–" : u.system.running && !u.system.direct ? tr("In progress…")
              : u.system.offered ? tr("v{version} available", { version: u.system.offered })
+             : (u.system.last || {}).kind === "direct" && u.system.last.ok ? u.system.last.version + " · " + tr("dev")
              : u.system.version ? "v" + u.system.version : (u.system.last || {}).version || "–",
            u.system && u.system.last && u.system.last.checked ? tr("checked {date}", { date: frDate(u.system.last.checked) }) : "",
            u.system && u.system.offered ? "warn" : u.system && u.system.last && !u.system.last.ok ? "bad" : "", true),
