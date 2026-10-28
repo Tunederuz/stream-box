@@ -735,6 +735,9 @@ Item {
         var l = s && s.last
         if (!l) return s && s.version ? "v" + s.version : ""
         if (!l.ok) return tr("System: failed")
+        // Developer mode: direct update of the files from main (system version + commit)
+        if (l.kind === "direct")
+            return l.version + "  ·  " + tr("dev") + (l.restart === "pending" ? "  ·  " + tr("restart to finish") : "")
         // A/B: the running version (restarted onto the new one since); waiting only while it is not the running one
         var running = s.version ? "v" + s.version : (l.version || "")
         var waiting = l.restart === "pending" && !(l.kind === "ab" && l.new === s.version)

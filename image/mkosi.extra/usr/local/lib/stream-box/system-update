@@ -8,6 +8,9 @@
 # systemd-boot fall back to the previous version if it doesn't work). A box running from a USB drive (one slot) gets
 # nothing: install it on the PC.
 #
+# Developer mode (/var/lib/stream-box/dev-mode), on any box: direct update, the files and not the system: the code and
+# the system files below, from the main branch instead of the latest release; version shown as <system>+<commit> (dev).
+#
 # Box installed before A/B (one system partition):
 #   - its own copy of the repository, owned by root (/var/lib/stream-box/src): what is installed as root never comes
 #     from media's copy, which media can change;
@@ -53,7 +56,11 @@ for part in /sys/block/"$disk"/"$disk"*; do
   if [ "${t,,}" = 4f68bce3-e8cd-4db1-96e7-fbcaf984b709 ]; then slots=$((slots + 1)); fi
 done
 
-if [[ "$root_label" == stream-box_* ]]; then
+# Developer mode: direct update (below, from main), not the A/B system
+direct=""
+if [ -e "$STATE/dev-mode" ]; then direct=1; fi
+
+if [ -z "$direct" ] && [[ "$root_label" == stream-box_* ]]; then
   kind=ab
   tag=v$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")
   if [ "$slots" -lt 2 ]; then
@@ -96,10 +103,21 @@ else
   rm -rf "$SRC"
   git clone -q "$REPO" "$SRC"
 fi
-tag=$(git -C "$SRC" tag -l 'v*' --sort=-v:refname | head -n 1)
-[ -n "$tag" ] || { report 0 "no release yet"; exit 0; }
-git -C "$SRC" checkout -q --force "refs/tags/$tag"
-echo "release $tag"
+if [ -n "$direct" ]; then   # the main branch's last commit; version: the system's (or latest release) + that commit
+  git -C "$SRC" fetch -q --force origin main
+  ref=FETCH_HEAD
+  base=$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")
+  base=${base:+v$base}
+  base=${base:-$(git -C "$SRC" tag -l 'v*' --sort=-v:refname | head -n 1)}
+  tag="$base+$(git -C "$SRC" rev-parse --short=7 FETCH_HEAD)"
+  kind=direct
+else
+  tag=$(git -C "$SRC" tag -l 'v*' --sort=-v:refname | head -n 1)
+  [ -n "$tag" ] || { report 0 "no release yet"; exit 0; }
+  ref=refs/tags/$tag
+fi
+git -C "$SRC" checkout -q --force "$ref"
+echo "files from $tag"
 
 step="system files"
 extra=$SRC/image/mkosi.extra
@@ -112,7 +130,7 @@ while read -r f; do
     echo "installed $f"
   fi
 done < "$wanted"
-if [ -f "$FILES" ]; then   # dropped by this release
+if [ -f "$FILES" ]; then   # dropped by this version
   while read -r f; do
     rm -f "$f"
     files=$((files + 1))
@@ -127,14 +145,15 @@ for unit in /etc/systemd/system/stream-box-*.service /etc/systemd/system/stream-
 done
 
 step=code
-want=$(git -C "$SRC" rev-parse "refs/tags/$tag^{commit}")
+want=$(git -C "$SRC" rev-parse "$ref^{commit}")
 if [ "$(runuser -u media -- git -C "$BOX" rev-parse HEAD)" != "$want" ]; then
   runuser -u media -- git -C "$BOX" fetch -q --tags --force origin   # tags moved upstream (page-v1) are taken as they are
+  runuser -u media -- git -C "$BOX" fetch -q origin main
   if runuser -u media -- git -C "$BOX" merge-base --is-ancestor HEAD "$want"; then
     runuser -u media -- git -C "$BOX" merge -q --ff-only "$want"
     code=updated
   else
-    code=ahead   # newer than the release (main): kept
+    code=ahead   # newer than the release (main), or local commits: kept
   fi
 fi
 echo "code: $code, system files changed: $files"

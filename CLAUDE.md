@@ -965,6 +965,10 @@ partition (the USB drive left plugged in after installing the same version) make
 the stick after installing.
 
 ### System update (image)
+Developer mode (/var/lib/stream-box/dev-mode), any box: direct update instead — the git path below, from main
+(root clone `fetch origin main`, media's code fast-forwarded to it) instead of the latest release, no system image;
+`kind: direct`, version `<IMAGE_VERSION or latest tag>+<commit>`, shown with "dev" on the TV and explained in the
+companion app ("the system itself is not updated").
 A/B box (step 3: the running system partition labelled `stream-box_*` and at least two root-x86-64 partitions on its
 disk): system-update runs `/usr/lib/systemd/systemd-sysupdate update` instead of the git path below, then looks in the
 ESP for the newest UKI above the running version that was not given up (`+0-…`: 3 failed tries, after a rollback it is

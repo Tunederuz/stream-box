@@ -1594,6 +1594,9 @@ async function refreshHealth() {
     const sys = u.system && u.system.last;   // system update (image): release installed
     // A/B box: version running, newer one installed in the other slot; older box: system files and code
     const sysText = !sys ? "" : !sys.ok ? tr("System: {error} ({date})", { error: sys.message, date: frDate(sys.date) })
+      : sys.kind === "direct" ? tr("Developer mode: the box's files from main, {version} ({date}), {files} system files changed; the system itself is not updated.",
+          { version: sys.version, date: frDate(sys.date), files: sys.files })
+          + " " + tr({ updated: "Code updated.", ahead: "Code newer than the release, kept." }[sys.code] || "Code up to date.")
       : sys.kind === "ab" ? tr("System: {version} ({date}).", { version: u.system.version ? "v" + u.system.version : sys.version, date: frDate(sys.date) })
           + (sys.message ? " " + tr(sys.message) : "")
           + (sys.new && sys.new !== u.system.version ? " " + tr("Version {new} installed.", { new: sys.new })

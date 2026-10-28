@@ -7,6 +7,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 ## [Unreleased]
 
 ### Added
+- Developer mode: "Update now" takes the box's files straight from the main branch (code and system files, not the
+  system), shown as <version>+<commit> · dev.
 - YouTube: a "Recommended for you" row, your YouTube home's videos (when the YouTube account is connected for the
   progress sync).
 
