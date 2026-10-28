@@ -283,7 +283,8 @@ when Twitch changes something. Update: `~/.local/share/streamlink-venv/bin/pip i
 
 ## Tests and checks
 - Workflow: work on a branch, merged into main through a pull request; `.github/workflows/checks.yml` runs on pull
-  requests to main and on main (not on a branch push alone). Before pushing, the parts of `tools/check.sh` that the
+  requests to main only (and by hand), testing the branch merged into main: squash-merge once they pass, after
+  bringing the branch up to date with main if main moved since. Before pushing, the parts of `tools/check.sh` that the
   change touches (`python` for Python, the page or the translations; `shell`; `qml`), all of them for a broad change.
 - `tools/check.sh` runs locally, in Docker, what `.github/workflows/checks.yml` runs: `python` (ruff with
   the pyflakes rules of `ruff.toml`, compile, `python3 -m unittest discover -s tests -t .`), `lua` (`tests/test_lua.py`

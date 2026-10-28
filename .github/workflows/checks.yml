@@ -1,11 +1,12 @@
-# Checks on pull requests to main and on main itself (work happens on branches, merged through a pull request: a
-# branch push alone runs nothing); tools/check.sh runs the same ones locally, in Docker
+# Checks on pull requests to main (work happens on branches, merged through a pull request: a branch push alone runs
+# nothing). They test the branch merged into main, so the squashed commit on main is what was tested, as long as main
+# did not move in between: a pull request is brought up to date with main before merging if it did. By hand: Actions →
+# checks → Run workflow. tools/check.sh runs the same ones locally, in Docker
 name: checks
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   python:
