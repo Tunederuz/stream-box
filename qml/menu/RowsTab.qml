@@ -24,7 +24,8 @@ Item {   // clip: what scrolls stops at the edge of the area (neither over the t
         delegate: SettingRow {
             width: rowsView.width
             readonly property real rel: y - rowsView.contentY
-            opacity: rel > -height / 2 && rel + height / 2 < rowsView.height ? 1 : 0
+            // a row cut at the top would cover the subtitle: hidden; at the bottom, shown while half of it is in view
+            opacity: rel > -4 && rel + height / 2 < rowsView.height ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 150 } }
             row: rowsView.rows[index] || {}
             pal: menu.pal
