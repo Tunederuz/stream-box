@@ -1,7 +1,7 @@
 """Stream Box: the box as a machine: sleep and shutdown, power key lock, wake-up, SSH access and developer mode,
 status (temperatures, processor, memory, network, services) and system updates. Standard library only.
 """
-import functools, json, os, shutil, socket, subprocess, time
+import functools, json, os, re, shutil, socket, subprocess, time, urllib.request
 
 import settings  # settings.py: chosen player
 from common import battery, lan_ip, mpv
@@ -320,17 +320,38 @@ def start_root(unit):
         raise ValueError((r.stderr or r.stdout).strip() or tr("Couldn't start the update."))
 
 
-def start_update(direct=False):
+BRANCHES_URL = "https://api.github.com/repos/Tunederuz/stream-box/branches?per_page=100"
+branches_cache = {"at": 0.0, "list": None}
+
+
+def branches():
+    """Branches of the repository for the direct update (GitHub API, no account: kept 10 min), main first; ["main"]
+    when GitHub is unreachable"""
+    if branches_cache["list"] is None or time.time() - branches_cache["at"] > 600:
+        try:
+            req = urllib.request.Request(BRANCHES_URL, headers={"Accept": "application/vnd.github+json"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                names = [b["name"] for b in json.load(r) if isinstance(b, dict) and b.get("name")]
+            branches_cache.update(at=time.time(), list=sorted(names, key=lambda n: (n != "main", n != "dev", n)))
+        except (OSError, ValueError, KeyError):
+            return branches_cache["list"] or ["main"]
+    return branches_cache["list"]
+
+
+def start_update(direct=False, branch="main"):
     """Install the newer release (the user accepted: TV menu question, Settings → Updates, companion app): marked as
     started by hand, so that system-update applies it at once when nothing plays. direct ("Direct update (source)",
-    developer mode only): the code and system files of the main branch, not the system"""
+    developer mode only): the code and system files of a branch (main by default), not the system"""
     if direct and not dev_status()["enabled"]:
         raise ValueError(tr("Direct update: developer mode only."))
+    branch = (branch or "main").strip()
+    if direct and not (re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}", branch) and ".." not in branch):
+        raise ValueError(tr("unknown branch"))
     if unit_state("stream-box-local-update.service").get("ActiveState") == "activating":   # (same slot; also locked)
         raise ValueError(tr("An update from a local image is running: try again once it is done."))
     os.makedirs(os.path.dirname(UPDATE_MANUAL), exist_ok=True)
     with open(UPDATE_DIRECT if direct else UPDATE_MANUAL, "w") as f:
-        f.write(str(time.time()))
+        f.write(branch + "\n" if direct else str(time.time()))   # (direct: the branch, read by system-update)
     start_root("stream-box-system-update.service")
 
 

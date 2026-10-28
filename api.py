@@ -234,6 +234,8 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path.startswith("/api/qr?"):
                 text = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("text", [""])[0]
                 self.send(200, {"rows": ambient.qr_rows(text)})
+            elif self.path == "/api/branches":   # direct update: the repository's branches
+                self.send(200, {"branches": system.branches()})
             elif self.path == "/api/account":
                 with twitch.account_lock:
                     self.send(200, dict(twitch.account))
