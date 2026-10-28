@@ -542,28 +542,23 @@ cache, `youtube:lang=fr`, otherwise titles are translated into English): videos,
 request; UC… id, subscribers, picture, `saved`), playlists excluded. `GET /api/youtube_channel?id=UC…`: latest videos
 of a channel found, even outside the list. Few requests: YouTube has already rate-limited
 the box's IP address.
-YouTube account ("Subscriptions" row, at the top of the channel rows): a Google app of your own (console.cloud.google.com,
-YouTube Data API v3, External audience published, otherwise tokens valid for 7 days, client "TVs and Limited Input
-devices"), authorization by code on google.com/device, `youtube.readonly` scope. `youtube-app.json` (client_id,
-client_secret), `youtube-token.json`, `youtube-subs.json` (subscriptions reread once a day), as 600 in
-`~/.config/stream-box`. Everything goes through googleapis.com (quota 10,000 units per day), nothing through youtube.com:
-`subscriptions` (1 unit per 50), then per channel `playlistItems` on the `UULF` playlist + id without "UC" (videos without
-Shorts or live streams; `UU` as fallback), 4 latest, 8 in parallel; `videos` for durations, views and upcoming live streams
-(excluded), 60 videos kept, durations and views reread at most every hour. Each channel at its own pace
-(`YT_CHANNEL_RHYTHM`, age of its latest video: < 2 d → every hour, < 7 d → 3 h, < 30 d → 12 h, otherwise 24 h),
-a round every minute (`yt_subfeed_loop`, 16 in parallel); results in `youtube-subfeed.json` (and the day's units,
-quota reset at midnight Pacific time, cap `YT_DAILY_BUDGET` 7000). 347 subscriptions: ~1,800
-units per day. `/api/youtube` serves the latest feed (the very first one, right after authorization, is awaited).
-`GET /api/youtube` → `subs` {configured, authorized, pending, channels, synced, videos}; `GET /api/youtube_account`;
-`POST /api/youtube_app|youtube_login|youtube_logout|youtube_sync`. TV: "Connect my account" card in the Subscriptions row
-as long as the box is not authorized → code popup and QR code (`ytAuth`, reread every 3 s); "YouTube
-account" row of the System menu (reread subscriptions, disconnect). Page: "YouTube account" section of Settings
-(app creation, code, status).
-Favorites: served by the subscription poll when the channel is part of it (`yt_fav_videos`, 15 videos per
-favorite instead of 4, durations and views, no request to youtube.com: `/api/youtube` in ~15 ms), otherwise RSS feeds
-read in parallel, failures kept for 10 min (`YT_FEED_RETRY`). The menu keeps `yt` from one opening to the next and
-rereads it in the background; the page only reads the list (`GET /api/youtube_channels`). Rows: cards created only for
-the targeted rows and their neighbors (`near`).
+YouTube account ("Subscriptions" row, at the top of the channel rows; "Recommended for you"; progress): the "YouTube TV
+app" access of `cast/youtube_tv.js` (below), signed in with a code on google.com/device: nothing to create (until
+0.4.x, a Google app of your own and the Data API: dropped, its app was a deal breaker for anyone else). Subscriptions:
+`GET /subscriptions` of youtube_tv.js, `/browse` FEsubscriptions with the TV client, its first tab ("All"; the others
+are one per channel) and the next page of its section list (`feedNext`), video tiles only (`TILE_CONTENT_TYPE_SHORTS`
+left out): channel from the tile's long-press menu (`browseId` UC…), date from "… ago" (`age`), duration and views
+from the overlay and the lines, lives ("… watching") first, then newest first, 60 at most, kept 15 min (`?fresh=1`:
+reread, "Reload my subscriptions"); `subscriptionVideos(pages)` is the pure parsing. `youtube.yt_subscriptions()` with
+the progress. `GET /api/youtube` → `subs` {authorized, pending, unavailable, videos}; `GET /api/youtube_account` →
+{authorized, pending, unavailable}; `POST /api/youtube_login|youtube_logout|youtube_sync`. TV: "Connect my account"
+card in the Subscriptions row as long as the box is not connected → code popup and QR code (`ytAuth`, reread every
+3 s); "YouTube account" row of Settings → Accounts and libraries (reload subscriptions, disconnect). Page: "YouTube
+account" section of Settings (code, status). Video title and duration (`yt_meta`: a video cast from the YouTube app,
+resume at the account's percentage): `GET /meta?id=` of youtube_tv.js (`/player`), oEmbed (title only) otherwise.
+Favorites: RSS feeds read in parallel, failures kept for 10 min (`YT_FEED_RETRY`). The menu keeps `yt` from one
+opening to the next and rereads it in the background; the page only reads the list (`GET /api/youtube_channels`).
+Rows: cards created only for the targeted rows and their neighbors (`near`).
 Recommended for you (first row under the search): the account's YouTube home through the "YouTube TV app" access
 (cast/youtube_tv.js `GET /recommended`: `/browse` FEwhat_to_watch with the TV client, first two pages, video tiles
 only — `tileRenderer` with `TILE_CONTENT_TYPE_VIDEO`: contentId, title, first line = channel, duration and views from
@@ -572,7 +567,7 @@ the pure parsing), `youtube.yt_tv_recommended`, `youtube_home()["recommended"]` 
 Authenticated requests as the TV app makes them, not yt-dlp extractions: no bot check. Row kind `rec` in the QML menu,
 "Recommended for you" in the quick menu; not in the companion app (it shows no video rows).
 Favorites (`youtube.json` list, one row per channel): Options on a subscription video → "Add to favorites"
-(channel taken from `youtube-subs.json`, no request to YouTube), "See latest videos", "Play the video".
+(channel from the video's UC… id, `yt_resolve`), "See latest videos", "Play the video".
 Page: YouTube block of the Remote tab (search, one chip per channel) and "YouTube favorites" in Settings.
 TV (YouTube tab of the QML menu): search row → on-screen keyboard (grid 10 wide, ↑↓←→ and OK, Back
 closes), then the channels found (round pictures; OK: "See latest videos", `preview` row right below, or
@@ -877,7 +872,7 @@ end of video → next in the queue; "Stop casting" → back to the stream (`/api
 `~/.config/stream-box/cast-receiver.json`. Started by start.sh if `cast/node_modules` exists; modules installed by
 `npm ci --omit=dev` in `cast/` (versions from `cast/package-lock.json`, ~40 MB) by install.sh, the image
 (mkosi.prepare.chroot) and update.sh (if the versions file has changed). Loading screen title: the app only
-gives the id, `yt_title` asks the Google API for it (connected account, 1 unit) or the public oEmbed.
+gives the id, `yt_meta` asks the YouTube account's TV access for it (`/meta`) or the public oEmbed.
 Tested: discovery, playback, pause, seek, volume, queue, pause from the remote, stop.
 
 ### Account YouTube progress (mixed)
@@ -885,17 +880,16 @@ Tested: discovery, playback, pause, seek, volume, queue, pause from the remote, 
 The official API gives neither history nor positions: `cast/youtube_tv.js` (same process as `cast.js`) signs in
 as the YouTube TV app (youtubei.js, TV client, code on google.com/device, Google shows "YouTube on TV";
 token `~/.config/stream-box/youtube-tv-token.json`), local server 127.0.0.1:8091 (`/status`, `/login`, `/logout`,
-`/progress`, `/report`). Mixed operation, tried before choosing:
+`/progress`, `/report`, `/recommended`, `/subscriptions`, `/meta`). Mixed operation, tried before choosing:
 - the box keeps its positions (exact resume on the TV) and reports them to YouTube (`history_loop`: every
   `YT_TV_PUSH` = 30 s, and on stop `final`) like a player: `/player` (tracking URL, cpn), `playback` ping, then
   `watchtime` (segment st→et, real time rt). Checked: the phone resumes to the second;
 - for a video watched elsewhere, or watched further elsewhere than on the box (the furthest position wins), the
   account's percentage (`percentDurationWatched` of the FEhistory cards, 8 pages ≈ 120 videos, and of FEsubscriptions,
   2 pages; kept for 10 min, reread only when the YouTube tab asks for it) gives the progress bar (`percent`) and the resume
-  (`play()`: percentage × duration, duration from the Google API). YouTube only updates this percentage with a 15 to 20 min
+  (`play()`: percentage × duration, duration from `/meta`). YouTube only updates this percentage with a 15 to 20 min
   delay, and only there: no other client (web, Android, iOS, /next) gives the exact position with this token.
-`/api/youtube_account` → `tv` {connected, pending, error}; `POST /api/youtube_tv_login|youtube_tv_logout`. TV:
-System → YouTube account → "Sync progress" (code popup, `ytAuth.tv`). Jellyfin: the server remains
+The same sign-in serves the subscriptions and the recommendations (see above). Jellyfin: the server remains
 the reference; Twitch replays: positions already reported to the Twitch account (`twitch_save_position`).
 
 ### Avoided loads (menu, page)

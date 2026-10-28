@@ -31,7 +31,6 @@ import playback  # playback.py: history loop
 import quickmenu # quickmenu.py: quick menu of the simplified version
 import system    # system.py: box status, wake-up, power key
 import twitch    # twitch.py: account, who is live, polls
-import youtube   # youtube.py: subscriptions feed
 from common import PORT
 
 twitch.write_cookies(twitch.read_token())   # at startup: cookies aligned with the saved token
@@ -43,7 +42,6 @@ threading.Thread(target=twitch.events_loop, daemon=True).start()
 threading.Thread(target=system.health_loop, daemon=True).start()
 threading.Thread(target=system.resume_loop, daemon=True).start()
 threading.Thread(target=netsetup.setup_loop, daemon=True).start()
-threading.Thread(target=youtube.yt_subfeed_loop, daemon=True).start()
 threading.Thread(target=quickmenu.listen_loop, daemon=True).start()
 system.hold_power_key()
 # Stopped (shutdown, session restart): the positions not written yet on a USB drive are written now

@@ -78,14 +78,15 @@ def set_number(body):
     mpv(["script-message", "streambox-set", body["key"], str(int(body.get("value", 0)))])
 
 
-def youtube_tv_login(body):
+def youtube_login(body):
+    """YouTube account (subscriptions, recommendations, progress): a code to type on google.com/device"""
     d = youtube.yt_tv("/login", {}, timeout=15)
     if not d or d.get("error"):
         raise ValueError(tr("Unable to connect: {error}",
                             error=(d or {}).get("error") or tr("cast service stopped")))
 
 
-def youtube_tv_logout(body):
+def youtube_logout(body):
     youtube.yt_tv("/logout", {})
     youtube.yt_tv_cache.update(at=0.0, data={})
 
@@ -227,12 +228,9 @@ ACTIONS = {
                                                       str(body.get("client_secret", ""))),
     "follows_login": lambda body: twitch.follows_start(),
     "follows_logout": lambda body: twitch.follows_logout(),
-    "youtube_app": lambda body: youtube.set_yt_app(str(body.get("client_id", "")), str(body.get("client_secret", ""))),
-    "youtube_login": lambda body: youtube.yt_login(),
-    "youtube_logout": lambda body: youtube.yt_logout(),
-    "youtube_tv_login": youtube_tv_login,
-    "youtube_tv_logout": youtube_tv_logout,
-    "youtube_sync": lambda body: youtube.yt_reset_subs(),
+    "youtube_login": youtube_login,
+    "youtube_logout": youtube_logout,
+    "youtube_sync": lambda body: youtube.yt_reload(),
     "poweroff": poweroff,
     "key": key,
     "bluetooth": bluetooth,

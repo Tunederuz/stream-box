@@ -549,36 +549,15 @@
 
   <section>
     <h2>YouTube account</h2>
-    <!-- Account subscriptions: your own Google app, authorization by code (read-only) -->
-    <div id="ytacc-setup" hidden>
-      <p>For the TV menu's <b>Subscriptions</b> row, the box needs your own Google app (free, one time).</p>
-      <details>
-        <summary>Create the app</summary>
-        <ol>
-          <li>On <code>console.cloud.google.com</code>, create a project, then enable <b>YouTube Data API v3</b>
-            (APIs &amp; Services → Library).</li>
-          <li><b>Google Auth Platform</b>: audience <b>External</b>, data access scope <code>youtube.readonly</code>, then
-            <b>Publish app</b> (otherwise Google disconnects the box every 7 days).</li>
-          <li><b>Clients → Create client</b>, type <b>TVs and Limited Input devices</b>.</li>
-          <li>Paste the <b>Client ID</b> and the <b>Client secret</b> into the fields below.</li>
-        </ol>
-      </details>
-      <div class="stack">
-        <input id="ytapp-id" autocomplete="off" autocapitalize="none" placeholder="Client ID (….apps.googleusercontent.com)"
-               aria-label="Google client ID">
-        <input id="ytapp-secret" type="password" autocomplete="off" placeholder="Client secret code"
-               aria-label="Google client secret">
-        <button id="ytapp-save" class="current">Save</button>
-      </div>
-    </div>
+    <!-- The "YouTube TV app" access: sign-in by code on google.com/device, nothing to create -->
     <div id="ytacc-auth" hidden>
-      <p>App saved. Allow the box to read your subscriptions (read-only).</p>
+      <p>Your subscriptions and recommendations in the TV menu, and the progress synced with your other screens.</p>
       <button id="ytacc-login" class="current" style="width: 100%">Authorize the box</button>
       <div id="ytacc-code" hidden style="margin-top: 12px; text-align: center">
         <p style="margin-bottom: 6px">On <b>google.com/device</b>, enter this code:</p>
         <div id="ytacc-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
         <a id="ytacc-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the activation page</a>
-        <p>"Google hasn't verified this app": <b>Advanced</b>, then <b>Go to …</b></p>
+        <p>Google shows "YouTube on TV": the box presents itself as the YouTube app for TVs.</p>
       </div>
     </div>
     <div id="ytacc-ok" hidden>
@@ -586,7 +565,6 @@
       <div class="row">
         <button id="ytacc-sync">Reload my subscriptions</button>
         <button id="ytacc-logout">Disconnect</button>
-        <button id="ytapp-change">Change app</button>
       </div>
     </div>
     <div class="status" id="ytacc-status"></div>
@@ -1599,8 +1577,8 @@ $("follows-logout").onclick = () => { if (confirm(tr("Disconnect the followed ch
 settingsLoaders.push(refreshFollows);
 if (!$("tab-settings").hidden) refreshFollows();
 
-// YouTube account: Google app, authorization by code, status
-let ytaccTimer = null, ytaccChanging = false;
+// YouTube account ("YouTube TV app" access): authorization by code, status
+let ytaccTimer = null;
 async function refreshYtAccount() {
   clearTimeout(ytaccTimer);
   try {
@@ -1608,22 +1586,17 @@ async function refreshYtAccount() {
     const a = await r.json();
     if (!r.ok) throw new Error(a.error);
     const pending = a.pending && !a.authorized;
-    $("ytacc-setup").hidden = a.configured && !ytaccChanging;
-    $("ytacc-auth").hidden = !a.configured || a.authorized || ytaccChanging;
-    $("ytacc-ok").hidden = !a.authorized || ytaccChanging;
+    $("ytacc-auth").hidden = a.unavailable || a.authorized;
+    $("ytacc-ok").hidden = !a.authorized;
     $("ytacc-code").hidden = !pending || !!a.pending.error;
     if (pending) {
       $("ytacc-user-code").textContent = a.pending.user_code;
       $("ytacc-link").href = a.pending.verification_uri;
     }
-    $("ytacc-status").className = a.pending?.error ? "status error" : "status";
-    $("ytacc-status").textContent = a.pending?.error ? tr("Authorization denied: {error}", { error: a.pending.error }) : "";
-    if (a.authorized) {
-      $("ytacc-summary").textContent = a.channels === null
-        ? tr("Connected · subscriptions reloaded the next time the YouTube tab is opened.")
-        : tr("Connected · {count} subscriptions, reloaded on {date}.", { count: a.channels,
-            date: new Date(a.synced * 1000).toLocaleString(LANG, { dateStyle: "short", timeStyle: "short" }) });
-    }
+    $("ytacc-status").className = a.pending?.error || a.unavailable ? "status error" : "status";
+    $("ytacc-status").textContent = a.unavailable ? tr("The box's YouTube service is not running (cast service stopped).")
+      : a.pending?.error ? tr("Authorization denied: {error}", { error: a.pending.error }) : "";
+    if (a.authorized) $("ytacc-summary").textContent = tr("Connected: subscriptions, recommendations and progress.");
     if (pending && !a.pending.error) ytaccTimer = setTimeout(refreshYtAccount, 3000);   // waiting for the code
   } catch (e) {
     $("ytacc-status").className = "status error";
@@ -1647,15 +1620,9 @@ async function ytaccAction(action, body = {}, done = "") {   // done: line shown
   });
   refreshYtAccount();
 }
-$("ytapp-save").onclick = async () => {
-  ytaccChanging = false;
-  await ytaccAction("youtube_app", { client_id: $("ytapp-id").value, client_secret: $("ytapp-secret").value });
-  $("ytapp-secret").value = "";
-};
 $("ytacc-login").onclick = () => ytaccAction("youtube_login");
 $("ytacc-sync").onclick = () => ytaccAction("youtube_sync", {}, tr("Subscriptions reloaded."));
 $("ytacc-logout").onclick = () => { if (confirm(tr("Disconnect the YouTube account?"))) ytaccAction("youtube_logout"); };
-$("ytapp-change").onclick = () => { ytaccChanging = true; refreshYtAccount(); };
 settingsLoaders.push(refreshYtAccount);
 if (!$("tab-settings").hidden) refreshYtAccount();
 
