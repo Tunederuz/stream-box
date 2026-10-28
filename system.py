@@ -208,8 +208,9 @@ def last_update():
 
 
 def system_update():
-    """System update (image only): None without it; otherwise running, and the last result (version, ok, message, code,
-    restart: now | pending | no)"""
+    """System update (image only): None without it; otherwise running, the version of the running system (os-release
+    IMAGE_VERSION: an A/B box restarted onto a new one since the last result) and the last result (version, ok, message,
+    code, restart: now | pending | no, kind: ab | files, new)"""
     r = subprocess.run(["systemctl", "show", "stream-box-system-update.service", "-p", "LoadState", "-p", "ActiveState"],
                        capture_output=True, text=True, timeout=10)
     props = dict(l.split("=", 1) for l in r.stdout.splitlines() if "=" in l)
@@ -220,7 +221,13 @@ def system_update():
             last = json.load(f)
     except (OSError, ValueError):
         last = None
-    return {"running": props.get("ActiveState") == "activating", "last": last}
+    version = None
+    try:
+        with open("/usr/lib/os-release", encoding="utf-8") as f:
+            version = next((l.split("=", 1)[1].strip().strip('"') for l in f if l.startswith("IMAGE_VERSION=")), None)
+    except OSError:
+        pass
+    return {"running": props.get("ActiveState") == "activating", "last": last, "version": version}
 
 
 def health():

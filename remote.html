@@ -1592,12 +1592,17 @@ async function refreshHealth() {
     $("update-now").disabled = busy;
     $("update-now").textContent = busy ? tr("Update in progress…") : tr("Update now");
     const sys = u.system && u.system.last;   // system update (image): release installed
+    // A/B box: version running, newer one installed in the other slot; older box: system files and code
+    const sysText = !sys ? "" : !sys.ok ? tr("System: {error} ({date})", { error: sys.message, date: frDate(sys.date) })
+      : sys.kind === "ab" ? tr("System: {version} ({date}).", { version: u.system.version ? "v" + u.system.version : sys.version, date: frDate(sys.date) })
+          + (sys.message ? " " + tr(sys.message) : "")
+          + (sys.new && sys.new !== u.system.version ? " " + tr("Version {new} installed.", { new: sys.new })
+             : sys.message ? "" : " " + tr("Up to date."))
+      : tr("System: {version} ({date}), {files} system files changed.", { version: sys.version, date: frDate(sys.date), files: sys.files })
+          + " " + tr({ updated: "Code updated.", ahead: "Code newer than the release, kept." }[sys.code] || "Code up to date.");
     $("update-log").textContent = (u.last ? u.last.lines.join("\n") : tr("No update recorded."))
-      + (sys ? "\n\n" + (sys.ok ? tr("System: {version} ({date}), {files} system files changed.",
-          { version: sys.version, date: frDate(sys.date), files: sys.files }) + " "
-          + tr({ updated: "Code updated.", ahead: "Code newer than the release, kept." }[sys.code] || "Code up to date.")
-          + (sys.restart === "pending" ? " " + tr("Restart the box to finish.") : "")
-          : tr("System: {error} ({date})", { error: sys.message, date: frDate(sys.date) })) : "");
+      + (sys ? "\n\n" + sysText + (sys.ok && sys.restart === "pending" && !(sys.kind === "ab" && sys.new === u.system.version)
+          ? " " + tr("Restart the box to finish.") : "") : "");
   } catch (e) { /* the page already shows the box status */ }
   healthTimer = setTimeout(refreshHealth, 5000);
 }

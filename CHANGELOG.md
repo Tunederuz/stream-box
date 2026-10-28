@@ -11,8 +11,14 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   your settings, accounts, Bluetooth pairings and Wi-Fi networks when the system is replaced. Boxes already installed
   keep working as they are.
 - The streamer list moved into the settings folder (moved by itself, nothing to do).
-- Releases now also contain the system partition and the kernel as separate files, with a signed checksum list: what
-  A/B updates will download.
+- Releases now also contain the system partition and the kernel as separate files, with a signed checksum list, and
+  the list of their packages.
+
+### Added
+- A/B system updates: on a box installed with this version, "Update now" and the weekly update install the whole
+  system of the latest release (Arch packages, kernel and the box's code) next to the running one, then restart onto
+  it when nothing is playing. If it doesn't work, the box goes back to the previous version by itself.
+- A release rebuilt every month with the latest Arch packages (security fixes), when they changed.
 
 ## [0.1.1]
 

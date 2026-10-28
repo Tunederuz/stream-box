@@ -958,6 +958,19 @@ partition (the USB drive left plugged in after installing the same version) make
 the stick after installing.
 
 ### System update (image)
+A/B box (step 3: the running system partition labelled `stream-box_*` and at least two root-x86-64 partitions on its
+disk): system-update runs `/usr/lib/systemd/systemd-sysupdate update` instead of the git path below, then looks in the
+ESP for the newest UKI above the running version that was not given up (`+0-…`: 3 failed tries, after a rollback it is
+not offered again until a newer release): it reboots onto it when /api/state says `home`, otherwise `restart: pending`
+("restart to finish"). system-update.json: `kind: ab`, `version` = running, `new` = the version waiting. On a USB drive
+(one slot): nothing, message "install the box on the PC". Boxes from before A/B (one system partition, label
+root-x86-64) keep the git path. Tested in QEMU (see the A/B sections).
+Monthly rebuild (.github/workflows/image.yml, 1st of the month 01:00 UTC, or by hand): the latest release's code
+(checkout of its tag) rebuilt with the Arch packages of the day as the next patch version, published only if the
+package manifest (mkosi `ManifestFormat=json`, stream-box_<version>.manifest.json in each release) differs from the
+latest release's, with the updated packages as release text; its tag is created on that commit by `gh release create
+--target` (a tag pushed with the workflow's token starts no other workflow). Releases from before A/B (no `build.sh
+release`) are not rebuilt.
 "Update now" (System menu, companion app) and the weekly update run update.sh (media: venvs, token server, cast
 receiver), which ends by starting `stream-box-system-update.service` (root; polkit rule 56 lets media start it, nothing
 else). `/usr/local/lib/stream-box/system-update`: its own root-owned clone (`/var/lib/stream-box/src`, from GitHub:

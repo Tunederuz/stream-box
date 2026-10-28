@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # Stream Box: system update (stream-box-system-update.service, started by update.sh: "Update now" of the System menu
-# and the weekly update). Follows the releases (tags v*) of the repository:
+# and the weekly update). Follows the releases (tags v*) of the repository.
+#
+# A/B box (installed with two system partitions, the running one labelled stream-box_<version>): the whole system of
+# the latest release through systemd-sysupdate (/usr/lib/sysupdate.d: signed, into the slot not in use, its UKI with 3
+# tries), then a restart onto it when nothing plays ("restart to finish" otherwise; stream-box-boot-check and
+# systemd-boot fall back to the previous version if it doesn't work). A box running from a USB drive (one slot) gets
+# nothing: install it on the PC.
+#
+# Box installed before A/B (one system partition):
 #   - its own copy of the repository, owned by root (/var/lib/stream-box/src): what is installed as root never comes
 #     from media's copy, which media can change;
 #   - the latest release's system files (image/mkosi.extra) installed, those that a release dropped removed (list of
@@ -16,19 +24,70 @@ FILES=$STATE/system-files
 BOX=/home/media/stream-box
 install -d -m 750 -o root -g media "$STATE"
 
-step=start tag="" files=0 code=same restart=no
+step=start tag="" files=0 code=same restart=no new="" kind=files
 report() {   # ok message: system-update.json (readable by media through the group of the directory)
-  python3 - "$STATE/system-update.json" "$1" "$2" "$tag" "$files" "$code" "$restart" << 'PY'
+  python3 - "$STATE/system-update.json" "$1" "$2" "$tag" "$files" "$code" "$restart" "$new" "$kind" << 'PY'
 import json, os, sys, time
-path, ok, message, tag, files, code, restart = sys.argv[1:]
+path, ok, message, tag, files, code, restart, new, kind = sys.argv[1:]
 with open(path + ".tmp", "w") as f:
     json.dump({"ok": ok == "1", "message": message, "version": tag, "files": int(files), "code": code,
-               "restart": restart, "date": time.strftime("%Y-%m-%dT%H:%M:%S")}, f)
+               "restart": restart, "new": new, "kind": kind, "date": time.strftime("%Y-%m-%dT%H:%M:%S")}, f)
 os.chmod(path + ".tmp", 0o644)
 os.replace(path + ".tmp", path)
 PY
 }
 trap 'report 0 "failed: $step"' ERR
+
+nothing_plays() {   # the box's server says the home screen is shown
+  [ "$(curl -s -m 5 http://127.0.0.1:8080/api/state | python3 -c 'import json, sys; print(json.load(sys.stdin).get("mode", ""))' 2> /dev/null)" = home ]
+}
+
+# Layout: system partitions (GPT type root-x86-64) on the disk of /, label of the running one
+root_dev=$(findmnt -no SOURCE / | sed 's/\[.*//')
+root_label=$(blkid -p -o value -s PART_ENTRY_NAME "$root_dev" 2> /dev/null || true)
+disk=$(lsblk -no PKNAME "$root_dev" | head -n 1)
+slots=0
+for part in /sys/block/"$disk"/"$disk"*; do
+  [ -e "$part/partition" ] || continue
+  t=$(blkid -p -o value -s PART_ENTRY_TYPE "/dev/${part##*/}" 2> /dev/null || true)
+  if [ "${t,,}" = 4f68bce3-e8cd-4db1-96e7-fbcaf984b709 ]; then slots=$((slots + 1)); fi
+done
+
+if [[ "$root_label" == stream-box_* ]]; then
+  kind=ab
+  tag=v$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")
+  if [ "$slots" -lt 2 ]; then
+    report 1 "on a USB drive: install the box on the PC to get system updates"
+    exit 0
+  fi
+  step=download
+  /usr/lib/systemd/systemd-sysupdate --no-pager update
+  # Newer system ready: the newest UKI in the ESP above the running version and not given up (+0-…: 3 failed tries,
+  # systemd-boot went back to this one; it is not offered again until a newer release)
+  step=restart
+  esp=$(bootctl --print-esp-path 2> /dev/null || echo /boot)
+  running=${tag#v}
+  new=$(for f in "$esp"/EFI/Linux/stream-box_*.efi; do
+          b=${f##*/stream-box_}
+          case $b in *+0-*) continue ;; esac
+          v=${b%.efi}; v=${v%%+*}
+          if [ "$v" != "$running" ] && [ "$(printf '%s\n%s\n' "$running" "$v" | sort -V | tail -n 1)" = "$v" ]; then
+            echo "$v"
+          fi
+        done | sort -V | tail -n 1)   # (if, not &&: with pipefail a last false test would fail the whole substitution)
+  if [ -n "$new" ]; then
+    code=image
+    if nothing_plays; then
+      restart=now
+      report 1 ""
+      systemctl reboot
+      exit 0
+    fi
+    restart=pending
+  fi
+  report 1 ""
+  exit 0
+fi
 
 step=download
 if [ -d "$SRC/.git" ]; then
@@ -82,8 +141,7 @@ echo "code: $code, system files changed: $files"
 
 step=restart
 if [ "$code" = updated ] || [ "$files" -gt 0 ]; then
-  mode=$(curl -s -m 5 http://127.0.0.1:8080/api/state | python3 -c 'import json, sys; print(json.load(sys.stdin).get("mode", ""))' || true)
-  if [ "$mode" = home ]; then   # nothing playing
+  if nothing_plays; then
     restart=now
     report 1 ""
     rm -f /run/greetd.run

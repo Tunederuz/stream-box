@@ -1,55 +1,132 @@
-# Release on every version tag (v0.2.0…): image/build.sh (mkosi in a privileged Arch container) with the tag's version,
-# then its release files (build.sh release): the disk image to install (stream-box.raw.xz), the system partition and
-# the UKI for A/B updates (stream-box_<version>.root-x86-64.raw.xz, stream-box_<version>.efi: systemd-sysupdate on the
-# boxes), SHA256SUMS and its signature SHA256SUMS.gpg (secret RELEASE_SIGNING_KEY, the private key of
-# image/release-signing-key.asc; the boxes check it with /etc/systemd/import-pubring.pgp). Release files are limited
-# to 2 GB: each .xz is about 1.5 GB.
+# Releases: image/build.sh (mkosi in a privileged Arch container), then its release files (build.sh release): the disk
+# image to install (stream-box.raw.xz), the system partition and the UKI for A/B updates
+# (stream-box_<version>.root-x86-64.raw.xz, stream-box_<version>.efi: systemd-sysupdate on the boxes), the package
+# manifest (stream-box_<version>.manifest.json), SHA256SUMS and its signature SHA256SUMS.gpg (secret RELEASE_SIGNING_KEY,
+# the private key of image/release-signing-key.asc; the boxes check it with /etc/systemd/import-pubring.pgp). Release
+# files are limited to 2 GB: each .xz is about 1.5 GB.
+#   - version tag pushed (v0.2.0…): that version, release text from its CHANGELOG.md section;
+#   - on the 1st of each month (and by hand: Actions → image → Run workflow): the latest release's code rebuilt with the
+#     Arch packages of the day, published as the next patch version (v0.2.0 → v0.2.1) only if packages changed, with
+#     the list of the updated ones: the boxes' weekly update (Monday 05:00) gets the security fixes within the week,
+#     without waiting for a release.
 name: image
 on:
   push:
     tags: ["v*"]
+  schedule:
+    - cron: "0 1 1 * *"   # 1st of the month, 01:00 UTC
+  workflow_dispatch:
 
 permissions:
-  contents: write   # create the release
+  contents: write   # create the release (and, for a monthly rebuild, its tag)
 
 jobs:
   image:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
+      - name: Version
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "ref=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "monthly=" >> "$GITHUB_OUTPUT"
+          else
+            latest=$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            echo "tag=v$major.$minor.$((patch + 1))" >> "$GITHUB_OUTPUT"
+            echo "ref=$latest" >> "$GITHUB_OUTPUT"
+            echo "monthly=$latest" >> "$GITHUB_OUTPUT"
+            echo "monthly rebuild of $latest as v$major.$minor.$((patch + 1))"
+          fi
       - uses: actions/checkout@v4   # mkosi.prepare.chroot clones this checkout into the image
+        with:
+          ref: ${{ steps.v.outputs.ref }}
+      - name: Can it be rebuilt?   # releases before A/B (no build.sh release) are not rebuilt monthly
+        id: ok
+        run: |
+          if grep -q 'release)' image/build.sh; then echo "go=1" >> "$GITHUB_OUTPUT"
+          else echo "::notice::${{ steps.v.outputs.ref }} has no release files to rebuild (before A/B)"; fi
       - name: Free disk space   # the build tree and the 3 GB image do not fit next to the runner's preinstalled tools
+        if: steps.ok.outputs.go
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
       - name: Signing key   # before the 20 min build: an unsigned release would be refused by the boxes anyway
+        if: steps.ok.outputs.go
         env:
           KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
         run: |
           [ -n "$KEY" ] || { echo "::error::secret RELEASE_SIGNING_KEY missing (Settings → Secrets → Actions)"; exit 1; }
           echo "$KEY" | gpg --batch --import
-      - run: VERSION="${GITHUB_REF_NAME#v}" bash image/build.sh
-      - run: VERSION="${GITHUB_REF_NAME#v}" bash image/build.sh release
+      - if: steps.ok.outputs.go
+        run: VERSION="${TAG#v}" bash image/build.sh
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+      - if: steps.ok.outputs.go
+        run: VERSION="${TAG#v}" bash image/build.sh release
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+      - name: Updated packages   # monthly rebuild: compared with the latest release's manifest; nothing changed, no release
+        id: pkgs
+        if: steps.ok.outputs.go && steps.v.outputs.monthly
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREV: ${{ steps.v.outputs.monthly }}
+        run: |
+          sudo chown -R "$(id -u)" image/mkosi.output/release
+          mkdir -p "$RUNNER_TEMP/prev"
+          gh release download "$PREV" -R "$GITHUB_REPOSITORY" -p '*.manifest.json' -D "$RUNNER_TEMP/prev" || true
+          rc=0
+          python3 - "$RUNNER_TEMP/prev" image/mkosi.output/release > "$RUNNER_TEMP/updated.md" << 'PY' || rc=$?
+          import glob, json, sys
+          def packages(folder):
+              files = glob.glob(f"{folder}/*.manifest.json")
+              return {p["name"]: p["version"] for p in json.load(open(files[0]))["packages"]} if files else None
+          old, new = packages(sys.argv[1]), packages(sys.argv[2])
+          changed = sorted(n for n in new if old is None or old.get(n) != new[n])
+          for n in changed:
+              print(f"- {n} {old.get(n, '(new)') if old else '?'} → {new[n]}")
+          sys.exit(0 if changed else 3)
+          PY
+          # (the steps run with bash -e: the exit code is read with || rc=…, see the python3 line)
+          if [ "$rc" = 3 ]; then echo "::notice::no package changed since $PREV: no release"; exit 0; fi
+          [ "$rc" = 0 ] && echo "changed=1" >> "$GITHUB_OUTPUT"
       - name: Sign
+        if: steps.ok.outputs.go && (!steps.v.outputs.monthly || steps.pkgs.outputs.changed)
         run: |
           sudo chown -R "$(id -u)" image/mkosi.output/release
           cd image/mkosi.output/release
           gpg --batch --yes --detach-sign -o SHA256SUMS.gpg SHA256SUMS
           ls -la
       - name: Release
+        if: steps.ok.outputs.go && (!steps.v.outputs.monthly || steps.pkgs.outputs.changed)
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+          MONTHLY: ${{ steps.v.outputs.monthly }}
         # A tag moved to another commit: the existing release gets the new image (its files replaced) instead of failing
         run: |
-          # Text: the version's section of CHANGELOG.md (## [0.1.1] for tag v0.1.1), then how to install
-          version=${GITHUB_REF_NAME#v}
-          changes=$(awk -v v="## [$version]" 'index($0, v) == 1 { on = 1; next } on && /^## \[/ { exit } on' CHANGELOG.md)
-          [ -n "$changes" ] || changes="(No CHANGELOG.md section for $version.)"
           install='Flash `stream-box.raw.xz` on a USB stick (balenaEtcher, Rufus), boot the PC on it, then TV menu → System → "Install on this PC". See the README'"'"'s Installation section.'
-          notes=$(printf '%s\n\n### Install\n%s\n' "$changes" "$install")
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" image/mkosi.output/release/* --clobber
-            gh release edit "$GITHUB_REF_NAME" --draft=false --title "Stream Box $GITHUB_REF_NAME" --notes "$notes"
+          if [ -n "$MONTHLY" ]; then
+            # Monthly rebuild: the same code as $MONTHLY, the Arch packages of the day; its tag is created on that commit
+            changes=$(printf 'Monthly rebuild of %s with the latest Arch packages (security and bug fixes): same features.\n\n<details><summary>Updated packages</summary>\n\n%s\n</details>' \
+              "$MONTHLY" "$(cat "$RUNNER_TEMP/updated.md")")
+            target=(--target "$(git rev-parse HEAD)")
           else
-            gh release create "$GITHUB_REF_NAME" image/mkosi.output/release/* --title "Stream Box $GITHUB_REF_NAME" --notes "$notes"
+            # Text: the version's section of CHANGELOG.md (## [0.1.1] for tag v0.1.1), then how to install
+            version=${TAG#v}
+            changes=$(awk -v v="## [$version]" 'index($0, v) == 1 { on = 1; next } on && /^## \[/ { exit } on' CHANGELOG.md)
+            [ -n "$changes" ] || changes="(No CHANGELOG.md section for $version.)"
+            target=()
+          fi
+          notes=$(printf '%s\n\n### Install\n%s\n' "$changes" "$install")
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" image/mkosi.output/release/* --clobber
+            gh release edit "$TAG" --draft=false --title "Stream Box $TAG" --notes "$notes"
+          else
+            gh release create "$TAG" "${target[@]}" image/mkosi.output/release/* --title "Stream Box $TAG" --notes "$notes"
           fi

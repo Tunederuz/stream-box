@@ -729,9 +729,12 @@ Item {
     function updateVersion() {
         var s = health && health.update && health.update.system
         var l = s && s.last
-        if (!l) return ""
+        if (!l) return s && s.version ? "v" + s.version : ""
         if (!l.ok) return tr("System: failed")
-        return (l.version || "") + (l.restart === "pending" ? "  ·  " + tr("restart to finish") : "")
+        // A/B: the running version (restarted onto the new one since); waiting only while it is not the running one
+        var running = s.version ? "v" + s.version : (l.version || "")
+        var waiting = l.restart === "pending" && !(l.kind === "ab" && l.new === s.version)
+        return running + (waiting ? "  ·  " + tr("restart to finish") : "")
     }
     function systemRows() {
         var login = account && account.login

@@ -31,6 +31,7 @@ case "${1:-build}" in
         xz -T0 -6 -c "$FROM.raw" > release/stream-box.raw.xz
         xz -T0 -6 -c "$FROM.root-x86-64.raw" > "release/stream-box_$VERSION.root-x86-64.raw.xz"
         cp "$FROM.efi" "release/stream-box_$VERSION.efi"
+        if [ -f "$FROM.manifest" ]; then cp "$FROM.manifest" "release/stream-box_$VERSION.manifest.json"; fi
         cd release && sha256sum -- * > SHA256SUMS && cat SHA256SUMS' ;;
   # Downloadable version: compressed (Etcher and Rufus decompress it themselves)
   xz) docker run --rm -v "$HERE/..":/src -w /src/image stream-box-mkosi \

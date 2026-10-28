@@ -117,7 +117,9 @@ common on Dell): set it to AHCI (Dell: SATA Operation → AHCI). The installer s
 - Wake-on-LAN is on for Ethernet in the image: enable it in the BIOS too to wake the box from the network.
 - Home Assistant: [docs/home-assistant.md](docs/home-assistant.md).
 - Updates: TV menu → System → "Update now", and every week by itself: streamlink, yt-dlp and the other tools, then the
-  box's code and system files from the latest release (not the Arch packages nor the kernel).
+  whole system of the latest release, installed next to the running one (the box restarts onto it when nothing plays,
+  and goes back to the previous version by itself if it doesn't work). A release is rebuilt every month with the
+  latest Arch packages. Boxes installed before 0.2.0 only get the box's code and system files.
 - Developer mode (TV menu → System): passwordless sudo and SSH for the `media` user. The image has no other root
   access.
 
