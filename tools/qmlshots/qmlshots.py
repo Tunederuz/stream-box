@@ -50,16 +50,16 @@ STEPS = (
     + keys("right down down down down ok back")                   # grid scrolls, options
     + scene(2, "right right ok")                                  # Replays: another streamer
     + keys("down right right right right down right up left left left ok back")   # rows, resume dialog
-    + scene(3, "down right right")                                # YouTube: recommended for you
+    + scene(3, "up down right right")                             # YouTube: first video row, search, recommended
     + keys("down right right right right menu down back")         # subscriptions, options
     + keys("down down right up up up")                            # channel rows
     + keys("ok ok right ok down down down down down right ok")    # search keyboard, search "ab"
     + keys("right right right right right right ok ok")           # found channels, dialog, its videos
     + keys("down right down up up up up ok")                      # rows, keyboard again
     + [("text", "phone", False), ("text", "phone typed", True)]   # text typed on the phone
-    + scene(4, "down right ok back down down right right right right down ok")   # Jellyfin: series
+    + scene(4, "up down right ok back down down right right right right down ok")   # Jellyfin: series
     + keys("right ok back up ok back")                            # episodes, dialog, keyboard closed
-    + scene(5, "down right ok back down down right ok")           # Plex: rows, series, episodes
+    + scene(5, "up down right ok back down down right ok")        # Plex: rows, series, episodes
     + scene(6, "right down down left ok back")                    # History
     + scene(7, "down down down down down down down down down down down down")   # Settings: sections, power below
     + keys("up up up up up up up up up up up up ok down right up right")   # Picture and sound: audio output, resolution

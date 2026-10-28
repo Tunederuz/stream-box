@@ -372,10 +372,22 @@ local function auto_switch()
     end
 end
 
+-- Why a video could not play: YouTube asking to prove it is not a bot (ytdl_hook's error, same for every client;
+-- only an account's cookies get past it) gets its own message
+local ytdl_error = nil
+mp.enable_messages("error")
+mp.register_event("log-message", function(m)
+    if m.prefix == "ytdl_hook" and m.text:find("not a bot", 1, true) then ytdl_error = "bot" end
+end)
+mp.register_event("start-file", function() ytdl_error = nil end)
+
 mp.register_event("end-file", function(e)
     if mode == "home" then return end
     if mode == "media" then
-        if e.reason == "error" then mp.osd_message(tr("Can't play this video"), 5) end
+        if e.reason == "error" then
+            mp.osd_message(ytdl_error == "bot" and tr("YouTube is refusing this video for now (it asks to prove you are not a robot): try again later")
+                           or tr("Can't play this video"), ytdl_error == "bot" and 8 or 5)
+        end
         if back_timer then back_timer:kill() end
         back_timer = mp.add_timeout(BACK_TO_MENU, function()
             back_timer = nil
@@ -526,10 +538,11 @@ local ctrl_focus = nil   -- row of buttons under the bar (video, Qt app): chosen
 -- Focus in a video (Qt app), top to bottom: the title (OK: Info panel), the bar itself (← → scrub; focused whenever
 -- the bar shows and neither of the others is), the row of buttons
 local title_focus = false   -- video title chosen (↑ from the bar): OK opens the Info panel
+local publish_controls   -- (below)
 local function hide_bar()
-    if ctrl_focus or title_focus then   -- the button row and the chosen title go away with the bar
-        ctrl_focus, title_focus = nil, false
-        mp.set_property_native("user-data/streambox/controls", { items = {}, focus = -1 })
+    if ctrl_focus or title_focus then   -- the focus leaves the button row and the title; the row stays published
+        ctrl_focus, title_focus = nil, false   -- (emptied, it stayed invisible when the bar came back with ◀ ▶)
+        publish_controls()
     end
     bar_visible = false
     bar:remove()
@@ -546,7 +559,9 @@ mp.register_event("start-file", function() if bar_visible then hide_bar() end en
 
 mp.add_periodic_timer(0.5, function()
     if not bar_visible then return end
-    if mp.get_property_native("idle-active") or (not mp.get_property_native("pause") and mp.get_time() > bar_until) then
+    -- not while the title is chosen: the bar stays until it is left
+    if mp.get_property_native("idle-active")
+            or (not mp.get_property_native("pause") and not title_focus and mp.get_time() > bar_until) then
         hide_bar()
     else
         draw_bar()
@@ -896,7 +911,7 @@ local function controls_list()
     if next_up() then list[#list + 1] = { id = "next", label = tr("Next episode") } end
     return list
 end
-local function publish_controls()
+function publish_controls()   -- (declared above hide_bar)
     local list = controls_list()
     if ctrl_focus then ctrl_focus = math.max(1, math.min(#list, ctrl_focus)) end
     mp.set_property_native("user-data/streambox/controls", { items = list, focus = ctrl_focus and ctrl_focus - 1 or -1,
