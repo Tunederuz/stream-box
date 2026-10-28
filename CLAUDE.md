@@ -282,7 +282,10 @@ when Twitch changes something. Update: `~/.local/share/streamlink-venv/bin/pip i
 - Someone may click in front of the TV during a test: the state can change while you are testing.
 
 ## Tests and checks
-- `tools/check.sh` runs locally, in Docker, what `.github/workflows/checks.yml` runs on each push: `python` (ruff with
+- Workflow: work on a branch, merged into main through a pull request; `.github/workflows/checks.yml` runs on pull
+  requests to main and on main (not on a branch push alone). Before pushing, the parts of `tools/check.sh` that the
+  change touches (`python` for Python, the page or the translations; `shell`; `qml`), all of them for a broad change.
+- `tools/check.sh` runs locally, in Docker, what `.github/workflows/checks.yml` runs: `python` (ruff with
   the pyflakes rules of `ruff.toml`, compile, `python3 -m unittest discover -s tests -t .`), `lua` (`tests/test_lua.py`
   in the same mpv as the box image: Lua modules under luajit, then `stream-box.lua` loaded in a real mpv **in French**
   and driven through its IPC), `shell` (shellcheck), `qml` (qmllint `[syntax]`, then the 233 steps of

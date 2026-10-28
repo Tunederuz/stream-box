@@ -1,6 +1,11 @@
-# Checks on every push and pull request; tools/check.sh runs the same ones locally, in Docker
+# Checks on pull requests to main and on main itself (work happens on branches, merged through a pull request: a
+# branch push alone runs nothing); tools/check.sh runs the same ones locally, in Docker
 name: checks
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   python:
