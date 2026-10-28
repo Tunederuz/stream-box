@@ -18,8 +18,8 @@ STATE_FILE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser
                           "stream-box", "display_mode")
 MIN_REFRESH = 59
 MIN_WIDTH, MIN_HEIGHT = 1280, 720   # small modes (640x480, 1024x768…) are not offered in the companion app
-# Kernel panel orientation → output transform (wl_output, counterclockwise: what wlr-randr takes)
-TRANSFORMS = {"Normal": "normal", "Upside Down": "180", "Left Side Up": "270", "Right Side Up": "90"}
+# Kernel panel orientation → wlr-randr transform (Steam Deck, "Right Side Up": 270, checked on the device)
+TRANSFORMS = {"Normal": "normal", "Upside Down": "180", "Left Side Up": "90", "Right Side Up": "270"}
 
 
 def wlr_env():
