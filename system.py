@@ -124,12 +124,12 @@ def set_dev(on):
         raise ValueError(tr("Developer mode: {error}", error=(r.stderr or r.stdout).strip() or r.returncode))
 
 
-# Box status (page, Settings → System): temperatures, processor, memory, disk, network, player, services,
+# Box status (TV Settings tab, companion app Settings → Status and updates): temperatures, processor, memory, disk, network, player, services,
 # updates. Processor and network throughput are measured over an interval: polled every 5 s by a thread.
 
 UPDATE_LOG = os.path.expanduser("~/.local/state/stream-box/update.log")
-# System update of the image (root, /usr/local/lib/stream-box/system-update, started at the end of update.sh): code and
-# system files of the latest release; result in this file (readable by media)
+# System update (root, /usr/local/lib/stream-box/system-update: daily check, install when accepted, direct update);
+# result and check in this file (readable by media)
 SYSTEM_UPDATE = "/var/lib/stream-box/system-update.json"
 health_rates = {"cpu": None, "rx": None, "tx": None}
 
@@ -309,6 +309,8 @@ def start_update(direct=False):
     developer mode only): the code and system files of the main branch, not the system"""
     if direct and not dev_status()["enabled"]:
         raise ValueError(tr("Direct update: developer mode only."))
+    if unit_state("stream-box-local-update.service").get("ActiveState") == "activating":   # (same slot; also locked)
+        raise ValueError(tr("An update from a local image is running: try again once it is done."))
     os.makedirs(os.path.dirname(UPDATE_MANUAL), exist_ok=True)
     with open(UPDATE_DIRECT if direct else UPDATE_MANUAL, "w") as f:
         f.write(str(time.time()))
@@ -322,7 +324,11 @@ def check_update():
 
 def update_deps():
     """"Update dependencies" (Settings → Advanced): update.sh now, as every day"""
-    user_systemctl("start", "--no-block", "stream-box-update.service")
+    env = {**os.environ, "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")}
+    r = subprocess.run(["systemctl", "--user", "start", "--no-block", "stream-box-update.service"],
+                       capture_output=True, text=True, timeout=10, env=env)
+    if r.returncode != 0:
+        raise ValueError((r.stderr or r.stdout).strip() or tr("Couldn't start the update."))
 
 
 def waiting_update():

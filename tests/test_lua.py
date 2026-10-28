@@ -32,7 +32,15 @@ class Script(unittest.TestCase):
             if os.path.exists(cls.sock):
                 break
             time.sleep(0.1)
-        time.sleep(1)
+        # Script loaded to the end (its last lines publish the chat corner): messages sent before would be lost, as on
+        # a slow CI runner after a fixed wait
+        for _ in range(150):
+            try:
+                if cls.ipc(cls, "get_property", "user-data/streambox/corner").get("data"):
+                    break
+            except OSError:
+                pass
+            time.sleep(0.1)
 
     @classmethod
     def tearDownClass(cls):

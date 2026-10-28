@@ -6,7 +6,7 @@
 Linux mini PC plugged into the TV. At boot, it shows the large menu (main page, animated background, nothing playing); a Twitch stream is watched with the chat
 as an overlay. With a Bluetooth remote, a menu lets you change streamer and adjust the
 chat (moving the mouse no longer opens anything). A companion app (installable as an app) does the same from a phone, and more.
-Installation and update: `install.sh` (see the README); settings backup: TV System menu and companion app (`backup.py`), or `backup.sh`.
+Installation and update: `install.sh` (see the README); settings backup: TV Settings → Backup and installation and companion app (`backup.py`), or `backup.sh`.
 
 ## Languages
 - Code, comments and docs are in English. User-facing texts are written in English in the code and wrapped with
@@ -17,8 +17,8 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   script-message `streambox-language` to the TV.
 - `GET /api/state` carries `lang` (current code) and `languages` (`{code: name in its own language}`, from
   `i18n.LANGUAGES`). Pickers: companion app section `#language-section` of Settings (moved to the top of the
-  `#setup` screen in setup mode, so the language is chosen first); TV: "Interface language" row (header "Language")
-  in `settingsRows()` (QML).
+  `#setup` screen in setup mode, so the language is chosen first); TV: "Interface language" row (Settings → Appearance,
+  `sectionRows("look")`, QML).
 - Adding a language: add its code to `LANGUAGES` in `i18n.py` and create `locales/<code>.json`. Decimal separator:
   `qml/fmt.js` (translatable `{int}.{dec}` keys), `I18N.dec` in `lua/streambox/i18n.lua`, and the
   `LANG === "fr"` checks in `remote.html` (currently only `fr` uses a comma); QML dates pick the Qt locale from
@@ -196,7 +196,7 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   in `user-data/streambox/ambient` (`qr`: address + lines of "0"/"1"). The Lua's `qr_code()` draws it as a
   single ASS path, in light gray (less striking than white): at the bottom right of the ambient screen (it drifts with
   the rest) and to the right of the menu when the ambient screen is not shown.
-  Adjustable display (Settings → Display, `POST /api/qr {mode}`, MQTT select, script-message `streambox-qr`, state
+  Adjustable display (Settings → Network, "Companion app QR code", `POST /api/qr {mode}`, MQTT select, script-message `streambox-qr`, state
   file `qr`): `always`, `timed` (`QR_SECONDS` = 30 s each time the ambient screen appears and the menu opens),
   `never`; the check is done in `qr_code()`.
 - **Polls and predictions** (`twitch.events_loop` / `fetch_events`): no more PubSub for a viewer, so
@@ -369,7 +369,7 @@ row with `sectionHint` (what it holds, grey line) and `sectionAlert` (only when 
 ready or failed, no network, installation running), OK or ▶ opens it, `open: true`) then the power rows (sleep, restart, shut down); a section
 open (`section`, `sectionRows(id)`: picture, playback, chat, look, accounts, network, devices, updates, backup,
 advanced), its rows, title in the header (`sectionTitle`); Back or ◀ (on a row without a value) returns to the list
-on that section (`leaveSection`, `rootSel`). The Lua menu of the simplified version keeps its own System menu.
+on that section (`leaveSection`, `rootSel`). The simplified version has its own small menu (quickmenu.py: Settings, System with the system update, power).
 Companion app, Settings tab: the same grouping, folded groups (`.group`, `data-group`: channels, accounts, picture,
 look, network, updates, backup; `openGroup(id)`, the open ones remembered in localStorage `groups`).
 Structure: `TvMenu.qml` keeps the data, the API calls, the timers, open / close, the computed rows (`settingsRows`,
@@ -439,7 +439,7 @@ load: ~66 % of a core for both (1080p60 + 720p60, vaapi decoding).
 
 ### Choice of player
 
-System → Player (QML and Lua TV menus; System section of the companion app settings): `POST /api/player {mode: qt|mpv}` writes
+Settings → Advanced → Version (QML TV menu; quick menu of the simplified version: "Switch to the full version"): `POST /api/player {mode: qt|mpv}` writes
 `~/.config/stream-box/player` and quits the player; the player.sh loop starts the right one. `/api/state` gives `player`
 (chosen) and `player_running` (`qt` if `current-vo` is `libmpv`): the page reports an automatic fallback to mpv.
 player.sh forgets the Qt app's failures when the file is rewritten (modification date), which allows retrying it
@@ -507,12 +507,14 @@ for Jellyfin (server link: `/Videos/…`, `api_key=`, `MediaSourceId=`), purple 
 `GET /api/health`: temperatures (hwmon `coretemp`/`k10temp` and `nvme`), CPU (% over 5 s, `health_loop`) and
 load, memory, disk, network (interface of the default route, link speed, throughput over 5 s), playback (player
 actually running, decoding, size, frames/s, dropped frames), user services (MQTT, YouTube tokens:
-`systemctl --user is-active`), updates (in progress, next one from the timer, last one from
-`update.log`). `POST /api/update` starts `stream-box-update.service` (`--no-block`). The page rereads every 5 s while
+`systemctl --user is-active`), updates: `running`/`last` the dependencies (update.sh, `update.log`), `system` the
+releases (system.system_update(): running, checking, direct, last, version, offered), `dev`. `POST /api/update_deps`
+starts `stream-box-update.service`; `/api/update`, `/api/update_check`, `/api/apply_update`: see System update
+(image). The page rereads every 5 s while
 the Settings tab is shown; tiles in orange or red beyond thresholds (70 °C, 85 °C, memory, disk,
 stopped service, CPU decoding).
-Same status in the System tab of the QML TV menu (tiles under the rows, `/api/health` reread every 5 s while
-the tab is shown).
+Same status in the Settings tab of the QML TV menu (tiles beside the list of sections, `/api/health` reread every 5 s
+while the tab is shown, and 1.5 s after an update button: `readBox`).
 - **UI rule: a press always shows something at once.** TV menu: change the bound data optimistically (`updateAct`,
   `display.setting`, `wifi.connecting`…), open dialogs at once and fill them when the box answers (`loadingModal`), then
   read the real state shortly after (`healthSoon` → `readBox`) instead of at the next 5 s reading. Companion app: the
@@ -839,7 +841,7 @@ page's virtual remote also sends actions (`streambox-input VIRTUAL <action>`, ne
 Held key: repeated by input.py itself (`REPEATABLE`: arrows, volume; 400 ms then every 80 ms, the gamepad d-pad
 too), the kernel's repeats (value 2) are ignored: the Xiaomi remote's "Consumer Control" entry (arrows, OK, volume)
 has no autorepeat (no EV_REP), only its "Keyboard" entry did, hence keys that repeated "sometimes".
-"Set up keys" wizard (System menu, QML and Lua; `POST /api/keymap {action: wizard|reset}`): in
+"Set up keys" wizard (Settings → Devices, QML; `POST /api/keymap {action: wizard|reset}`): in
 stream-box.lua, the actions one by one (8 s each, without a key it keeps its own; a key already taken is
 refused), learned keys added to `~/.config/stream-box/keymap.json` ({name: action}, Linux names via input.py or
 mpv names as fallback), state in `user-data/streambox/learn` → `qml/KeyWizard.qml` (on-screen message with mpv alone).
@@ -894,8 +896,8 @@ list computed once (`followItems`). Page: `/api/state` paused when the page is i
 sections (followed channels, YouTube account, Wi-Fi) loaded when the tab opens (`settingsLoaders`).
 
 ### Backup and restore (backup.py)
-System menu → "Backup and restore" (QML `backupMenu`, Lua `backup_menu`, popup reread every 2 s):
-per plugged-in USB stick, "↓  Back up to {name}" (Lua: "↓  Save to {name}") then its 4 latest backups (OK → confirmation → restore then
+Settings → Backup and installation → "Backup and restore" (QML `backupMenu`, popup reread every 2 s):
+per plugged-in USB stick, "↓  Back up to {name}" then its 4 latest backups (OK → confirmation → restore then
 reboot). Page: Settings → Backup, "Download the backup" (`GET /api/backup/download`) and "Restore
 from a file…" (`POST /api/backup_restore`, raw body). API: `GET /api/backup` (sticks, backups, busy,
 message shown for one minute), `POST /api/backup` `{action: save_usb|restore_usb, path, name}`.
@@ -927,7 +929,7 @@ Home screen (AmbientScreen) and menu without video behind (TvMenu, in the tab's 
 60 %) share `Backdrop.qml`: a **background** (`none` solid color, `aurora` blurred blobs, `fluid` folded noise, `borealis`
 northern lights curtains) + a **layer** (`none`, `silk` luminous threads, `stars` stars on two planes).
 The shader layers render `vec4(light, 0)`: additive blending with Qt's premultiplied alpha. Crossfade on
-each change (`shownBase` / `shownOverlay`). Settings → Display: "Animated background", "On top", "Home colors" (`color`: violet, blue, green, sunset, pink, ice; palettes
+each change (`shownBase` / `shownOverlay`). Settings → Appearance: "Animated background", "Overlay", "Home screen colors" (`color`: violet, blue, green, sunset, pink, ice; palettes
 in AmbientScreen, the menu keeps the color of its tabs). `POST /api/backdrop {base?, overlay?, color?}`,
 `~/.config/stream-box/backdrop` (JSON; old single value accepted), `backdrop` (the choice) in
 `/api/state`; the home screen takes the most recent of its state (20 s) and that of the open menu (ui.qml). Over a
@@ -1063,8 +1065,8 @@ section enabled → media's code fast-forwarded to the tag (`runuser -u media`, 
 such as page-v1 made the fetch fail), never backwards (`ahead`: kept) → session restarted when something changed and
 `/api/state` says `home`, otherwise `restart: pending` (next restart). Result in
 `/var/lib/stream-box/system-update.json` {ok, message ("failed: <step>"), version, files, code: updated | same |
-ahead, restart: now | pending | no, date}: `/api/health` → `update.system` {running, last}; TV: value of the "Update
-now" row (version, "restart to finish", "System: failed"); companion app: under the update log. Not the Arch packages
+ahead, restart: now | pending | no, date}: `/api/health` → `update.system`; TV: Settings → Updates (version the box runs, `<release>+<commit> · dev` after a
+direct update; the direct update's own state on its row); companion app: status line under the update button. Not the Arch packages
 nor the kernel. A box installed from an image without it (v0.1) needs the three files installed once by hand
 (developer mode: system-update, its service, rule 56). Tested in QEMU: polkit, ahead, behind → fast-forward and
 restart, the whole chain from `POST /api/update`. The service does not wait for network-online.target (it pulled

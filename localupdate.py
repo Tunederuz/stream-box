@@ -101,7 +101,10 @@ def clear():
 
 
 def start():
-    """Files in place: the root job (it checks them, installs, restarts)"""
+    """Files in place: the root job (it checks them, installs, restarts); not during an online system update (same
+    slot; also locked)"""
+    if (system.system_update() or {}).get("running"):
+        raise ValueError(tr("An online system update is running: try again once it is done."))
     if not os.path.isfile(os.path.join(STAGE, FILES["image"])):
         raise ValueError(tr("No image to install."))
     r = subprocess.run(["systemctl", "start", "--no-block", "stream-box-local-update.service"],

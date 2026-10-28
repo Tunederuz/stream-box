@@ -19,7 +19,7 @@ import jellyfin   # jellyfin.py: library, playback
 import playback   # playback.py: links, history entries
 import plex       # plex.py: library, playback
 import settings   # settings.py: back to the full version
-import system     # system.py: sleep, shutdown
+import system     # system.py: sleep, shutdown, system update
 import twitch     # twitch.py: streamers, who is live, followed channels, replays
 import youtube    # youtube.py: favorites, subscriptions
 from common import MPV_SOCKET, mpv
@@ -283,13 +283,44 @@ def power_screen():
     ])
 
 
+def update_item():
+    """System update, as in the TV menu's Settings → Updates: restart onto the version installed and waiting (a plain
+    restart keeps the running one), install the release the daily check found, or check now"""
+    s = system.system_update()
+    if not s:
+        return None
+    pending, last, _ = system.waiting_update()
+
+    def run(fn, text):
+        def go():
+            close()
+            try:
+                fn()
+                mpv(["show-text", text, 5000])
+            except (OSError, ValueError) as e:
+                mpv(["show-text", str(e), 5000])
+        return go
+    if s.get("running") or s.get("checking"):
+        return item(tr("Update in progress…") if s.get("running") else tr("Checking…"), dim=True)
+    if pending:
+        return item(tr("Restart to apply version {version}", version=last["new"]) if last.get("new") else
+                    tr("Restart to apply the update"), run(system.apply_update, tr("Restarting…")))
+    if s.get("offered"):
+        return item(tr("Install version {version}", version=s["offered"]),
+                    run(system.start_update, tr("Downloading version {version}. The box restarts by itself once it is installed (not during a video).",
+                                                version=s["offered"])))
+    return item(tr("Check for updates"), run(system.check_update, tr("Checking…")),
+                info="v" + s["version"] if s.get("version") else "")
+
+
 def system_screen():
     def build():
-        return [
+        return [x for x in [
+            update_item(),
             item(tr("Switch to the full version"), lambda: playing(lambda: settings.set_player("qt"))),
             item(tr("Turn off or restart"), power_screen),
             item(tr("Companion app"), info=ambient.remote_url() or "", dim=True),
-        ]
+        ] if x]
     return screen(tr("System"), build)
 
 

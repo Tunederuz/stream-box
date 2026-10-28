@@ -1,6 +1,26 @@
 {
-  "/api/youtube_channels": {"channels": [
-    {"id": "UCaaaaaaaaaaaaaaaaaaaaaa", "name": "Chaîne A", "handle": "@chainea", "avatar": "/img/336699"},
-    {"id": "UCbbbbbbbbbbbbbbbbbbbbbb", "name": "Chaîne B", "handle": "@chaineb", "avatar": "/img/993366"}
-  ]}
+  "/api/youtube_channels": {
+    "channels": [
+      {
+        "id": "UCaaaaaaaaaaaaaaaaaaaaaa",
+        "name": "Chaîne A",
+        "handle": "@chainea",
+        "avatar": "/img/336699"
+      },
+      {
+        "id": "UCbbbbbbbbbbbbbbbbbbbbbb",
+        "name": "Chaîne B",
+        "handle": "@chaineb",
+        "avatar": "/img/993366"
+      }
+    ]
+  },
+  "/api/local_update": {
+    "available": true,
+    "dev": false,
+    "busy": false,
+    "copy": null,
+    "job": null,
+    "usb": []
+  }
 }

@@ -56,19 +56,19 @@ Item {
     property var health: null                // /api/health, reloaded every 5 s on the Settings tab
     property var wifi: null
     property var audioOut: null
-    // Bluetooth (System menu): /api/bluetooth, and current step of the dialog ("", scan, pair)
+    // Bluetooth (Settings → Devices): /api/bluetooth, and current step of the dialog ("", scan, pair)
     property var bt: null
     property var ssh: null                   // /api/ssh: SSH access (maintenance) on or off
     property var dev: null                   // /api/dev: developer mode (sudo for media, SSH)
     property var install: null               // /api/install: box booted from its USB stick, internal disks, progress
     property var localUpd: null              // /api/local_update: A/B box?, images on USB sticks, copy and progress
-    property string btPhase: ""              // /api/audio: audio outputs, choice ("auto" or an output), current output                  // /api/wifi, same ("Wi-Fi" row: setup mode)
+    property string btPhase: ""              // Bluetooth dialog: "" (list), "scan", "pair" (its 2 s refresh runs while not "")
     // YouTube: channels of the list (/api/youtube), search results, row and choice per row
     property var yt: null
     // YouTube account: dialog with the code to enter on google.com/device (/api/youtube_account), and its QR code
     property var ytAuth: null
     property var ytAuthQr: null
-    property var ytAccount: null             // same state, for the "YouTube account" row of the System menu
+    property var ytAccount: null             // same state, for the "YouTube account" row (Settings → Accounts and libraries)
     // Plex account: code to enter on plex.tv/link (/api/plex_link: { pending: { code, error }, configured, name }), QR
     property var plexLink: null
     property var plexLinkQr: null
@@ -336,7 +336,7 @@ Item {
         if (plexLink && plexLink.pending && !plexLink.pending.error) call("POST", "/api/plex_link", { action: "cancel" })
         plexLink = null
     }
-    // "Jellyfin" row of the System menu: the servers that answer on the network (Quick Connect), or forget the server
+    // "Jellyfin" row (Settings → Accounts and libraries): the servers that answer on the network (Quick Connect), or forget the server
     function jellyfinMenu() {
         var on = !!(st.libraries || {}).jellyfin
         openModal(tr("Looking for Jellyfin servers on the network…"), [{ label: tr("Cancel"), ok: function () {} }])
@@ -374,7 +374,7 @@ Item {
         if (jfLink && jfLink.pending && !jfLink.pending.error) call("POST", "/api/jellyfin_link", { action: "cancel" })
         jfLink = null
     }
-    // "Plex" row of the System menu: sign in by code, or forget the server
+    // "Plex" row (Settings → Accounts and libraries): sign in by code, or forget the server
     function plexMenu() {
         var on = !!(st.libraries || {}).plex
         var items = [{ label: tr(on ? "↻  Sign in with another Plex account" : "+  Sign in with a Plex account"),
@@ -572,7 +572,7 @@ Item {
         askUpdate()
         idleClose.restart()
     }
-    // Update waiting for the user (installed by the weekly update, which never restarts by itself): asked once per
+    // Update for the user (found by the daily check, installed only when accepted; never applied by itself): asked once per
     // start and per wake-up (/api/update_prompt id), at the menu's first opening: a version installed and waiting for a
     // restart, or else a newer release found by the daily check (installed only if accepted); "Later" asks again next
     // time, "Don't ask again" not for this version (Settings → Updates still offers it; a newer one asks again)
@@ -606,8 +606,10 @@ Item {
         stopPreview()
         closePlexLink()
         closeJfLink()
+        ytAuth = null   // (Google's code expires by itself; reopening the menu must not show a stale one)
         isOpen = false
         modal = null
+        btPhase = ""
         kbOpen = false
         box.setMenuOpen(false)
         idleClose.stop()
@@ -899,7 +901,7 @@ Item {
                   hint: tr("A release's image (stream-box.raw.xz), without the Internet"), ok: function () { localUpdateMenu() } },
                 { label: tr("Direct update (source)"), visible: !!(dev && dev.enabled), value: directValue(),
                   hint: tr("Developer mode: the code and system files of the main branch, not the system"),
-                  ok: function () { if (!(health && health.update && health.update.system && health.update.system.running)) updateAct("update", { direct: true }, function (u) { u.system.running = true; u.system.direct = true }) } },
+                  ok: function () { var u = health && health.update && health.update.system; if (!(u && (u.running || u.checking))) updateAct("update", { direct: true }, function (u) { u.system.running = true; u.system.direct = true }) } },
             ]
         case "backup":
             return [
@@ -1386,8 +1388,9 @@ Item {
         if (kbOpen) return keyKeyboard(k)
         if (modal) {
             if (k === "up" || k === "down") modalSel = Math.max(0, Math.min(modal.items.length - 1, modalSel + (k === "down" ? 1 : -1)))
-            else if (k === "ok") { var it = modal.items[modalSel]; modal = null; it.ok() }
-            else if (k === "back" || k === "left") { modal = null; if (powerOnly) close() }
+            else if (k === "ok") { var it = modal.items[modalSel]; modal = null; if (it) it.ok() }   // (a dialog may have no item)
+            // Back: the dialog goes, and the Bluetooth search or pairing with it (its refresh would take over the next one)
+            else if (k === "back" || k === "left") { modal = null; btPhase = ""; if (powerOnly) close() }
             return
         }
         if (ytAuth) { if (k === "back" || k === "left" || k === "ok") ytAuth = null; return }

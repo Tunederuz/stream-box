@@ -16,11 +16,12 @@ SHA256SUMS.gpg next to it:
     systemd-boot fall back to the previous version if it doesn't work, as for an online update.
 Progress and result in /run/stream-box-local-update.json (read by remote.py).
 """
-import glob, hashlib, json, lzma, os, shutil, subprocess, sys, time, uuid
+import fcntl, glob, hashlib, json, lzma, os, shutil, subprocess, sys, time, uuid
 
 STAGE = "/data/home/media/.local/state/stream-box/local-update"   # media's ~/.local/state is bound from /data
 WORK = "/data/local-update"
 STATUS = "/run/stream-box-local-update.json"
+LOCK = "/run/stream-box-system-update.lock"   # shared with system-update: one system update at a time (same slot)
 KEYRING = "/etc/systemd/import-pubring.pgp"
 DEV_MARK = "/var/lib/stream-box/dev-mode"
 IMAGE, SUMS, SIG = "stream-box.raw.xz", "SHA256SUMS", "SHA256SUMS.gpg"
@@ -203,6 +204,12 @@ def write(disk, slots, running_root):
 
 def main():
     status()
+    lock = open(LOCK, "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        status(state="error", error="an online system update is running: try again once it is done")
+        return 1
     try:
         disk, root, slots = layout()
         if not any(s[0] == root and s[2].startswith("stream-box_") for s in slots) or len(slots) < 2 \
