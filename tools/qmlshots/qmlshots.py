@@ -49,7 +49,8 @@ STEPS = (
     + keys("right down down down down ok back")                   # grid scrolls, options
     + scene(2, "right right ok")                                  # Replays: another streamer
     + keys("down right right right right down right up left left left ok back")   # rows, resume dialog
-    + scene(3, "down right right right right menu down back")     # YouTube: subscriptions, options
+    + scene(3, "down right right")                                # YouTube: recommended for you
+    + keys("down right right right right menu down back")         # subscriptions, options
     + keys("down down right up up up")                            # channel rows
     + keys("ok ok right ok down down down down down right ok")    # search keyboard, search "ab"
     + keys("right right right right right right ok ok")           # found channels, dialog, its videos

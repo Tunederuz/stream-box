@@ -254,6 +254,9 @@ Item {
             rows.push({ kind: "preview", key: "preview", title: tr("{name} · latest videos", { name: ytPreview.name }), avatar: ytPreview.avatar,
                         items: ytPreview.videos || [], loading: ytPreview.videos === null })
         if (ytResults) rows.push({ kind: "results", key: "search", title: tr("Results for \"{query}\"", { query: ytResults.query }), items: ytResults.results })
+        // The account's YouTube home ("YouTube TV app" access): its recommended videos, first
+        var rec = yt && yt.recommended
+        if (rec && rec.length) rows.push({ kind: "rec", key: "rec", title: tr("Recommended for you"), items: rec })
         var subs = yt && yt.subs
         if (subs && subs.authorized)
             rows.push({ kind: "subs", key: "subs", title: tr("Subscriptions"), items: subs.videos || [], loading: subs.videos === null })
@@ -493,8 +496,9 @@ Item {
             parts = [it.channel, ago(it.date), it.seconds ? Fmt.clock(it.seconds) : ""]
         else if (row.kind === "connect")
             parts = [tr("Your YouTube subscriptions")]
-        else if (row.kind === "results")
-            parts = [it.channel, it.seconds ? Fmt.clock(it.seconds) : "", it.views ? tr("{n} views", { n: Fmt.big(it.views, tr) }) : ""]
+        else if (row.kind === "results" || row.kind === "rec")
+            parts = [it.channel, it.live ? tr("● LIVE") : it.seconds ? Fmt.clock(it.seconds) : "",
+                     it.views ? tr("{n} views", { n: Fmt.big(it.views, tr) }) : ""]
         else
             parts = [ago(it.date), it.views ? tr("{n} views", { n: Fmt.big(it.views, tr) }) : ""]
         return parts.filter(function (t) { return !!t }).join(" · ") + (it.finished ? " · " + tr("watched") : "")

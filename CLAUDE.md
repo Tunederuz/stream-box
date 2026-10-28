@@ -525,6 +525,13 @@ favorite instead of 4, durations and views, no request to youtube.com: `/api/you
 read in parallel, failures kept for 10 min (`YT_FEED_RETRY`). The menu keeps `yt` from one opening to the next and
 rereads it in the background; the page only reads the list (`GET /api/youtube_channels`). Rows: cards created only for
 the targeted rows and their neighbors (`near`).
+Recommended for you (first row under the search): the account's YouTube home through the "YouTube TV app" access
+(cast/youtube_tv.js `GET /recommended`: `/browse` FEwhat_to_watch with the TV client, first two pages, video tiles
+only — `tileRenderer` with `TILE_CONTENT_TYPE_VIDEO`: contentId, title, first line = channel, duration and views from
+the overlay and the lines, "LIVE" overlay — without duplicates, 30 at most, kept 30 min; `recommendedVideos(data)` is
+the pure parsing), `youtube.yt_tv_recommended`, `youtube_home()["recommended"]` with the progress (`with_progress`).
+Authenticated requests as the TV app makes them, not yt-dlp extractions: no bot check. Row kind `rec` in the QML menu,
+"Recommended for you" in the quick menu; not in the companion app (it shows no video rows).
 Favorites (`youtube.json` list, one row per channel): Options on a subscription video → "Add to favorites"
 (channel taken from `youtube-subs.json`, no request to YouTube), "See latest videos", "Play the video".
 Page: YouTube block of the Remote tab (search, one chip per channel) and "YouTube favorites" in Settings.

@@ -179,6 +179,13 @@ def yt_tv_progress():
     return yt_tv_cache["data"]
 
 
+def yt_tv_recommended():
+    """Videos of the account's YouTube home ("YouTube TV app" access, kept 30 min by youtube_tv.js): [] when not
+    connected, the server not running or YouTube unreachable"""
+    videos = yt_tv("/recommended", timeout=20)
+    return videos if isinstance(videos, list) else []
+
+
 def yt_tv_report(video_id, position, final=False):
     threading.Thread(target=yt_tv, args=("/report", {"id": video_id, "position": position, "final": final}),
                      daemon=True).start()
@@ -200,8 +207,9 @@ def yt_fav_videos(cache, channel_id):
 
 
 def youtube_home():
-    """Favorites (one row per channel) and subscriptions. Subscribed favorites: subscriptions poll, no request to
-    youtube.com; the others: RSS feeds, read in parallel (yt_feed also keeps failures)"""
+    """Recommended for you (the account's YouTube home, through the "YouTube TV app" access), favorites (one row per
+    channel) and subscriptions. Subscribed favorites: subscriptions poll, no request to youtube.com; the others: RSS
+    feeds, read in parallel (yt_feed also keeps failures)"""
     from concurrent.futures import ThreadPoolExecutor
     cache, chans = read_json_file(YT_FEED_FILE), yt_channels()
     videos = {c["id"]: yt_fav_videos(cache, c["id"]) for c in chans}
@@ -217,7 +225,7 @@ def youtube_home():
     except (OSError, ValueError, KeyError) as e:   # YouTube account broken: the list's channels remain
         print(f"remote.py: YouTube subscriptions: {e}", flush=True)
         subs = None
-    return {"channels": out, "subs": subs}
+    return {"channels": out, "subs": subs, "recommended": with_progress(yt_tv_recommended(), known)}
 
 
 def yt_search(query):

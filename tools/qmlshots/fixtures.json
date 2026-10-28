@@ -710,7 +710,81 @@
      "avatar": "http://127.0.0.1:8080/img/ff4f5e.png"
     }
    ]
-  }
+  },
+  "recommended": [
+   {
+    "id": "rec00000000",
+    "title": "Recommended 0",
+    "channel": "Channel R0",
+    "thumb": "http://127.0.0.1:8080/img/1db954.png",
+    "url": "https://www.youtube.com/watch?v=rec0",
+    "seconds": 600,
+    "views": 1800,
+    "live": false,
+    "position": null,
+    "finished": false
+   },
+   {
+    "id": "rec00000001",
+    "title": "Recommended 1",
+    "channel": "Channel R1",
+    "thumb": "http://127.0.0.1:8080/img/f5a623.png",
+    "url": "https://www.youtube.com/watch?v=rec1",
+    "seconds": 737,
+    "views": 14400,
+    "live": false,
+    "position": 300,
+    "finished": false
+   },
+   {
+    "id": "rec00000002",
+    "title": "Recommended 2",
+    "channel": "Channel R2",
+    "thumb": "http://127.0.0.1:8080/img/00bcd4.png",
+    "url": "https://www.youtube.com/watch?v=rec2",
+    "seconds": 874,
+    "views": 48600,
+    "live": true,
+    "position": null,
+    "finished": false
+   },
+   {
+    "id": "rec00000003",
+    "title": "Recommended 3",
+    "channel": "Channel R3",
+    "thumb": "http://127.0.0.1:8080/img/e91e63.png",
+    "url": "https://www.youtube.com/watch?v=rec3",
+    "seconds": 1011,
+    "views": 115200,
+    "live": false,
+    "position": null,
+    "finished": true
+   },
+   {
+    "id": "rec00000004",
+    "title": "Recommended 4",
+    "channel": "Channel R4",
+    "thumb": "http://127.0.0.1:8080/img/8bc34a.png",
+    "url": "https://www.youtube.com/watch?v=rec4",
+    "seconds": 1148,
+    "views": 225000,
+    "live": false,
+    "position": null,
+    "finished": false
+   },
+   {
+    "id": "rec00000005",
+    "title": "Recommended 5",
+    "channel": "Channel R5",
+    "thumb": "http://127.0.0.1:8080/img/795548.png",
+    "url": "https://www.youtube.com/watch?v=rec5",
+    "seconds": 1285,
+    "views": 388800,
+    "live": false,
+    "position": null,
+    "finished": false
+   }
+  ]
  },
  "/api/youtube_search": {
   "results": [

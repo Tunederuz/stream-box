@@ -6,6 +6,10 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+### Added
+- YouTube: a "Recommended for you" row, your YouTube home's videos (when the YouTube account is connected for the
+  progress sync).
+
 ## [0.2.0]
 
 To get A/B system updates, a box installed with 0.1.x must be installed again from this version: save its settings

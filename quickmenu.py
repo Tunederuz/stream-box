@@ -151,6 +151,10 @@ def youtube_screen():
     def build():
         d = youtube.youtube_home()
         out = []
+        rec = d.get("recommended") or []
+        if rec:
+            out.append(item(tr("Recommended for you"), lambda: screen(tr("Recommended for you"), lambda: video_items(
+                rec, lambda v: v.get("channel") or "")), str(len(rec))))
         subs = d.get("subs") or {}
         if subs.get("videos"):
             out.append(item(tr("Subscriptions"), lambda: screen(tr("Subscriptions"), lambda: video_items(

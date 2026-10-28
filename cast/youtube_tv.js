@@ -7,6 +7,9 @@
 //                   only updates this percentage with a long delay: indicative only)
 //   POST /report    { id, position, final }: position sent back to YouTube (the phone resumes where the TV stopped),
 //                   like a player does: session start (/player, cpn), then segments watched in real time
+//   GET  /recommended  videos of the account's YouTube home (the TV app's: FEwhat_to_watch, its first two pages: the
+//                   shelves "Recommended", "Recently uploaded", topics…), without duplicates (kept 30 min: two
+//                   requests, as the TV app makes when it opens and scrolls)
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -15,6 +18,7 @@ import { Innertube, Log, ClientType, Constants } from 'youtubei.js';
 const TOKEN = os.homedir() + '/.config/stream-box/youtube-tv-token.json';
 const PORT = 8091;
 const PROGRESS_CACHE = 600e3;
+const RECOMMENDED_CACHE = 1800e3, RECOMMENDED_MAX = 30, RECOMMENDED_PAGES = 2;
 const PAGES_HISTORY = 8, PAGES_SUBS = 2;   // ~15 videos per page
 const SESSION_IDLE = 120e3;   // no report for 2 min: new playback session
 const CLIENT = { client_name: Constants.CLIENTS.TV.NAME, client_version: Constants.CLIENTS.TV.VERSION };
@@ -22,6 +26,7 @@ Log.setLevel(Log.Level.NONE);
 
 let yt = null, connected = false, pending = null, error = null;
 let progress = { at: 0, data: {} };
+let recommended = { at: 0, data: [] };
 const sessions = new Map();
 
 const saveToken = ({ credentials }) => {
@@ -89,6 +94,55 @@ async function getProgress() {
   return data;
 }
 
+// Text of a TV client text node (simpleText or runs)
+const text = (t) => t?.simpleText ?? (t?.runs || []).map((r) => r.text).join('') ?? '';
+// "1:14:35" → 4475; "1.8K views" → 1800 (the TV client answers in English)
+const seconds = (s) => (/^\d+(:\d+)+$/.test(s || '') ? s.split(':').reduce((a, n) => a * 60 + Number(n), 0) : null);
+function count(s) {
+  const m = (s || '').replace(/,/g, '').match(/([\d.]+)\s*([KMB]?)\s+views?/i);
+  return m ? Math.round(Number(m[1]) * ({ K: 1e3, M: 1e6, B: 1e9 }[m[2].toUpperCase()] || 1)) : null;
+}
+
+// Videos of a TV home response (FEwhat_to_watch): its video tiles, without duplicates, in order
+export function recommendedVideos(data) {
+  const out = [], seen = new Set();
+  (function walk(n) {
+    if (Array.isArray(n)) return n.forEach(walk);
+    if (!n || typeof n !== 'object') return;
+    const t = n.tileRenderer;
+    if (t && t.contentType === 'TILE_CONTENT_TYPE_VIDEO' && /^[\w-]{11}$/.test(t.contentId || '') && !seen.has(t.contentId)) {
+      seen.add(t.contentId);
+      const head = t.header?.tileHeaderRenderer || {}, meta = t.metadata?.tileMetadataRenderer || {};
+      const lines = (meta.lines || []).map((l) => (l.lineRenderer?.items || []).map((i) => text(i.lineItemRenderer?.text)));
+      const overlay = (head.thumbnailOverlays || []).map((o) => text(o.thumbnailOverlayTimeStatusRenderer?.text)).find(Boolean);
+      out.push({ id: t.contentId, title: text(meta.title), channel: lines[0]?.[0] || '',
+                 thumb: `https://i.ytimg.com/vi/${t.contentId}/mqdefault.jpg`, url: `https://www.youtube.com/watch?v=${t.contentId}`,
+                 seconds: seconds(overlay), live: overlay === 'LIVE', views: count(lines.flat().join(' ')) });
+    }
+    for (const v of Object.values(n)) walk(v);
+  })(data);
+  return out.slice(0, RECOMMENDED_MAX);
+}
+
+async function getRecommended() {
+  if (!connected) return [];
+  if (Date.now() - recommended.at < RECOMMENDED_CACHE) return recommended.data;
+  try {
+    const pages = [];
+    let r = await yt.actions.execute('/browse', { browseId: 'FEwhat_to_watch', client: 'TV' });
+    for (let n = 1; ; n++) {
+      pages.push(r.data);
+      const token = n < RECOMMENDED_PAGES && nextPage(JSON.stringify(r.data));
+      if (!token) break;
+      r = await yt.actions.execute('/browse', { continuation: token, client: 'TV' });
+    }
+    recommended = { at: Date.now(), data: recommendedVideos(pages) };
+  } catch (e) {
+    console.error('youtube_tv.js: FEwhat_to_watch:', e.message);   // the previous list, retried at the next call
+  }
+  return recommended.data;
+}
+
 async function report(id, position, final) {
   if (!connected || !/^[\w-]{11}$/.test(id) || !(position >= 0)) return false;
   const www = (u) => u.replace('https://s.', 'https://www.');
@@ -131,6 +185,7 @@ export function startYoutubeTv() {
     try {
       if (req.method === 'GET' && req.url === '/status') return send(200, { connected, pending, error });
       if (req.method === 'GET' && req.url === '/progress') return send(200, await getProgress());
+      if (req.method === 'GET' && req.url === '/recommended') return send(200, await getRecommended());
       if (req.method === 'POST' && req.url === '/login') {
         error = null;
         const c = await client();
@@ -142,6 +197,7 @@ export function startYoutubeTv() {
         try { await yt?.session.signOut(); } catch {}
         fs.rmSync(TOKEN, { force: true });
         Object.assign(progress, { at: 0, data: {} });
+        Object.assign(recommended, { at: 0, data: [] });
         connected = false; pending = null; yt = null;
         return send(200, { connected });
       }
