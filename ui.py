@@ -32,6 +32,7 @@ from PySide6.QtQuick import QQuickFramebufferObject, QQuickView, QQuickWindow, Q
 import mpv
 
 import chat_qt   # chat with emotes (same folder)
+import common    # common.py: built-in battery
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 CURSOR_HIDE_MS = 4000   # like mpv's --cursor-autohide=4000
@@ -151,6 +152,7 @@ class Box(QObject):
     ambientChanged = Signal()
     videoActiveChanged = Signal()
     homeChanged = Signal()
+    batteryChanged = Signal()
     _ambient_in = Signal(str)        # from the mpv thread
     _video_in = Signal(bool)
     _home_in = Signal(str, str)      # home screen: key (ambient_on, status, qr), value as JSON
@@ -163,6 +165,21 @@ class Box(QObject):
         self._home_in.connect(self._set_home, Qt.QueuedConnection)
         self._ambient_in.connect(self._set_ambient, Qt.QueuedConnection)
         self._video_in.connect(self._set_video, Qt.QueuedConnection)
+        # Built-in battery (Steam Deck, laptop), read every 30 s: home screen and menu header; "" without one
+        self._battery = ""
+        self._battery_timer = QTimer(self, interval=30000)
+        self._battery_timer.timeout.connect(self._read_battery)
+        self._battery_timer.start()
+        self._read_battery()
+
+    def _read_battery(self):
+        b = common.battery()
+        value = json.dumps(b) if b else ""
+        if value != self._battery:
+            self._battery = value
+            self.batteryChanged.emit()
+
+    battery = Property(str, lambda self: self._battery, notify=batteryChanged)   # {percent, charging} (JSON) or ""
 
     def _set_ambient(self, value):
         if value != self._ambient:

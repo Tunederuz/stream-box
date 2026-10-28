@@ -4,7 +4,7 @@ status (temperatures, processor, memory, network, services) and system updates. 
 import functools, json, os, shutil, socket, subprocess, time
 
 import settings  # settings.py: chosen player
-from common import lan_ip, mpv
+from common import battery, lan_ip, mpv
 from i18n import tr
 
 
@@ -292,6 +292,7 @@ def health():
     except (OSError, subprocess.SubprocessError):
         props = {}
     return {
+        "battery": battery(),   # None without one (a mini PC)
         "temps": temperatures(), "cpu": health_rates["cpu"], "load": os.getloadavg()[0], "cores": os.cpu_count(),
         "memory": {"total": mem.get("MemTotal", 0) * 1024, "available": mem.get("MemAvailable", 0) * 1024},
         "disk": {"total": disk.total, "free": disk.free,

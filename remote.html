@@ -1806,6 +1806,9 @@ async function refreshHealth() {
     const player = p.running === "qt" ? tr("Full version") : tr("Simplified version");
     $("health").replaceChildren(
       tile(tr("Temperature"), t != null ? `${t} °C` : "–", h.temps.disk != null ? tr("disk {t} °C", { t: h.temps.disk }) : "", t >= 85 ? "bad" : t >= 70 ? "warn" : ""),
+      // built-in battery (Steam Deck, laptop): only when the box has one
+      ...(h.battery ? [tile(tr("Battery"), tr("{n}%", { n: h.battery.percent }), h.battery.charging ? tr("charging") : tr("on battery"),
+                            !h.battery.charging && h.battery.percent <= 15 ? "bad" : "")] : []),
       tile(tr("Processor"), h.cpu != null ? tr("{n}%", { n: Math.round(h.cpu) }) : "…",
            tr("load {load} · {cores} cores", { load: h.load.toFixed(1).replace(".", LANG === "fr" ? "," : "."), cores: h.cores }), h.cpu >= 85 ? "warn" : ""),
       tile(tr("Memory"), bytes(used), tr("of {total}", { total: bytes(h.memory.total) }), h.memory.available < 5e8 ? "warn" : ""),
