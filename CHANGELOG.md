@@ -17,8 +17,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - Local system update, without the Internet: a release's image (stream-box.raw.xz with its SHA256SUMS and
   SHA256SUMS.gpg) from a USB stick (System menu) or sent from the companion app (Settings → System). Unsigned images
   only in developer mode.
-- Developer mode: "Update now" takes the box's files straight from the main branch (code and system files, not the
-  system), shown as <version>+<commit> · dev.
+- Developer mode: a "Direct update (main)" option takes the box's files straight from the main branch (code and system
+  files, not the system), shown as <version>+<commit> · dev. Otherwise the box updates as any other.
 - YouTube: a "Recommended for you" row, your YouTube home's videos (when the YouTube account is connected for the
   progress sync).
 

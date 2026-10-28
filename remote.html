@@ -589,6 +589,7 @@
     <div class="setting" style="margin-top: 0">Box status</div>
     <div class="health" id="health"></div>
     <button id="update-now" style="width: 100%; margin-top: 10px">Update now</button>
+    <button id="update-direct" hidden style="width: 100%; margin-top: 8px">Direct update (main)</button>
     <button id="reboot" style="width: 100%; margin-top: 8px">Restart the box</button>
     <details style="margin-top: 10px">
       <summary>Last update log</summary>
@@ -1603,6 +1604,8 @@ async function refreshHealth() {
     );
     const busy = u.running || !!(u.system && u.system.running);
     $("update-now").disabled = busy;
+    $("update-direct").hidden = !u.dev;   // developer mode: the code and system files of main, not the system
+    $("update-direct").disabled = busy;
     const sys = u.system && u.system.last;   // system update (image): release installed
     updateWaiting = !!(sys && sys.ok && sys.restart === "pending" && !(sys.kind === "ab" && sys.new === u.system.version));
     $("update-now").textContent = busy ? tr("Update in progress…") : updateWaiting ? tr("↻  Restart now") : tr("Update now");
@@ -1626,6 +1629,11 @@ let updateWaiting = false;   // installed, waiting for "Restart now" (a plain re
 $("update-now").onclick = async () => {
   $("update-now").disabled = true;
   await send(updateWaiting ? "apply_update" : "update");
+  setTimeout(refreshHealth, 1500);
+};
+$("update-direct").onclick = async () => {
+  $("update-direct").disabled = true;
+  await send("update", { direct: true });
   setTimeout(refreshHealth, 1500);
 };
 refreshHealth();

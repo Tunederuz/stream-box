@@ -965,7 +965,10 @@ partition (the USB drive left plugged in after installing the same version) make
 the stick after installing.
 
 ### System update (image)
-Developer mode (/var/lib/stream-box/dev-mode), any box: direct update instead — the git path below, from main
+Developer mode updates as any box (weekly, "Update now"). Direct update, by hand only and in developer mode ("Direct
+update (main)" in the TV System menu and the companion app: `POST /api/update {direct: true}`, system.start_update leaves
+~/.local/state/stream-box/update-direct, used up by system-update within 2 h, applied at once like "Update now"), any
+box: the git path below, from main
 (root clone `fetch origin main`, media's code fast-forwarded to it) instead of the latest release, no system image;
 `kind: direct`, version `<IMAGE_VERSION or latest tag>+<commit>`, shown with "dev" on the TV and explained in the
 companion app ("the system itself is not updated").

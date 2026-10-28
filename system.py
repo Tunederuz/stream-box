@@ -276,19 +276,23 @@ def health():
                    "dropped": drops, "fps": fps, "size": f"{width}x{height}" if width else None},
         "services": services,
         "update": {"running": props.get("ActiveState") == "activating", "next": next_run, "last": last_update(),
-                   "system": system_update()},
+                   "system": system_update(), "dev": dev_status()["enabled"]},
     }
 
 
 UPDATE_MANUAL = os.path.expanduser("~/.local/state/stream-box/update-manual")
+UPDATE_DIRECT = os.path.expanduser("~/.local/state/stream-box/update-direct")
 UPDATE_DISMISSED = os.path.expanduser("~/.local/state/stream-box/update-dismissed")   # "Don't ask again": that update
 
 
-def start_update():
+def start_update(direct=False):
     """"Update now": marked as started by hand, so that system-update applies it at once (when nothing plays); the
-    weekly update never restarts by itself"""
+    weekly update never restarts by itself. direct ("Direct update (main)", developer mode only): the code and system
+    files of the main branch, not the system"""
+    if direct and not dev_status()["enabled"]:
+        raise ValueError(tr("Direct update: developer mode only."))
     os.makedirs(os.path.dirname(UPDATE_MANUAL), exist_ok=True)
-    with open(UPDATE_MANUAL, "w") as f:
+    with open(UPDATE_DIRECT if direct else UPDATE_MANUAL, "w") as f:
         f.write(str(time.time()))
     user_systemctl("start", "--no-block", "stream-box-update.service")
 

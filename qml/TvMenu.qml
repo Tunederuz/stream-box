@@ -850,6 +850,9 @@ Item {
                   if (updateWaiting()) askUpdate(true)
                   else act("update")
               } },
+            { label: tr("Direct update (main)"), visible: !!(dev && dev.enabled),
+              hint: tr("Developer mode: the code and system files of the main branch, not the system"),
+              ok: function () { if (!(health && health.update && health.update.running)) act("update", { direct: true }) } },
             { label: tr("Power button"), hint: tr("Remote, phone and Home Assistant"),
               value: st.power_action === "suspend" ? tr("Sleep") : tr("Full shutdown"),
               step: function (d) { act("power_action", { mode: st.power_action === "suspend" ? "poweroff" : "suspend" }) } },

@@ -208,7 +208,7 @@ ACTIONS = {
     "plex_link": lambda body: plex.link_cancel() if body.get("action") == "cancel" else plex.link_start(),
     "youtube_channels": lambda body: youtube.edit_yt_channels(str(body.get("action", "")),
                                                               str(body.get("channel", "")), int(body.get("delta", 0))),
-    "update": lambda body: system.start_update(),
+    "update": lambda body: system.start_update(bool(body.get("direct"))),   # direct: developer mode, from main
     "apply_update": lambda body: system.apply_update(),   # "Restart now" for an update waiting for the user
     "dismiss_update": lambda body: system.dismiss_update(),   # "Don't ask again" (for that update)
     "qr": qr,

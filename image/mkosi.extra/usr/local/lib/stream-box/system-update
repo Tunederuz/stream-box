@@ -13,8 +13,10 @@
 # ("Update now": remote.py leaves ~/.local/state/stream-box/update-manual), it applies at once when nothing plays.
 #   system-update state   at boot (stream-box-update-state.service): whether an update is still waiting
 #
-# Developer mode (/var/lib/stream-box/dev-mode), on any box: direct update, the files and not the system: the code and
-# the system files below, from the main branch instead of the latest release; version shown as <system>+<commit> (dev).
+# Direct update (developer mode only, started by hand: "Direct update (main)", remote.py leaves
+# ~/.local/state/stream-box/update-direct), on any box: the files and not the system: the code and the system files
+# below, from the main branch instead of the latest release; version shown as <system>+<commit> (dev). Otherwise
+# developer mode updates as any box does.
 #
 # Box installed before A/B (one system partition):
 #   - its own copy of the repository, owned by root (/var/lib/stream-box/src): what is installed as root never comes
@@ -46,8 +48,8 @@ PY
 }
 trap 'report 0 "failed: $step"' ERR
 
-manual() {   # started by "Update now" within the last 2 h (the marker is used up)
-  local mark=/home/media/.local/state/stream-box/update-manual
+manual() {   # mark: started by hand within the last 2 h (the marker is used up)
+  local mark=/home/media/.local/state/stream-box/$1
   [ -f "$mark" ] || return 1
   local age=$(( $(date +%s) - $(stat -c %Y "$mark") ))
   rm -f "$mark"
@@ -64,6 +66,8 @@ try:
 except (OSError, ValueError):
     d = {"ok": True, "message": "", "kind": "ab"}
 d.update(restart=restart, new=new)
+if new:
+    d["kind"] = "ab"   # a newer system waits (after a direct update, for instance): applied as an A/B one
 with open(path + ".tmp", "w") as f:
     json.dump(d, f)
 os.chmod(path + ".tmp", 0o644)
@@ -75,8 +79,12 @@ nothing_plays() {   # the box's server says the home screen is shown
   [ "$(curl -s -m 5 http://127.0.0.1:8080/api/state | python3 -c 'import json, sys; print(json.load(sys.stdin).get("mode", ""))' 2> /dev/null)" = home ]
 }
 
-is_manual=""
-if [ "${1:-}" != state ] && manual; then is_manual=1; fi
+is_manual="" direct=""
+if [ "${1:-}" != state ]; then
+  if manual update-manual; then is_manual=1; fi
+  # Direct update: asked by hand, developer mode still on
+  if manual update-direct && [ -e "$STATE/dev-mode" ]; then direct=1 is_manual=1; fi
+fi
 
 # Layout: system partitions (GPT type root-x86-64) on the disk of /, label of the running one
 root_dev=$(findmnt -no SOURCE / | sed 's/\[.*//')
@@ -88,10 +96,6 @@ for part in /sys/block/"$disk"/"$disk"*; do
   t=$(blkid -p -o value -s PART_ENTRY_TYPE "/dev/${part##*/}" 2> /dev/null || true)
   if [ "${t,,}" = 4f68bce3-e8cd-4db1-96e7-fbcaf984b709 ]; then slots=$((slots + 1)); fi
 done
-
-# Developer mode: direct update (below, from main), not the A/B system
-direct=""
-if [ -e "$STATE/dev-mode" ]; then direct=1; fi
 
 if [ -z "$direct" ] && [[ "$root_label" == stream-box_* ]]; then
   kind=ab
