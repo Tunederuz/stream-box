@@ -6,6 +6,11 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+## [0.2.0]
+
+To get A/B system updates, a box installed with 0.1.x must be installed again from this version: save its settings
+first (System → Backup and restore, on a USB stick), then restore them after the installation.
+
 ### Changed
 - New installations prepare the disk for A/B system updates: two system partitions and a data partition that keeps
   your settings, accounts, Bluetooth pairings and Wi-Fi networks when the system is replaced. Boxes already installed
@@ -19,6 +24,9 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   system of the latest release (Arch packages, kernel and the box's code) next to the running one, then restart onto
   it when nothing is playing. If it doesn't work, the box goes back to the previous version by itself.
 - A release rebuilt every month with the latest Arch packages (security fixes), when they changed.
+
+### Fixed
+- The playback bar no longer shows up empty for a moment, nor goes back to 0 while it disappears.
 
 ## [0.1.1]
 
