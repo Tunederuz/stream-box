@@ -17,6 +17,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   stays while the video title is chosen.
 - Leaving a video with Back reopens the menu on the tab it was started from (YouTube…) instead of Live.
 - A YouTube video refused by YouTube's robot check now says so, instead of "Can't play this video".
+- YouTube: videos resumed in the middle (history, Resume) failed with "Can't play this video": YouTube served only
+  the start of the file to the client the box used; it now uses another one.
 
 ## [0.3.0]
 

@@ -151,9 +151,13 @@ Installation and update: `install.sh` (see the README); settings backup: TV Syst
   valid token changes nothing while the block lasts (a few hours). Tokens: pip plugin
   `bgutil-ytdlp-pot-provider` + its server (same version, `~/.local/share/bgutil-pot-provider`, built with Node
   from the pip package `nodejs-wheel`), user service `stream-box-pot` (127.0.0.1:4416). mpv passes
-  `extractor-args=youtube:player_client=tv_simply,android_vr;fetch_pot=always`: the TV client chosen by default
-  received rejected streams (HTTP 403 on googlevideo, even with IPv4 end to end). If YouTube breaks again, compare
-  the clients with `yt-dlp --extractor-args youtube:player_client=<client> -g <url>` then `curl -r 0-1000` on the URL. Check: `yt-dlp -v --simulate <url>` → `PO Token Providers: bgutil:http`.
+  `extractor-args=youtube:player_client=mweb,tv_simply;fetch_pot=always`: the TV client chosen by default
+  received rejected streams (HTTP 403 on googlevideo, even with IPv4 end to end); tv_simply (2026-10-28) served only
+  the first megabytes (403 further on: a video resumed from the history failed at once, "Can't play this video"),
+  mweb the whole file; android_vr's https formats are skipped (no GVS token). If YouTube breaks again, compare the
+  clients with `yt-dlp --extractor-args "youtube:player_client=<client>;fetch_pot=always" -g <url>` then `curl -r`
+  on the URL **both at the start and far into the file** (`-r 0-1000`, `-r 20000000-20001000`): a 206 at the start
+  alone proves nothing. Check: `yt-dlp -v --simulate <url>` → `PO Token Providers: bgutil:http`.
 - **Rewinding the live stream**: `on_load` keeps `LIVE_BACK` (400 MiB ≈ 7-8 min at 1080p60) with
   `demuxer-seekable-cache=yes`. `live_window()` reads `demuxer-cache-state.seekable-ranges`. When time-shifted or paused,
   `set_live_buffer` raises the forward buffer to 150 MiB (otherwise mpv stops reading the stream and the delay melts
