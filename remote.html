@@ -82,6 +82,15 @@
   .tabs button[aria-selected="true"] { background: var(--grad); color: #fff; box-shadow: 0 4px 14px rgba(145, 70, 255, .35); }
   .tab { display: grid; gap: 14px; }
   .tab[hidden] { display: none; }
+  .group { display: grid; gap: 14px; }
+  .group-body { display: grid; gap: 14px; }
+  .group-body[hidden] { display: none; }
+  .group-head { display: flex; align-items: center; width: 100%; min-height: 52px; padding: 0 18px; font-weight: 600;
+                font-size: 16px; text-align: left; border-radius: var(--radius); background: var(--glass);
+                border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow); }
+  .group-head::after { content: ""; margin-left: auto; width: 8px; height: 8px; border: solid var(--muted);
+                       border-width: 0 2px 2px 0; transform: rotate(45deg); transition: transform .2s; }
+  .group-head[aria-expanded="true"]::after { transform: rotate(-135deg); }
 
   section, .tabs, #status {
     background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
@@ -430,264 +439,314 @@
 
   <div class="tab" id="tab-settings" hidden>
 
-  <!-- Interface language (TV and companion app); first section of the first setup -->
-  <section id="language-section">
-    <h2>Language</h2>
-    <select id="language" aria-label="Language"></select>
-  </section>
+  <!-- Sections in groups, as the TV menu's Settings (folded; open ones remembered on the phone: openGroup) -->
 
-  <!-- Wi-Fi: setup mode (the box's access point, netsetup.py) or network change -->
-  <section id="wifi" hidden>
-    <h2>Wi-Fi</h2>
-    <p id="wifi-state">…</p>
-    <label class="setting" for="wifi-ssid" style="margin-top: 0">Network</label>
-    <select id="wifi-ssid"></select>
-    <label class="setting" for="wifi-password">Password</label>
-    <div class="field">
-      <input id="wifi-password" type="password" autocomplete="off" placeholder="Wi-Fi password">
-      <button id="wifi-connect" class="current">Connect</button>
-    </div>
-    <div class="status" id="wifi-status"></div>
-  </section>
+  <div class="group" data-group="channels">
+    <button class="group-head" aria-expanded="false">Channels and favorites</button>
+    <div class="group-body" hidden>
 
-  <section id="streamers-section">
-    <h2>Streamer list</h2>
-    <p>Order matters: it is the order of the TV menu, of channel zapping (up / down) and of the automatic switch to
-      a streamer who goes live.</p>
-    <div class="field">
-      <input id="new-streamer" autocomplete="off" autocapitalize="none" placeholder="Twitch username or link"
-             aria-label="Streamer to add">
-      <button id="add-streamer" class="current">Add</button>
-    </div>
-    <div class="status" id="manage-status"></div>
-    <div id="manage-list"></div>
-  </section>
-
-  <section>
-    <h2>YouTube favorites</h2>
-    <p>Their latest videos show up in the YouTube block of the companion app and in the TV menu.</p>
-    <div class="field">
-      <input id="new-yt" autocomplete="off" autocapitalize="none" placeholder="@channel name or link"
-             aria-label="YouTube channel to add">
-      <button id="add-yt" class="current">Add</button>
-    </div>
-    <div class="status" id="yt-manage-status"></div>
-    <div id="yt-manage-list"></div>
-  </section>
-
-  <section>
-    <h2>YouTube account</h2>
-    <!-- Account subscriptions: your own Google app, authorization by code (read-only) -->
-    <div id="ytacc-setup" hidden>
-      <p>For the TV menu's <b>Subscriptions</b> row, the box needs your own Google app (free, one time).</p>
-      <details>
-        <summary>Create the app</summary>
-        <ol>
-          <li>On <code>console.cloud.google.com</code>, create a project, then enable <b>YouTube Data API v3</b>
-            (APIs &amp; Services → Library).</li>
-          <li><b>Google Auth Platform</b>: audience <b>External</b>, data access scope <code>youtube.readonly</code>, then
-            <b>Publish app</b> (otherwise Google disconnects the box every 7 days).</li>
-          <li><b>Clients → Create client</b>, type <b>TVs and Limited Input devices</b>.</li>
-          <li>Paste the <b>Client ID</b> and the <b>Client secret</b> into the fields below.</li>
-        </ol>
-      </details>
-      <div class="stack">
-        <input id="ytapp-id" autocomplete="off" autocapitalize="none" placeholder="Client ID (….apps.googleusercontent.com)"
-               aria-label="Google client ID">
-        <input id="ytapp-secret" type="password" autocomplete="off" placeholder="Client secret code"
-               aria-label="Google client secret">
-        <button id="ytapp-save" class="current">Save</button>
-      </div>
-    </div>
-    <div id="ytacc-auth" hidden>
-      <p>App saved. Allow the box to read your subscriptions (read-only).</p>
-      <button id="ytacc-login" class="current" style="width: 100%">Authorize the box</button>
-      <div id="ytacc-code" hidden style="margin-top: 12px; text-align: center">
-        <p style="margin-bottom: 6px">On <b>google.com/device</b>, enter this code:</p>
-        <div id="ytacc-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
-        <a id="ytacc-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the activation page</a>
-        <p>"Google hasn't verified this app": <b>Advanced</b>, then <b>Go to …</b></p>
-      </div>
-    </div>
-    <div id="ytacc-ok" hidden>
-      <p id="ytacc-summary"></p>
-      <div class="row">
-        <button id="ytacc-sync">Reload my subscriptions</button>
-        <button id="ytacc-logout">Disconnect</button>
-        <button id="ytapp-change">Change app</button>
-      </div>
-    </div>
-    <div class="status" id="ytacc-status"></div>
-  </section>
-
-  <section>
-    <h2>Sound output</h2>
-    <select id="audio-out" aria-label="Sound output"><option>Loading…</option></select>
-    <p id="audio-hint">Automatic: USB or Bluetooth headphones or speakers come first, otherwise the TV connected over
-      HDMI / DisplayPort.</p>
-  </section>
-
-  <section>
-    <h2>Jellyfin</h2>
-    <p style="margin-top: 0">Your Jellyfin server in the TV menu (a Jellyfin tab), and the box in "Play on…" of your
-      Jellyfin apps. Signing in by Quick Connect: no password to type.</p>
-    <p id="jf-connected" hidden></p>
-    <label class="setting" for="jf-address">Address of the server</label>
-    <div class="field">
-      <input id="jf-address" type="url" autocomplete="off" placeholder="http://192.168.1.10:8096">
-    </div>
-    <button id="jf-connect" class="current" style="width: 100%; margin-top: 8px">Connect</button>
-    <div id="jf-code" hidden style="margin-top: 12px; text-align: center">
-      <p style="margin-bottom: 6px">In Jellyfin (app or website): your user menu, <b>Quick Connect</b>, then enter:</p>
-      <div id="jf-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
-    </div>
-    <button id="jf-cancel" style="width: 100%; margin-top: 8px" hidden>Cancel</button>
-    <button id="jf-forget" style="width: 100%; margin-top: 8px" hidden>Disconnect</button>
-    <div class="status" id="jf-status"></div>
-  </section>
-
-  <section>
-    <h2>Plex</h2>
-    <p style="margin-top: 0">Your Plex server in the TV menu (a Plex tab): resume, next episodes, recent additions,
-      search. Progress follows on your other Plex apps.</p>
-    <p id="plex-connected" hidden></p>
-    <button id="plex-link" class="current" style="width: 100%">Sign in with a Plex account</button>
-    <div id="plex-code" hidden style="margin-top: 12px; text-align: center">
-      <p style="margin-bottom: 6px">On <b>plex.tv/link</b>, enter this code:</p>
-      <div id="plex-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
-      <a href="https://plex.tv/link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the link page</a>
-    </div>
-    <label class="setting" for="plex-address">Or the address of a server of the local network</label>
-    <div class="field">
-      <input id="plex-address" type="url" autocomplete="off" placeholder="http://192.168.1.10:32400">
-    </div>
-    <details>
-      <summary>Token (if the server asks for one)</summary>
-      <p>Not needed if Plex lets the box's network in without signing in: Plex, Settings, Network, "List of IP
-        addresses and networks that are allowed without auth" (for example 192.168.1.0/255.255.255.0). Otherwise the
-        X-Plex-Token of your account: in Plex on the web, "Get info" on a video, "View XML": it ends the link.</p>
-      <input id="plex-token" type="password" autocomplete="off" placeholder="X-Plex-Token" aria-label="Plex token">
-    </details>
-    <button id="plex-save" style="width: 100%; margin-top: 8px">Connect</button>
-    <button id="plex-forget" style="width: 100%; margin-top: 8px" hidden>Disconnect</button>
-    <div class="status" id="plex-status"></div>
-  </section>
-
-  <section>
-    <h2>Companion app address</h2>
-    <label class="setting" for="remote-url" style="margin-top: 0">Address shown as a QR code on the TV</label>
-    <div class="field">
-      <input id="remote-url" type="url" autocomplete="off" placeholder="Local network (default)">
-      <button id="remote-url-save">Save</button>
-    </div>
-    <p>Empty: the box's address on the local network. Domain name (https://…, behind a reverse proxy):
-      required to install the companion app as an app on the phone.</p>
-  </section>
-
-  <section>
-    <h2>System</h2>
-    <div class="setting" style="margin-top: 0">Box status</div>
-    <div class="health" id="health"></div>
-    <button id="update-now" style="width: 100%; margin-top: 10px">Update now</button>
-    <button id="update-direct" hidden style="width: 100%; margin-top: 8px">Direct update (main)</button>
-    <button id="reboot" style="width: 100%; margin-top: 8px">Restart the box</button>
-    <details style="margin-top: 10px">
-      <summary>Last update log</summary>
-      <pre id="update-log"></pre>
-    </details>
-    <details id="local-update" hidden style="margin-top: 10px">
-      <summary>Update from a file</summary>
-      <p>The image of a release (stream-box.raw.xz, the one used to install), with its SHA256SUMS and SHA256SUMS.gpg
-        (unsigned images: developer mode only). The box installs it next to the running system, then restarts onto it.</p>
-      <label class="setting" for="lu-image">Image (stream-box.raw.xz)</label>
-      <input id="lu-image" type="file" accept=".xz">
-      <label class="setting" for="lu-sums">SHA256SUMS and SHA256SUMS.gpg</label>
-      <input id="lu-sums" type="file" multiple>
-      <button id="lu-send" style="width: 100%; margin-top: 8px">Send and install</button>
-      <div class="status" id="lu-status"></div>
-    </details>
-  </section>
-
-  <section>
-    <h2>Backup</h2>
-    <p style="margin-top: 0">Settings, history, favorites, accounts (Twitch, YouTube, Jellyfin, MQTT) and Wi-Fi, to
-      restore them after a reinstall. The file contains your logins: keep it to yourself. Also in the TV's System
-      menu, on a USB stick.</p>
-    <button id="backup-download" style="width: 100%">Download the backup</button>
-    <button id="backup-restore" style="width: 100%; margin-top: 8px">Restore from a file…</button>
-    <input id="backup-file" type="file" accept=".gz,.tgz,application/gzip" hidden>
-    <div class="status" id="backup-status"></div>
-  </section>
-
-  <section>
-    <h2>Twitch account</h2>
-    <div id="account-on" hidden>
-      <p>Connected: <span class="account-name" id="account-name"></span>. No ads on the channels you're subscribed to.</p>
-      <button id="logout" style="width: 100%">Log out</button>
-    </div>
-    <div id="account-off" hidden>
-      <p id="account-intro">Connect your account to enjoy your subscriptions without ads.</p>
-      <details>
-        <summary>Where to find the token?</summary>
-        <ol>
-          <li>On a computer, open <code>twitch.tv</code> while logged in.</li>
-          <li>Press <code>F12</code>, then the <b>Application</b> tab (Chrome, Edge) or the <b>Storage</b> tab (Firefox).</li>
-          <li>Cookies → <code>https://www.twitch.tv</code> → row <code>auth-token</code>.</li>
-          <li>Copy its value (30 letters and digits) and paste it here.</li>
-        </ol>
-        <p style="margin-top: 8px">This token gives access to your account: it stays on the box and is never shown again.
-          It stops working if you log out of Twitch in that browser.</p>
-      </details>
+    <section id="streamers-section">
+      <h2>Streamer list</h2>
+      <p>Order matters: it is the order of the TV menu, of channel zapping (up / down) and of the automatic switch to
+        a streamer who goes live.</p>
       <div class="field">
-        <input id="token" type="password" autocomplete="off" placeholder="auth-token value" aria-label="Twitch token">
-        <button id="login" class="current">Connect</button>
+        <input id="new-streamer" autocomplete="off" autocapitalize="none" placeholder="Twitch username or link"
+               aria-label="Streamer to add">
+        <button id="add-streamer" class="current">Add</button>
       </div>
-    </div>
-    <div class="status" id="account-status"></div>
-  </section>
+      <div class="status" id="manage-status"></div>
+      <div id="manage-list"></div>
+    </section>
 
-  <section>
-    <h2>Followed channels</h2>
-    <!-- Twitch does not give this list to the website's token: it takes your own Twitch app and an authorization by code -->
-    <div id="follows-setup" hidden>
-      <p>For the <b>Following</b> tab of the TV menu, the box needs your own Twitch app (free, one time).</p>
+    <section>
+      <h2>YouTube favorites</h2>
+      <p>Their latest videos show up in the YouTube block of the companion app and in the TV menu.</p>
+      <div class="field">
+        <input id="new-yt" autocomplete="off" autocapitalize="none" placeholder="@channel name or link"
+               aria-label="YouTube channel to add">
+        <button id="add-yt" class="current">Add</button>
+      </div>
+      <div class="status" id="yt-manage-status"></div>
+      <div id="yt-manage-list"></div>
+    </section>
+
+    </div>
+  </div>
+
+  <div class="group" data-group="accounts">
+    <button class="group-head" aria-expanded="false">Accounts and libraries</button>
+    <div class="group-body" hidden>
+
+    <section>
+      <h2>Twitch account</h2>
+      <div id="account-on" hidden>
+        <p>Connected: <span class="account-name" id="account-name"></span>. No ads on the channels you're subscribed to.</p>
+        <button id="logout" style="width: 100%">Log out</button>
+      </div>
+      <div id="account-off" hidden>
+        <p id="account-intro">Connect your account to enjoy your subscriptions without ads.</p>
+        <details>
+          <summary>Where to find the token?</summary>
+          <ol>
+            <li>On a computer, open <code>twitch.tv</code> while logged in.</li>
+            <li>Press <code>F12</code>, then the <b>Application</b> tab (Chrome, Edge) or the <b>Storage</b> tab (Firefox).</li>
+            <li>Cookies → <code>https://www.twitch.tv</code> → row <code>auth-token</code>.</li>
+            <li>Copy its value (30 letters and digits) and paste it here.</li>
+          </ol>
+          <p style="margin-top: 8px">This token gives access to your account: it stays on the box and is never shown again.
+            It stops working if you log out of Twitch in that browser.</p>
+        </details>
+        <div class="field">
+          <input id="token" type="password" autocomplete="off" placeholder="auth-token value" aria-label="Twitch token">
+          <button id="login" class="current">Connect</button>
+        </div>
+      </div>
+      <div class="status" id="account-status"></div>
+    </section>
+
+    <section>
+      <h2>Followed channels</h2>
+      <!-- Twitch does not give this list to the website's token: it takes your own Twitch app and an authorization by code -->
+      <div id="follows-setup" hidden>
+        <p>For the <b>Following</b> tab of the TV menu, the box needs your own Twitch app (free, one time).</p>
+        <details>
+          <summary>Create the app</summary>
+          <ol>
+            <li>Go to <code>dev.twitch.tv/console/apps</code> → <b>Register Your Application</b> (two-factor
+              authentication must be enabled on your account).</li>
+            <li>Any name (unique on Twitch), OAuth Redirect URL <code>http://localhost</code>, category
+              <b>Other</b>.</li>
+            <li>Client type <b>Public</b>: only the Client ID is needed. With <b>Confidential</b>, also paste the secret.</li>
+            <li>Copy the <b>Client ID</b> here.</li>
+          </ol>
+        </details>
+        <div class="stack">
+          <input id="app-id" autocomplete="off" autocapitalize="none" placeholder="Client ID" aria-label="Client ID">
+          <input id="app-secret" type="password" autocomplete="off" placeholder="Secret (confidential app only)"
+                 aria-label="App secret">
+          <button id="app-save" class="current">Save</button>
+        </div>
+      </div>
+      <div id="follows-auth" hidden>
+        <p>App saved. Allow the box to read your followed channels (read-only).</p>
+        <button id="follows-login" class="current" style="width: 100%">Authorize the box</button>
+        <div id="follows-code" hidden style="margin-top: 12px; text-align: center">
+          <p style="margin-bottom: 6px">On <b>twitch.tv/activate</b>, enter this code:</p>
+          <div id="follows-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
+          <a id="follows-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the activation page</a>
+        </div>
+      </div>
+      <div id="follows-ok" hidden>
+        <p id="follows-summary"></p>
+        <div class="row">
+          <button id="follows-logout">Remove authorization</button>
+          <button id="app-change">Change app</button>
+        </div>
+      </div>
+      <div class="status" id="follows-status"></div>
+    </section>
+
+    <section>
+      <h2>YouTube account</h2>
+      <!-- Account subscriptions: your own Google app, authorization by code (read-only) -->
+      <div id="ytacc-setup" hidden>
+        <p>For the TV menu's <b>Subscriptions</b> row, the box needs your own Google app (free, one time).</p>
+        <details>
+          <summary>Create the app</summary>
+          <ol>
+            <li>On <code>console.cloud.google.com</code>, create a project, then enable <b>YouTube Data API v3</b>
+              (APIs &amp; Services → Library).</li>
+            <li><b>Google Auth Platform</b>: audience <b>External</b>, data access scope <code>youtube.readonly</code>, then
+              <b>Publish app</b> (otherwise Google disconnects the box every 7 days).</li>
+            <li><b>Clients → Create client</b>, type <b>TVs and Limited Input devices</b>.</li>
+            <li>Paste the <b>Client ID</b> and the <b>Client secret</b> into the fields below.</li>
+          </ol>
+        </details>
+        <div class="stack">
+          <input id="ytapp-id" autocomplete="off" autocapitalize="none" placeholder="Client ID (….apps.googleusercontent.com)"
+                 aria-label="Google client ID">
+          <input id="ytapp-secret" type="password" autocomplete="off" placeholder="Client secret code"
+                 aria-label="Google client secret">
+          <button id="ytapp-save" class="current">Save</button>
+        </div>
+      </div>
+      <div id="ytacc-auth" hidden>
+        <p>App saved. Allow the box to read your subscriptions (read-only).</p>
+        <button id="ytacc-login" class="current" style="width: 100%">Authorize the box</button>
+        <div id="ytacc-code" hidden style="margin-top: 12px; text-align: center">
+          <p style="margin-bottom: 6px">On <b>google.com/device</b>, enter this code:</p>
+          <div id="ytacc-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
+          <a id="ytacc-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the activation page</a>
+          <p>"Google hasn't verified this app": <b>Advanced</b>, then <b>Go to …</b></p>
+        </div>
+      </div>
+      <div id="ytacc-ok" hidden>
+        <p id="ytacc-summary"></p>
+        <div class="row">
+          <button id="ytacc-sync">Reload my subscriptions</button>
+          <button id="ytacc-logout">Disconnect</button>
+          <button id="ytapp-change">Change app</button>
+        </div>
+      </div>
+      <div class="status" id="ytacc-status"></div>
+    </section>
+
+    <section>
+      <h2>Jellyfin</h2>
+      <p style="margin-top: 0">Your Jellyfin server in the TV menu (a Jellyfin tab), and the box in "Play on…" of your
+        Jellyfin apps. Signing in by Quick Connect: no password to type.</p>
+      <p id="jf-connected" hidden></p>
+      <label class="setting" for="jf-address">Address of the server</label>
+      <div class="field">
+        <input id="jf-address" type="url" autocomplete="off" placeholder="http://192.168.1.10:8096">
+      </div>
+      <button id="jf-connect" class="current" style="width: 100%; margin-top: 8px">Connect</button>
+      <div id="jf-code" hidden style="margin-top: 12px; text-align: center">
+        <p style="margin-bottom: 6px">In Jellyfin (app or website): your user menu, <b>Quick Connect</b>, then enter:</p>
+        <div id="jf-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
+      </div>
+      <button id="jf-cancel" style="width: 100%; margin-top: 8px" hidden>Cancel</button>
+      <button id="jf-forget" style="width: 100%; margin-top: 8px" hidden>Disconnect</button>
+      <div class="status" id="jf-status"></div>
+    </section>
+
+    <section>
+      <h2>Plex</h2>
+      <p style="margin-top: 0">Your Plex server in the TV menu (a Plex tab): resume, next episodes, recent additions,
+        search. Progress follows on your other Plex apps.</p>
+      <p id="plex-connected" hidden></p>
+      <button id="plex-link" class="current" style="width: 100%">Sign in with a Plex account</button>
+      <div id="plex-code" hidden style="margin-top: 12px; text-align: center">
+        <p style="margin-bottom: 6px">On <b>plex.tv/link</b>, enter this code:</p>
+        <div id="plex-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
+        <a href="https://plex.tv/link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the link page</a>
+      </div>
+      <label class="setting" for="plex-address">Or the address of a server of the local network</label>
+      <div class="field">
+        <input id="plex-address" type="url" autocomplete="off" placeholder="http://192.168.1.10:32400">
+      </div>
       <details>
-        <summary>Create the app</summary>
-        <ol>
-          <li>Go to <code>dev.twitch.tv/console/apps</code> → <b>Register Your Application</b> (two-factor
-            authentication must be enabled on your account).</li>
-          <li>Any name (unique on Twitch), OAuth Redirect URL <code>http://localhost</code>, category
-            <b>Other</b>.</li>
-          <li>Client type <b>Public</b>: only the Client ID is needed. With <b>Confidential</b>, also paste the secret.</li>
-          <li>Copy the <b>Client ID</b> here.</li>
-        </ol>
+        <summary>Token (if the server asks for one)</summary>
+        <p>Not needed if Plex lets the box's network in without signing in: Plex, Settings, Network, "List of IP
+          addresses and networks that are allowed without auth" (for example 192.168.1.0/255.255.255.0). Otherwise the
+          X-Plex-Token of your account: in Plex on the web, "Get info" on a video, "View XML": it ends the link.</p>
+        <input id="plex-token" type="password" autocomplete="off" placeholder="X-Plex-Token" aria-label="Plex token">
       </details>
-      <div class="stack">
-        <input id="app-id" autocomplete="off" autocapitalize="none" placeholder="Client ID" aria-label="Client ID">
-        <input id="app-secret" type="password" autocomplete="off" placeholder="Secret (confidential app only)"
-               aria-label="App secret">
-        <button id="app-save" class="current">Save</button>
-      </div>
-    </div>
-    <div id="follows-auth" hidden>
-      <p>App saved. Allow the box to read your followed channels (read-only).</p>
-      <button id="follows-login" class="current" style="width: 100%">Authorize the box</button>
-      <div id="follows-code" hidden style="margin-top: 12px; text-align: center">
-        <p style="margin-bottom: 6px">On <b>twitch.tv/activate</b>, enter this code:</p>
-        <div id="follows-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
-        <a id="follows-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the activation page</a>
-      </div>
-    </div>
-    <div id="follows-ok" hidden>
-      <p id="follows-summary"></p>
-      <div class="row">
-        <button id="follows-logout">Remove authorization</button>
-        <button id="app-change">Change app</button>
-      </div>
-    </div>
-    <div class="status" id="follows-status"></div>
-  </section>
+      <button id="plex-save" style="width: 100%; margin-top: 8px">Connect</button>
+      <button id="plex-forget" style="width: 100%; margin-top: 8px" hidden>Disconnect</button>
+      <div class="status" id="plex-status"></div>
+    </section>
 
+    </div>
+  </div>
+
+  <div class="group" data-group="picture">
+    <button class="group-head" aria-expanded="false">Picture and sound</button>
+    <div class="group-body" hidden>
+
+    <section>
+      <h2>Sound output</h2>
+      <select id="audio-out" aria-label="Sound output"><option>Loading…</option></select>
+      <p id="audio-hint">Automatic: USB or Bluetooth headphones or speakers come first, otherwise the TV connected over
+        HDMI / DisplayPort.</p>
+    </section>
+
+    </div>
+  </div>
+
+  <div class="group" data-group="look">
+    <button class="group-head" aria-expanded="false">Appearance</button>
+    <div class="group-body" hidden>
+
+    <!-- Interface language (TV and companion app); first section of the first setup -->
+    <section id="language-section">
+      <h2>Language</h2>
+      <select id="language" aria-label="Language"></select>
+    </section>
+
+    </div>
+  </div>
+
+  <div class="group" data-group="network">
+    <button class="group-head" aria-expanded="false">Network</button>
+    <div class="group-body" hidden>
+
+    <!-- Wi-Fi: setup mode (the box's access point, netsetup.py) or network change -->
+    <section id="wifi" hidden>
+      <h2>Wi-Fi</h2>
+      <p id="wifi-state">…</p>
+      <label class="setting" for="wifi-ssid" style="margin-top: 0">Network</label>
+      <select id="wifi-ssid"></select>
+      <label class="setting" for="wifi-password">Password</label>
+      <div class="field">
+        <input id="wifi-password" type="password" autocomplete="off" placeholder="Wi-Fi password">
+        <button id="wifi-connect" class="current">Connect</button>
+      </div>
+      <div class="status" id="wifi-status"></div>
+    </section>
+
+    <section>
+      <h2>Companion app address</h2>
+      <label class="setting" for="remote-url" style="margin-top: 0">Address shown as a QR code on the TV</label>
+      <div class="field">
+        <input id="remote-url" type="url" autocomplete="off" placeholder="Local network (default)">
+        <button id="remote-url-save">Save</button>
+      </div>
+      <p>Empty: the box's address on the local network. Domain name (https://…, behind a reverse proxy):
+        required to install the companion app as an app on the phone.</p>
+    </section>
+
+    </div>
+  </div>
+
+  <div class="group" data-group="updates">
+    <button class="group-head" aria-expanded="false">Status and updates</button>
+    <div class="group-body" hidden>
+
+    <section>
+      <h2>System</h2>
+      <div class="setting" style="margin-top: 0">Box status</div>
+      <div class="health" id="health"></div>
+      <button id="update-now" style="width: 100%; margin-top: 10px">Update now</button>
+      <button id="update-direct" hidden style="width: 100%; margin-top: 8px">Direct update (main)</button>
+      <button id="reboot" style="width: 100%; margin-top: 8px">Restart the box</button>
+      <details style="margin-top: 10px">
+        <summary>Last update log</summary>
+        <pre id="update-log"></pre>
+      </details>
+      <details id="local-update" hidden style="margin-top: 10px">
+        <summary>Update from a file</summary>
+        <p>The image of a release (stream-box.raw.xz, the one used to install), with its SHA256SUMS and SHA256SUMS.gpg
+          (unsigned images: developer mode only). The box installs it next to the running system, then restarts onto it.</p>
+        <label class="setting" for="lu-image">Image (stream-box.raw.xz)</label>
+        <input id="lu-image" type="file" accept=".xz">
+        <label class="setting" for="lu-sums">SHA256SUMS and SHA256SUMS.gpg</label>
+        <input id="lu-sums" type="file" multiple>
+        <button id="lu-send" style="width: 100%; margin-top: 8px">Send and install</button>
+        <div class="status" id="lu-status"></div>
+      </details>
+    </section>
+
+    </div>
+  </div>
+
+  <div class="group" data-group="backup">
+    <button class="group-head" aria-expanded="false">Backup and installation</button>
+    <div class="group-body" hidden>
+
+    <section>
+      <h2>Backup</h2>
+      <p style="margin-top: 0">Settings, history, favorites, accounts (Twitch, YouTube, Jellyfin, MQTT) and Wi-Fi, to
+        restore them after a reinstall. The file contains your logins: keep it to yourself. Also in the TV's System
+        menu, on a USB stick.</p>
+      <button id="backup-download" style="width: 100%">Download the backup</button>
+      <button id="backup-restore" style="width: 100%; margin-top: 8px">Restore from a file…</button>
+      <input id="backup-file" type="file" accept=".gz,.tgz,application/gzip" hidden>
+      <div class="status" id="backup-status"></div>
+    </section>
+
+    </div>
+  </div>
   </div>
 
   <div class="status" id="status"></div>
@@ -979,6 +1038,22 @@ $("setup-done").onclick = async () => {
   location.reload();
 };
 
+// Settings groups: folded, the open ones remembered on the phone
+let openGroups = [];
+try { openGroups = JSON.parse(localStorage.getItem("groups") || "[]"); } catch (e) { /* storage unavailable */ }
+function openGroup(id, open = true) {
+  const g = document.querySelector(`.group[data-group="${id}"]`);
+  if (!g) return;
+  g.querySelector(".group-head").setAttribute("aria-expanded", String(open));
+  g.querySelector(".group-body").hidden = !open;
+  openGroups = openGroups.filter((x) => x !== id).concat(open ? [id] : []);
+  try { localStorage.setItem("groups", JSON.stringify(openGroups)); } catch (e) { /* idem */ }
+}
+for (const g of document.querySelectorAll(".group")) {
+  const id = g.dataset.group;
+  g.querySelector(".group-head").onclick = () => openGroup(id, g.querySelector(".group-body").hidden);
+  if (openGroups.includes(id)) openGroup(id);
+}
 var settingsLoaders = [];   // Settings sections loaded only when the tab is shown (registered below)
 function showTab(name) {
   for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === name));
@@ -1546,10 +1621,11 @@ settingsLoaders.push(refreshWifi);
 if (!$("tab-settings").hidden) refreshWifi();
 if (onSetupHotspot) {
   showTab("settings");
+  openGroup("network");
   $("wifi").scrollIntoView();
 }
 
-// Box status (Settings → System), reloaded every 5 s while the tab is shown
+// Box status (Settings → Status and updates), reloaded every 5 s while the tab is shown
 let healthTimer = null;
 const bytes = (n) => n >= 1e9 ? tr("{n} GB", { n: (n / 1e9).toFixed(1).replace(".", LANG === "fr" ? "," : ".") }) : tr("{n} MB", { n: Math.round(n / 1e6) });
 const bits = (n) => n == null ? "…" : n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", LANG === "fr" ? "," : ".")} Mbit/s` : `${Math.round(n / 1e3)} kbit/s`;

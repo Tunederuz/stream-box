@@ -14,6 +14,7 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - TV menu: Settings and System become one Settings tab, in sections (Picture and sound, Playback, Chat, Appearance,
   Accounts and libraries, Network, Devices, Updates, Backup and installation, Advanced), each with a summary of what
   it holds; sleep, restart and shut down stay on the list.
+- Companion app: its Settings are grouped the same way, in folded groups (the open ones are remembered).
 - System status: the Disk tile shows the space left for your data (the system partition aside).
 
 ### Added

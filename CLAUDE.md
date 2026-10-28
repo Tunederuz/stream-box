@@ -355,6 +355,8 @@ row with `sectionSummary`, OK or ▶ opens it, `open: true`) then the power rows
 open (`section`, `sectionRows(id)`: picture, playback, chat, look, accounts, network, devices, updates, backup,
 advanced), its rows, title in the header (`sectionTitle`); Back or ◀ (on a row without a value) returns to the list
 on that section (`leaveSection`, `rootSel`). The Lua menu of the simplified version keeps its own System menu.
+Companion app, Settings tab: the same grouping, folded groups (`.group`, `data-group`: channels, accounts, picture,
+look, network, updates, backup; `openGroup(id)`, the open ones remembered in localStorage `groups`).
 Structure: `TvMenu.qml` keeps the data, the API calls, the timers, open / close, the computed rows (`settingsRows`,
 `ytRows`…), the dialog builders and all the key handling; the drawing lives in `qml/menu/`, one component per part,
 each taking the menu as `required property var menu` (`LiveTab { menu: menu }`; no id lookups across files): `Rail`,
@@ -485,7 +487,7 @@ chosen from the position. QML pitfall again: `left` (FINAL) cannot be used as a 
 Bar color depending on the source (`InfoBar.source`, from `path` relayed by ui.py): red for YouTube, blue
 for Jellyfin (server link: `/Videos/…`, `api_key=`, `MediaSourceId=`), purple otherwise and for live.
 
-### Box status (page, Settings → System)
+### Box status (page, Settings → Status and updates)
 
 `GET /api/health`: temperatures (hwmon `coretemp`/`k10temp` and `nvme`), CPU (% over 5 s, `health_loop`) and
 load, memory, disk, network (interface of the default route, link speed, throughput over 5 s), playback (player
@@ -825,7 +827,7 @@ ui.py also applies keymap.json to the open QML menu. Bluetooth (btsetup.py, `GET
 paired devices, 20 s scan, pairing without a code (NoInputNoOutput agent) + trust + connect, unpairing;
 "Remotes and controllers" popup of the System menu (QML: `btMenu`, `btScan`, reread every 2 s).
 Reboot: `POST /api/reboot` (`systemctl reboot`, polkit login1.reboot* added), "Restart the box" in the System menu
-(second OK within 4 s), button in Settings → System of the page, "Restart" button in Home Assistant.
+(second OK within 4 s), button in Settings → Status and updates of the page, "Restart" button in Home Assistant.
 Power held for 1 s → "Box" popup ("☾  Sleep", "↻  Restart", "⏻  Shut down", "Cancel"; QML menu `powerMenu`,
 `streambox-power-menu`) instead of the action of the "Power button" setting, which now fires on release of a
 short press. input.py measures the press (evdev values 1 / 0, action `power_menu` sent at 1 s); as fallback,
@@ -1001,7 +1003,7 @@ stream-box-apply-update.service (polkit rule 58, apply-update: A/B unpin and reb
 Local update (A/B boxes, without the Internet): the full disk image of a release (stream-box.raw.xz, the one used to
 install) with its SHA256SUMS and SHA256SUMS.gpg; unsigned: developer mode only. From a USB stick (TV System menu
 "Update from a USB stick", images at the root of the drive, listed once per drive like the backups) or sent from the
-companion app (Settings → System → "Update from a file": raw bodies, `POST /api/local_update_upload?file=image|sums|sig`,
+companion app (Settings → Status and updates → "Update from a file": raw bodies, `POST /api/local_update_upload?file=image|sums|sig`,
 XMLHttpRequest for the upload progress, then `POST /api/local_update {action: start}`). localupdate.py (media) puts
 the files in ~/.local/state/stream-box/local-update (on the data partition; free space checked: image + 700 MB) and
 starts stream-box-local-update.service (polkit rule 57); `/usr/local/lib/stream-box/local-update` (root, Python):
