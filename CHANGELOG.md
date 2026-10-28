@@ -12,7 +12,7 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   checked, with one button that checks, installs or restarts as needed; no more "next update" date.
 - The tools that keep YouTube and Twitch working (yt-dlp, streamlink…) update themselves every day without a word;
   "Update dependencies" in Settings → Advanced forces it. The direct update of developer mode moved there too, with
-  its own status.
+  its own status, renamed "Direct update (source)".
 - Every button shows at once that it was pressed (dialogs open right away, "Checking…", "In progress…") instead of
   changing a few seconds later.
 - TV menu, Settings: each section says what it holds, and shows a notice only when something needs attention

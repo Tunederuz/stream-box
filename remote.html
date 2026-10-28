@@ -711,7 +711,7 @@
     <div class="health" id="health"></div>
     <button id="update-now" style="width: 100%; margin-top: 10px">Check for updates</button>
     <div class="status" id="update-status"></div>
-    <button id="update-direct" hidden style="width: 100%; margin-top: 8px">Direct update (main)</button>
+    <button id="update-direct" hidden style="width: 100%; margin-top: 8px">Direct update (source)</button>
     <button id="reboot" style="width: 100%; margin-top: 8px">Restart the box</button>
     <details style="margin-top: 10px">
       <summary>Dependencies</summary>
@@ -1707,7 +1707,7 @@ async function refreshHealth() {
     const sysBusy = !!(u.system && (u.system.running || u.system.checking));
     $("update-direct").hidden = !u.dev;   // developer mode: the code and system files of main, not the system
     $("update-direct").disabled = sysBusy;
-    $("update-direct").textContent = u.system && u.system.direct ? tr("In progress…") : tr("Direct update (main)");
+    $("update-direct").textContent = u.system && u.system.direct ? tr("In progress…") : tr("Direct update (source)");
     $("update-deps").disabled = !!u.running;
     $("update-deps").textContent = u.running ? tr("In progress…") : tr("Update dependencies");
     const sys = u.system && u.system.last;   // system update (image): release installed

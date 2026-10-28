@@ -15,7 +15,7 @@
 # start and wake-up ("restart to apply?", apply-update).
 #   system-update state   at boot (stream-box-update-state.service): whether an update is still waiting
 #
-# Direct update (developer mode only, started by hand: "Direct update (main)", remote.py leaves
+# Direct update (developer mode only, started by hand: "Direct update (source)", remote.py leaves
 # ~/.local/state/stream-box/update-direct), on any box: the files and not the system: the code and the system files
 # below, from the main branch instead of the latest release; version shown as <system>+<commit> (dev). Otherwise
 # developer mode updates as any box does.

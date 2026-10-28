@@ -946,7 +946,7 @@ Item {
                   hint: tr("yt-dlp, streamlink…: updated by themselves every day")
                       + (health && health.update && health.update.last ? "  ·  " + tr("Last: {date}", { date: frDate(health.update.last.date) }) : ""),
                   ok: function () { if (!(health && health.update && health.update.running)) updateAct("update_deps", {}, function (u) { u.running = true }) } },
-                { label: tr("Direct update (main)"), visible: !!(dev && dev.enabled), value: directValue(),
+                { label: tr("Direct update (source)"), visible: !!(dev && dev.enabled), value: directValue(),
                   hint: tr("Developer mode: the code and system files of the main branch, not the system"),
                   ok: function () { if (!(health && health.update && health.update.system && health.update.system.running)) updateAct("update", { direct: true }, function (u) { u.system.running = true; u.system.direct = true }) } },
             ]
@@ -991,7 +991,7 @@ Item {
         if (install && install.available) call("GET", "/api/install", undefined, function (d) { if (d) install = d })
         if (localUpd && localUpd.available) call("GET", "/api/local_update", undefined, function (d) { if (d) localUpd = d })
     }
-    // "Direct update (main)": in progress, or the last one (version, failed, restart to finish)
+    // "Direct update (source)": in progress, or the last one (version, failed, restart to finish)
     function directValue() {
         var s = health && health.update && health.update.system
         var l = s && s.last
