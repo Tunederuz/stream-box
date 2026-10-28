@@ -6,6 +6,17 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+### Changed
+- YouTube account: no more Google app to create. Connecting the account (a code on google.com/device) is enough for
+  the Subscriptions row, Recommended for you and the progress synced with your other screens; one sign-in instead of
+  two. The subscriptions now come from the same feed as the YouTube app for TVs (Shorts left out, lives first).
+- Twitch followed channels: no more Twitch app to create, the box has its own; authorizing with the code on
+  twitch.tv/activate is enough. Your own app stays possible in the companion app.
+
+### Added
+- The battery level shows in the TV menu, on the home screen and in the companion app on devices that have one
+  (Steam Deck, laptop).
+
 ## [0.4.1]
 
 ### Fixed

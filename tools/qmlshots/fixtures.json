@@ -617,8 +617,9 @@
    }
   ],
   "subs": {
-   "configured": true,
    "authorized": true,
+   "pending": null,
+   "unavailable": false,
    "videos": [
     {
      "title": "Sub video 0",
@@ -1343,16 +1344,9 @@
   "login": "tester"
  },
  "/api/youtube_account": {
-  "configured": true,
   "authorized": true,
-  "channels": 12,
-  "tv": {
-   "connected": false,
-   "pending": {
-    "user_code": "WXYZ-1234",
-    "verification_uri": "https://yt.be/activate"
-   }
-  }
+  "pending": null,
+  "unavailable": false
  },
  "/api/health": {
   "temps": {

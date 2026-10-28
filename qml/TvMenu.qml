@@ -78,12 +78,11 @@ Item {
     readonly property var codeDialog: {
         if (ytAuth) {
             var p = ytAuth.pending
-            return { title: ytAuth.tv ? tr("Sync YouTube progress") : tr("Connect my YouTube account"),
+            return { title: tr("Connect my YouTube account"),
                      where: tr("On your phone, open google.com/device and enter:"),
                      code: p && p.user_code && !p.error ? p.user_code : "",
                      error: p && p.error ? tr("Authorization denied: {error}", { error: p.error }) : "",
-                     help: ytAuth.tv ? tr("Google shows \"YouTube on TV\": the box presents itself as the YouTube app for TVs, to read and send back progress.")
-                                     : tr("Google warns that the app isn't verified: \"Advanced\", then \"Go to Stream Box\". Read-only."),
+                     help: tr("Google shows \"YouTube on TV\": the box presents itself as the YouTube app for TVs (subscriptions, recommendations, progress)."),
                      qr: ytAuthQr }
         }
         if (jfLink) {
@@ -263,7 +262,7 @@ Item {
         var subs = yt && yt.subs
         if (subs && subs.authorized)
             rows.push({ kind: "subs", key: "subs", title: tr("Subscriptions"), items: subs.videos || [], loading: subs.videos === null })
-        else if (subs && subs.configured)
+        else if (subs && !subs.unavailable)
             rows.push({ kind: "connect", key: "connect", title: tr("Subscriptions"),
                         items: [{ title: tr("Connect my account"), connect: true }] })
         var chans = yt ? yt.channels : []
@@ -286,12 +285,12 @@ Item {
             if (ytPreview && ytPreview.id === c.id) ytPreview = Object.assign({}, ytPreview, { videos: d ? d.videos : [] })
         })
     }
-    // YouTube account: code to enter on google.com/device; the dialog reloads every 3 s until authorized
-    // tv: progress through the "YouTube TV app" access (cast/youtube_tv.js), otherwise subscriptions (own Google app)
-    function ytConnect(tv) {
-        ytAuth = { tv: !!tv, pending: null }
-        call("POST", tv ? "/api/youtube_tv_login" : "/api/youtube_login", {}, function (d) {
-            if (!d) ytAuth = { tv: !!tv, pending: { error: tv ? tr("YouTube unreachable") : tr("Google unreachable, or app misconfigured") } }
+    // YouTube account ("YouTube TV app" access, cast/youtube_tv.js): code to enter on google.com/device; the dialog
+    // reloads every 3 s until authorized
+    function ytConnect() {
+        ytAuth = { pending: null }
+        call("POST", "/api/youtube_login", {}, function (d) {
+            if (!d) ytAuth = { pending: { error: tr("YouTube unreachable") } }
             else loadYtAuth()
         })
     }
@@ -301,10 +300,9 @@ Item {
         call("GET", "/api/youtube_account", undefined, function (d) {
             if (!ytAuth || !d) return
             ytAccount = d
-            var tv = ytAuth.tv, st = tv ? (d.tv || {}) : d
-            if (tv ? st.connected : st.authorized) { ytAuth = null; yt = null; loadYoutube(); return }
-            var p = st.pending || (st.error ? { error: st.error } : null)
-            ytAuth = { tv: tv, pending: p }
+            if (d.authorized) { ytAuth = null; yt = null; loadYoutube(); return }
+            var p = d.pending
+            ytAuth = { pending: p }
             if (p && p.verification_uri && !p.error) {
                 if (!ytAuthQr || ytAuthQr.text !== p.verification_uri)
                     call("GET", "/api/qr?text=" + encodeURIComponent(p.verification_uri), undefined, function (q) {
@@ -393,30 +391,25 @@ Item {
     }
     function ytAccountMenu() {
         var a = ytAccount
-        if (!a) return
+        if (!a || a.unavailable) return
         var items = []
-        if (a.configured && !a.authorized)
-            items.push({ label: tr("+  Connect my subscriptions"), ok: function () { ytConnect(false) } })
-        if (a.authorized) {
+        if (!a.authorized)
+            items.push({ label: tr("+  Connect my YouTube account"), ok: function () { ytConnect() } })
+        else {
             items.push({ label: tr("↻  Reload my subscriptions"), ok: function () {
                 loadingModal("", tr("Reloading your subscriptions…"))
                 call("POST", "/api/youtube_sync", {}, function (d) {
                     yt = null; loadYoutube(); loadYtAccount()
                     openModal(d ? tr("Subscriptions reloaded") : tr("YouTube unreachable for now"), [{ label: tr("OK"), ok: function () {} }])
                 }) } })
-        }
-        if (a.tv && !a.tv.unavailable)
-            items.push(a.tv.connected
-                ? { label: tr("✕  Stop syncing progress"), danger: true, ok: function () {
-                    confirmModal(tr("Stop syncing the progress with your YouTube account?"), tr("✕  Stop syncing progress"), function () {
-                        call("POST", "/api/youtube_tv_logout", {}, function () { yt = null; loadYtAccount() }) }) } }
-                : { label: tr("↻  Sync progress"), ok: function () { ytConnect(true) } })
-        if (a.authorized)
-            items.push({ label: tr("✕  Disconnect subscriptions"), danger: true, ok: function () {
-                confirmModal(tr("Disconnect your YouTube subscriptions?"), tr("✕  Disconnect subscriptions"), function () {
+            items.push({ label: tr("✕  Disconnect YouTube"), danger: true, ok: function () {
+                confirmModal(tr("Disconnect your YouTube account? Subscriptions, recommendations and progress sync stop"),
+                             tr("✕  Disconnect YouTube"), function () {
+                    ytAccount = Object.assign({}, ytAccount, { authorized: false })   // at once
                     call("POST", "/api/youtube_logout", {}, function () { yt = null; loadYtAccount() }) }) } })
+        }
         items.push({ label: tr("Close"), ok: function () {} })
-        openModal(tr("YouTube account") + (a.channels !== null ? " · " + tr("{n} subscriptions", { n: a.channels }) : ""), items)
+        openModal(tr("YouTube account"), items)
     }
     // Options on a subscription video: play, channel as favorite (a row of its own)
     function ytSubOptions(v) {
@@ -517,7 +510,7 @@ Item {
             parts = it.type === "Series" ? [it.unplayed ? tr("{n} unwatched", { n: it.unplayed }) : tr("Series"), it.year]
                 : it.episode ? [it.episode] : [it.year, it.seconds ? hm(it.seconds) : ""]
         else if (row.kind === "subs")
-            parts = [it.channel, ago(it.date), it.seconds ? Fmt.clock(it.seconds) : ""]
+            parts = [it.channel, it.live ? tr("● LIVE") : ago(it.date), it.seconds ? Fmt.clock(it.seconds) : ""]
         else if (row.kind === "connect")
             parts = [tr("Your YouTube subscriptions")]
         else if (row.kind === "results" || row.kind === "rec")
@@ -867,12 +860,9 @@ Item {
                                       : tr("Sign in to Twitch from the companion app on your phone (Settings → Accounts and libraries)."),
                                 [{ label: tr("Close"), ok: function () {} }])
                   } },
-                { open: true, label: tr("YouTube account"), visible: !!(ytAccount && (ytAccount.configured || (ytAccount.tv && !ytAccount.tv.unavailable))),
-                  value: ytAccount && ytAccount.authorized
-                       ? tr("Connected") + (ytAccount.channels !== null ? " · " + tr("{n} subscriptions", { n: ytAccount.channels }) : "")
-                       : tr("Not connected"),
-                  hint: ytAccount && ytAccount.tv && ytAccount.tv.connected ? tr("Progress synced with your account (phone, computer)")
-                      : tr("Subscriptions, and progress synced with your account"),
+                { open: true, label: tr("YouTube account"), visible: !!(ytAccount && !ytAccount.unavailable),
+                  value: ytAccount && ytAccount.authorized ? tr("Connected") : tr("Not connected"),
+                  hint: tr("Subscriptions, recommendations, and progress synced with your account"),
                   ok: function () { ytAccountMenu() } },
                 { open: true, label: "Jellyfin", value: (s.libraries || {}).jellyfin ? tr("Connected") : tr("Not connected"),
                   hint: (s.libraries || {}).jellyfin ? String(s.jellyfin_server || "").replace(/^https?:\/\//, "")
@@ -1594,14 +1584,14 @@ Item {
             var it = row.items[sel]
             var chan = row.kind === "channel" ? row.key : it.channel_id
             if (row.kind === "chans") ytChannelMenu(it)
-            else if (row.kind === "connect") ytConnect(false)
+            else if (row.kind === "connect") ytConnect()
             else if (libTab) libChoose(it, true)
             else if (chan) ytSubOptions(Object.assign({}, it, { channel_id: chan, channel: it.channel || row.title, avatar: it.avatar || row.avatar }))
             else chooseVideo(it, true)
         }
         else if (k === "ok" && row.items[sel]) {
             if (row.kind === "chans") ytChannelMenu(row.items[sel])
-            else if (row.kind === "connect") ytConnect(false)
+            else if (row.kind === "connect") ytConnect()
             else if (libTab) libChoose(row.items[sel])
             else chooseVideo(row.items[sel])
         }

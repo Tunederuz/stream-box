@@ -10,6 +10,9 @@
 //   GET  /recommended  videos of the account's YouTube home (the TV app's: FEwhat_to_watch, its first two pages: the
 //                   shelves "Recommended", "Recently uploaded", topics…), without duplicates (kept 30 min: two
 //                   requests, as the TV app makes when it opens and scrolls)
+//   GET  /meta?id=  { title, seconds } of a video (/player, as the TV app asks before playing it)
+//   GET  /subscriptions  latest videos of the subscribed channels (the TV app's FEsubscriptions, its "All" tab, two
+//                   pages), newest first, lives at the top, without Shorts (kept 15 min; ?fresh=1: read again)
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -20,6 +23,7 @@ const PORT = 8091;
 const PROGRESS_CACHE = 600e3;
 const RECOMMENDED_CACHE = 1800e3, RECOMMENDED_MAX = 30, RECOMMENDED_PAGES = 2;
 const PAGES_HISTORY = 8, PAGES_SUBS = 2;   // ~15 videos per page
+const SUBS_CACHE = 900e3, SUBS_MAX = 60, SUBS_PAGES = 2;
 const SESSION_IDLE = 120e3;   // no report for 2 min: new playback session
 const CLIENT = { client_name: Constants.CLIENTS.TV.NAME, client_version: Constants.CLIENTS.TV.VERSION };
 Log.setLevel(Log.Level.NONE);
@@ -27,6 +31,7 @@ Log.setLevel(Log.Level.NONE);
 let yt = null, connected = false, pending = null, error = null;
 let progress = { at: 0, data: {} };
 let recommended = { at: 0, data: [] };
+let subscriptions = { at: 0, data: [] };
 const sessions = new Map();
 
 const saveToken = ({ credentials }) => {
@@ -39,7 +44,7 @@ async function client() {
   if (yt) return yt;
   yt = await Innertube.create({ retrieve_player: false, client_type: ClientType.TV });
   yt.session.on('auth-pending', (d) => { pending = { user_code: d.user_code, verification_uri: d.verification_url }; });
-  yt.session.on('auth', (d) => { saveToken(d); connected = true; pending = null; error = null; progress.at = 0; });
+  yt.session.on('auth', (d) => { saveToken(d); connected = true; pending = null; error = null; progress.at = 0; subscriptions.at = 0; });
   yt.session.on('update-credentials', saveToken);
   yt.session.on('auth-error', (e) => { error = e.message; pending = null; });
   return yt;
@@ -143,6 +148,77 @@ async function getRecommended() {
   return recommended.data;
 }
 
+// "2 hours ago", "Streamed 4 days ago" → seconds; null without (upcoming premiere…)
+const UNITS = { second: 1, minute: 60, hour: 3600, day: 86400, week: 604800, month: 2629800, year: 31557600 };
+function age(s) {
+  const m = (s || '').match(/(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago/);
+  return m ? Number(m[1]) * UNITS[m[2]] : null;
+}
+
+// Videos of the subscriptions feed (FEsubscriptions pages): video tiles only (the Shorts shelf has its own type),
+// with the channel (its UC… id, from the tile's menu) and a date worked out from "… ago"; lives ("… watching") first
+export function subscriptionVideos(pages, now = Date.now()) {
+  const out = [], seen = new Set();
+  (function walk(n) {
+    if (Array.isArray(n)) return n.forEach(walk);
+    if (!n || typeof n !== 'object') return;
+    const t = n.tileRenderer;
+    if (t) {
+      if (t.contentType === 'TILE_CONTENT_TYPE_VIDEO' && /^[\w-]{11}$/.test(t.contentId || '') && !seen.has(t.contentId)) {
+        seen.add(t.contentId);
+        const head = t.header?.tileHeaderRenderer || {}, meta = t.metadata?.tileMetadataRenderer || {};
+        const lines = (meta.lines || []).map((l) => (l.lineRenderer?.items || []).map((i) => text(i.lineItemRenderer?.text)));
+        const info = lines.slice(1).flat().join(' ');
+        const overlay = (head.thumbnailOverlays || []).map((o) => text(o.thumbnailOverlayTimeStatusRenderer?.text)).find(Boolean);
+        const live = /\bwatching\b/.test(info) || overlay === 'LIVE', secs = age(info);
+        const channel = (JSON.stringify(t.onLongPressCommand || {}).match(/"browseId":"(UC[\w-]{22})"/) || [])[1] || '';
+        if (live || secs !== null)
+          out.push({ id: t.contentId, title: text(meta.title), channel: lines[0]?.[0] || '', channel_id: channel,
+                     thumb: `https://i.ytimg.com/vi/${t.contentId}/mqdefault.jpg`, url: `https://www.youtube.com/watch?v=${t.contentId}`,
+                     seconds: live ? null : seconds(overlay), live, views: count(info),
+                     date: new Date(now - 1000 * (secs || 0)).toISOString(), age: live ? -1 : secs });
+      }
+      return;
+    }
+    for (const v of Object.values(n)) walk(v);
+  })(pages);
+  out.sort((a, b) => a.age - b.age);
+  return out.slice(0, SUBS_MAX).map(({ age: _, ...v }) => v);
+}
+
+// Next page of the feed itself (its section list), not of one of its rows
+function feedNext(data) {
+  let token = null;
+  (function walk(n) {
+    if (token || !n || typeof n !== 'object') return;
+    const list = n.sectionListRenderer || n.sectionListContinuation;
+    if (list) { token = list.continuations?.[0]?.nextContinuationData?.continuation || null; return; }
+    for (const v of Object.values(n)) walk(v);
+  })(data);
+  return token;
+}
+
+async function getSubscriptions() {
+  if (!connected) return [];
+  if (Date.now() - subscriptions.at < SUBS_CACHE) return subscriptions.data;
+  try {
+    let r = await yt.actions.execute('/browse', { browseId: 'FEsubscriptions', client: 'TV' });
+    // Its first tab ("All"; the others: one per channel)
+    const pages = [r.data.contents?.tvBrowseRenderer?.content?.tvSecondaryNavRenderer?.sections?.[0]
+      ?.tvSecondaryNavSectionRenderer?.tabs?.[0] || r.data];
+    for (let n = 1; n < SUBS_PAGES; n++) {
+      const token = feedNext(pages[pages.length - 1]);
+      if (!token) break;
+      r = await yt.actions.execute('/browse', { continuation: token, client: 'TV' });
+      pages.push(r.data);
+    }
+    subscriptions = { at: Date.now(), data: subscriptionVideos(pages) };
+  } catch (e) {
+    console.error('youtube_tv.js: FEsubscriptions:', e.message);   // the previous list, retried at the next call
+  }
+  return subscriptions.data;
+}
+
 async function report(id, position, final) {
   if (!connected || !/^[\w-]{11}$/.test(id) || !(position >= 0)) return false;
   const www = (u) => u.replace('https://s.', 'https://www.');
@@ -186,6 +262,16 @@ export function startYoutubeTv() {
       if (req.method === 'GET' && req.url === '/status') return send(200, { connected, pending, error });
       if (req.method === 'GET' && req.url === '/progress') return send(200, await getProgress());
       if (req.method === 'GET' && req.url === '/recommended') return send(200, await getRecommended());
+      if (req.method === 'GET' && req.url.startsWith('/meta?id=')) {
+        const id = decodeURIComponent(req.url.slice(9));
+        if (!connected || !/^[\w-]{11}$/.test(id)) return send(404, { error: 'unknown' });
+        const d = (await yt.actions.execute('/player', { videoId: id, client: 'TV' })).data.videoDetails || {};
+        return send(200, { title: d.title || null, seconds: Number(d.lengthSeconds) || null });
+      }
+      if (req.method === 'GET' && req.url.startsWith('/subscriptions')) {
+        if (req.url.endsWith('fresh=1')) subscriptions.at = 0;
+        return send(200, await getSubscriptions());
+      }
       if (req.method === 'POST' && req.url === '/login') {
         error = null;
         const c = await client();
@@ -198,6 +284,7 @@ export function startYoutubeTv() {
         fs.rmSync(TOKEN, { force: true });
         Object.assign(progress, { at: 0, data: {} });
         Object.assign(recommended, { at: 0, data: [] });
+        Object.assign(subscriptions, { at: 0, data: [] });
         connected = false; pending = null; yt = null;
         return send(200, { connected });
       }
