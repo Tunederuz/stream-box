@@ -42,7 +42,7 @@ jobs:
             echo "monthly=$latest" >> "$GITHUB_OUTPUT"
             echo "monthly rebuild of $latest as v$major.$minor.$((patch + 1))"
           fi
-      - uses: actions/checkout@v4   # mkosi.prepare.chroot clones this checkout into the image
+      - uses: actions/checkout@v7   # mkosi.prepare.chroot clones this checkout into the image
         with:
           ref: ${{ steps.v.outputs.ref }}
       - name: Can it be rebuilt?   # releases before A/B (no build.sh release) are not rebuilt monthly

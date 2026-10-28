@@ -1,18 +1,19 @@
-# Checks on pull requests to main and on main itself (work happens on branches, merged through a pull request: a
-# branch push alone runs nothing); tools/check.sh runs the same ones locally, in Docker
+# Checks on pull requests to main (work happens on branches, merged through a pull request: a branch push alone runs
+# nothing). They test the branch merged into main, so the squashed commit on main is what was tested, as long as main
+# did not move in between: a pull request is brought up to date with main before merging if it did. By hand: Actions →
+# checks → Run workflow. tools/check.sh runs the same ones locally, in Docker
 name: checks
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - run: pip install ruff
@@ -25,17 +26,17 @@ jobs:
     container: archlinux:latest
     steps:
       - run: pacman -Syu --noconfirm --needed mpv luajit python git
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: python -m unittest tests.test_lua -v
 
   shell:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: git ls-files '*.sh' | xargs shellcheck -S warning
 
   qml:   # qmllint and the qmlshots scenario (tools/qmlshots, Docker: PySide6 of the box, Xvfb, Mesa)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: tools/check.sh qml
