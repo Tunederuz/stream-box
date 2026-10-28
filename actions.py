@@ -210,6 +210,7 @@ ACTIONS = {
                                                               str(body.get("channel", "")), int(body.get("delta", 0))),
     "update": lambda body: system.start_update(),
     "apply_update": lambda body: system.apply_update(),   # "Restart now" for an update waiting for the user
+    "dismiss_update": lambda body: system.dismiss_update(),   # "Don't ask again" (for that update)
     "qr": qr,
     "set": set_number,
     "display": lambda body: display.apply(str(body.get("mode", "auto"))),

@@ -984,7 +984,10 @@ once when nothing plays (`bootctl set-default ""` and reboot, or session restart
 stream-box-update-state.service (before greetd) runs `system-update state`: A/B, recomputes `new` (newest UKI above
 the running one, not given up) and the pin; files, `pending` cleared (the boot applied them). `GET /api/update_prompt`
 {pending, id = boot_id:wake-ups (system.resume_loop counts them), new, kind}: the TV menu asks once per id when it
-opens ("Version X is ready. Restart now to apply it?" / "Later"); "Restart now" → `POST /api/apply_update` →
+opens ("Version X is ready. Restart now to apply it?" / "Later" / "Don't ask again": `dismiss_update` writes the update's
+key, its A/B version or files date, to ~/.local/state/stream-box/update-dismissed, then `dismissed` until a newer one);
+a plain restart does not apply an A/B update (pinned boot): while one waits, System → Update now (TV, askUpdate(true))
+and the companion app's button become "Restart now"; "Restart now" → `POST /api/apply_update` →
 stream-box-apply-update.service (polkit rule 58, apply-update: A/B unpin and reboot, files session restart). Disk tile
 (TV, companion app): the data partition on an A/B box, the system partition (5 GB slot) aside (`health.disk.system`).
 Local update (A/B boxes, without the Internet): the full disk image of a release (stream-box.raw.xz, the one used to

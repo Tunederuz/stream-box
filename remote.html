@@ -1603,8 +1603,9 @@ async function refreshHealth() {
     );
     const busy = u.running || !!(u.system && u.system.running);
     $("update-now").disabled = busy;
-    $("update-now").textContent = busy ? tr("Update in progress…") : tr("Update now");
     const sys = u.system && u.system.last;   // system update (image): release installed
+    updateWaiting = !!(sys && sys.ok && sys.restart === "pending" && !(sys.kind === "ab" && sys.new === u.system.version));
+    $("update-now").textContent = busy ? tr("Update in progress…") : updateWaiting ? tr("↻  Restart now") : tr("Update now");
     // A/B box: version running, newer one installed in the other slot; older box: system files and code
     const sysText = !sys ? "" : !sys.ok ? tr("System: {error} ({date})", { error: sys.message, date: frDate(sys.date) })
       : sys.kind === "direct" ? tr("Developer mode: the box's files from main, {version} ({date}), {files} system files changed; the system itself is not updated.",
@@ -1617,14 +1618,14 @@ async function refreshHealth() {
       : tr("System: {version} ({date}), {files} system files changed.", { version: sys.version, date: frDate(sys.date), files: sys.files })
           + " " + tr({ updated: "Code updated.", ahead: "Code newer than the release, kept." }[sys.code] || "Code up to date.");
     $("update-log").textContent = (u.last ? u.last.lines.join("\n") : tr("No update recorded."))
-      + (sys ? "\n\n" + sysText + (sys.ok && sys.restart === "pending" && !(sys.kind === "ab" && sys.new === u.system.version)
-          ? " " + tr("Restart the box to finish.") : "") : "");
+      + (sys ? "\n\n" + sysText + (updateWaiting ? " " + tr("Restart the box to finish.") : "") : "");
   } catch (e) { /* the page already shows the box status */ }
   healthTimer = setTimeout(refreshHealth, 5000);
 }
+let updateWaiting = false;   // installed, waiting for "Restart now" (a plain restart keeps the running A/B version)
 $("update-now").onclick = async () => {
   $("update-now").disabled = true;
-  await send("update");
+  await send(updateWaiting ? "apply_update" : "update");
   setTimeout(refreshHealth, 1500);
 };
 refreshHealth();

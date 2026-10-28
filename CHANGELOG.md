@@ -8,7 +8,9 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ### Changed
 - Automatic updates no longer restart the box by themselves: at each start and wake-up, the TV menu offers to restart
-  onto the waiting version ("Later" asks again next time). "Update now" still applies at once when nothing plays.
+  onto the waiting version ("Later" asks again next time, "Don't ask again" not for this version). "Update now"
+  still applies at once when nothing plays; once installed, System → Update now and the companion app offer "Restart
+  now".
 - System status: the Disk tile shows the space left for your data (the system partition aside).
 
 ### Added

@@ -281,6 +281,7 @@ def health():
 
 
 UPDATE_MANUAL = os.path.expanduser("~/.local/state/stream-box/update-manual")
+UPDATE_DISMISSED = os.path.expanduser("~/.local/state/stream-box/update-dismissed")   # "Don't ask again": that update
 
 
 def start_update():
@@ -292,19 +293,41 @@ def start_update():
     user_systemctl("start", "--no-block", "stream-box-update.service")
 
 
-def update_prompt():
-    """Update waiting for the user (system-update.json restart "pending", and for A/B not the running version):
-    {pending, id, new, kind}; id changes at each boot and wake-up, the TV menu asks once per id"""
+def waiting_update():
+    """(pending, last system-update.json, key): key names that update (A/B: its version; files: its date)"""
     s = system_update() or {}
     last = s.get("last") or {}
     pending = bool(last.get("ok") and last.get("restart") == "pending"
                    and not (last.get("kind") == "ab" and last.get("new") == s.get("version")))
+    return pending, last, (last.get("new") if last.get("kind") == "ab" else last.get("date")) or ""
+
+
+def update_prompt():
+    """Update waiting for the user (system-update.json restart "pending", and for A/B not the running version):
+    {pending, dismissed, id, new, kind}; id changes at each boot and wake-up, the TV menu asks once per id, unless
+    "Don't ask again" was chosen for that update (dismissed: a newer one asks again)"""
+    pending, last, key = waiting_update()
     try:
         with open("/proc/sys/kernel/random/boot_id") as f:
             boot = f.read().strip()
     except OSError:
         boot = ""
-    return {"pending": pending, "id": f"{boot}:{wakes}", "new": last.get("new") or "", "kind": last.get("kind") or ""}
+    try:
+        with open(UPDATE_DISMISSED) as f:
+            dismissed = pending and f.read().strip() == key
+    except OSError:
+        dismissed = False
+    return {"pending": pending, "dismissed": dismissed, "id": f"{boot}:{wakes}", "new": last.get("new") or "",
+            "kind": last.get("kind") or ""}
+
+
+def dismiss_update():
+    """"Don't ask again" of that question: not asked again for this update (System → Update now still applies it)"""
+    pending, _, key = waiting_update()
+    if pending:
+        os.makedirs(os.path.dirname(UPDATE_DISMISSED), exist_ok=True)
+        with open(UPDATE_DISMISSED, "w") as f:
+            f.write(key)
 
 
 def apply_update():

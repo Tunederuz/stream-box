@@ -574,16 +574,20 @@ Item {
         idleClose.restart()
     }
     // Update waiting for the user (installed by the weekly update, which never restarts by itself): asked once per
-    // start and per wake-up (/api/update_prompt id), at the menu's first opening; "Later" asks again next time
+    // start and per wake-up (/api/update_prompt id), at the menu's first opening; "Later" asks again next time,
+    // "Don't ask again" not for this update (System → Update now still offers it; a newer one asks again)
     property string updateAsked: ""
-    function askUpdate() {
+    function askUpdate(always) {
         call("GET", "/api/update_prompt", undefined, function (d) {
-            if (!d || !d.pending || d.id === updateAsked || modal || !isOpen) return
+            if (!d || !d.pending || modal || !isOpen) return
+            if (!always && (d.dismissed || d.id === updateAsked)) return
             updateAsked = d.id
+            var items = [{ label: tr("↻  Restart now"), ok: function () { act("apply_update"); close() } },
+                         { label: tr("Later"), ok: function () {} }]
+            if (!always)
+                items.push({ label: tr("Don't ask again"), ok: function () { act("dismiss_update") } })
             openModal(d.kind === "ab" ? tr("Version {version} is ready. Restart now to apply it?", { version: d.new })
-                                      : tr("An update of the box is ready. Restart now to apply it?"), [
-                { label: tr("↻  Restart now"), ok: function () { act("apply_update"); close() } },
-                { label: tr("Later"), ok: function () {} }])
+                                      : tr("An update of the box is ready. Restart now to apply it?"), items)
         })
     }
     function close() {
@@ -755,8 +759,13 @@ Item {
             return l.version + "  ·  " + tr("dev") + (l.restart === "pending" ? "  ·  " + tr("restart to finish") : "")
         // A/B: the running version (restarted onto the new one since); waiting only while it is not the running one
         var running = s.version ? "v" + s.version : (l.version || "")
-        var waiting = l.restart === "pending" && !(l.kind === "ab" && l.new === s.version)
-        return running + (waiting ? "  ·  " + tr("restart to finish") : "")
+        return running + (updateWaiting() ? "  ·  " + tr("restart to finish") : "")
+    }
+    // Installed, waiting for "Restart now" (a plain restart keeps the running A/B version: its boot is pinned)
+    function updateWaiting() {
+        var s = health && health.update && health.update.system
+        var l = s && s.last
+        return !!(l && l.ok && l.restart === "pending" && !(l.kind === "ab" && l.new === s.version))
     }
     function systemRows() {
         var login = account && account.login
@@ -836,7 +845,11 @@ Item {
                     : (health.update.last ? tr(health.update.last.ok ? "Last: {date}" : "Failed: {date}",
                                                { date: frDate(health.update.last.date) }) : tr("Never"))
                       + (health.update.next ? "  ·  " + tr("next: {date}", { date: frDate(health.update.next) }) : "")) : undefined,
-              ok: function () { if (!(health && health.update && health.update.running)) act("update") } },
+              ok: function () {
+                  if (health && health.update && health.update.running) return
+                  if (updateWaiting()) askUpdate(true)
+                  else act("update")
+              } },
             { label: tr("Power button"), hint: tr("Remote, phone and Home Assistant"),
               value: st.power_action === "suspend" ? tr("Sleep") : tr("Full shutdown"),
               step: function (d) { act("power_action", { mode: st.power_action === "suspend" ? "poweroff" : "suspend" }) } },
