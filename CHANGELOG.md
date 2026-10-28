@@ -6,7 +6,15 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+## [0.4.0]
+
 ### Changed
+- Updates: the box checks every day whether a new version exists and the TV menu offers it ("Version X is available.
+  Update now?"); nothing is downloaded until you accept. Settings → Updates shows the version and when it was last
+  checked, with one button that checks, installs or restarts as needed; no more "next update" date.
+- The tools that keep YouTube and Twitch working (yt-dlp, streamlink…) update themselves every day without a word;
+  "Update dependencies" in Settings → Advanced forces it. The direct update of developer mode, renamed "Direct update
+  (source)", has its own status in Settings → Updates.
 - The same rules everywhere (TV menu, companion app, simplified version): disconnecting an account, forgetting the
   learned keys, turning SSH or developer mode off and leaving the Wi-Fi network ask first; restart and shut down ask
   a second OK; one name and one symbol per action (↻ Restart, ⏻ Shut down, ☾ Sleep…), and every dialog has a way out.
@@ -16,12 +24,6 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - Companion app: a "Chat and playback" group with the TV's chat, subtitle, night mode, auto switch and polls
   settings; "Disconnect" for every account; a Plex sign-in code can be cancelled; installing or applying an update
   asks first.
-- Updates: the box checks every day whether a new version exists and the TV menu offers it ("Version X is available.
-  Update now?"); nothing is downloaded until you accept. Settings → Updates shows the version and when it was last
-  checked, with one button that checks, installs or restarts as needed; no more "next update" date.
-- The tools that keep YouTube and Twitch working (yt-dlp, streamlink…) update themselves every day without a word;
-  "Update dependencies" in Settings → Advanced forces it. The direct update of developer mode, renamed "Direct update
-  (source)", has its own status in Settings → Updates.
 - Every button shows at once that it was pressed (dialogs open right away, "Checking…", "In progress…") instead of
   changing a few seconds later: settings switches, favorite channels, reloading subscriptions, disconnecting a
   library, authorizing followed channels on the TV; in the companion app, account buttons, list rows, shutdown,
@@ -33,6 +35,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - TV menu, grids (Live, Following, History): ▶ on the last card of a line goes on to the next line.
 
 ### Fixed
+- YouTube: videos resumed in the middle (history, Resume) failed with "Can't play this video": YouTube served only
+  the start of the file to the client the box used; it now uses another one.
 - TV menu: leaving the Bluetooth search with Back no longer lets its results replace the next dialog; the YouTube
   sign-in code no longer stays on screen after the menu is closed; a dialog without buttons no longer breaks on OK.
 - An online system update and an update from a USB stick or a file can no longer run at the same time.
@@ -48,8 +52,6 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   stays while the video title is chosen.
 - Leaving a video with Back reopens the menu on the tab it was started from (YouTube…) instead of Live.
 - A YouTube video refused by YouTube's robot check now says so, instead of "Can't play this video".
-- YouTube: videos resumed in the middle (history, Resume) failed with "Can't play this video": YouTube served only
-  the start of the file to the client the box used; it now uses another one.
 
 ## [0.3.0]
 
