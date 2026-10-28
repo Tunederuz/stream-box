@@ -6,6 +6,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+## [0.3.0]
+
 ### Changed
 - Automatic updates no longer restart the box by themselves: at each start and wake-up, the TV menu offers to restart
   onto the waiting version ("Later" asks again next time, "Don't ask again" not for this version). "Update now"
@@ -19,9 +21,9 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ### Added
 - Local system update, without the Internet: a release's image (stream-box.raw.xz with its SHA256SUMS and
-  SHA256SUMS.gpg) from a USB stick (System menu) or sent from the companion app (Settings → System). Unsigned images
-  only in developer mode.
-- Developer mode: a "Direct update (main)" option takes the box's files straight from the main branch (code and system
+  SHA256SUMS.gpg) from a USB stick (TV menu: Settings → Updates) or sent from the companion app (Settings → Status and
+  updates). Unsigned images only in developer mode.
+- Developer mode: a "Direct update (main)" option (Settings → Updates) takes the box's files straight from the main branch (code and system
   files, not the system), shown as <version>+<commit> · dev. Otherwise the box updates as any other.
 - YouTube: a "Recommended for you" row, your YouTube home's videos (when the YouTube account is connected for the
   progress sync).
