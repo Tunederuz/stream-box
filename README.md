@@ -91,8 +91,10 @@ bash image/build.sh vm     # optional: try it in a virtual machine first
 
 ### 2. Flash it on a USB stick
 
-With [balenaEtcher](https://etcher.balena.io/) or [Rufus](https://rufus.ie/) (both take the `.xz` as is), or on Linux:
-`xzcat stream-box.raw.xz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync`.
+With [balenaEtcher](https://etcher.balena.io/) (takes the `.xz` as is), or on Linux:
+`xzcat stream-box.raw.xz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync`. Not Rufus: a stick written with it
+(0.4.0, Steam Deck) never finished booting (emergency mode), the same image written with dd did. If Windows offers to
+format the stick afterwards (it cannot read the system partition), cancel.
 
 ### 3. Boot the PC on the stick
 
