@@ -12,6 +12,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   two. The subscriptions now come from the same feed as the YouTube app for TVs (Shorts left out, lives first).
 - Twitch followed channels: no more Twitch app to create, the box has its own; authorizing with the code on
   twitch.tv/activate is enough. Your own app stays possible in the companion app.
+- Gamepads: the middle button (Steam on the Steam Deck, Xbox, PlayStation) opens the TV menu, like Start; the Steam
+  Deck's "…" button goes to the home screen.
 
 ### Added
 - The battery level shows in the TV menu, on the home screen and in the companion app on devices that have one
