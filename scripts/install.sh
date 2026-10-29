@@ -23,7 +23,7 @@ set -euo pipefail
 BOX_USER=media
 BOX_HOME=/home/$BOX_USER
 BOX_DIR=$BOX_HOME/stream-box
-SRC=$(cd "$(dirname "$0")" && pwd)
+SRC=$(cd "$(dirname "$0")/.." && pwd)   # the repository (this script is in its scripts/)
 MEDIA_VENV_PACKAGES="yt-dlp[default] deno nodejs-wheel bgutil-ytdlp-pot-provider jellyfin-mpv-shim paho-mqtt segno dbus-fast"
 POT_REPO=https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git
 
@@ -120,12 +120,12 @@ fi
 LIST=$BOX_HOME/.config/stream-box/streamers.txt
 if [ ! -f "$LIST" ] && [ ! -f "$BOX_DIR/streamers.txt" ]; then
   install -d -m 700 -o "$BOX_USER" -g "$BOX_USER" "$(dirname "$LIST")"
-  cp "$BOX_DIR/streamers.example.txt" "$LIST"
+  cp "$BOX_DIR/assets/streamers.example.txt" "$LIST"
   [ -n "$STREAMERS" ] && tr ',' '\n' <<< "$STREAMERS" | tr -d ' ' | tr '[:upper:]' '[:lower:]' | grep . >> "$LIST"
   chown "$BOX_USER:$BOX_USER" "$LIST"
 fi
 chown -R "$BOX_USER:$BOX_USER" "$BOX_DIR"
-chmod +x "$BOX_DIR"/*.sh "$BOX_DIR"/*.py
+chmod +x "$BOX_DIR"/scripts/*.sh "$BOX_DIR"/app/*.py
 # These permissions are not changes for git (otherwise git pull refuses to update)
 git -c safe.directory='*' -C "$BOX_DIR" config core.fileMode false 2> /dev/null || true
 
@@ -236,14 +236,14 @@ else
 [Desktop Entry]
 Name=Stream Box
 Comment=Full-screen Twitch stream (cage + mpv), without a desktop
-Exec=env XCURSOR_PATH=$BOX_DIR/cursors XCURSOR_THEME=blank cage -s -- $BOX_DIR/start.sh
+Exec=env XCURSOR_PATH=$BOX_DIR/assets/cursors XCURSOR_THEME=blank cage -s -- $BOX_DIR/scripts/start.sh
 Type=Application
 DesktopNames=StreamBox
 DESKTOP
 
   # The mode (automatic login or login screen) is decided at boot depending on whether a keyboard is plugged in.
   # Root-owned copy: the service runs as root, the script must not be modifiable by media.
-  install -D -m 755 -o root -g root "$BOX_DIR/boot-mode.py" /usr/local/lib/stream-box/boot-mode.py
+  install -D -m 755 -o root -g root "$BOX_DIR/app/boot-mode.py" /usr/local/lib/stream-box/boot-mode.py
   install -d "$DM_DIR"
   cat > /etc/systemd/system/stream-box-boot-mode.service << UNIT
 [Unit]

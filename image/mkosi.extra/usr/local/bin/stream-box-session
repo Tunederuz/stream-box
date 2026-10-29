@@ -2,10 +2,10 @@
 # Stream Box: box session, started by greetd. Output of cage and everything it starts goes to the journal
 # (journalctl -t stream-box-session). If cage stops in less than 20 s (no usable graphics acceleration with this card:
 # missing driver…), new try with wlroots' software rendering, slower but displayed.
-# Invisible cage cursor (the repository's cursors/blank theme, also named "default": wlroots ignores XCURSOR_THEME and
+# Invisible cage cursor (the repository's assets/cursors/blank theme, also named "default": wlroots ignores XCURSOR_THEME and
 # always loads "default", looked up first in XCURSOR_PATH; start.sh removes these variables for the apps)
-session() { XCURSOR_PATH=/home/media/stream-box/cursors XCURSOR_THEME=blank \
-              systemd-cat --identifier=stream-box-session -- cage -s -- /home/media/stream-box/start.sh; }
+session() { XCURSOR_PATH=/home/media/stream-box/assets/cursors XCURSOR_THEME=blank \
+              systemd-cat --identifier=stream-box-session -- cage -s -- /home/media/stream-box/scripts/start.sh; }
 start=$(date +%s)
 session
 if [ $(( $(date +%s) - start )) -lt 20 ]; then

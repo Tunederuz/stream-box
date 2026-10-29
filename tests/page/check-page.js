@@ -7,7 +7,7 @@ const path = require("path");
 const { JSDOM, VirtualConsole } = require("jsdom");
 
 const repo = path.resolve(process.argv[2] || "../..");
-const html = fs.readFileSync(path.join(repo, "remote.html"), "utf8");
+const html = fs.readFileSync(path.join(repo, "web", "remote.html"), "utf8");
 const api = Object.assign({}, JSON.parse(fs.readFileSync(path.join(repo, "tools/qmlshots/fixtures.json"), "utf8")),
                           JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures.json"), "utf8")));
 const problems = [];
