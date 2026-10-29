@@ -32,6 +32,7 @@ Item {   // clip: what scrolls stops at the edge of the area (neither over the t
                 accent: menu.accent
                 focused: menu.area === "content" && index === menu.histSel
             }
+            Tap { tv: menu; onPick: { menu.area = "content"; menu.histSel = index } }
         }
     }
 }

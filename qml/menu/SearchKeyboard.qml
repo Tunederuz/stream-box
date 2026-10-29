@@ -8,12 +8,18 @@ Item {
     visible: opacity > 0
     Behavior on opacity { NumberAnimation { duration: 160 } }
     Rectangle { anchors.fill: parent; color: "#05030a"; opacity: 0.6 }
+    MouseArea {   // outside the keyboard: Back; and nothing reaches the menu underneath
+        anchors.fill: parent; enabled: menu.kbOpen
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: menu.key("back")
+    }
     Rectangle {
         width: 1180; height: 690; radius: 30
         anchors.centerIn: parent
         color: menu.pal.sheet
         scale: menu.kbOpen ? 1 : 0.95
         Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton }   // (the sheet itself: no Back)
         Text { x: 48; y: 36; text: menu.tr("Search {service}", { service: menu.libTab ? menu.libName : "YouTube" }); color: menu.pal.label; font.pixelSize: 22; font.bold: true }
         Rectangle {   // typed text
             x: 44; y: 78; width: parent.width - 88; height: 76; radius: 18
@@ -44,6 +50,7 @@ Item {
                                 anchors.centerIn: parent; text: menu.tr(label)
                                 color: parent.foc ? "#1a1020" : "white"; font.pixelSize: wide ? 26 : 32; font.bold: parent.foc
                             }
+                            Tap { tv: menu; rightKey: "back"; enabled: menu.kbOpen; onPick: { menu.kbRow = r; menu.kbCol = index } }
                         }
                     }
                 }

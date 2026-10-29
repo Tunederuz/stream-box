@@ -30,6 +30,13 @@ Item {   // clip: what scrolls stops at the edge of the area (neither over the t
             row: rowsView.rows[index] || {}
             pal: menu.pal
             focused: index === rowsView.focusedRow
+            // ◀ ▶ rows: left click = next value, right click = previous one
+            Tap {
+                tv: menu; enabled: !parent.header && parent.opacity > 0.5
+                leftKey: parent.row.step && !parent.row.ok ? "right" : "ok"
+                rightKey: parent.row.step ? "left" : "back"
+                onPick: { menu.area = "content"; menu.setSel = Math.max(0, rowsView.sel.indexOf(index)) }
+            }
         }
     }
 }

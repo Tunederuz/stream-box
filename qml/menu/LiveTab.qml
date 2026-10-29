@@ -22,6 +22,7 @@ Item {
                 FocusFrame { active: foc; radius: 32 }
                 Rectangle { anchors.fill: parent; radius: 32; color: modelData.current ? "#9146ff" : (foc ? "#3a2c4e" : "#2a2034") }
                 Text { id: label; anchors.centerIn: parent; text: modelData.label; color: "white"; font.pixelSize: 24; font.bold: !!modelData.current }
+                Tap { tv: menu; rightKey: "back"; onPick: { menu.area = "content"; menu.shortcut = index } }
             }
         }
     }
@@ -54,6 +55,7 @@ Item {
                     focused: menu.area === "content" && menu.shortcut < 0 && index === menu.liveSel
                     current: menu.st.mode === "twitch" && menu.st.channel === login
                 }
+                Tap { tv: menu; onPick: { menu.area = "content"; menu.shortcut = -1; menu.liveSel = index } }
             }
         }
     }

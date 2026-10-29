@@ -13,6 +13,8 @@ trap 'exit 0' INT TERM HUP
 UI_PYTHON=python3
 [ -x "$HOME/.local/share/ui-venv/bin/python" ] && UI_PYTHON="$HOME/.local/share/ui-venv/bin/python"
 
+# No first setup from the phone (the box's large QR code until it is done): the app is used with its own window
+mkdir -p "$HOME/.config/stream-box" && touch "$HOME/.config/stream-box/setup-done"
 python3 "$DIR/app/player/remote.py" &   # companion app, port 8080
 # YouTube Cast receiver and "TV app" access (cast/cast.js), when its modules are there
 [ -d "$DIR/cast/node_modules" ] && node "$DIR/cast/cast.js" &

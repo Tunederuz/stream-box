@@ -1205,9 +1205,19 @@ run, never published: `/etc/ssh/stream-box-test-keys`). QEMU in the mkosi contai
 
 ### Regular keyboard
 By default (input.py `DEFAULTS`, stream-box.lua `KEYS` fallback): arrows, Enter = OK, Esc / Backspace =
-Back, Windows, Home or M = TV menu, O = options (≡), H = home screen, Space = play / pause (action `corner`),
+Back, Tab, Windows, Home or M = TV menu (Tab for the Stream Player: a desktop keeps the Windows key), O = options (≡), H = home screen, Space = play / pause (action `corner`),
 + / − (and numeric keypad) = volume, media keys (next / previous = → / ←, stop = Back). Linux codes are
-positional (QWERTY): the M of an AZERTY keyboard arrives as KEY_SEMICOLON, mapped too.
+positional (QWERTY): the M of an AZERTY keyboard arrives as KEY_SEMICOLON, mapped too. While the search keyboard
+is open, the Qt app types the computer's keys into it (Box.setTyping / keyTyped: characters, Backspace, Enter).
+
+### Mouse (TV menu)
+Still a remote-style interface, with clicks on top (qml/menu/Tap.qml): a click focuses the element as the arrows
+would, then left = OK, right = ≡ (or Back where there are no options); ◀ ▶ rows: left = next value, right =
+previous. A click outside a dialog or the search keyboard = Back; right click and the mouse's back button elsewhere
+= Back, the wheel = ▲ ▼ (a notch per step). ui.py passes the mouse to the QML while the menu is open; menu closed,
+the Stream Player opens it on a click (double click: full screen), the box sends the mouse to mpv as before.
+Stream Player on a desktop: an ordinary 1280×720 window (`WINDOWED`, F11: full screen); full screen in SteamOS's
+Game mode (XDG_CURRENT_DESKTOP=gamescope). Checked by the qmlshots scenario's mouse steps (click, rclick, wheel, type).
 
 ### pacman (developer mode)
 The official image has neither a pacman mirror nor keyring (mkosi leaves none, and that is intended: no packages

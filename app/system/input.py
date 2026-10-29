@@ -41,7 +41,7 @@ DEFAULTS = {
     "KEY_VOLUMEUP": "volume_up", "KEY_VOLUMEDOWN": "volume_down", "KEY_MUTE": "mute",
     # Regular keyboard: Space play / pause, Windows or M TV menu, O options, H home screen, + / − volume, media keys.
     # Linux codes are positional (QWERTY): the M of an AZERTY keyboard sends KEY_SEMICOLON
-    "KEY_SPACE": "corner", "KEY_LEFTMETA": "home", "KEY_RIGHTMETA": "home", "KEY_M": "home", "KEY_SEMICOLON": "home", "KEY_O": "menu", "KEY_H": "homescreen",
+    "KEY_SPACE": "corner", "KEY_TAB": "home", "KEY_LEFTMETA": "home", "KEY_RIGHTMETA": "home", "KEY_M": "home", "KEY_SEMICOLON": "home", "KEY_O": "menu", "KEY_H": "homescreen",
     "KEY_KPPLUS": "volume_up", "KEY_KPMINUS": "volume_down", "KEY_EQUAL": "volume_up", "KEY_MINUS": "volume_down",
     "KEY_NEXTSONG": "right", "KEY_PREVIOUSSONG": "left", "KEY_STOPCD": "back",
     # Gamepads. BTN_MODE: the middle button (Xbox, PlayStation, the Steam Deck's Steam button) opens the TV menu, as on

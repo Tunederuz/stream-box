@@ -18,7 +18,7 @@ local KEYS = {
     POWER = "power", ["0x21ff2a"] = "power",  -- power button (remote, box): mpv alone, Qt app
     VOLUME_UP = "volume_up", VOLUME_DOWN = "volume_down", MUTE = "mute",
     -- Regular keyboard (same actions as input.py; here, names depend on the keyboard layout)
-    SPACE = "corner", m = "home", o = "menu", h = "homescreen", ["+"] = "volume_up", ["-"] = "volume_down",
+    SPACE = "corner", TAB = "home", m = "home", o = "menu", h = "homescreen", ["+"] = "volume_up", ["-"] = "volume_down",
     KP_ADD = "volume_up", KP_SUBTRACT = "volume_down", NEXT = "right", PREV = "left", STOP = "back",
 }
 -- These names (mpv, or hacked keysyms like 0x21ffa0) are only a fallback: normally, input.py reads the keys

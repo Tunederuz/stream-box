@@ -34,6 +34,7 @@ Item {
             // asked, the code not there yet (TvMenu sets pending {} at once)
             Text { anchors.centerIn: parent; text: page.pend && !page.pend.error ? menu.tr("Requesting the code…") : menu.tr("Authorize the box")
                    color: "white"; font.pixelSize: 25; font.bold: true }
+            Tap { tv: menu; rightKey: "back"; onPick: menu.area = "content" }
         }
         Text {
             visible: !!(page.pend && page.pend.error)
@@ -68,6 +69,7 @@ Item {
                     focused: menu.area === "content" && index === menu.followSel
                     current: menu.st.mode === "twitch" && menu.st.channel === c.login
                 }
+                Tap { tv: menu; onPick: { menu.area = "content"; menu.followSel = index } }
             }
         }
     }

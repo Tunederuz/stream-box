@@ -18,6 +18,10 @@ Item {
         Behavior on opacity { NumberAnimation { duration: 160 } }
         Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
     }
+    Item {   // (mouse: the "Home screen" entry)
+        x: 40; y: 150; width: 320; height: 64
+        Tap { tv: menu; rightKey: ""; onPick: { menu.area = "rail"; menu.railHome = true } }
+    }
     Text {   // global: home screen, whatever the tab
         x: 78; y: 182 - height / 2
         text: menu.tr("⌂  Home screen")
@@ -45,6 +49,8 @@ Item {
                 font.bold: cur
                 Behavior on x { NumberAnimation { duration: 160 } }
             }
+            // mouse: shows the tab (the focus stays on the tabs; a click in the content goes there)
+            Tap { tv: menu; leftKey: ""; rightKey: "back"; onPick: { menu.area = "rail"; menu.railHome = false; menu.tab = index } }
         }
     }
     Column {   // what plays on the TV

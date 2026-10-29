@@ -146,7 +146,10 @@ Item {
     property bool kbOpen: false
     property string kbText: ""
     // Keyboard opened or closed: reported to the box, the companion app then offers to type the text
-    onKbOpenChanged: call("POST", "/api/keyboard", { open: kbOpen, text: kbText, target: libTab ? libName : "YouTube" })
+    onKbOpenChanged: {
+        call("POST", "/api/keyboard", { open: kbOpen, text: kbText, target: libTab ? libName : "YouTube" })
+        box.setTyping(kbOpen)
+    }
     property int kbRow: 0
     property int kbCol: 0
     readonly property var kbKeys: [
@@ -647,8 +650,18 @@ Item {
         function onTextInput(text, submit) {
             if (!menu.kbOpen) return
             menu.kbText = text.slice(0, 80)
-            if (submit && menu.kbText.trim()) { menu.kbOpen = false; if (menu.libTab) menu.libSearch(menu.kbText); else menu.ytSearch(menu.kbText) }
+            if (submit) menu.kbSubmit()
         }
+        // The computer's keyboard (Stream Player): a character, "\b" erases, "\n" searches
+        function onKeyTyped(t) {
+            if (!menu.kbOpen) return
+            if (t === "\b") menu.kbText = menu.kbText.slice(0, -1)
+            else if (t === "\n") menu.kbSubmit()
+            else if (menu.kbText.length < 80) menu.kbText += t
+        }
+    }
+    function kbSubmit() {
+        if (kbText.trim()) { kbOpen = false; if (libTab) libSearch(kbText); else ytSearch(kbText) }
     }
     Component.onCompleted: refresh()
 
@@ -1722,6 +1735,21 @@ Item {
             anchors.fill: parent; color: "black"
             opacity: livePreview.ready && menu.previewFor ? 0.55 : 0
             Behavior on opacity { NumberAnimation { duration: 300 } }
+        }
+        MouseArea {   // mouse, under the clickable elements (menu/Tap.qml): right click and the back button = Back,
+            // the wheel = ▲ ▼ (over the content, the focus goes there first); a notch (120) per step, for touchpads
+            anchors.fill: parent
+            acceptedButtons: Qt.RightButton | Qt.BackButton
+            property real wheelSum: 0
+            onClicked: menu.key("back")
+            onWheel: function (w) {
+                wheelSum += w.angleDelta.y
+                if (Math.abs(wheelSum) < 120) return
+                var k = wheelSum > 0 ? "up" : "down"
+                wheelSum = 0
+                if (menu.area === "rail" && w.x > 400 && menu.canEnter(menu.tabs[menu.tab].id)) menu.enterContent()
+                menu.key(k)
+            }
         }
         Rail { menu: menu }   // (menu: the id of this object, looked up before the property of the same name)
         Header { menu: menu }

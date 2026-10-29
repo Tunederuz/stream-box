@@ -33,9 +33,12 @@ import mpv
 
 import chat_qt   # chat with emotes (same folder)
 import common    # common.py: built-in battery
+from sysparts import SYSTEM   # False: the Stream Player (an app on an OS that runs itself)
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 CURSOR_HIDE_MS = 4000   # like mpv's --cursor-autohide=4000
+# Stream Player on a desktop: an ordinary window (F11: full screen). Full screen on the box and in SteamOS's Game mode
+WINDOWED = not SYSTEM and os.environ.get("XDG_CURRENT_DESKTOP", "").lower() != "gamescope"
 
 # Qt keys → mpv key names (those stream-box.lua binds). Keys with no name in Qt (OK and Menu of the
 # Xiaomi remote control) are forwarded by their keysym, under the name mpv gave them (see key_name).
@@ -58,7 +61,7 @@ SPECIAL_KEYSYMS = {0x1008ffa0: "0x21ffa0",   # OK
 
 # Keys for the big menu, same roles as KEYS in stream-box.lua
 MENU_KEYS = {"UP": "up", "DOWN": "down", "LEFT": "left", "RIGHT": "right", "ENTER": "ok", "KP_ENTER": "ok",
-             "0x21ffa0": "ok", "HOMEPAGE": "home", "GO_BACK": "back", "ESC": "back", "0x2111a0": "menu",
+             "0x21ffa0": "ok", "HOMEPAGE": "home", "TAB": "home", "GO_BACK": "back", "ESC": "back", "0x2111a0": "menu",
              "WWW": "homescreen", "PLAY": "corner", "PLAYPAUSE": "corner"}
 
 
@@ -148,6 +151,7 @@ class Box(QObject):
     closeRequested = Signal()      # video started from elsewhere (phone, Cast…), keys wizard: menu closed
     keyPressed = Signal(str)
     textInput = Signal(str, bool)
+    keyTyped = Signal(str)   # computer keyboard while the search keyboard is open: a character, "\b" or "\n"
     powerMenuRequested = Signal()   # power held (stream-box.lua): "sleep, restart, shut down" window    # text typed on the phone for the menu keyboard (text, start the search)
     ambientChanged = Signal()
     videoActiveChanged = Signal()
@@ -214,6 +218,13 @@ class Box(QObject):
         if chat:
             chat.set_menu_open(value)
         to_mpv(set_flag, "user-data/streambox/tvmenu", value)   # the chat hides, the mouse does not open the small menu
+
+    typing = False
+
+    @Slot(bool)
+    def setTyping(self, value):
+        """The menu's search keyboard is open: the computer's keys type in it (View.keyPressEvent)."""
+        self.typing = value
 
     @Slot()
     def quit(self):
@@ -654,9 +665,20 @@ class View(QQuickView):
         self.setColor(Qt.black)
         self.hide_cursor = QTimer(self, singleShot=True, interval=CURSOR_HIDE_MS)
         self.hide_cursor.timeout.connect(lambda: self.setCursor(QCursor(Qt.BlankCursor)))
-        self.setCursor(QCursor(Qt.BlankCursor))
+        if not WINDOWED:
+            self.setCursor(QCursor(Qt.BlankCursor))
 
     def keyPressEvent(self, event):
+        if box.menu_open and box.typing:
+            if event.key() == Qt.Key_Backspace:
+                return box.keyTyped.emit("\b")
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                return box.keyTyped.emit("\n")
+            if event.text() and event.text().isprintable():
+                return box.keyTyped.emit(event.text())
+        if WINDOWED and event.key() == Qt.Key_F11:
+            self.showNormal() if self.visibility() == QQuickView.FullScreen else self.showFullScreen()
+            return
         if time.time() - input_service["beat"] < 15:   # input.py reads the keys at the source: nothing to do here
             return
         name = key_name(event)
@@ -687,14 +709,21 @@ class View(QQuickView):
         return int(p.x() * ratio), int(p.y() * ratio)
 
     def mouseMoveEvent(self, event):
-        if box.menu_open:
-            return
         self.setCursor(QCursor(Qt.ArrowCursor))
         self.hide_cursor.start()
+        if box.menu_open:   # the menu's clickable elements (qml/menu/Tap.qml)
+            return super().mouseMoveEvent(event)
         to_mpv(player.command, "mouse", *self.mouse_pos(event))
 
     def mousePressEvent(self, event):
         if box.menu_open:
+            return super().mousePressEvent(event)
+        if not SYSTEM and event.button() == Qt.LeftButton:
+            # Stream Player: a click opens the menu (no remote needed); a double click toggles full screen
+            if WINDOWED and event.type() == event.Type.MouseButtonDblClick:
+                self.showNormal() if self.visibility() == QQuickView.FullScreen else self.showFullScreen()
+            else:
+                box.openRequested.emit()
             return
         x, y = self.mouse_pos(event)
         double = event.type() == event.Type.MouseButtonDblClick
@@ -814,7 +843,12 @@ def main():
     else:   # no big menu: stream-box.lua opens its small menu instead
         bridge.ready.connect(lambda: to_mpv(player._set_property, "user-data/streambox/menu", "small"),
                              Qt.QueuedConnection)
-    view.showFullScreen()
+    if WINDOWED:
+        view.setTitle("Stream Player")
+        view.resize(1280, 720)
+        view.show()
+    else:
+        view.showFullScreen()
     # Boot image from start.sh (mpv, same image as the Plymouth screen): removed once the app's first frame is
     # on screen (short delay: cage switches to the most recent window)
     def drop_splash():

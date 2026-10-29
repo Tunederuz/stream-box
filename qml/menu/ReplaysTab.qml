@@ -35,6 +35,7 @@ Item {
             Rectangle { anchors.fill: parent; radius: 32; color: parent.cur ? "#9146ff" : (parent.foc ? "#3a2c4e" : "#2a2034") }
             RoundImage { x: 10; y: 8; width: 48; height: 48; circle: true; placeholder: "#4a3d5c"; source: (menu.st.avatars || {})[login] || "" }
             Text { id: chipText; x: 70; anchors.verticalCenter: parent.verticalCenter; text: login; color: "white"; font.pixelSize: 22; font.bold: parent.cur }
+            Tap { tv: menu; rightKey: "back"; onPick: { menu.area = "content"; menu.rpRow = 0; var s = menu.rpSel.slice(); s[0] = index; menu.rpSel = s } }
         }
     }
     Item {   // clip: the rows scroll between the chips and the help at the bottom
@@ -62,6 +63,7 @@ Item {
                               + (it.finished ? " · " + menu.tr("watched") : "")
                         progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
                         focused: menu.area === "content" && menu.rpRow === r && index === (menu.rpSel[r] || 0)
+                        Tap { tv: menu; onPick: { menu.area = "content"; menu.rpRow = r; var s = menu.rpSel.slice(); s[r] = index; menu.rpSel = s } }
                     }
                 }
             }
