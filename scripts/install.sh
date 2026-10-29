@@ -125,7 +125,7 @@ if [ ! -f "$LIST" ] && [ ! -f "$BOX_DIR/streamers.txt" ]; then
   chown "$BOX_USER:$BOX_USER" "$LIST"
 fi
 chown -R "$BOX_USER:$BOX_USER" "$BOX_DIR"
-chmod +x "$BOX_DIR"/scripts/*.sh "$BOX_DIR"/app/*.py
+chmod +x "$BOX_DIR"/scripts/*.sh "$BOX_DIR"/app/*/*.py
 # These permissions are not changes for git (otherwise git pull refuses to update)
 git -c safe.directory='*' -C "$BOX_DIR" config core.fileMode false 2> /dev/null || true
 
@@ -243,7 +243,7 @@ DESKTOP
 
   # The mode (automatic login or login screen) is decided at boot depending on whether a keyboard is plugged in.
   # Root-owned copy: the service runs as root, the script must not be modifiable by media.
-  install -D -m 755 -o root -g root "$BOX_DIR/app/boot-mode.py" /usr/local/lib/stream-box/boot-mode.py
+  install -D -m 755 -o root -g root "$BOX_DIR/app/system/boot-mode.py" /usr/local/lib/stream-box/boot-mode.py
   install -d "$DM_DIR"
   cat > /etc/systemd/system/stream-box-boot-mode.service << UNIT
 [Unit]

@@ -9,7 +9,7 @@ The chosen language is stored in ~/.config/stream-box/language ("en" when missin
 """
 import json, os
 
-DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # the repository (locales/ next to app/)
+DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # the repository (this is app/player/)
 LANG_FILE = os.path.expanduser("~/.config/stream-box/language")
 LANGUAGES = {"en": "English", "fr": "Français"}   # code -> name shown in the language picker (in its own language)
 DEFAULT = "en"

@@ -8,7 +8,7 @@ unset XCURSOR_THEME XCURSOR_PATH
 # Resolution saved from the companion app ("auto" by default: never 4K at 30 Hz), first: then the boot image (the same
 # as the Plymouth screen) while everything starts, otherwise ~3 s of black. ui.py removes it on its first drawn frame
 # (player.sh for mpv alone), and after 30 s anyway
-python3 "$DIR/app/display.py" apply
+python3 "$DIR/app/system/display.py" apply
 SPLASH_PID="${XDG_RUNTIME_DIR:-/tmp}/stream-box-splash.pid"
 mpv --no-config --really-quiet --fs --no-osc --osd-level=0 --no-input-default-bindings --input-vo-keyboard=no \
     --cursor-autohide=always \
@@ -20,18 +20,18 @@ echo $! > "$SPLASH_PID"
 # hotspot, see netsetup.py) if there is a Wi-Fi card
 for _ in $(seq 10); do getent hosts www.twitch.tv > /dev/null && break; sleep 2; done
 
-python3 "$DIR/app/chat_overlay.py" &
-python3 "$DIR/app/remote.py" &   # companion app, port 8080
+python3 "$DIR/app/player/chat_overlay.py" &
+python3 "$DIR/app/player/remote.py" &   # companion app, port 8080
 
 # Sound output (see audio.py): the TV plugged in over HDMI / DisplayPort, or a USB / Bluetooth device, or the choice
 # made in the settings; followed continuously (plugs, unplugs)
-python3 "$DIR/app/audio.py" watch &
+python3 "$DIR/app/system/audio.py" watch &
 # Keys read at the source (remotes, gamepads, keyboards: see input.py); without permissions on /dev/input, it stops
 # and the keys stay with the Qt app and mpv
-python3 "$DIR/app/input.py" &
+python3 "$DIR/app/system/input.py" &
 # Permanent Bluetooth agent (btagent.py: remotes that start pairing themselves), with dbus-fast
 MEDIA_PY="$HOME/.local/share/media-venv/bin/python"
-"$MEDIA_PY" -c "import dbus_fast" 2> /dev/null && "$MEDIA_PY" "$DIR/app/btagent.py" &
+"$MEDIA_PY" -c "import dbus_fast" 2> /dev/null && "$MEDIA_PY" "$DIR/app/system/btagent.py" &
 # YouTube Cast receiver (cast/cast.js: the box in the Cast button of the YouTube app), if its modules are installed
 # (npm install in cast/)
 if [ -d "$DIR/cast/node_modules" ]; then

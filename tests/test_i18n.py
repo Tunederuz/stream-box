@@ -3,7 +3,7 @@ import importlib, os, sys, unittest
 
 from tests.helpers import REPO, temp_home
 
-sys.path.insert(0, os.path.join(REPO, "app"))
+sys.path.insert(0, os.path.join(REPO, "app", "player"))
 
 
 class I18n(unittest.TestCase):

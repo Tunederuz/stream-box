@@ -20,8 +20,12 @@ This file starts the background loops and the HTTP server; the code lives in the
   settings.py  player, power button action, background
   system.py    power, wake-up, SSH and developer mode, box status, updates
 """
-import signal, sys, threading
+import os, signal, sys, threading
 from http.server import ThreadingHTTPServer
+
+# app/player and app/system on the import path: the modules import each other by name, from either folder (system/
+# is not part of the Stream Player)
+sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), d) for d in ("player", "system")]
 
 import ambient   # ambient.py: weather, schedules, QR code
 import history   # history.py: positions kept in memory on a USB drive

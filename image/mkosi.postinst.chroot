@@ -37,4 +37,4 @@ as_box 'cat > ~/.config/jellyfin-mpv-shim/conf.json' << 'JSON'
   "mpv_idle_quit": false
 }
 JSON
-chmod +x "$BOX_HOME"/stream-box/scripts/*.sh "$BOX_HOME"/stream-box/app/*.py
+chmod +x "$BOX_HOME"/stream-box/scripts/*.sh "$BOX_HOME"/stream-box/app/*/*.py

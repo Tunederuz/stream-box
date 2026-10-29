@@ -12,6 +12,10 @@ Also imported by remote.py.
 """
 import json, os, re, subprocess, sys
 
+# app/player and app/system on the import path: the modules import each other by name, from either folder (system/
+# is not part of the Stream Player)
+sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), d) for d in ("player", "system")]
+
 from i18n import tr
 
 STATE_FILE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"),
