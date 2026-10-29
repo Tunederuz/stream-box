@@ -47,23 +47,20 @@ that can be installed on a phone (PWA).
 
 ## How it is built
 
-| File | Role |
+| Folder | Role |
 |---|---|
-| `start.sh` | Launched by the session: chat, companion app, resolution, then loop on a permanent mpv |
-| `stream-box.lua`, `lua/streambox/` | mpv script and its modules: streamlink, quick menu of the simplified version, Twitch / video modes, time shifting, playback bar, keys |
-| `ui.py`, `ui.qml`, `player.sh` | Qt Quick app embedding mpv (libmpv), and player loop (Qt or mpv alone) |
-| `qml/`, `qml/menu/` | Large TV menu in the style of Android TV, in QML (animated, rendered by the GPU); its parts in `qml/menu/` |
-| `chat_overlay.py` | Twitch chat (anonymous IRC) shown in mpv through its IPC |
-| `chat_qt.py` | Chat with emotes for the Qt app (shown by `qml/ChatOverlay.qml`) |
-| `remote.py` + `remote.html` | Companion app server (Python standard library) and its page; the server's modules: `api.py`, `actions.py`, `twitch.py`, `youtube.py`, `jellyfin.py`, `plex.py`, `quickmenu.py`, `playback.py`, `history.py`, `ambient.py`, `images.py`, `settings.py`, `system.py`, `common.py` |
-| `input.py` | Remote, keyboard and gamepad keys read at the source |
-| `i18n.py`, `qml/i18n.js`, `locales/` | Interface translations (English by default, French available) |
-| `display.py` | Video output resolution (wlr-randr), never below 60 Hz |
-| `mqtt_bridge.py` | MQTT bridge to Home Assistant (automatic discovery) |
-| `update.sh`, `systemd/` | Updates, YouTube anti-bot tokens, MQTT bridge |
-| `install.sh`, `backup.sh`, `backup.py`, `boot-mode.py` | Installation, update, backup (command line, menu and page); mode depending on the keyboard at boot |
-| `audio.py` | Sound output on the TV's HDMI at boot |
-| `tests/`, `tools/check.sh`, `tools/qmlshots/` | Automated tests and checks (also run on GitHub on each push); screenshots of the TV menu without a box |
+| `app/` | The box's Python, all modules side by side (they import each other by name): the companion app server `remote.py` and its modules (`api.py`, `actions.py`, `twitch.py`, `youtube.py`, `jellyfin.py`, `plex.py`, `quickmenu.py`, `playback.py`, `history.py`, …), the Qt Quick app embedding mpv `ui.py` + `ui.qml`, the chat (`chat_overlay.py`, `chat_qt.py`), keys (`input.py`), resolution (`display.py`), sound (`audio.py`), translations (`i18n.py`), system settings (`system.py`, `netsetup.py`, `btsetup.py`, `installer.py`, `localupdate.py`, `backup.py`), MQTT bridge (`mqtt_bridge.py`) |
+| `lua/` | mpv script `stream-box.lua` and its modules (`lua/streambox/`): streamlink, quick menu of the simplified version, Twitch / video modes, time shifting, playback bar, keys |
+| `qml/`, `qml/menu/` | Large TV menu in the style of Android TV, in QML (animated, rendered by the GPU) |
+| `web/` | Companion app page (`remote.html`), its PWA files and icons |
+| `scripts/` | `start.sh` (launched by the session: chat, companion app, resolution, then the player), `player.sh` (player loop: Qt or mpv alone), `update.sh` (dependencies), `install.sh`, `backup.sh` |
+| `assets/` | Boot image, invisible cursor of the session, example streamer list |
+| `locales/` | Interface translations (English by default, French available), read by Python, QML and Lua |
+| `cast/` | YouTube Cast receiver and the YouTube account's TV access (Node) |
+| `systemd/` | User services: dependency updates, YouTube anti-bot tokens, MQTT bridge |
+| `image/` | The disk image (mkosi): system configuration, A/B updates, installer |
+| `tests/`, `tools/check.sh`, `tools/qmlshots/` | Automated tests and checks (also run on GitHub); screenshots of the TV menu without a box |
+| `start.sh`, `update.sh`, `mqtt_bridge.py`, `cursors` (root) | Relays for boxes whose image (0.5.0 and older) still points there; to remove later |
 | `CLAUDE.md` | Detailed technical documentation (decisions, pitfalls, how to test) |
 
 ## Installation
@@ -135,13 +132,13 @@ untried) as the login manager. From an admin account, in a copy of the repositor
 
 ```
 git clone https://github.com/Tunederuz/stream-box.git && cd stream-box
-sudo bash install.sh --city "Your city" --streamers channel1,channel2
+sudo bash scripts/install.sh --city "Your city" --streamers channel1,channel2
 ```
 
 The script installs the packages, creates the `media` user that runs the box, copies the repository there, installs
 streamlink, yt-dlp, jellyfin-mpv-shim and the rest in venvs, enables the services and sets up the desktop-less
-session. It can be run again to update an installation (`git pull`, then `sudo bash install.sh`).
-The options are optional (`sudo bash install.sh --help`):
+session. It can be run again to update an installation (`git pull`, then `sudo bash scripts/install.sh`).
+The options are optional (`sudo bash scripts/install.sh --help`):
 
 | Option | Role |
 |---|---|
@@ -151,7 +148,7 @@ The options are optional (`sudo bash install.sh --help`):
 | `--allow-from IP` | Opens port 8080 to this address (HTTPS reverse proxy) if the ufw firewall is active |
 | `--static-ip IP/PREFIX --gateway IP [--dns IP]` | Static IP on the Ethernet connection |
 | `--wol` | Wake-on-LAN on the Ethernet connection (must also be enabled in the BIOS) |
-| `--restore ARCHIVE` | Restores the settings and connections saved by `backup.sh` |
+| `--restore ARCHIVE` | Restores the settings and connections saved by `scripts/backup.sh` |
 
 At the end, it lists the remaining settings (Twitch account, HTTPS, Jellyfin, Home Assistant).
 
@@ -160,13 +157,13 @@ At the end, it lists the remaining settings (Twitch account, HTTPS, Jellyfin, Ho
 The simplest way: TV menu → Settings → Backup and installation → "Backup and restore" (on a USB stick), or Settings → Backup in the companion app
 (file downloaded to the phone). Restoring puts everything back, then the box restarts.
 
-On the command line, `sudo bash backup.sh` creates an archive of everything specific to the box: streamer list,
+On the command line, `sudo bash scripts/backup.sh` creates an archive of everything specific to the box: streamer list,
 settings, Twitch token, Jellyfin connection, MQTT and weather configuration, sound, Bluetooth pairings. It contains
 secrets: it is readable only by whoever creates it, and does not belong in the repository. After reinstalling with
 `install.sh`:
 
 ```
-sudo bash install.sh --restore stream-box-backup-YYYY-MM-DD.tar.gz --static-ip … --gateway … --wol --allow-from …
+sudo bash scripts/install.sh --restore stream-box-backup-YYYY-MM-DD.tar.gz --static-ip … --gateway … --wol --allow-from …
 ```
 
 The details, and the reasons behind each choice, are in `CLAUDE.md`.

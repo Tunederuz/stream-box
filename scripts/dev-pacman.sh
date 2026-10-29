@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stream Box: prepares pacman on a box installed from the image, in developer mode (sudo without password):
-#   ssh media@<box>  then  bash ~/stream-box/dev-pacman.sh
+#   ssh media@<box>  then  bash ~/stream-box/scripts/dev-pacman.sh
 # The official image deliberately has neither mirror nor keyring: no packages added outside developer mode.
 set -euo pipefail
 sudo -n true 2> /dev/null || { echo "Enable developer mode first (TV System menu)." >&2; exit 1; }

@@ -40,9 +40,11 @@ DEFAULTS = {
     "KEY_SPACE": "corner", "KEY_LEFTMETA": "home", "KEY_RIGHTMETA": "home", "KEY_M": "home", "KEY_SEMICOLON": "home", "KEY_O": "menu", "KEY_H": "homescreen",
     "KEY_KPPLUS": "volume_up", "KEY_KPMINUS": "volume_down", "KEY_EQUAL": "volume_up", "KEY_MINUS": "volume_down",
     "KEY_NEXTSONG": "right", "KEY_PREVIOUSSONG": "left", "KEY_STOPCD": "back",
-    # Gamepads
+    # Gamepads. BTN_MODE: the middle button (Xbox, PlayStation, the Steam Deck's Steam button) opens the TV menu, as on
+    # a console; BTN_BASE: the Steam Deck's "…" button, the home screen
     "BTN_DPAD_UP": "up", "BTN_DPAD_DOWN": "down", "BTN_DPAD_LEFT": "left", "BTN_DPAD_RIGHT": "right",
-    "BTN_SOUTH": "ok", "BTN_EAST": "back", "BTN_START": "home", "BTN_SELECT": "menu", "BTN_MODE": "homescreen",
+    "BTN_SOUTH": "ok", "BTN_EAST": "back", "BTN_START": "home", "BTN_SELECT": "menu", "BTN_MODE": "home",
+    "BTN_BASE": "homescreen",
 }
 IGNORED = re.compile(r"HDA |Video Bus|PC Speaker|WMI hotkeys|Sleep Button|Lid Switch|ydotool|Power Button$")
 

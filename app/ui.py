@@ -167,10 +167,15 @@ class Box(QObject):
         self._video_in.connect(self._set_video, Qt.QueuedConnection)
         # Built-in battery (Steam Deck, laptop), read every 30 s: home screen and menu header; "" without one
         self._battery = ""
+        self._battery_timer = None
+        self._read_battery()
+
+    def start(self):
+        """Timers, once the Qt application exists (box is created at import, before it: a QTimer made then never
+        fires, and the battery stayed at its value from the start of the session)"""
         self._battery_timer = QTimer(self, interval=30000)
         self._battery_timer.timeout.connect(self._read_battery)
         self._battery_timer.start()
-        self._read_battery()
 
     def _read_battery(self):
         b = common.battery()
@@ -692,6 +697,7 @@ def main():
     qmlRegisterType(MpvVideo, "StreamBox", 1, 0, "MpvVideo")
     view = View()
     view.rootContext().setContextProperty("box", box)
+    box.start()
     view.rootContext().setContextProperty("pip", pip)
     view.rootContext().setContextProperty("livePreview", live_preview)
     global chat

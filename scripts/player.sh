@@ -5,7 +5,7 @@
 # mpv alone. The file is read again on each restart: to switch, write it then quit the player (quit command through
 # the IPC). Safety net: if the Qt app stops three times in a row in less than 30 s, back to mpv alone until the next
 # session start.
-DIR="$(cd "$(dirname "$0")" && pwd)"
+DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"   # the repository (this script is in its scripts/)
 export PATH="$HOME/.local/bin:$PATH"
 UI_PYTHON="$HOME/.local/share/ui-venv/bin/python"
 
@@ -16,13 +16,14 @@ YTDL_FORMAT='bestvideo[height<=?1440][vcodec!^=av01]+bestaudio/best'
 
 # hwdec: hardware decoding when it is safe (VA-API, NVDEC…). French and English subtitles, manual and automatic,
 # without the automatic translations ("French from Arabic"… over 100 tracks).
-# player_client: mweb first: its streams play to the end; tv_simply's stop after the first megabytes (HTTP 403 further
-# on, so a video resumed in the middle fails at once; checked 2026-10-28), kept as a fallback
+# player_client: mweb first, tv_simply as a fallback; which client's streams YouTube serves changes from day to day
+# (tv_simply cut after the first megabytes on 2026-10-28, mweb refused on 2026-10-29): stream-box.lua reloads a video
+# refused with HTTP 403 with the next client
 # fetch_pot: anti-bot token (stream-box-pot service) for every request, otherwise YouTube blocks the subtitles
 # shellcheck disable=SC2054  # (commas inside mpv option values, not array separators)
 MPV_ARGS=(
   --idle=yes --force-window=yes --fs --osc=no --cursor-autohide=4000
-  --input-ipc-server=/tmp/stream-box-mpv.sock --script="$DIR/stream-box.lua"
+  --input-ipc-server=/tmp/stream-box-mpv.sock --script="$DIR/lua/stream-box.lua"
   --cache=yes --hwdec=auto-safe
   --ytdl-format="$YTDL_FORMAT"
   --ytdl-raw-options-append=sub-langs=fr,fr-FR,fr-orig,en,en-US,en-GB,en-orig
@@ -52,7 +53,7 @@ while true; do
   ) &
   if [ "$choice" = qt ] && [ -x "$UI_PYTHON" ] && [ "$quick_fails" -lt 3 ]; then
     started=$(date +%s)
-    QT_QPA_PLATFORM=wayland "$UI_PYTHON" "$DIR/ui.py" "${MPV_ARGS[@]}" >> /tmp/stream-box-ui.log 2>&1
+    QT_QPA_PLATFORM=wayland "$UI_PYTHON" "$DIR/app/ui.py" "${MPV_ARGS[@]}" >> /tmp/stream-box-ui.log 2>&1
     code=$?
     if [ "$code" -ne 0 ] && [ $(( $(date +%s) - started )) -lt 30 ]; then
       quick_fails=$((quick_fails + 1))

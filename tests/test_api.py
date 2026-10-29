@@ -59,7 +59,7 @@ class Api(unittest.TestCase):
     def setUpClass(cls):
         cls.mpv = FakeMpv()
         cls.home = temp_home()
-        cls.server = subprocess.Popen([sys.executable, os.path.join(REPO, "remote.py")], cwd=REPO,
+        cls.server = subprocess.Popen([sys.executable, os.path.join(REPO, "app", "remote.py")], cwd=REPO,
                                       env=dict(os.environ, HOME=cls.home),
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(100):

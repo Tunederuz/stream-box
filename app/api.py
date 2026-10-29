@@ -28,12 +28,12 @@ from i18n import tr
 
 # Files served as is: the page and what is needed to install it as an app (PWA)
 STATIC = {
-    "/": ("remote.html", "text/html; charset=utf-8"),
-    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
-    "/sw.js": ("sw.js", "text/javascript"),
-    "/icon-192.png": ("icon-192.png", "image/png"),
-    "/icon-512.png": ("icon-512.png", "image/png"),
-    "/apple-touch-icon.png": ("icon-180.png", "image/png"),
+    "/": ("web/remote.html", "text/html; charset=utf-8"),
+    "/manifest.webmanifest": ("web/manifest.webmanifest", "application/manifest+json"),
+    "/sw.js": ("web/sw.js", "text/javascript"),
+    "/icon-192.png": ("web/icon-192.png", "image/png"),
+    "/icon-512.png": ("web/icon-512.png", "image/png"),
+    "/apple-touch-icon.png": ("web/icon-180.png", "image/png"),
 }
 # Translations (companion app, TV menu): /locales/<lang>.json
 for _code in i18n.LANGUAGES:

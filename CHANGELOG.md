@@ -7,23 +7,36 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 ## [Unreleased]
 
 ### Changed
+- Twitch account: sign in with a code on twitch.tv/activate, from the TV menu (Settings → Accounts and libraries) or
+  the companion app, instead of copying a cookie from a computer; the same sign-in gives the followed channels.
+  Pasting the token stays possible.
+
+## [0.5.0]
+
+### Changed
 - YouTube account: no more Google app to create. Connecting the account (a code on google.com/device) is enough for
   the Subscriptions row, Recommended for you and the progress synced with your other screens; one sign-in instead of
   two. The subscriptions now come from the same feed as the YouTube app for TVs (Shorts left out, lives first).
 - Twitch followed channels: no more Twitch app to create, the box has its own; authorizing with the code on
   twitch.tv/activate is enough. Your own app stays possible in the companion app.
-- Twitch account: sign in with a code on twitch.tv/activate, from the TV menu (Settings → Accounts and libraries) or
-  the companion app, instead of copying a cookie from a computer; the same sign-in gives the followed channels.
-  Pasting the token stays possible.
+- Gamepads: the middle button (Steam on the Steam Deck, Xbox, PlayStation) opens the TV menu, like Start; the Steam
+  Deck's "…" button goes to the home screen.
+- Steam Deck: its controller is used as a gamepad from the start (it acted as a keyboard and mouse until ☰ was held,
+  and Steam or "…" did nothing).
 
 ### Added
 - The battery level shows in the TV menu, on the home screen and in the companion app on devices that have one
   (Steam Deck, laptop).
-
-## [0.4.1]
+- Developer mode: the direct update can follow any branch of the repository (◀ ▶ on "Direct update (source)", or the
+  list in the companion app), forwards or backwards; choosing main again is the way back.
 
 ### Fixed
+- YouTube: a video refused by YouTube ("Can't play this video", HTTP 403) is reloaded at the same second with
+  another YouTube client, and the one that plays is kept for the next videos: which one YouTube accepts changes from
+  one day to the next.
 - Built-in screens mounted sideways (Steam Deck) show the box the right way up instead of on its side.
+- Boot: when the system partition does not show up (a Steam Deck's SD card sometimes fails to start on a cold boot),
+  the box restarts after about 30 s instead of freezing on the boot screen.
 - A box running from its USB stick no longer offers to check for system updates it cannot install: Settings →
   Updates (and the companion app) say to install it on the PC to get them.
 - README: flash the image with balenaEtcher or dd; a stick written with Rufus did not finish booting.

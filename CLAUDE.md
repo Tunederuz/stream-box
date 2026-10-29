@@ -58,6 +58,16 @@ Installation and update: `install.sh` (see the README); settings backup: TV Sett
 - No passwordless sudo for `media`. mpv and cage come from the system packages.
 
 ## Files (`/home/media/stream-box/`)
+Layout (since 0.5.0, phase 1 of the split between the player and the system, see the Stream Player idea):
+`app/` all the Python modules, side by side (they import each other by name; `common.DIR` and `i18n.DIR` are the
+repository, one level up), plus `ui.qml` next to `ui.py` (it imports `../qml`); `lua/` `stream-box.lua` (its `DIR` is
+the repository, its modules next to it); `qml/` the QML; `web/` the companion app page, PWA files, icons (served by
+api.py from `web/`); `scripts/` start.sh, player.sh, update.sh, install.sh, backup.sh, dev-pacman.sh (their `DIR` /
+`SRC` is the repository, one level up); `assets/` boot image, cursors, example list. Relays at the root for the images
+0.5.0 and older, whose system points there: `start.sh` (session: stream-box-session, stream-box.desktop), `update.sh`
+and `mqtt_bridge.py` (user units copied into those images), `cursors` → `assets/cursors` (session's XCURSOR_PATH); to
+remove once no box runs those images. Tests: `tests/__init__.py` puts `app/` on sys.path.
+Below, file names without a folder are in these folders.
 - `start.sh`: waits for the network (`getent hosts www.twitch.tv`), starts `chat_overlay.py` and `remote.py` in the
   background, then loops on a **permanent** mpv (`--idle --force-window --fs --osc=no`, IPC `/tmp/stream-box-mpv.sock`,
   script `stream-box.lua`). The loop restarts mpv if it is closed, and first kills any orphaned streamlink.

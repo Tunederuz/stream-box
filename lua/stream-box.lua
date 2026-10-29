@@ -6,9 +6,11 @@
 -- mpv stays empty, we go back to the stream.
 local mp = require "mp"
 
-local DIR = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$") or "."   -- (mp.get_script_file is too recent)
--- Modules of this script: lua/streambox/*.lua (require "streambox.…")
-package.path = DIR .. "/lua/?.lua;" .. package.path
+-- This script is in the repository's lua/ (mp.get_script_file is too recent), its modules next to it in
+-- lua/streambox/*.lua (require "streambox.…"); DIR: the repository (locales/)
+local LUA_DIR = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$") or "."
+local DIR = LUA_DIR .. "/.."
+package.path = LUA_DIR .. "/?.lua;" .. package.path
 local I18N = require "streambox.i18n"   -- interface language (see i18n.py), reloaded on streambox-language
 local ass = require "streambox.ass"
 local fmt = require "streambox.fmt"
@@ -375,15 +377,50 @@ end
 -- Why a video could not play: YouTube asking to prove it is not a bot (ytdl_hook's error, same for every client;
 -- only an account's cookies get past it) gets its own message
 local ytdl_error = nil
-mp.enable_messages("error")
+mp.enable_messages("warn")   -- (ffmpeg's "HTTP error 403" is a warning)
 mp.register_event("log-message", function(m)
-    if m.prefix == "ytdl_hook" and m.text:find("not a bot", 1, true) then ytdl_error = "bot" end
+    if m.prefix == "ytdl_hook" and m.text:find("not a bot", 1, true) then ytdl_error = "bot"
+    elseif m.text:find("HTTP error 403", 1, true) then ytdl_error = ytdl_error or "403" end
 end)
 mp.register_event("start-file", function() ytdl_error = nil end)
+
+-- YouTube client (player_client of yt-dlp): which one's streams YouTube serves changes from one day to the next (mweb
+-- refused with HTTP 403 on 2026-10-29 while tv_simply played to the end; the other way round the day before). A
+-- video refused with a 403 is reloaded at the same second with the next client; the one that plays stays for the
+-- following videos. One table (the script's 200 locals limit): clients, current one, tries for this video
+local ytc = { list = { "mweb,tv_simply", "tv_simply", "mweb", "web_safari" }, i = 1, tries = 0, path = nil, pos = 0 }
+-- Before ytdl_hook (priority 10): this video's yt-dlp options with the chosen client, the others unchanged
+mp.add_hook("on_load", 9, function()
+    local path = mp.get_property("path") or ""
+    if path ~= ytc.path then ytc.path, ytc.tries = path, 0 end
+    if ytc.i == 1 or not path:find("youtu", 1, true) then return end
+    local raw = mp.get_property_native("ytdl-raw-options") or {}
+    raw["extractor-args"] = (raw["extractor-args"] or "youtube:fetch_pot=always")
+        :gsub("player_client=[^;]*", "player_client=" .. ytc.list[ytc.i])
+    mp.set_property_native("file-local-options/ytdl-raw-options", raw)
+end)
+mp.observe_property("time-pos", "number", function(_, v) if v and v > 0 then ytc.pos = v end end)
+-- A new video starts where it is asked to (start=…, resume from the history), a reload where the refused one was
+mp.register_event("start-file", function()
+    ytc.pos = tonumber((mp.get_property("file-local-options/start") or ""):match("^%+?([%d.]+)$")) or 0
+end)
+-- Refused (403): the next client, at most once each for this video; true when it is reloaded
+function ytc.retry(e)
+    local path = ytc.path or ""
+    if e.reason ~= "error" or ytdl_error ~= "403" or not path:find("youtu", 1, true) or ytc.tries >= #ytc.list - 1 then
+        return false
+    end
+    ytc.tries = ytc.tries + 1
+    ytc.i = ytc.i % #ytc.list + 1
+    mp.msg.info(("YouTube refused the stream (403): retrying with player_client=%s"):format(ytc.list[ytc.i]))
+    mp.commandv("loadfile", path, "replace", "-1", ("start=%d"):format(math.floor(ytc.pos or 0)))
+    return true
+end
 
 mp.register_event("end-file", function(e)
     if mode == "home" then return end
     if mode == "media" then
+        if ytc.retry(e) then return end   -- YouTube refused the stream: the next client
         if e.reason == "error" then
             mp.osd_message(ytdl_error == "bot" and tr("YouTube is refusing this video for now (it asks to prove you are not a robot): try again later")
                            or tr("Can't play this video"), ytdl_error == "bot" and 8 or 5)
