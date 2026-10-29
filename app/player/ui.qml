@@ -5,7 +5,7 @@
 import QtQuick
 import QtQuick.Effects
 import StreamBox 1.0
-import "../qml"
+import "../../qml"
 
 Item {
     id: stage

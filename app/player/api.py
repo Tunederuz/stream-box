@@ -6,24 +6,19 @@ from http.server import BaseHTTPRequestHandler
 
 import actions    # actions.py: POST /api/<name>, TV menu keyboard
 import ambient    # ambient.py: first setup, remote URL, QR codes
-import audio      # audio.py: sound outputs
-import backup     # backup.py: backup and restore of settings
-import btsetup    # btsetup.py: Bluetooth devices
-import display    # display.py: screen resolution
 import history    # history.py: history file, kind of the current video
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import images     # images.py: TV preview
-import installer  # installer.py: installation to an internal disk
 import jellyfin   # jellyfin.py: library
-import localupdate  # localupdate.py: system update from a local image (USB stick, file sent)
 import plex       # plex.py: library
-import netsetup   # netsetup.py: Wi-Fi
 import playback   # playback.py: videos shared from the phone
 import settings   # settings.py: player, power button, background
-import system     # system.py: status, SSH, developer mode
 import twitch     # twitch.py: streamers, live, polls, account, followed channels
 import youtube    # youtube.py: channels, search, account, subtitles
+import sysparts   # sysparts.py: the box's system part, absent from the Stream Player
 from common import DIR, mpv
+# (system part: sound outputs, backup, Bluetooth, resolution, installation, local update, Wi-Fi, status / SSH / dev mode)
+from sysparts import SYSTEM, audio, backup, btsetup, display, installer, localupdate, netsetup, system
 from i18n import tr
 
 # Files served as is: the page and what is needed to install it as an app (PWA)
@@ -98,16 +93,20 @@ JSON_ROUTES = {
     "/api/youtube_channels": lambda: {"channels": youtube.yt_channels()},
     "/api/youtube_account": youtube.yt_account_status,
     "/api/plex_link": plex.link_state,   # Plex server, and the sign-in code being waited for
-    "/api/bluetooth": btsetup.status,
-    "/api/audio": audio_status,
-    "/api/wifi": netsetup.status,
-    "/api/health": system.health,
-    "/api/dev": system.dev_status,
-    "/api/install": installer.status,
-    "/api/backup": backup.status,
-    "/api/local_update": localupdate.status,   # system update from a local image: drives, copy, progress
-    "/api/update_prompt": system.update_prompt,   # update to offer or to apply (the TV menu asks at start, wake-up)
+    "/api/features": sysparts.features,   # what this installation has (system part or not)
 }
+if SYSTEM:   # the box's system (the Stream Player leaves it to its OS: these routes answer 404 there)
+    JSON_ROUTES.update({
+        "/api/bluetooth": btsetup.status,
+        "/api/audio": audio_status,
+        "/api/wifi": netsetup.status,
+        "/api/health": system.health,
+        "/api/dev": system.dev_status,
+        "/api/install": installer.status,
+        "/api/backup": backup.status,
+        "/api/local_update": localupdate.status,   # system update from a local image: drives, copy, progress
+        "/api/update_prompt": system.update_prompt,   # update to offer or to apply (the TV menu asks at start, wake-up)
+    })
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -159,7 +158,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, twitch.replays(login))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
-            elif self.path == "/api/display":
+            elif SYSTEM and self.path == "/api/display":
                 try:
                     self.send(200, display.info())
                 except OSError as e:
@@ -209,9 +208,9 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, youtube.yt_channel_videos(q))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
-            elif self.path == "/api/ssh":
+            elif SYSTEM and self.path == "/api/ssh":
                 self.send(200, system.ssh_status(local=self.client_address[0] == "127.0.0.1"))
-            elif self.path.startswith("/api/backup/download"):
+            elif SYSTEM and self.path.startswith("/api/backup/download"):
                 # Companion app: backup file saved on the phone
                 data = backup.create()
                 self.send_response(200)
@@ -234,7 +233,7 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path.startswith("/api/qr?"):
                 text = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("text", [""])[0]
                 self.send(200, {"rows": ambient.qr_rows(text)})
-            elif self.path == "/api/branches":   # direct update: the repository's branches
+            elif SYSTEM and self.path == "/api/branches":   # direct update: the repository's branches
                 self.send(200, {"branches": system.branches()})
             elif self.path == "/api/account":
                 with twitch.account_lock:
@@ -249,17 +248,17 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(404, {"error": tr("not found")})
         try:
             length = int(self.headers.get("Content-Length") or 0)
-            if self.path.startswith("/api/local_update_upload?"):   # companion app: a file of a local system update
+            if SYSTEM and self.path.startswith("/api/local_update_upload?"):   # companion app: a file of a local system update
                 kind = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("file", [""])[0]
                 localupdate.receive(kind, self.rfile, length)
                 return self.send(200, {"ok": True})
-            if self.path == "/api/backup_restore":   # companion app: raw backup file, then restart
+            if SYSTEM and self.path == "/api/backup_restore":   # companion app: raw backup file, then restart
                 if length > backup.MAX_SIZE:
                     raise ValueError(tr("File too large for a backup."))
                 backup.restore_upload(self.rfile.read(length))
                 return self.send(200, {"ok": True})
             body = json.loads(self.rfile.read(length) or b"{}") if length else {}
-            if self.path[len("/api/"):] in system.LOCAL_ONLY and self.client_address[0] != "127.0.0.1":
+            if SYSTEM and self.path[len("/api/"):] in system.LOCAL_ONLY and self.client_address[0] != "127.0.0.1":
                 return self.send(403, {"error": tr("Access setting: only from the TV menu.")})
             actions.action(self.path[len("/api/"):], body)
             self.send(200, {"ok": True})

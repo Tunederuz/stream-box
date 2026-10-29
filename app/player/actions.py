@@ -5,24 +5,19 @@ library only.
 import re, subprocess, time
 
 import ambient    # ambient.py: remote URL, first setup
-import audio      # audio.py: sound output (plugged HDMI, USB, Bluetooth, manual choice)
-import backup     # backup.py: backup and restore of settings (USB stick, file from the page)
-import btsetup    # btsetup.py: Bluetooth remotes and gamepads (pairing, removal)
-import display    # display.py: screen resolution
 import history    # history.py: history edits
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
-import installer  # installer.py: installation to an internal disk from the USB stick
 import jellyfin   # jellyfin.py: Jellyfin playback
-import localupdate  # localupdate.py: system update from a local image
-import netsetup   # netsetup.py: Wi-Fi networks, setup access point
 import playback   # playback.py: videos started from a link
 import plex       # plex.py: Plex server, playback
 import settings   # settings.py: player, power button, background
-import system     # system.py: power, SSH, developer mode, updates
 import twitch     # twitch.py: streamers, polls and predictions, account, followed channels
 import youtube    # youtube.py: channels, account, "TV app" access
 from common import mpv
 from i18n import tr
+# The box's system part (sound output, backup, Bluetooth, resolution, installation, local update, Wi-Fi, power, SSH,
+# developer mode, updates): None in the Stream Player, whose actions below are then unknown
+from sysparts import SYSTEM, audio, backup, btsetup, display, installer, localupdate, netsetup, system
 
 keyboard = {}   # TV menu search keyboard: {open, text, target, at}
 
@@ -211,15 +206,8 @@ ACTIONS = {
     "plex_link": lambda body: plex.link_cancel() if body.get("action") == "cancel" else plex.link_start(),
     "youtube_channels": lambda body: youtube.edit_yt_channels(str(body.get("action", "")),
                                                               str(body.get("channel", "")), int(body.get("delta", 0))),
-    # direct: developer mode, from a branch (main by default)
-    "update": lambda body: system.start_update(bool(body.get("direct")), str(body.get("branch") or "main")),
-    "update_check": lambda body: system.check_update(),   # "Check for updates"
-    "update_deps": lambda body: system.update_deps(),   # "Update dependencies" (Settings → Advanced)
-    "apply_update": lambda body: system.apply_update(),   # "Restart now" for an update waiting for the user
-    "dismiss_update": lambda body: system.dismiss_update(),   # "Don't ask again" (for that update)
     "qr": qr,
     "set": set_number,
-    "display": lambda body: display.apply(str(body.get("mode", "auto"))),
     "volume": lambda body: mpv(["add", "volume", max(-20, min(20, int(body.get("delta", 0))))]),
     "mute": lambda body: mpv(["cycle", "mute"]),
     "pause": lambda body: mpv(["cycle", "pause"]),
@@ -232,30 +220,40 @@ ACTIONS = {
     "youtube_login": youtube_login,
     "youtube_logout": youtube_logout,
     "youtube_sync": lambda body: youtube.yt_reload(),
-    "poweroff": poweroff,
     "key": key,
-    "bluetooth": bluetooth,
     "language": language,
     "setup": lambda body: ambient.finish_setup(),   # phone page: "Finish" of the first setup
-    "ssh": lambda body: system.set_ssh(bool(body.get("enabled"))),
-    "dev": lambda body: system.set_dev(bool(body.get("enabled"))),
-    # TV System menu: {"disk": "nvme0n1"}; the disk is entirely erased
-    "install": lambda body: installer.start(str(body.get("disk", ""))[:32]),
-    "backup": backup_usb,
-    # System update from a local image: {"action": "usb", "path", "name"} (copied from the drive, then installed), or
-    # {"action": "start"} once the companion app sent the files
-    "local_update": lambda body: localupdate.from_usb(str(body.get("path", ""))[:100], str(body.get("name", ""))[:120])
-                    if body.get("action") == "usb" else localupdate.start(),
     "keymap": keymap,
-    # Sound output: "auto" or the identifier of an output from GET /api/audio
-    "audio": lambda body: audio.set_choice(str(body.get("output", "auto"))[:200]),
     "keyboard": keyboard_state,
     "keyboard_input": keyboard_input,
     "remote_url": lambda body: ambient.set_remote_url(str(body.get("url", ""))[:300]),
-    "wifi": wifi,
-    "reboot": reboot,
-    "power_action": lambda body: settings.set_power_action(str(body.get("mode", ""))),
 }
+if SYSTEM:   # the box's system (the Stream Player leaves it to its OS: these actions are unknown there)
+    ACTIONS.update({
+        # direct: developer mode, from a branch (main by default)
+        "update": lambda body: system.start_update(bool(body.get("direct")), str(body.get("branch") or "main")),
+        "update_check": lambda body: system.check_update(),   # "Check for updates"
+        "update_deps": lambda body: system.update_deps(),   # "Update dependencies" (Settings → Advanced)
+        "apply_update": lambda body: system.apply_update(),   # "Restart now" for an update waiting for the user
+        "dismiss_update": lambda body: system.dismiss_update(),   # "Don't ask again" (for that update)
+        "display": lambda body: display.apply(str(body.get("mode", "auto"))),
+        "poweroff": poweroff,
+        "bluetooth": bluetooth,
+        "ssh": lambda body: system.set_ssh(bool(body.get("enabled"))),
+        "dev": lambda body: system.set_dev(bool(body.get("enabled"))),
+        # TV System menu: {"disk": "nvme0n1"}; the disk is entirely erased
+        "install": lambda body: installer.start(str(body.get("disk", ""))[:32]),
+        "backup": backup_usb,
+        # System update from a local image: {"action": "usb", "path", "name"} (copied from the drive, then installed), or
+        # {"action": "start"} once the companion app sent the files
+        "local_update": lambda body: localupdate.from_usb(str(body.get("path", ""))[:100], str(body.get("name", ""))[:120])
+                        if body.get("action") == "usb" else localupdate.start(),
+        # Sound output: "auto" or the identifier of an output from GET /api/audio
+        "audio": lambda body: audio.set_choice(str(body.get("output", "auto"))[:200]),
+        "wifi": wifi,
+        "reboot": reboot,
+        "power_action": lambda body: settings.set_power_action(str(body.get("mode", ""))),
+    })
 
 
 def action(name, body):

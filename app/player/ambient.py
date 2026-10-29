@@ -4,10 +4,10 @@ by ambient_loop in user-data/streambox/ambient. Standard library only.
 import datetime, json, os, re, subprocess, time, urllib.parse, urllib.request, zoneinfo
 
 import history   # history.py: a box that has a history counts as set up
-import netsetup  # netsetup.py: setup Wi-Fi access point
 import twitch    # twitch.py: streamer list, Twitch schedules
 from common import COOKIES_DIR, PORT, PUBLISH_EVERY, lan_ip, mpv
 from i18n import tr
+from sysparts import netsetup   # setup Wi-Fi access point (None in the Stream Player)
 
 # Ambient screen (drawn by stream-box.lua when nothing is playing): weather and upcoming scheduled lives, published in
 # user-data/streambox/ambient. Weather comes from Open-Meteo (no account); location in ~/.config/stream-box/ambient.json:
@@ -211,7 +211,7 @@ def ambient_loop():
             data["qr"] = None   # no network: no address to show
         # Setup mode (the box's Wi-Fi access point): QR code to join its network, then for the page
         try:
-            w = netsetup.status()
+            w = netsetup.status() if netsetup else {}
         except (OSError, subprocess.SubprocessError):
             w = {}
         h = w.get("hotspot")

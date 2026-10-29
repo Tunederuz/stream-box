@@ -2,8 +2,8 @@
 """
 import os, shutil, subprocess, threading, time
 
-import display   # display.py: environment of cage's Wayland session (grim)
 from common import mpv
+from sysparts import display   # environment of cage's Wayland session, for grim (None in the Stream Player)
 
 # TV preview for the page, only when the page asks for it (section open): the whole screen, ambient screen and
 # menus included, captured by grim through cage's wlr-screencopy protocol. Without grim, mpv capture (window, with
@@ -21,7 +21,7 @@ def preview():
             return preview_cache["data"]
         data = None
         playing = mpv(["get_property", "video-params"])[0] is not None
-        if shutil.which("grim"):
+        if display and shutil.which("grim"):   # (the box's own session only)
             try:
                 width = mpv(["get_property", "osd-dimensions"])[0].get("w") or PREVIEW_WIDTH
                 r = subprocess.run(["grim", "-t", "jpeg", "-q", "70", "-s", f"{min(1.0, PREVIEW_WIDTH / width):.3f}", "-"],

@@ -53,7 +53,7 @@ while true; do
   ) &
   if [ "$choice" = qt ] && [ -x "$UI_PYTHON" ] && [ "$quick_fails" -lt 3 ]; then
     started=$(date +%s)
-    QT_QPA_PLATFORM=wayland "$UI_PYTHON" "$DIR/app/ui.py" "${MPV_ARGS[@]}" >> /tmp/stream-box-ui.log 2>&1
+    QT_QPA_PLATFORM=wayland "$UI_PYTHON" "$DIR/app/player/ui.py" "${MPV_ARGS[@]}" >> /tmp/stream-box-ui.log 2>&1
     code=$?
     if [ "$code" -ne 0 ] && [ $(( $(date +%s) - started )) -lt 30 ]; then
       quick_fails=$((quick_fails + 1))
