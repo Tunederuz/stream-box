@@ -6,6 +6,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+## [0.5.0]
+
 ### Changed
 - YouTube account: no more Google app to create. Connecting the account (a code on google.com/device) is enough for
   the Subscriptions row, Recommended for you and the progress synced with your other screens; one sign-in instead of
@@ -20,18 +22,16 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 ### Added
 - The battery level shows in the TV menu, on the home screen and in the companion app on devices that have one
   (Steam Deck, laptop).
+- Developer mode: the direct update can follow any branch of the repository (◀ ▶ on "Direct update (source)", or the
+  list in the companion app), forwards or backwards; choosing main again is the way back.
 
 ### Fixed
 - YouTube: a video refused by YouTube ("Can't play this video", HTTP 403) is reloaded at the same second with
   another YouTube client, and the one that plays is kept for the next videos: which one YouTube accepts changes from
   one day to the next.
+- Built-in screens mounted sideways (Steam Deck) show the box the right way up instead of on its side.
 - Boot: when the system partition does not show up (a Steam Deck's SD card sometimes fails to start on a cold boot),
   the box restarts after about 30 s instead of freezing on the boot screen.
-
-## [0.4.1]
-
-### Fixed
-- Built-in screens mounted sideways (Steam Deck) show the box the right way up instead of on its side.
 - A box running from its USB stick no longer offers to check for system updates it cannot install: Settings →
   Updates (and the companion app) say to install it on the PC to get them.
 - README: flash the image with balenaEtcher or dd; a stick written with Rufus did not finish booting.
