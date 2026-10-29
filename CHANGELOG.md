@@ -20,6 +20,9 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   (Steam Deck, laptop).
 
 ### Fixed
+- YouTube: a video refused by YouTube ("Can't play this video", HTTP 403) is reloaded at the same second with
+  another YouTube client, and the one that plays is kept for the next videos: which one YouTube accepts changes from
+  one day to the next.
 - Boot: when the system partition does not show up (a Steam Deck's SD card sometimes fails to start on a cold boot),
   the box restarts after about 30 s instead of freezing on the boot screen.
 
