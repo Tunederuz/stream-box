@@ -3,4 +3,4 @@ Description=Stream Box: update of the dependencies (streamlink, yt-dlp, jellyfin
 
 [Service]
 Type=oneshot
-ExecStart=%h/stream-box/update.sh
+ExecStart=%h/stream-box/scripts/update.sh

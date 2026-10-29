@@ -6,9 +6,11 @@
 -- mpv stays empty, we go back to the stream.
 local mp = require "mp"
 
-local DIR = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$") or "."   -- (mp.get_script_file is too recent)
--- Modules of this script: lua/streambox/*.lua (require "streambox.…")
-package.path = DIR .. "/lua/?.lua;" .. package.path
+-- This script is in the repository's lua/ (mp.get_script_file is too recent), its modules next to it in
+-- lua/streambox/*.lua (require "streambox.…"); DIR: the repository (locales/)
+local LUA_DIR = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$") or "."
+local DIR = LUA_DIR .. "/.."
+package.path = LUA_DIR .. "/?.lua;" .. package.path
 local I18N = require "streambox.i18n"   -- interface language (see i18n.py), reloaded on streambox-language
 local ass = require "streambox.ass"
 local fmt = require "streambox.fmt"

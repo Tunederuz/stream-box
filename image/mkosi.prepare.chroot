@@ -25,7 +25,7 @@ git -C "$BOX_HOME/stream-box" config core.fileMode false
 # Changes not committed yet (git clone only takes the last commit): copy of the working tree
 tar -C /work/src/stream-box --exclude=.git --exclude=image --exclude=node_modules -cf - . | tar -C "$BOX_HOME/stream-box" -xf -
 install -d -m 700 "$BOX_HOME/.config/stream-box"
-cp "$BOX_HOME/stream-box/streamers.example.txt" "$BOX_HOME/.config/stream-box/streamers.txt"
+cp "$BOX_HOME/stream-box/assets/streamers.example.txt" "$BOX_HOME/.config/stream-box/streamers.txt"
 chown -R "$BOX_USER:$BOX_USER" "$BOX_HOME"
 
 as_box '

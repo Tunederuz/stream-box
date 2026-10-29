@@ -2,7 +2,7 @@
 it sends to mpv with their time. Usage: input_device.py EVENTS_JSON ([[delay, code, value], …], times in seconds)"""
 import json, os, sys, tempfile, threading, time
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app"))
 import input as inp   # noqa: E402
 
 events = json.loads(sys.argv[1])

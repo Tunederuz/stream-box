@@ -26,7 +26,7 @@ class Script(unittest.TestCase):
         open(os.path.join(home, ".config", "stream-box", "setup-done"), "w").close()
         cls.mpv = subprocess.Popen(["mpv", "--no-config", "--idle=yes", "--vo=null", "--ao=null",
                                     "--input-ipc-server=" + cls.sock, "--log-file=" + cls.log,
-                                    "--script=" + os.path.join(REPO, "stream-box.lua")],
+                                    "--script=" + os.path.join(REPO, "lua", "stream-box.lua")],
                                    env=dict(os.environ, HOME=home), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(100):
             if os.path.exists(cls.sock):
