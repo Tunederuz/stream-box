@@ -16,8 +16,9 @@ YTDL_FORMAT='bestvideo[height<=?1440][vcodec!^=av01]+bestaudio/best'
 
 # hwdec: hardware decoding when it is safe (VA-API, NVDEC…). French and English subtitles, manual and automatic,
 # without the automatic translations ("French from Arabic"… over 100 tracks).
-# player_client: mweb first: its streams play to the end; tv_simply's stop after the first megabytes (HTTP 403 further
-# on, so a video resumed in the middle fails at once; checked 2026-10-28), kept as a fallback
+# player_client: mweb first, tv_simply as a fallback; which client's streams YouTube serves changes from day to day
+# (tv_simply cut after the first megabytes on 2026-10-28, mweb refused on 2026-10-29): stream-box.lua reloads a video
+# refused with HTTP 403 with the next client
 # fetch_pot: anti-bot token (stream-box-pot service) for every request, otherwise YouTube blocks the subtitles
 # shellcheck disable=SC2054  # (commas inside mpv option values, not array separators)
 MPV_ARGS=(
