@@ -11,19 +11,19 @@ import json, socket, threading, time
 
 import actions    # actions.py: language, restart
 import ambient    # ambient.py: companion app address
-import audio      # audio.py: sound outputs
-import display    # display.py: screen resolution
 import history    # history.py: history file, resume thresholds
 import i18n       # i18n.py: interface language
 import jellyfin   # jellyfin.py: library, playback
 import playback   # playback.py: links, history entries
 import plex       # plex.py: library, playback
 import settings   # settings.py: back to the full version
-import system     # system.py: sleep, shutdown, system update
 import twitch     # twitch.py: streamers, who is live, followed channels, replays
 import youtube    # youtube.py: favorites, subscriptions
 from common import MPV_SOCKET, mpv
 from i18n import tr
+# The box's system part (sound outputs, screen resolution, sleep, shutdown, system update): None in the Stream Player,
+# whose menu then leaves those rows out
+from sysparts import SYSTEM, audio, display, system
 
 CORNERS = {"tl": "↖ top left", "tr": "↗ top right", "br": "↘ bottom right", "bl": "↙ bottom left"}   # (stream-box.lua)
 STATE = "user-data/streambox/quickmenu"
@@ -248,7 +248,7 @@ def settings_screen():
 
     def build():
         out = []
-        for row in (sound, resolution):   # one failing (no sound server, no wlr-randr) leaves the others
+        for row in (sound, resolution) if SYSTEM else ():   # one failing (no sound server, no wlr-randr) leaves the others
             try:
                 out.append(row())
             except (OSError, ValueError, KeyError) as e:
@@ -289,7 +289,7 @@ def power_screen():
 def update_item():
     """System update, as in the TV menu's Settings → Updates: restart onto the version installed and waiting (a plain
     restart keeps the running one), install the release the daily check found, or check now"""
-    s = system.system_update()
+    s = system.system_update() if SYSTEM else None
     if not s:
         return None
     pending, last, _ = system.waiting_update()
@@ -323,7 +323,7 @@ def system_screen():
         return [x for x in [
             update_item(),
             item(tr("Switch to the full version"), lambda: playing(lambda: settings.set_player("qt"))),
-            item(tr("Turn off or restart"), power_screen),
+            item(tr("Turn off or restart"), power_screen) if SYSTEM else None,
             item(tr("Companion app"), info=ambient.remote_url() or "", dim=True),
         ] if x]
     return screen(tr("System"), build)

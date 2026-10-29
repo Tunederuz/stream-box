@@ -1,6 +1,7 @@
 """remote.py (companion app server and API): started for real with a throwaway HOME and a fake mpv IPC socket that
-records the commands it receives. Skipped when port 8080 or the mpv socket are already taken (a running box)."""
-import http.client, json, os, socket, subprocess, sys, threading, time, unittest
+records the commands it receives. Skipped when port 8080 or the mpv socket are already taken (a running box). Run twice:
+from the repository (Stream Box OS), and from a copy without app/system (Stream Player)."""
+import http.client, json, os, shutil, socket, subprocess, sys, tempfile, threading, time, unittest
 
 from tests.helpers import REPO, temp_home
 
@@ -55,11 +56,19 @@ class FakeMpv:
 
 @unittest.skipIf(port_taken() or os.path.exists(SOCK), "port 8080 or the mpv socket already in use")
 class Api(unittest.TestCase):
+    SYSTEM = True   # the system part is there (Stream Box OS)
+
+    @classmethod
+    def root(cls):
+        """The repository the server runs from"""
+        return REPO
+
     @classmethod
     def setUpClass(cls):
         cls.mpv = FakeMpv()
         cls.home = temp_home()
-        cls.server = subprocess.Popen([sys.executable, os.path.join(REPO, "app", "player", "remote.py")], cwd=REPO,
+        root = cls.root()
+        cls.server = subprocess.Popen([sys.executable, os.path.join(root, "app", "player", "remote.py")], cwd=root,
                                       env=dict(os.environ, HOME=cls.home),
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(100):
@@ -123,6 +132,9 @@ class Api(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("error", body)
 
+    def test_features(self):
+        self.assertEqual(self.request("GET", "/api/features"), (200, {"system": self.SYSTEM}))
+
     def test_unknown_action(self):
         self.assertGreaterEqual(self.request("POST", "/api/no_such_action", {})[0], 400)
 
@@ -138,3 +150,28 @@ class Api(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlayerOnly(Api):
+    """The same server and tests from a copy of the repository without app/system: the Stream Player, whose OS runs
+    itself. It starts, serves the page and the player's API, and has none of the system's routes and actions."""
+    SYSTEM = False
+
+    @classmethod
+    def root(cls):
+        cls.copy = tempfile.mkdtemp()
+        skip = lambda d, names: [n for n in names if n in (".git", "node_modules", "__pycache__")
+                                 or (os.path.basename(d) == "app" and n == "system")]
+        shutil.copytree(REPO, os.path.join(cls.copy, "repo"), ignore=skip, symlinks=True)
+        return os.path.join(cls.copy, "repo")
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(cls.copy, ignore_errors=True)
+
+    def test_no_system_routes(self):
+        for path in ("/api/health", "/api/wifi", "/api/bluetooth", "/api/dev", "/api/display", "/api/ssh"):
+            self.assertEqual(self.request("GET", path)[0], 404, path)
+        for name in ("poweroff", "reboot", "update", "wifi", "ssh", "install"):
+            self.assertEqual(self.request("POST", f"/api/{name}", {})[0], 400, name)   # unknown action

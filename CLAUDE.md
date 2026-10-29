@@ -59,8 +59,17 @@ Installation and update: `install.sh` (see the README); settings backup: TV Sett
 
 ## Files (`/home/media/stream-box/`)
 Layout (since 0.5.0, phase 1 of the split between the player and the system, see the Stream Player idea):
-`app/` all the Python modules, side by side (they import each other by name; `common.DIR` and `i18n.DIR` are the
-repository, one level up), plus `ui.qml` next to `ui.py` (it imports `../qml`); `lua/` `stream-box.lua` (its `DIR` is
+`app/player/` the portable modules (TV app, companion app server, Twitch, YouTube, Jellyfin, Plex, playback,
+history, chat, i18n) and `ui.qml` next to `ui.py` (it imports `../../qml`); `app/system/` the box's system (system.py,
+display, audio, input, netsetup, btsetup, btagent, installer, localupdate, backup, boot-mode, mqtt_bridge). Both
+folders are on the import path (the scripts started directly add them, tests/__init__.py too): the modules import
+each other by name; `common.DIR` and `i18n.DIR` are the repository, two levels up. The system part is optional
+(Stream Player: the app on an OS that runs itself): the player's modules take it from `sysparts.py` (`SYSTEM`, and
+each module or None; decided by the folder being there, an import error with the folder is a real error); api.py and
+actions.py then declare no system route or action (404, "unknown action"), quickmenu.py leaves those rows out,
+remote.py starts no system loop, ambient.py and images.py do without the setup access point and grim;
+`GET /api/features` → {system}. tests/test_api.py runs its tests twice: from the repository and from a copy without
+app/system; `lua/` `stream-box.lua` (its `DIR` is
 the repository, its modules next to it); `qml/` the QML; `web/` the companion app page, PWA files, icons (served by
 api.py from `web/`); `scripts/` start.sh, player.sh, update.sh, install.sh, backup.sh, dev-pacman.sh (their `DIR` /
 `SRC` is the repository, one level up); `assets/` boot image, cursors, example list. Relays at the root for the images

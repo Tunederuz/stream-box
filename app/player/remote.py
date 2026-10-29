@@ -30,10 +30,9 @@ sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 import ambient   # ambient.py: weather, schedules, QR code
 import history   # history.py: positions kept in memory on a USB drive
 import api       # api.py: HTTP request handler
-import netsetup  # netsetup.py: setup Wi-Fi access point
 import playback  # playback.py: history loop
 import quickmenu # quickmenu.py: quick menu of the simplified version
-import system    # system.py: box status, wake-up, power key
+from sysparts import SYSTEM, netsetup, system   # the box's system part (setup access point, status, power key)
 import twitch    # twitch.py: account, who is live, polls
 from common import PORT
 
@@ -43,11 +42,12 @@ threading.Thread(target=twitch.live_loop, daemon=True).start()
 threading.Thread(target=ambient.ambient_loop, daemon=True).start()
 threading.Thread(target=playback.history_loop, daemon=True).start()
 threading.Thread(target=twitch.events_loop, daemon=True).start()
-threading.Thread(target=system.health_loop, daemon=True).start()
-threading.Thread(target=system.resume_loop, daemon=True).start()
-threading.Thread(target=netsetup.setup_loop, daemon=True).start()
 threading.Thread(target=quickmenu.listen_loop, daemon=True).start()
-system.hold_power_key()
+if SYSTEM:   # (the Stream Player leaves the system to its OS)
+    threading.Thread(target=system.health_loop, daemon=True).start()
+    threading.Thread(target=system.resume_loop, daemon=True).start()
+    threading.Thread(target=netsetup.setup_loop, daemon=True).start()
+    system.hold_power_key()
 # Stopped (shutdown, session restart): the positions not written yet on a USB drive are written now
 signal.signal(signal.SIGTERM, lambda *_: (history.flush(force=True), sys.exit(0)))
 ThreadingHTTPServer(("0.0.0.0", PORT), api.Handler).serve_forever()
