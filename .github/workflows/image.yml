@@ -7,8 +7,8 @@
 #   - version tag pushed (v0.2.0…): that version, release text from its CHANGELOG.md section;
 #   - on the 1st of each month (and by hand: Actions → image → Run workflow): the latest release's code rebuilt with the
 #     Arch packages of the day, published as the next patch version (v0.2.0 → v0.2.1) only if packages changed, with
-#     the list of the updated ones: the boxes' weekly update (Monday 05:00) gets the security fixes within the week,
-#     without waiting for a release.
+#     the list of the updated ones: the boxes' daily check offers it (installed once the user accepts), so the
+#     security fixes come without waiting for a release. A severe flaw in the middle of the month: run it by hand.
 name: image
 on:
   push:
