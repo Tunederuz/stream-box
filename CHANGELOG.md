@@ -14,6 +14,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   twitch.tv/activate is enough. Your own app stays possible in the companion app.
 - Gamepads: the middle button (Steam on the Steam Deck, Xbox, PlayStation) opens the TV menu, like Start; the Steam
   Deck's "…" button goes to the home screen.
+- Steam Deck: its controller is used as a gamepad from the start (it acted as a keyboard and mouse until ☰ was held,
+  and Steam or "…" did nothing).
 
 ### Added
 - The battery level shows in the TV menu, on the home screen and in the companion app on devices that have one
