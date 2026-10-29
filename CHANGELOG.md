@@ -19,6 +19,10 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - The battery level shows in the TV menu, on the home screen and in the companion app on devices that have one
   (Steam Deck, laptop).
 
+### Fixed
+- Boot: when the system partition does not show up (a Steam Deck's SD card sometimes fails to start on a cold boot),
+  the box restarts after about 30 s instead of freezing on the boot screen.
+
 ## [0.4.1]
 
 ### Fixed
