@@ -76,6 +76,9 @@ Item {
         height: 1080
         scale: Math.min(parent.width / 1920, parent.height / 1080)
         transformOrigin: Item.TopLeft
+        // centered when the screen or the window is not 16:9 (Steam Deck 16:10, Stream Player window)
+        x: (parent.width - width * scale) / 2
+        y: (parent.height - height * scale) / 2
         // background changed in the menu: right away here too
         AmbientScreen { backdrop: tvMenu.st.backdrop || null; covered: tvMenu.isOpen && !tvMenu.powerOnly }
         ChatOverlay {}
