@@ -173,6 +173,8 @@ Item {
     property string pendingDisplay: ""
     property string pendingPlayer: ""        // player chosen with the arrows, applied by OK (the player restarts)
     property string pendingLang: ""          // interface language chosen with the arrows, applied by OK
+    property string pendingBranch: ""        // direct update: branch chosen with the arrows, updated to by OK
+    property var branches: ["main"]          // the repository's branches (/api/branches), read when Updates opens
     property real poweroffUntil: 0
     property real rebootUntil: 0             // "Restart the box": second OK within 4 s
     property bool powerOnly: false           // "Box" dialog alone, without the menu behind (power held)
@@ -719,10 +721,13 @@ Item {
         }
         return ""
     }
-    function openSection(id) { section = id; rootSel = setSel; setSel = 0; pendingDisplay = ""; pendingPlayer = ""; pendingLang = "" }
+    function openSection(id) { section = id; rootSel = setSel; setSel = 0; pendingDisplay = ""; pendingPlayer = ""; pendingLang = ""; pendingBranch = ""
+        if (id === "updates" && dev && dev.enabled)
+            call("GET", "/api/branches", undefined, function (d) { if (d && d.branches && d.branches.length) branches = d.branches })
+    }
     function leaveSection() {
         var i = sectionIds.indexOf(section)
-        section = ""; setSel = i >= 0 ? i : rootSel; pendingDisplay = ""; pendingPlayer = ""; pendingLang = ""
+        section = ""; setSel = i >= 0 ? i : rootSel; pendingDisplay = ""; pendingPlayer = ""; pendingLang = ""; pendingBranch = ""
     }
     function settingsRows() {
         // Rows that open a dialog (open: true) show "›" and also open with ▶, as the sections themselves
@@ -939,9 +944,22 @@ Item {
                   } },
                 { open: true, label: tr("Update from a USB stick"), visible: !!(localUpd && localUpd.available), value: localUpdValue(),
                   hint: tr("A release's image (stream-box.raw.xz), without the Internet"), ok: function () { localUpdateMenu() } },
+                // ◀ ▶ choose the branch (main, dev, exp/…), OK updates to it: forwards or backwards, main is the
+                // way back from an experimental branch
                 { label: tr("Direct update (source)"), visible: !!(dev && dev.enabled), value: directValue(),
-                  hint: tr("Developer mode: the code and system files of the main branch, not the system"),
-                  ok: function () { var u = health && health.update && health.update.system; if (!(u && (u.running || u.checking))) updateAct("update", { direct: true }, function (u) { u.system.running = true; u.system.direct = true }) } },
+                  hint: pendingBranch && pendingBranch !== directBranch() ? tr("OK to update to this branch")
+                      : tr("Developer mode: the code and system files of a branch, not the system"),
+                  step: function (d) {
+                      var i = Math.max(0, branches.indexOf(pendingBranch || directBranch()))
+                      pendingBranch = branches[(i + d + branches.length) % branches.length]
+                  },
+                  ok: function () {
+                      var u = health && health.update && health.update.system
+                      if (u && (u.running || u.checking)) return
+                      var b = pendingBranch || directBranch()
+                      pendingBranch = ""
+                      updateAct("update", { direct: true, branch: b }, function (u) { u.system.running = true; u.system.direct = true })
+                  } },
             ]
         case "backup":
             return [
@@ -1019,7 +1037,7 @@ Item {
     function updateVersion() {
         var s = health && health.update && health.update.system
         var l = s && s.last
-        if (l && l.kind === "direct" && l.ok) return l.version + "  ·  " + tr("dev")
+        if (l && l.kind === "direct" && l.ok) return l.version + "  ·  " + (l.branch && l.branch !== "main" ? l.branch : tr("dev"))
         if (s && s.version) return "v" + s.version
         return l && l.kind !== "direct" ? l.version || "" : ""
     }
@@ -1044,13 +1062,19 @@ Item {
         if (localUpd && localUpd.available) call("GET", "/api/local_update", undefined, function (d) { if (d) localUpd = d })
     }
     // "Direct update (source)": in progress, failed, or waiting for a restart (its version shows on the Updates row)
+    // Branch of the last direct update (main before branches could be chosen)
+    function directBranch() {
+        var l = health && health.update && health.update.system && health.update.system.last
+        return l && l.kind === "direct" && l.branch ? l.branch : "main"
+    }
     function directValue() {
         var s = health && health.update && health.update.system
         var l = s && s.last
         if (s && s.direct) return tr("In progress…")
-        if (!l || l.kind !== "direct") return ""
-        if (!l.ok) return tr("failed")
-        return l.restart === "pending" ? tr("restart to finish") : ""
+        var b = pendingBranch || directBranch()
+        if (pendingBranch || !l || l.kind !== "direct") return b
+        if (!l.ok) return b + "  ·  " + tr("failed")
+        return l.restart === "pending" ? b + "  ·  " + tr("restart to finish") : b
     }
     // Installed, waiting for "Restart now" (a plain restart keeps the running A/B version: its boot is pinned)
     function updateWaiting() {
@@ -1482,7 +1506,7 @@ Item {
         case "settings": return keyRows(k, settingsRows())
         }
     }
-    function toRail() { area = "rail"; railHome = false; shortcut = -1; pendingDisplay = ""; pendingPlayer = ""; pendingLang = "" }
+    function toRail() { area = "rail"; railHome = false; shortcut = -1; pendingDisplay = ""; pendingPlayer = ""; pendingLang = ""; pendingBranch = "" }
     // Something to focus in the tab (data still loading counts as yes: checkArea goes back to the rail if it is empty)
     function canEnter(id) {
         var list = st.streamers

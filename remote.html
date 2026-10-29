@@ -702,6 +702,8 @@
     <div class="health" id="health"></div>
     <button id="update-now" style="width: 100%; margin-top: 10px">Check for updates</button>
     <div class="status" id="update-status"></div>
+    <!-- Developer mode: the branch to follow (main, dev, exp/…; main again is the way back), then the update -->
+    <select id="update-branch" hidden aria-label="Branch" style="width: 100%; margin-top: 8px"></select>
     <button id="update-direct" hidden style="width: 100%; margin-top: 8px">Direct update (source)</button>
     <button id="reboot" style="width: 100%; margin-top: 8px">↻  Restart</button>
     <details style="margin-top: 10px">
@@ -1804,7 +1806,9 @@ async function refreshHealth() {
            u.system && u.system.offered ? "warn" : u.system && u.system.last && !u.system.last.ok ? "bad" : "", true),
     );
     const sysBusy = !!(u.system && (u.system.running || u.system.checking));
-    $("update-direct").hidden = !u.dev;   // developer mode: the code and system files of main, not the system
+    $("update-direct").hidden = !u.dev;   // developer mode: the code and system files of a branch, not the system
+    $("update-branch").hidden = !u.dev;
+    if (u.dev && !branchesLoaded) loadBranches((u.system?.last?.kind === "direct" && u.system.last.branch) || "main");
     $("update-direct").disabled = sysBusy;
     $("update-direct").textContent = u.system && u.system.direct ? tr("In progress…") : tr("Direct update (source)");
     $("update-deps").disabled = !!u.running;
@@ -1862,10 +1866,19 @@ $("update-deps").onclick = async () => {
   await send("update_deps");
   setTimeout(refreshHealth, 1500);
 };
+let branchesLoaded = false;
+async function loadBranches(current) {   // the repository's branches, the one of the last direct update chosen
+  branchesLoaded = true;
+  try {
+    const { branches } = await (await fetch("/api/branches")).json();
+    $("update-branch").replaceChildren(...branches.map((b) => Object.assign(document.createElement("option"), { value: b, textContent: b })));
+    $("update-branch").value = branches.includes(current) ? current : "main";
+  } catch (e) { branchesLoaded = false; bug(e); }
+}
 $("update-direct").onclick = async () => {
   $("update-direct").disabled = true;
   $("update-direct").textContent = tr("In progress…");
-  await send("update", { direct: true });
+  await send("update", { direct: true, branch: $("update-branch").value || "main" });
   setTimeout(refreshHealth, 1500);
 };
 refreshHealth();

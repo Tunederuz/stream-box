@@ -16,9 +16,11 @@
 #   system-update state   at boot (stream-box-update-state.service): whether an update is still waiting
 #
 # Direct update (developer mode only, started by hand: "Direct update (source)", remote.py leaves
-# ~/.local/state/stream-box/update-direct), on any box: the files and not the system: the code and the system files
-# below, from the main branch instead of the latest release; version shown as <system>+<commit> (dev). Otherwise
-# developer mode updates as any box does.
+# ~/.local/state/stream-box/update-direct holding the branch to follow), on any box: the files and not the system: the
+# code and the system files below, from a branch (main by default, or one chosen in the TV menu: dev, exp/…) instead of
+# the latest release; version shown as <system>+<commit> (dev). The box's code is put on that branch's commit as is,
+# forwards or backwards: choosing main again is the way back from an experimental branch. Otherwise developer mode
+# updates as any box does.
 #
 # Box installed before A/B (one system partition):
 #   - its own copy of the repository, owned by root (/var/lib/stream-box/src): what is installed as root never comes
@@ -36,19 +38,21 @@ FILES=$STATE/system-files
 BOX=/home/media/stream-box
 install -d -m 750 -o root -g media "$STATE"
 
-step=start tag="" files=0 code=same restart=no new="" kind=files available=keep
+step=start tag="" files=0 code=same restart=no new="" kind=files available=keep branch=""
 report() {   # ok message: system-update.json (readable by media through the group of the directory); the daily check's
   # fields (available, checked) carried over, available replaced unless "keep"
-  python3 - "$STATE/system-update.json" "$1" "$2" "$tag" "$files" "$code" "$restart" "$new" "$kind" "$available" << 'PY'
+  python3 - "$STATE/system-update.json" "$1" "$2" "$tag" "$files" "$code" "$restart" "$new" "$kind" "$available" \
+    "$branch" << 'PY'
 import json, os, sys, time
-path, ok, message, tag, files, code, restart, new, kind, available = sys.argv[1:]
+path, ok, message, tag, files, code, restart, new, kind, available, branch = sys.argv[1:]
 try:
     old = json.load(open(path))
 except (OSError, ValueError):
     old = {}
 d = {"ok": ok == "1", "message": message, "version": tag, "files": int(files), "code": code, "restart": restart,
      "new": new, "kind": kind, "date": time.strftime("%Y-%m-%dT%H:%M:%S"),
-     "available": old.get("available", "") if available == "keep" else available, "checked": old.get("checked", "")}
+     "available": old.get("available", "") if available == "keep" else available, "checked": old.get("checked", ""),
+     "branch": branch}
 with open(path + ".tmp", "w") as f:
     json.dump(d, f)
 os.chmod(path + ".tmp", 0o644)
@@ -56,6 +60,12 @@ os.replace(path + ".tmp", path)
 PY
 }
 trap 'report 0 "failed: $step"' ERR
+
+direct_branch() {   # branch asked in the direct update's marker (written by media: checked strictly), main by default
+  local b
+  b=$(head -c 200 /home/media/.local/state/stream-box/update-direct 2> /dev/null | head -n 1 | tr -d '[:space:]' || true)
+  if [[ "$b" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$ ]] && [[ "$b" != *..* ]]; then echo "$b"; else echo main; fi
+}
 
 manual() {   # mark: started by hand within the last 2 h (the marker is used up)
   local mark=/home/media/.local/state/stream-box/$1
@@ -96,7 +106,8 @@ if [ -z "${1:-}" ]; then   # (not the boot state nor the daily check: they leave
   if ! flock -n 9; then report 0 "another system update is running"; exit 0; fi
   if manual update-manual; then is_manual=1; fi
   # Direct update: asked by hand, developer mode still on
-  if manual update-direct && [ -e "$STATE/dev-mode" ]; then direct=1 is_manual=1; fi
+  branch=$(direct_branch)
+  if manual update-direct && [ -e "$STATE/dev-mode" ]; then direct=1 is_manual=1; else branch=""; fi
   # Which update runs (until its result replaces the file): the TV and the companion app show it on its own row
   if [ -n "$direct" ]; then setf run=direct; else setf run=release; fi
 fi
@@ -194,8 +205,8 @@ else
   rm -rf "$SRC"
   git clone -q "$REPO" "$SRC"
 fi
-if [ -n "$direct" ]; then   # the main branch's last commit; version: the system's (or latest release) + that commit
-  git -C "$SRC" fetch -q --force origin main
+if [ -n "$direct" ]; then   # the branch's last commit; version: the system's (or latest release) + that commit
+  git -C "$SRC" fetch -q --force origin "refs/heads/$branch" || { report 0 "unknown branch: $branch"; exit 0; }
   ref=FETCH_HEAD
   base=$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")
   base=${base:+v$base}
@@ -239,12 +250,15 @@ step=code
 want=$(git -C "$SRC" rev-parse "$ref^{commit}")
 if [ "$(runuser -u media -- git -C "$BOX" rev-parse HEAD)" != "$want" ]; then
   runuser -u media -- git -C "$BOX" fetch -q --tags --force origin   # tags moved upstream (page-v1) are taken as they are
-  runuser -u media -- git -C "$BOX" fetch -q origin main
+  runuser -u media -- git -C "$BOX" fetch -q origin "refs/heads/${branch:-main}"
   if runuser -u media -- git -C "$BOX" merge-base --is-ancestor HEAD "$want"; then
     runuser -u media -- git -C "$BOX" merge -q --ff-only "$want"
     code=updated
+  elif [ -n "$direct" ]; then   # another branch, or back from one: put on its commit as is (fails on local changes)
+    runuser -u media -- git -C "$BOX" checkout -q --detach "$want"
+    code=updated
   else
-    code=ahead   # newer than the release (main), or local commits: kept
+    code=ahead   # newer than the release (main, a branch), or local commits: kept
   fi
 fi
 echo "code: $code, system files changed: $files"
