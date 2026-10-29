@@ -27,6 +27,9 @@
     --radius: 20px; --radius-sm: 14px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  /* Without the system part (Stream Player, /api/features): power, sound output, updates, box status, backup and
+     Wi-Fi are left to the OS */
+  .no-system [data-system] { display: none !important; }
   html { background: var(--bg); }
   body {
     margin: 0; color: var(--text); min-height: 100vh;
@@ -269,7 +272,7 @@
       <h1>Stream Box</h1>
       <div class="tv-state"><span class="dot" id="dot"></span><span id="tv-state">Connecting…</span></div>
     </div>
-    <button class="power ghost" id="poweroff" aria-label="Turn off the box" title="Turn off the box">
+    <button class="power ghost" id="poweroff" data-system aria-label="Turn off the box" title="Turn off the box">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
            stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></svg>
     </button>
@@ -633,7 +636,7 @@
     </div>
   </div>
 
-  <div class="group" data-group="picture">
+  <div class="group" data-group="picture" data-system>
     <button class="group-head" aria-expanded="false">Picture and sound</button>
     <div class="group-body" hidden>
 
@@ -665,7 +668,7 @@
     <div class="group-body" hidden>
 
   <!-- Wi-Fi: setup mode (the box's access point, netsetup.py) or network change -->
-  <section id="wifi" hidden>
+  <section id="wifi" hidden data-system>
     <h2>Wi-Fi</h2>
     <p id="wifi-state">…</p>
     <label class="setting" for="wifi-ssid" style="margin-top: 0">Network</label>
@@ -692,7 +695,7 @@
     </div>
   </div>
 
-  <div class="group" data-group="updates">
+  <div class="group" data-group="updates" data-system>
     <button class="group-head" aria-expanded="false">Status and updates</button>
     <div class="group-body" hidden>
 
@@ -728,7 +731,7 @@
     </div>
   </div>
 
-  <div class="group" data-group="backup">
+  <div class="group" data-group="backup" data-system>
     <button class="group-head" aria-expanded="false">Backup and installation</button>
     <div class="group-body" hidden>
 
@@ -752,6 +755,13 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+// What this installation has: without the system part (Stream Player), its blocks are hidden (.no-system) and its
+// routes, absent, are not read. The box's (everything) until known
+let SYSTEM = true;
+const featuresReady = fetch("/api/features").then((r) => r.json()).then((f) => {
+  SYSTEM = f.system !== false;
+  document.documentElement.classList.toggle("no-system", !SYSTEM);
+}).catch(() => {});
 // Caught errors that the page shows nowhere (box unreachable: kept quiet): a mistake in the code still reaches the
 // console (and fails tests/page/check-page.js); the box being unreachable or restarting does not
 function bug(e) {
@@ -1677,6 +1687,7 @@ $("new-yt").onkeydown = (e) => { if (e.key === "Enter") $("add-yt").click(); };
 
 // Sound output: automatic or a specific output (audio.py); reloaded when Settings opens
 async function refreshAudio() {
+  await featuresReady; if (!SYSTEM) return;
   let a;
   try { a = await (await fetch("/api/audio")).json(); } catch (e) { bug(e); return; }
   if (!a.outputs) return;
@@ -1699,6 +1710,7 @@ $("audio-out").onchange = async () => {
 const onSetupHotspot = location.hostname === "10.42.0.1";
 let wifiTimer = null;
 async function refreshWifi() {
+  await featuresReady; if (!SYSTEM) return;
   let w;
   try { w = await (await fetch("/api/wifi")).json(); } catch (e) { bug(e); return; }
   $("wifi").hidden = !w.device;
@@ -1760,6 +1772,7 @@ const frDate = (text) => {
 };
 async function refreshHealth() {
   clearTimeout(healthTimer);
+  await featuresReady; if (!SYSTEM) return;   // (the box's status)
   if (document.hidden || $("tab-settings").hidden) { healthTimer = setTimeout(refreshHealth, 5000); return; }
   try {
     const h = await (await fetch("/api/health")).json();
@@ -1881,13 +1894,14 @@ $("update-direct").onclick = async () => {
   await send("update", { direct: true, branch: $("update-branch").value || "main" });
   setTimeout(refreshHealth, 1500);
 };
-refreshHealth();
+featuresReady.then(refreshHealth);
 // System update from a file (localupdate.py, A/B boxes): the image and its signature files sent as raw bodies
 // (POST /api/local_update_upload?file=image|sums|sig), then installed (POST /api/local_update {action: start}); the
 // box's progress read from GET /api/local_update until it restarts
 let luTimer = null;
 async function refreshLocalUpdate() {
   clearTimeout(luTimer);
+  await featuresReady; if (!SYSTEM) return;
   try {
     const d = await (await fetch("/api/local_update")).json();
     $("local-update").hidden = !d.available;

@@ -1,4 +1,7 @@
 {
+ "/api/features": {
+  "system": true
+ },
  "/api/state": {
   "streamers": [
    "alpha",

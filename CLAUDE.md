@@ -69,7 +69,13 @@ each module or None; decided by the folder being there, an import error with the
 actions.py then declare no system route or action (404, "unknown action"), quickmenu.py leaves those rows out,
 remote.py starts no system loop, ambient.py and images.py do without the setup access point and grim;
 `GET /api/features` → {system}. tests/test_api.py runs its tests twice: from the repository and from a copy without
-app/system; `lua/` `stream-box.lua` (its `DIR` is
+app/system; the interface follows `features.system` (false: Stream Player): the QML menu (`features`, `sysOn`, read at each
+opening; the box's until read) drops the Updates and Backup sections, the power options and the power-key window, the
+resolution, audio output, Bluetooth pairing, power button and dependencies rows, reads no system route, and words the
+section hints for what is left; the companion app sets `.no-system` on its root and hides the `[data-system]` blocks
+(power, Picture and sound, Box status and updates, Backup, Wi-Fi) and reads no system route (`featuresReady`).
+Checked by tests/page/check-page.js (a second pass without the system part) and `QMLSHOTS_PLAYER=1
+tools/qmlshots/run.sh shoot` (system routes 404, as in the Stream Player); `lua/` `stream-box.lua` (its `DIR` is
 the repository, its modules next to it); `qml/` the QML; `web/` the companion app page, PWA files, icons (served by
 api.py from `web/`); `scripts/` start.sh, player.sh, update.sh, install.sh, backup.sh, dev-pacman.sh (their `DIR` /
 `SRC` is the repository, one level up); `assets/` boot image, cursors, example list. Relays at the root for the images

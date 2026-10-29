@@ -173,6 +173,11 @@ Item {
     property string pendingDisplay: ""
     property string pendingPlayer: ""        // player chosen with the arrows, applied by OK (the player restarts)
     property string pendingLang: ""          // interface language chosen with the arrows, applied by OK
+    // What this installation has (/api/features): without the system part (Stream Player, the app on an OS that runs
+    // itself), no power, update, backup, Wi-Fi, Bluetooth, resolution, audio output, SSH or developer mode settings.
+    // The box's until read (it has them all)
+    property var features: ({ system: true })
+    readonly property bool sysOn: features.system !== false
     property string pendingBranch: ""        // direct update: branch chosen with the arrows, updated to by OK
     property var branches: ["main"]          // the repository's branches (/api/branches), read when Updates opens
     property real poweroffUntil: 0
@@ -584,9 +589,10 @@ Item {
         isOpen = true
         box.setMenuOpen(true)
         refresh()
-        call("GET", "/api/display", undefined, function (d) { if (d && d.modes) display = d })
+        call("GET", "/api/features", undefined, function (d) { if (d) features = d })
+        if (sysOn) call("GET", "/api/display", undefined, function (d) { if (d && d.modes) display = d })
         call("GET", "/api/account", undefined, function (d) { account = d })
-        askUpdate()
+        if (sysOn) askUpdate()
         idleClose.restart()
     }
     // Update for the user (found by the daily check, installed only when accepted; never applied by itself): asked once per
@@ -634,7 +640,7 @@ Item {
     Connections {
         target: box
         function onOpenRequested() { menu.open() }
-        function onPowerMenuRequested() { menu.open(); menu.powerMenu() }
+        function onPowerMenuRequested() { if (menu.sysOn) { menu.open(); menu.powerMenu() } }   // (the box's power only)
         function onCloseRequested() { menu.close() }
         function onKeyPressed(k) { menu.key(k) }
         // Text typed on the phone while the search keyboard is open
@@ -690,7 +696,9 @@ Item {
     // something needs attention (update ready, no network…); the
     // power actions stay on the list itself. Box status and the companion app's QR code beside the list
     readonly property var sectionIds: ["picture", "playback", "chat", "look", "accounts", "network", "devices", "updates",
-                                       "backup", "advanced"]
+                                       "backup", "advanced"].filter(function (id) {
+        return sysOn || (id !== "updates" && id !== "backup")   // (the Stream Player: its OS and its format update it)
+    })
     function sectionTitle(id) {
         return tr(({ picture: "Picture and sound", playback: "Playback", chat: "Chat", look: "Appearance",
                      accounts: "Accounts and libraries", network: "Network", devices: "Devices", updates: "Updates",
@@ -698,6 +706,11 @@ Item {
     }
     // What a section holds (grey line under its title)
     function sectionHint(id) {
+        if (!sysOn) {   // (without the system part: what is left in the section)
+            var player = { picture: "Volume, night mode", network: "Companion app QR code", devices: "Keys of remotes and controllers",
+                           advanced: "Full or simplified version" }[id]
+            if (player) return tr(player)
+        }
         return tr(({ picture: "Resolution, audio output, volume, night mode",
                      playback: "Subtitles, auto switch, polls and predictions",
                      chat: "Chat on the TV, corner, background, text size", look: "Background, colors, language",
@@ -740,7 +753,7 @@ Item {
             return { label: sectionTitle(id), hint: sectionHint(id), value: (alert ? alert + "   " : "") + "›",
                      ok: function () { openSection(id) }, open: true }
         })
-        return rows.concat([
+        return !sysOn ? rows : rows.concat([   // (power: the box's own; the Stream Player leaves it to its OS)
             { header: tr("Power options") },
             { label: tr("☾  Sleep"), hint: tr("Wake up with the remote, Home Assistant or the power button"),
               ok: function () { act("poweroff", { mode: "suspend" }); close() } },
@@ -770,7 +783,7 @@ Item {
             var modes = ["auto"].concat(display ? display.modes : [])
             var cur = pendingDisplay || (display ? display.setting : "auto")
             return [
-                { label: tr("TV resolution"),
+                { label: tr("TV resolution"), visible: sysOn,
                   value: !display ? "…" : cur === "auto" ? tr("Auto ({mode})", { mode: prettyMode(display.auto) }) : prettyMode(cur),
                   hint: pendingDisplay && display && pendingDisplay !== display.setting ? tr("OK to apply") : undefined,
                   step: function (d) {
@@ -785,7 +798,7 @@ Item {
                       pendingDisplay = ""
                       displayReload.restart()
                   } },
-                { label: tr("Audio output"),
+                { label: tr("Audio output"), visible: sysOn,
                   // automatic: USB or Bluetooth device plugged in, otherwise the TV (audio.py)
                   hint: audioOut && audioCurrentLabel() ? tr("Right now: {output}", { output: audioCurrentLabel() }) : undefined,
                   value: !audioOut ? "…" : audioOut.choice === "auto" ? tr("Automatic")
@@ -902,7 +915,7 @@ Item {
             ]
         case "devices":
             return [
-                { open: true, label: tr("Remotes and controllers"),
+                { open: true, label: tr("Remotes and controllers"), visible: sysOn,   // (Bluetooth pairing)
                   value: bt ? tr(bt.paired.length > 1 ? "{n} devices paired" : "{n} device paired", { n: bt.paired.length }) : "",
                   hint: tr("Pair, unpair"), ok: function () { btMenu() } },
                 { label: tr("Set up keys"), hint: tr("Learn the keys of a remote or a controller, one by one"),
@@ -915,7 +928,7 @@ Item {
                         })
                     })
                 } },
-                { label: tr("Power button"), hint: tr("Remote, phone and Home Assistant"),
+                { label: tr("Power button"), hint: tr("Remote, phone and Home Assistant"), visible: sysOn,
                   value: s.power_action === "suspend" ? tr("Sleep") : tr("Full shutdown"),
                   step: function (d) { act("power_action", { mode: s.power_action === "suspend" ? "poweroff" : "suspend" }) } },
             ]
@@ -1012,7 +1025,7 @@ Item {
                   } },
                 // Dependencies (update.sh: yt-dlp, streamlink…): every day by themselves, without a word (the direct
                 // update of developer mode is in Updates, with its own status)
-                { label: tr("Update dependencies"),
+                { label: tr("Update dependencies"), visible: sysOn,
                   value: health && health.update ? (health.update.running ? tr("In progress…")
                        : health.update.last && !health.update.last.ok ? tr("failed") : "") : "",
                   hint: tr("yt-dlp, streamlink…: updated by themselves every day")
@@ -1056,6 +1069,7 @@ Item {
     // Settings tab, every 5 s and shortly after a press: box status, Wi-Fi, installation and local update progress
     // (values of their rows while their dialog is closed)
     function readBox() {
+        if (!sysOn) return   // (the box's status: the system part's)
         call("GET", "/api/health", undefined, function (d) { if (d && d.temps) health = d })
         call("GET", "/api/wifi", undefined, function (d) { if (d) wifi = d })
         if (install && install.available) call("GET", "/api/install", undefined, function (d) { if (d) install = d })
@@ -1439,10 +1453,12 @@ Item {
     function loadAudio() { call("GET", "/api/audio", undefined, function (d) { if (d && d.outputs) audioOut = d }) }
     function loadTab(id) {
         if (id === "settings") {
-            loadAudio()
-            loadBt(); loadYtAccount(); loadSsh()
-            call("GET", "/api/install", undefined, function (d) { if (d) install = d })
-            call("GET", "/api/local_update", undefined, function (d) { if (d) localUpd = d })
+            loadYtAccount()
+            if (sysOn) {   // (sound outputs, Bluetooth, SSH, developer mode, installation, local update: the system part)
+                loadAudio(); loadBt(); loadSsh()
+                call("GET", "/api/install", undefined, function (d) { if (d) install = d })
+                call("GET", "/api/local_update", undefined, function (d) { if (d) localUpd = d })
+            }
         }
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()

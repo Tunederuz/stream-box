@@ -25,6 +25,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 WAIT = int(os.environ.get("QMLSHOTS_WAIT", "900"))   # ms after each step: animations and images done
 NOSHOTS = bool(os.environ.get("QMLSHOTS_NOSHOTS"))   # the scenario and console.log only (checks: no screenshot)
+# The Stream Player (no system part): /api/features {system: false}, and the system's routes answer 404 as there
+PLAYER = bool(os.environ.get("QMLSHOTS_PLAYER"))
+SYSTEM_ROUTES = ("/api/health", "/api/wifi", "/api/audio", "/api/local_update", "/api/branches", "/api/backup",
+                 "/api/bluetooth", "/api/dev", "/api/ssh", "/api/install", "/api/display", "/api/update_prompt")
 
 # Key sequence: ("key", name), ("open",), ("power",), ("text", text, submit), ("video", bool), ("close",),
 # ("pause", ms): nothing more than waiting (the live preview starts after a moment on a live streamer).
@@ -242,6 +246,9 @@ def shoot(qml_dir, out):
         lang = Property(str, lambda self: "fr", notify=changed)
 
     fixtures = dates(json.load(open(os.path.join(HERE, "fixtures.json"), encoding="utf-8")))
+    if PLAYER:
+        fixtures = {k: v for k, v in fixtures.items() if k not in SYSTEM_ROUTES}
+        fixtures["/api/features"] = {"system": False}
     posts = []
     serve(fixtures, posts)
     console = []
