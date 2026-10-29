@@ -6,6 +6,10 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+### Added
+- Stream Player (preview): the player as a Flatpak app, for SteamOS or a desktop, without the box's system settings
+  (its OS runs itself). Built with `flatpak/build.sh`; Settings → "Quit" closes it.
+
 ## [0.5.0]
 
 ### Changed

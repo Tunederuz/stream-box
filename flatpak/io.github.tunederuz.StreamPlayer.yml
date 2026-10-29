@@ -1,0 +1,124 @@
+# Stream Player: the Stream Box's player as an app (SteamOS, a desktop…), without the box's system part.
+# Built by flatpak/build.sh (in Docker): pip, npm and the token server need the network while building.
+id: io.github.tunederuz.StreamPlayer
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: stream-player
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --device=dri
+  - --env=LC_NUMERIC=C
+  # The box's paths, kept in the app's own folder (~/.var/app/<id>/…): the code stays the same
+  - --persist=.config/stream-box
+  - --persist=.local/state/stream-box
+  - --persist=.config/streamlink
+  - --persist=.config/jellyfin-mpv-shim
+cleanup:
+  - '*.la'
+  - '*.a'
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+
+modules:
+  # libmpv and what the runtime lacks for it (the runtime brings FFmpeg, Vulkan, shaderc, fontconfig, harfbuzz…)
+  - name: luajit
+    no-autogen: true
+    make-args: [BUILDMODE=dynamic, PREFIX=/app]
+    make-install-args: [PREFIX=/app]
+    sources:
+      - type: git
+        url: https://github.com/openresty/luajit2.git
+        tag: v2.1-20260724
+        commit: 982cd8323eafd8604a9e5f2a916aa50b9f67d9ed
+    cleanup: [/bin]
+
+  - name: libass
+    config-opts: [--disable-static, --enable-asm, --enable-harfbuzz, --enable-fontconfig]
+    sources:
+      - type: git
+        url: https://github.com/libass/libass.git
+        tag: 0.17.5
+        commit: 4a05d8127f525943ebf45fdc6497c9e665947f0d
+
+  - name: libplacebo
+    buildsystem: meson
+    config-opts: [-Dvulkan=enabled, -Dshaderc=enabled, -Ddemos=false]
+    sources:
+      - type: git
+        url: https://github.com/haasn/libplacebo.git
+        tag: v7.387.0
+        commit: 275f7dea27924cdd34ab2e6c20e448b6bc4fab65
+
+  - name: mpv
+    buildsystem: meson
+    config-opts:
+      - -Dlibmpv=true
+      - -Dcplayer=false
+      - -Dlua=luajit
+      - -Djavascript=disabled
+      - -Dmanpage-build=disabled
+      - -Dbuild-date=false
+      - -Dwerror=false
+    sources:
+      - type: git
+        url: https://github.com/mpv-player/mpv.git
+        tag: v0.41.0
+        commit: 41f6a645068483470267271e1d09966ca3b9f413
+
+  # Needed by the Qt of the PySide6 wheel (QtNetwork), missing from the runtime
+  - name: krb5
+    subdir: src
+    build-options:
+      cflags: -std=gnu17   # (old C, refused as C23 by the SDK's GCC)
+    config-opts: [--disable-static, --without-ldap, --disable-rpath]
+    cleanup: [/bin, /sbin, /share/examples, /var]
+    sources:
+      - type: archive
+        url: https://kerberos.org/dist/krb5/1.21/krb5-1.21.3.tar.gz
+        sha256: b7a4cd5ead67fb08b980b21abd150ff7217e85ea320c9ed0c6dadd304840ad35
+
+  # Python side: Qt (PySide6 wheel), python-mpv, yt-dlp and its token plugin, streamlink, the Jellyfin shim, segno
+  # (QR code), and Node (nodejs-wheel) for the token server, the Cast receiver and yt-dlp's JavaScript challenges
+  - name: python-packages
+    buildsystem: simple
+    build-options:
+      build-args: [--share=network]
+    build-commands:
+      - pip3 install --prefix=/app --no-cache-dir --no-warn-script-location PySide6-Essentials python-mpv
+        'yt-dlp[default]' bgutil-ytdlp-pot-provider streamlink jellyfin-mpv-shim segno nodejs-wheel
+
+  # YouTube anti-bot token server, at the version of the bgutil plugin (as update.sh does on the box)
+  - name: pot-server
+    buildsystem: simple
+    build-options:
+      build-args: [--share=network]
+    build-commands:
+      - version=$(pip3 show bgutil-ytdlp-pot-provider | awk '/^Version/{print $2}')
+        && git clone -q --depth 1 --branch "$version" https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git pot
+        && cd pot/server && npm ci --no-audit --no-fund --loglevel=error && npx tsc
+        && npm prune --omit=dev --no-audit --no-fund --loglevel=error
+      - mkdir -p /app/lib/bgutil-pot && cp -r pot/server /app/lib/bgutil-pot/
+
+  - name: stream-player
+    buildsystem: simple
+    build-options:
+      build-args: [--share=network]
+    build-commands:
+      - mkdir -p /app/stream-box
+      - cp -r app lua qml web locales assets cast scripts /app/stream-box/
+      - rm -rf /app/stream-box/app/system   # Stream Player: no system part
+      - cd /app/stream-box/cast && npm ci --omit=dev --no-audit --no-fund --loglevel=error
+      - install -Dm755 flatpak/stream-player /app/bin/stream-player
+      - install -Dm644 flatpak/io.github.tunederuz.StreamPlayer.desktop -t /app/share/applications
+      - install -Dm644 flatpak/io.github.tunederuz.StreamPlayer.metainfo.xml -t /app/share/metainfo
+      - install -Dm644 web/icon-512.png /app/share/icons/hicolor/512x512/apps/io.github.tunederuz.StreamPlayer.png
+    sources:
+      - type: dir
+        path: ..
+        skip: [.git, tests, tools, image, docs, systemd]

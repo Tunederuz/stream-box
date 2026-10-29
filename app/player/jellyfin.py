@@ -4,7 +4,7 @@ of its videos and progress reports to the server. Standard library only.
 import json, os, re, shutil, socket, subprocess, threading, time, urllib.parse, urllib.request
 
 import history   # history.py: the box's history and the video being played
-from common import mpv
+from common import mpv, tool
 from i18n import tr
 
 # Jellyfin: library of the server already paired with jellyfin-mpv-shim ("Play on…"), with its credentials
@@ -13,7 +13,7 @@ from i18n import tr
 # server during playback (Sessions/Playing, /Progress, /Stopped): "watched" and resume follow everywhere.
 
 JF_USERS = os.path.expanduser("~/.config/jellyfin-mpv-shim/users.json")
-SHIM = os.path.expanduser("~/.local/bin/jellyfin-mpv-shim")
+SHIM = tool("jellyfin-mpv-shim")
 SHIM_LOG = "/tmp/jellyfin-shim.log"
 JF_CACHE = 30
 jf_cache = {}

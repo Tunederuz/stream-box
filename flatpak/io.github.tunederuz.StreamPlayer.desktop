@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Stream Player
+Comment=Twitch, YouTube, Jellyfin and Plex on the TV, with a remote or a controller
+Exec=stream-player
+Icon=io.github.tunederuz.StreamPlayer
+Categories=AudioVideo;Video;Player;TV;

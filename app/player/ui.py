@@ -215,6 +215,11 @@ class Box(QObject):
             chat.set_menu_open(value)
         to_mpv(set_flag, "user-data/streambox/tvmenu", value)   # the chat hides, the mouse does not open the small menu
 
+    @Slot()
+    def quit(self):
+        """Stream Player: "Quit" of the TV menu. mpv quits, the app with it (shutdown event below)."""
+        to_mpv(lambda: player.command("quit"))
+
 
 box = Box()
 
@@ -256,6 +261,17 @@ def wayland_display():
         return None
 
 
+def x11_display():
+    """Same for an X11 session (Stream Player in SteamOS's Game mode: gamescope only offers X11)."""
+    try:
+        lib = ctypes.CDLL("libX11.so.6")
+        lib.XOpenDisplay.restype = ctypes.c_void_p
+        lib.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        return lib.XOpenDisplay(None) or None
+    except OSError:
+        return None
+
+
 def egl_get_proc_address():
     libegl = ctypes.CDLL("libEGL.so.1")
     libegl.eglGetProcAddress.restype = ctypes.c_void_p
@@ -276,6 +292,8 @@ class MpvRenderer(QQuickFramebufferObject.Renderer):
             display = wayland_display()
             if display:
                 params["wl_display"] = ctypes.c_void_p(display)
+            elif os.environ.get("DISPLAY") and (display := x11_display()):
+                params["x11_display"] = ctypes.c_void_p(display)
             main = self.item.which == "main"
             source = {"pip": pip_player, "preview": preview_player}.get(self.item.which, player)
             self.ctx = mpv.MpvRenderContext(source, "opengl", **params)
@@ -692,6 +710,8 @@ def main():
     opts, appends, files = parse_args(sys.argv[1:])
     force_window = opts.pop("__force_window", None)
     QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
+    # Under X11, Qt's OpenGL through EGL (GLX by default): libmpv takes its functions from EGL (egl_get_proc_address)
+    os.environ.setdefault("QT_XCB_GL_INTEGRATION", "xcb_egl")
     app = QGuiApplication(sys.argv[:1])
     locale.setlocale(locale.LC_NUMERIC, "C")   # required by libmpv, after Qt which applies the system locale
     qmlRegisterType(MpvVideo, "StreamBox", 1, 0, "MpvVideo")

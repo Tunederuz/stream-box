@@ -77,8 +77,14 @@ section hints for what is left; the companion app sets `.no-system` on its root 
 Checked by tests/page/check-page.js (a second pass without the system part) and `QMLSHOTS_PLAYER=1
 tools/qmlshots/run.sh shoot` (system routes 404, as in the Stream Player); `lua/` `stream-box.lua` (its `DIR` is
 the repository, its modules next to it); `qml/` the QML; `web/` the companion app page, PWA files, icons (served by
-api.py from `web/`); `scripts/` start.sh, player.sh, update.sh, install.sh, backup.sh, dev-pacman.sh (their `DIR` /
-`SRC` is the repository, one level up); `assets/` boot image, cursors, example list. Relays at the root for the images
+api.py from `web/`); `scripts/` start.sh, player.sh, mpv-args.sh (the player's mpv options,
+sourced by player.sh and stream-player.sh), stream-player.sh (the Stream Player: remote.py, cast.js, token server,
+Jellyfin shim and ui.py, no restart loop, everything stopped with it), update.sh, install.sh, backup.sh,
+dev-pacman.sh (their `DIR` / `SRC` is the repository, one level up); `flatpak/` the Stream Player's Flatpak
+(manifest: libmpv built with LuaJIT, libass, libplacebo, krb5 for the PySide6 wheel; pip and npm at build time, with
+the network; `--persist` keeps the box's paths ~/.config/stream-box… in ~/.var/app/<id>; `build.sh` builds it in
+Docker, cache in ~/.cache/stream-box-flatpak). Tools are found by `common.tool()` (~/.local/bin, otherwise the
+PATH); under X11 (SteamOS Game mode: gamescope) ui.py uses Qt's EGL and gives libmpv the X11 display (VA-API); `assets/` boot image, cursors, example list. Relays at the root for the images
 0.5.0 and older, whose system points there: `start.sh` (session: stream-box-session, stream-box.desktop), `update.sh`
 and `mqtt_bridge.py` (user units copied into those images), `cursors` → `assets/cursors` (session's XCURSOR_PATH); to
 remove once no box runs those images. Tests: `tests/__init__.py` puts `app/` on sys.path.

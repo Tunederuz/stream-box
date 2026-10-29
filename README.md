@@ -126,6 +126,11 @@ common on Dell): set it to AHCI (Dell: SATA Operation → AHCI). The installer s
 - Developer mode (TV menu → Settings → Advanced): passwordless sudo and SSH for the `media` user. The image has no other root
   access.
 
+### Stream Player (preview): the app for SteamOS or a desktop
+The same player as a Flatpak app, without the box's system settings (Wi-Fi, Bluetooth, power, updates: the OS
+handles them). Build it with `flatpak/build.sh` (Docker), then `flatpak install --user StreamPlayer.flatpak`. On
+SteamOS, add it to Steam as a non-Steam game to launch it from Game mode.
+
 ### Advanced: on an existing Arch installation
 
 `install.sh` installs the box on top of an Arch distribution with Plasma Login (SDDM is supported by the script but

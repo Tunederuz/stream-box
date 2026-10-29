@@ -1,7 +1,7 @@
 """Stream Box: what the companion app's modules (remote.py and the modules it imports) share: port, paths, mpv's
 IPC socket, private JSON files. Standard library only.
 """
-import json, os, socket
+import json, os, shutil, socket
 
 PORT = 8080
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
@@ -9,6 +9,13 @@ DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))
 # Box settings and tokens (700: also protects the files that yt-dlp rewrites as 644, see twitch.py)
 COOKIES_DIR = os.path.expanduser("~/.config/stream-box")
 PUBLISH_EVERY = 10   # seconds between two sends of already known data to mpv: a restarted mpv gets them quickly
+
+
+def tool(name):
+    """Command installed for the box in ~/.local/bin (venvs linked there by install.sh and the image), otherwise the one
+    on the PATH (Stream Player: the app's own, /app/bin in the Flatpak)."""
+    own = os.path.expanduser(f"~/.local/bin/{name}")
+    return own if os.access(own, os.X_OK) else shutil.which(name) or own
 
 
 def battery():

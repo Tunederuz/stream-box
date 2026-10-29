@@ -753,7 +753,10 @@ Item {
             return { label: sectionTitle(id), hint: sectionHint(id), value: (alert ? alert + "   " : "") + "›",
                      ok: function () { openSection(id) }, open: true }
         })
-        return !sysOn ? rows : rows.concat([   // (power: the box's own; the Stream Player leaves it to its OS)
+        if (!sysOn)   // (power: the box's own; the Stream Player leaves it to its OS, and can be closed)
+            return rows.concat([{ header: tr("Stream Player") },
+                                { label: tr("✕  Quit"), ok: function () { close(); box.quit() } }])
+        return rows.concat([
             { header: tr("Power options") },
             { label: tr("☾  Sleep"), hint: tr("Wake up with the remote, Home Assistant or the power button"),
               ok: function () { act("poweroff", { mode: "suspend" }); close() } },
