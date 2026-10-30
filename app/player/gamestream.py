@@ -2,15 +2,17 @@
 Standard library only; Moonlight itself is moonlight-qt's command line (moonlight pair / list / stream / quit), its
 pairing kept in its own settings (~/.config/Moonlight Game Streaming Project/).
 
-The PC: found on the network (mDNS, _nvstream._tcp, what Sunshine announces), or the one already paired
+The PC: found on the network (mDNS, _nvstream._tcp, what Sunshine announces; otherwise the box's /24 tried on
+Sunshine's port 47989), or the one already paired
 (~/.config/stream-box/gamestream.json: {"host": "<address>"}). Pairing: the box picks a 4-digit code, shows it on the
 TV, and waits in "moonlight pair" while it is typed in Sunshine's PIN page. While a game streams, the moonlight process
 covers the screen; its PID is in GAMESTREAM_PID, so that input.py leaves the keys to it (a long press on Home ends
 the stream).
 """
-import csv, io, json, os, random, re, shutil, socket, struct, subprocess, threading, time, urllib.request
+import concurrent.futures, csv, io, json, os, random, re, shutil, socket, struct, subprocess, threading, time
+import urllib.request
 
-from common import COOKIES_DIR, GAMESTREAM_PID, mpv
+from common import COOKIES_DIR, GAMESTREAM_PID, lan_ip, mpv
 from i18n import tr
 
 CONF = os.path.join(COOKIES_DIR, "gamestream.json")
@@ -65,6 +67,24 @@ def discover(timeout=1.5):
     return sorted(found)
 
 
+def scan():
+    """Without an mDNS answer (no Avahi on the PC, a firewall on port 5353): the addresses of the box's network
+    (its /24) that have Sunshine's port 47989 open, tried all at once (about a second)"""
+    try:
+        prefix = lan_ip().rsplit(".", 1)[0]
+    except OSError:
+        return []
+
+    def try_one(addr):
+        try:
+            with socket.create_connection((addr, 47989), timeout=0.6):
+                return addr
+        except OSError:
+            return None
+    with concurrent.futures.ThreadPoolExecutor(64) as pool:
+        return [a for a in pool.map(try_one, (f"{prefix}.{i}" for i in range(1, 255))) if a]
+
+
 def serverinfo(host):
     """Name and state of the PC (Sunshine's public page, no pairing needed): {name, playing} or None if unreachable"""
     try:
@@ -116,8 +136,12 @@ def status():
     if not available():
         return {"available": False}
     conf = read_conf()
-    if time.time() - state["found_at"] > 30:
-        state["found"], state["found_at"] = discover(), time.time()
+    if time.time() - state["found_at"] > 30 and not conf.get("host"):   # (looked for in the background: a few seconds)
+        state["found_at"] = time.time()
+
+        def look():
+            state["found"] = discover() or scan()
+        threading.Thread(target=look, daemon=True).start()
     host = conf.get("host") or (state["found"][0] if state["found"] else "")
     info = serverinfo(host) if host else None
     pairing = None
