@@ -5,7 +5,8 @@ Reads /dev/input/event* (the user must be in the input group), with Linux's stan
 BTN_SOUTH…), and sends to mpv, through its IPC:
   script-message streambox-input <key name> <action or empty>
 stream-box.lua plays the action (or, during the "Set up keys" wizard, learns the key). Actions: up down left right ok
-back home (TV menu) menu (options ≡) homescreen corner power volume_up volume_down mute.
+back home (TV menu) menu (options ≡) corner power volume_up volume_down mute (homescreen: only from keys learned
+before it left the defaults).
 Mapping: DEFAULTS below, then ~/.config/stream-box/keymap.json ({"KEY_…": "action"}, written by the wizard), read again
 when it changes. While this service runs, it announces it (user-data/streambox/input) and the Qt app and mpv ignore the
 keys they receive themselves (otherwise each one would count twice); without permissions on the devices, it stops and
@@ -38,18 +39,18 @@ DEFAULTS = {
     "KEY_BACK": "back", "KEY_ESC": "back", "KEY_BACKSPACE": "back",
     "KEY_HOMEPAGE": "home", "KEY_HOME": "home",
     "KEY_MENU": "menu", "KEY_COMPOSE": "menu", "KEY_VIDEOPHONE": "menu", "KEY_VOICECOMMAND": "menu", "KEY_INFO": "menu",
-    "KEY_WWW": "homescreen", "KEY_PLAYPAUSE": "corner", "KEY_PLAY": "corner", "KEY_POWER": "power",
+    "KEY_WWW": "home", "KEY_PLAYPAUSE": "corner", "KEY_PLAY": "corner", "KEY_POWER": "power",
     "KEY_VOLUMEUP": "volume_up", "KEY_VOLUMEDOWN": "volume_down", "KEY_MUTE": "mute",
-    # Regular keyboard: Space play / pause, Windows or M TV menu, O options, H home screen, + / − volume, media keys.
+    # Regular keyboard: Space play / pause, Tab, Windows or M TV menu, O options, + / − volume, media keys.
     # Linux codes are positional (QWERTY): the M of an AZERTY keyboard sends KEY_SEMICOLON
-    "KEY_SPACE": "corner", "KEY_TAB": "home", "KEY_LEFTMETA": "home", "KEY_RIGHTMETA": "home", "KEY_M": "home", "KEY_SEMICOLON": "home", "KEY_O": "menu", "KEY_H": "homescreen",
+    "KEY_SPACE": "corner", "KEY_TAB": "home", "KEY_LEFTMETA": "home", "KEY_RIGHTMETA": "home", "KEY_M": "home", "KEY_SEMICOLON": "home", "KEY_O": "menu",
     "KEY_KPPLUS": "volume_up", "KEY_KPMINUS": "volume_down", "KEY_EQUAL": "volume_up", "KEY_MINUS": "volume_down",
     "KEY_NEXTSONG": "right", "KEY_PREVIOUSSONG": "left", "KEY_STOPCD": "back",
-    # Gamepads. BTN_MODE: the middle button (Xbox, PlayStation, the Steam Deck's Steam button) opens the TV menu, as on
-    # a console; BTN_BASE: the Steam Deck's "…" button, the home screen
+    # Gamepads. The TV menu: the middle button (BTN_MODE: Xbox, PlayStation, the Steam Deck's Steam button), as on a
+    # console, Select (View) and the Steam Deck's "…" (BTN_BASE); Start (≡ on Xbox) the options
     "BTN_DPAD_UP": "up", "BTN_DPAD_DOWN": "down", "BTN_DPAD_LEFT": "left", "BTN_DPAD_RIGHT": "right",
     "BTN_SOUTH": "ok", "BTN_EAST": "back", "BTN_START": "menu", "BTN_SELECT": "home", "BTN_MODE": "home",
-    "BTN_BASE": "homescreen",
+    "BTN_BASE": "home",
 }
 IGNORED = re.compile(r"HDA |Video Bus|PC Speaker|WMI hotkeys|Sleep Button|Lid Switch|ydotool|Power Button$")
 

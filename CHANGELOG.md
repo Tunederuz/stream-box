@@ -10,7 +10,9 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - Stream Box is now **Inlet**, with a new logo: TV menu, boot screen, companion app (its icon too), Cast and
   Jellyfin's "Play on" lists, Plex, Home Assistant. Settings, accounts and updates are untouched.
 - Gamepads: Start (≡ on Xbox controllers) now opens the options and Select (View) the TV menu, the other way round
-  from before; the middle button still opens the TV menu.
+  from before; the middle button and the Steam Deck's "…" open the TV menu too.
+- No more home screen shortcut on the keys (the Steam Deck's "…", the remote's Internet key, H on a keyboard): the
+  TV menu's "Home screen" entry stays.
 
 ### Added
 - PC link: a TV menu tab to play the games of a PC running Sunshine, with Moonlight. The box finds the PC on the

@@ -1092,7 +1092,7 @@ local function on_key(key)
         publish_controls()
         return
     end
-    if key == "homescreen" then   -- home screen, from any mode
+    if key == "homescreen" then   -- home screen, from any mode (keys learned when the wizard still offered it)
         if mode ~= "home" then show_home() end
         return
     elseif key == "corner" then   -- next corner for the chat

@@ -877,7 +877,8 @@ BTN_* and ABS_HAT pad of gamepads), translated into actions (DEFAULTS, then keym
 `script-message streambox-input <name> <action>`; it announces `user-data/streambox/input` = "evdev:<time>" every
 5 s, and as long as that is fresh (15 s) stream-box.lua and ui.py ignore keys received by mpv / Qt (otherwise doubled).
 Without permissions on /dev/input, it stops: old path (mpv names and 0x21… keysyms, KEYS of stream-box.lua) as
-fallback. Actions: up down left right ok back home menu homescreen corner power volume_up volume_down mute. The
+fallback. Actions: up down left right ok back home menu corner power volume_up volume_down mute (homescreen: no key by
+default any more, kept for keys learned before). Gamepads: the middle button, Select and the Deck's "…" = TV menu, Start = options. The
 page's virtual remote also sends actions (`streambox-input VIRTUAL <action>`, never learned).
 Held key: repeated by input.py itself (`REPEATABLE`: arrows, volume; 400 ms then every 80 ms, the gamepad d-pad
 too), the kernel's repeats (value 2) are ignored: the Xiaomi remote's "Consumer Control" entry (arrows, OK, volume)
@@ -1225,7 +1226,7 @@ ends the TV menu opens again.
 
 ### Regular keyboard
 By default (input.py `DEFAULTS`, stream-box.lua `KEYS` fallback): arrows, Enter = OK, Esc / Backspace =
-Back, Tab, Windows, Home or M = TV menu (Tab for the Inlet app: a desktop keeps the Windows key), O = options (≡), H = home screen, Space = play / pause (action `corner`),
+Back, Tab, Windows, Home or M = TV menu (Tab for the Inlet app: a desktop keeps the Windows key), O = options (≡), Space = play / pause (action `corner`),
 + / − (and numeric keypad) = volume, media keys (next / previous = → / ←, stop = Back). Linux codes are
 positional (QWERTY): the M of an AZERTY keyboard arrives as KEY_SEMICOLON, mapped too. While the search keyboard
 is open, the Qt app types the computer's keys into it (Box.setTyping / keyTyped: characters, Backspace, Enter).

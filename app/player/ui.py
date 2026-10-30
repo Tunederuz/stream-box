@@ -64,7 +64,7 @@ SPECIAL_KEYSYMS = {0x1008ffa0: "0x21ffa0",   # OK
 # Keys for the big menu, same roles as KEYS in stream-box.lua
 MENU_KEYS = {"UP": "up", "DOWN": "down", "LEFT": "left", "RIGHT": "right", "ENTER": "ok", "KP_ENTER": "ok",
              "0x21ffa0": "ok", "HOMEPAGE": "home", "TAB": "home", "GO_BACK": "back", "ESC": "back", "0x2111a0": "menu",
-             "WWW": "homescreen", "PLAY": "corner", "PLAYPAUSE": "corner"}
+             "WWW": "home", "PLAY": "corner", "PLAYPAUSE": "corner"}
 
 
 # Learned keys (wizard of the System menu, written by stream-box.lua): re-read when the file changes

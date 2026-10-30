@@ -13,12 +13,12 @@ local KEYS = {
     UP = "up", DOWN = "down", LEFT = "left", RIGHT = "right",
     ENTER = "ok", KP_ENTER = "ok", ["0x21ffa0"] = "ok",
     HOMEPAGE = "home", GO_BACK = "back", ESC = "back", ["0x2111a0"] = "menu",
-    WWW = "homescreen",
+    WWW = "home",
     PLAY = "corner", PLAYPAUSE = "corner",   -- without this binding, mpv turns them into pause, which froze the live stream
     POWER = "power", ["0x21ff2a"] = "power",  -- power button (remote, box): mpv alone, Qt app
     VOLUME_UP = "volume_up", VOLUME_DOWN = "volume_down", MUTE = "mute",
     -- Regular keyboard (same actions as input.py; here, names depend on the keyboard layout)
-    SPACE = "corner", TAB = "home", m = "home", o = "menu", h = "homescreen", ["+"] = "volume_up", ["-"] = "volume_down",
+    SPACE = "corner", TAB = "home", m = "home", o = "menu", ["+"] = "volume_up", ["-"] = "volume_down",
     KP_ADD = "volume_up", KP_SUBTRACT = "volume_down", NEXT = "right", PREV = "left", STOP = "back",
 }
 -- These names (mpv, or hacked keysyms like 0x21ffa0) are only a fallback: normally, input.py reads the keys
@@ -86,7 +86,7 @@ end
 -- user-data/streambox/learn (drawn by qml/KeyWizard.qml), and as an on-screen message with mpv alone
 local LEARN = { { "up", "Up" }, { "down", "Down" }, { "left", "Left" }, { "right", "Right" }, { "ok", "OK" },
                 { "back", "Back" }, { "home", "TV menu" }, { "menu", "Options (≡)" },
-                { "homescreen", "Home screen" }, { "corner", "Play / chat corner" }, { "power", "Power" } }
+                { "corner", "Play / chat corner" }, { "power", "Power" } }
 local LEARN_WAIT = 8
 local learn = nil   -- { step, learned = { name = action }, timer, last }
 
