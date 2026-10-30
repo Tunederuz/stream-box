@@ -6,10 +6,6 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
-### Added
-- PC link: a TV menu tab to play the games of a PC running Sunshine, with Moonlight. The box finds the PC on the
-  network, pairs with a code typed in Sunshine, shows its games and streams them; hold Home to end the stream.
-
 ### Changed
 - Stream Box is now **Inlet**, with a new logo: TV menu, boot screen, companion app (its icon too), Cast and
   Jellyfin's "Play on" lists, Plex, Home Assistant. Settings, accounts and updates are untouched.
@@ -17,6 +13,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   from before; the middle button still opens the TV menu.
 
 ### Added
+- PC link: a TV menu tab to play the games of a PC running Sunshine, with Moonlight. The box finds the PC on the
+  network, pairs with a code typed in Sunshine, shows its games and streams them; hold Home to end the stream.
 - Inlet app (preview): the player as a Flatpak app, for SteamOS or a desktop, without the box's system settings
   (its OS runs itself). Built with `flatpak/build.sh`; Settings → "Quit" closes it. It opens in a window (F11 or a
   double click: full screen) and needs no first setup from a phone.
