@@ -79,20 +79,34 @@ Item {
         color: "transparent"; border.color: root.color; border.width: 3
         Text { anchors.centerIn: parent; text: "HD"; color: root.color; font.pixelSize: 12; font.bold: true }
     }
-    // Next chapter / next episode: triangle and bar (episode: two triangles)
+    // Chapters: a list, a dot and a line per chapter
+    Column {
+        visible: root.name === "chapters"
+        anchors.centerIn: parent
+        spacing: 4
+        Repeater {
+            model: 3
+            Row {
+                spacing: 4
+                Rectangle { width: 5; height: 5; radius: 2.5; color: root.color; anchors.verticalCenter: parent.verticalCenter }
+                Rectangle { width: index === 1 ? 16 : 20; height: 3; radius: 1.5; color: root.color; anchors.verticalCenter: parent.verticalCenter }
+            }
+        }
+    }
+    // Next episode: two triangles and a bar
     Shape {
-        visible: root.name === "chapter" || root.name === "next"
+        visible: root.name === "next"
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
         ShapePath {
             fillColor: root.color; strokeColor: "transparent"
-            startX: root.name === "next" ? 3 : 7; startY: 6
-            PathLine { x: root.name === "next" ? 15 : 22; y: 17 }
-            PathLine { x: root.name === "next" ? 3 : 7; y: 28 }
-            PathLine { x: root.name === "next" ? 3 : 7; y: 6 }
+            startX: 3; startY: 6
+            PathLine { x: 15; y: 17 }
+            PathLine { x: 3; y: 28 }
+            PathLine { x: 3; y: 6 }
         }
         ShapePath {
-            fillColor: root.name === "next" ? root.color : "transparent"; strokeColor: "transparent"
+            fillColor: root.color; strokeColor: "transparent"
             startX: 15; startY: 6
             PathLine { x: 27; y: 17 }
             PathLine { x: 15; y: 28 }
@@ -100,8 +114,8 @@ Item {
         }
     }
     Rectangle {
-        visible: root.name === "chapter" || root.name === "next"
-        x: root.name === "next" ? 27 : 23; y: 6
+        visible: root.name === "next"
+        x: 27; y: 6
         width: 4; height: 22; radius: 1; color: root.color
     }
 }

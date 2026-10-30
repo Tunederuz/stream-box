@@ -731,9 +731,11 @@ title over a light image.
   and neither of the others is: InfoBar.qml `barFocus`, track 8 → 12 px, cursor 22 → 28 px and a faint halo), row of
   buttons. Bar hidden: ↑ or ↓ shows it, focus on the bar; from the bar ↑ the title, ↓ the buttons; from the title ↓,
   from the buttons ↑ or Back, back to the bar.
-- Row of buttons: ↓ from the bar (focus on Pause/Play), ← → and OK;
-  Subtitles, −10 s, Pause/Play, +10 s, Quality (YouTube), Next chapter (if there are chapters), Next
-  episode (Jellyfin). Row centered on Pause/Play (InfoBar.qml `playIndex`). `ctrl_focus`,
+- Row of buttons: ↓ from the bar (focus on Pause/Play, `ctrl_focus = 2`), ← → (in the list's order) and OK;
+  −10 s, Pause/Play, +10 s in the middle of the screen, then on the right, ending with the progress bar: Subtitles,
+  Quality (YouTube), Chapters (if there are chapters), Next episode (Jellyfin) (InfoBar.qml: `mid` and `side`
+  groups, one shared `button` component). Chapters opens the subtitles panel in `chapters` mode (`tracks_mode`):
+  start time and title of each chapter (`chapter-list`), the current one chosen, OK sets `chapter`. `ctrl_focus`,
   `user-data/streambox/controls` {items, focus}; disappears with the bar. Round centered buttons, drawn icons
   (`qml/PlayerIcon.qml`, QtQuick.Shapes: no Unicode characters, whose rendering depends on the fonts), Play / Pause
   larger, name of the selected button below.

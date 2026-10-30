@@ -730,8 +730,17 @@ mp.register_event("start-file", function()   -- another video: back to automatic
     end
 end)
 
-local tracks_mode = "subs"   -- panel opened by the Subtitles button (subtitles, audio) or Quality
+local tracks_mode = "subs"   -- panel opened by the Subtitles button (subtitles, audio), Quality or Chapters
 local function build_tracks()
+    if tracks_mode == "chapters" then   -- start time and title of each chapter, the current one chosen
+        local items, cur = { { header = tr("Chapters") } }, mp.get_property_number("chapter", -1)
+        for i, c in ipairs(mp.get_property_native("chapter-list") or {}) do
+            items[#items + 1] = { kind = "chapter", id = i - 1, selected = cur == i - 1,
+                                  label = fmt.clock(c.time or 0) .. "  ·  " .. ((c.title or "") ~= "" and c.title or tr("Chapter {n}", { n = i })) }
+        end
+        tracks_items = items
+        return
+    end
     if tracks_mode == "quality" then
         local items, cur = { { header = tr("Quality") } }, (mp.get_property_native("video-params") or {}).h
         items[#items + 1] = { kind = "quality", id = false, selected = not quality.max,
@@ -775,7 +784,7 @@ local function open_tracks(mode)
     tracks_open = true
     tracks_sel = 2
     for i, it in ipairs(tracks_items) do   -- focus on the current choice
-        if (it.kind == "sub" or it.kind == "quality") and it.selected then tracks_sel = i break end
+        if (it.kind == "sub" or it.kind == "quality" or it.kind == "chapter") and it.selected then tracks_sel = i break end
     end
     publish_tracks()
 end
@@ -794,7 +803,8 @@ local function tracks_key(key)
         publish_tracks()
     elseif key == "ok" then
         local it = tracks_items[tracks_sel]
-        if it and it.kind == "quality" then
+        if it and it.kind == "chapter" then mp.set_property_number("chapter", it.id)
+        elseif it and it.kind == "quality" then
             if (it.id or nil) ~= quality.max then quality.set(it.id or nil) end
         elseif it then mp.set_property(it.kind == "sub" and "sid" or "aid", it.id and tostring(it.id) or "no") end
         -- Choice remembered for this video (apply_sub_pref on resume): the language, or off
@@ -942,12 +952,13 @@ end)
 -- Row of buttons under the bar (Qt app): ↓ goes down into it, ← → choose, OK, ↑ or Back go back up
 local function controls_list()
     local paused = mp.get_property_native("pause")
-    -- Subtitles on the left: Play / Pause in the middle of the row (InfoBar.qml centers it on this button)
-    local list = { { id = "tracks", label = tr("Subtitles") }, { id = "back", label = "−10 s" },
-                   { id = "play", label = paused and tr("Play") or tr("Pause") }, { id = "fwd", label = "+10 s" } }
+    -- −10 s, Play / Pause, +10 s first (InfoBar.qml puts them in the middle of the screen), then the others (on the
+    -- right): subtitles, quality, chapters, next episode
+    local list = { { id = "back", label = "−10 s" }, { id = "play", label = paused and tr("Play") or tr("Pause") },
+                   { id = "fwd", label = "+10 s" }, { id = "tracks", label = tr("Subtitles") } }
     -- Quality: YouTube only, when several resolutions are offered (Jellyfin: original file)
     if #quality.list() > 1 then list[#list + 1] = { id = "quality", label = tr("Quality") } end
-    if #(mp.get_property_native("chapter-list") or {}) > 1 then list[#list + 1] = { id = "chapter", label = tr("Next chapter") } end
+    if #(mp.get_property_native("chapter-list") or {}) > 1 then list[#list + 1] = { id = "chapters", label = tr("Chapters") } end
     if next_up() then list[#list + 1] = { id = "next", label = tr("Next episode") } end
     return list
 end
@@ -971,7 +982,7 @@ local function controls_key(key)
         elseif id == "play" then mp.commandv("cycle", "pause")
         elseif id == "tracks" then open_tracks()
         elseif id == "quality" then open_tracks("quality")
-        elseif id == "chapter" then mp.commandv("add", "chapter", "1")
+        elseif id == "chapters" then open_tracks("chapters")
         elseif id == "next" then play_next() end
     end
     show_bar()
@@ -1140,7 +1151,7 @@ local function on_key(key)
             elseif bar_visible then hide_bar() else show_bar() end
         elseif key == "down" then
             if qt_ui() then   -- bar hidden: shows it (focus on the bar); bar focused: the button row, on Pause / Play
-                if bar_visible then ctrl_focus = 3 end
+                if bar_visible then ctrl_focus = 2 end   -- (controls_list: Play / Pause is second)
                 show_bar()
                 publish_controls()
             elseif not mp.get_property_native("pause") then

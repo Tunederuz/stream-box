@@ -17,7 +17,12 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - A turning ring over the video while it waits for data (after a seek forward, a slow stream), with the buffer's
   percentage.
 
+- Chapters: a button of the playback bar lists the video's chapters (start time and title) to jump to one; it
+  replaces "Next chapter".
+
 ### Changed
+- Playback bar: −10 s, pause and +10 s in the middle, the other buttons (subtitles, quality, chapters, next episode)
+  on the right.
 - In the TV menu's rows of videos, moving to another row starts at its first card, instead of where it was left.
 - One options menu (≡) for every YouTube video card: play or resume, see the channel's latest videos, add it to the
   favorites or remove it; Recommended for you and search results now have them too.

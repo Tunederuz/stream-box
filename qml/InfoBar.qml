@@ -305,53 +305,63 @@ Item {
             color: root.live && root.delay < 4 ? "#ff4f5e" : "white"
             font.pixelSize: 23; font.bold: root.live && root.delay < 4
         }
-        // Row of buttons (video), centered: ↓ to go there, ← → and OK. Round buttons with drawn icons (PlayerIcon),
-        // Play / Pause bigger; the name of the selected button shows below. Dimmed while none is selected
+        // Row of buttons (video): −10 s, Play / Pause, +10 s in the middle of the screen, the others (subtitles,
+        // quality, chapters, next episode) on the right; ↓ to go there, ← → (in the list's order) and OK. Round buttons
+        // with drawn icons (PlayerIcon), Play / Pause bigger; the name of the selected button shows below. Dimmed while
+        // none is selected
         Item {
+            id: controlsRow
             visible: !root.live && (root.ctl.items || []).length > 0
             x: 0; y: track.y + 62
             width: parent.width; height: 140
             opacity: root.ctl.focus >= 0 ? 1 : 0.6
             Behavior on opacity { NumberAnimation { duration: 160 } }
-            Row {
-                id: buttons
-                // Centered on Play / Pause (72-wide buttons, Play / Pause 92, 22 apart), whatever the buttons
-                // on either side (Quality, Next episode…)
-                readonly property int playIndex: Math.max(0, (root.ctl.items || []).map(function (i) { return i.id }).indexOf("play"))
-                x: parent.width / 2 - playIndex * (72 + spacing) - 46
-                spacing: 22
-                Repeater {
-                    model: (root.ctl.items || []).length
-                    Item {
-                        readonly property var it: root.ctl.items[index] || {}
-                        readonly property bool foc: index === root.ctl.focus
-                        readonly property bool big: it.id === "play"
-                        width: big ? 92 : 72; height: 92
-                        Rectangle {
+            readonly property var items: root.ctl.items || []
+            readonly property var mid: items.map(function (it, i) { return ["back", "play", "fwd"].indexOf(it.id) >= 0 ? i : -1 })
+                                            .filter(function (i) { return i >= 0 })
+            readonly property var side: items.map(function (it, i) { return mid.indexOf(i) < 0 ? i : -1 }).filter(function (i) { return i >= 0 })
+            Component {   // one button; modelData: its index in the list (ctl.items, ctl.focus)
+                id: button
+                Item {
+                    readonly property var it: controlsRow.items[modelData] || {}
+                    readonly property bool foc: modelData === root.ctl.focus
+                    readonly property bool big: it.id === "play"
+                    width: big ? 92 : 72; height: 92
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: parent.width; height: width; radius: width / 2
+                        color: parent.foc ? "white" : "#2effffff"
+                        border.color: parent.foc ? "white" : "#40ffffff"; border.width: 1
+                        scale: parent.foc ? 1.1 : 1
+                        Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 140 } }
+                        PlayerIcon {
                             anchors.centerIn: parent
-                            width: parent.width; height: width; radius: width / 2
-                            color: parent.foc ? "white" : "#2effffff"
-                            border.color: parent.foc ? "white" : "#40ffffff"; border.width: 1
-                            scale: parent.foc ? 1.1 : 1
-                            Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-                            Behavior on color { ColorAnimation { duration: 140 } }
-                            PlayerIcon {
-                                anchors.centerIn: parent
-                                // −10 / +10: thin circle, enlarged to fill the button like the other icons
-                                scale: parent.parent.big ? 1.25 : (parent.parent.it.id === "back" || parent.parent.it.id === "fwd") ? 1.4 : 1
-                                name: parent.parent.it.id === "play" ? (root.pb.pause ? "play" : "pause") : (parent.parent.it.id || "")
-                                color: parent.parent.foc ? "#17151c" : "white"
-                            }
-                        }
-                        Text {   // name of the selected button
-                            visible: parent.foc
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            y: parent.height + 12
-                            text: parent.it.label || ""
-                            color: "white"; font.pixelSize: 21; font.bold: true
+                            // −10 / +10: thin circle, enlarged to fill the button like the other icons
+                            scale: parent.parent.big ? 1.25 : (parent.parent.it.id === "back" || parent.parent.it.id === "fwd") ? 1.4 : 1
+                            name: parent.parent.it.id === "play" ? (root.pb.pause ? "play" : "pause") : (parent.parent.it.id || "")
+                            color: parent.parent.foc ? "#17151c" : "white"
                         }
                     }
+                    Text {   // name of the selected button
+                        visible: parent.foc
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: parent.height + 12
+                        text: parent.it.label || ""
+                        color: "white"; font.pixelSize: 21; font.bold: true
+                    }
                 }
+            }
+            Row {
+                id: buttons
+                x: (parent.width - width) / 2
+                spacing: 22
+                Repeater { model: controlsRow.mid; delegate: button }
+            }
+            Row {   // its right edge on the end of the progress bar
+                x: track.x + track.width - width
+                spacing: 22
+                Repeater { model: controlsRow.side; delegate: button }
             }
             Text {
                 visible: root.ctl.focus < 0

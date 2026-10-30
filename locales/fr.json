@@ -364,7 +364,6 @@
  "Never": "Jamais",
  "New code": "Nouveau code",
  "New search  (\"{query}\")": "Nouvelle recherche  (« {query} »)",
- "Next chapter": "Chapitre suivant",
  "Next episode": "Épisode suivant",
  "Next episode in {seconds} s: {title} — OK to start it, Back to stay": "Épisode suivant dans {seconds} s : {title} — OK pour le lancer, Retour pour rester",
  "Next episodes": "Prochains épisodes",
@@ -994,5 +993,6 @@
  "unknown channel": "chaîne inconnue",
  "unknown library": "bibliothèque inconnue",
  "▶  See latest videos of {channel}": "▶  Voir les dernières vidéos de {channel}",
- "the channel": "la chaîne"
+ "the channel": "la chaîne",
+ "Chapters": "Chapitres"
 }
