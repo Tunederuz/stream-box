@@ -1,5 +1,5 @@
 [Unit]
-Description=Stream Box: update of the dependencies (streamlink, yt-dlp, jellyfin-mpv-shim…)
+Description=Owlink: update of the dependencies (streamlink, yt-dlp, jellyfin-mpv-shim…)
 
 [Service]
 Type=oneshot

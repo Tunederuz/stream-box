@@ -1,4 +1,4 @@
-"""Stream Box: Plex library for the companion app and the TV menu, playback of its videos (direct play) and progress
+"""Owlink: Plex library for the companion app and the TV menu, playback of its videos (direct play) and progress
 reports to the server. Standard library only.
 """
 import json, os, re, threading, time, urllib.error, urllib.parse, urllib.request, uuid
@@ -72,8 +72,8 @@ link_lock = threading.Lock()
 
 
 def plex_tv(method, path, params=None, token=None):
-    headers = {"Accept": "application/json", "X-Plex-Product": "Stream Box", "X-Plex-Client-Identifier": px_client(),
-               "X-Plex-Device-Name": "Stream Box"}
+    headers = {"Accept": "application/json", "X-Plex-Product": "Owlink", "X-Plex-Client-Identifier": px_client(),
+               "X-Plex-Device-Name": "Owlink"}
     if token:
         headers["X-Plex-Token"] = token
     query = urllib.parse.urlencode(params or {})
@@ -160,9 +160,9 @@ def px_request(address, token, path, params=None):
     if token:
         params["X-Plex-Token"] = token
     url = address + path + ("?" + urllib.parse.urlencode(params) if params else "")
-    req = urllib.request.Request(url, headers={"Accept": "application/json", "X-Plex-Product": "Stream Box",
+    req = urllib.request.Request(url, headers={"Accept": "application/json", "X-Plex-Product": "Owlink",
                                                "X-Plex-Client-Identifier": px_client(),
-                                               "X-Plex-Device-Name": "Stream Box"})
+                                               "X-Plex-Device-Name": "Owlink"})
     with urllib.request.urlopen(req, timeout=10) as r:
         data = r.read()
     return json.loads(data) if data.strip() else {}

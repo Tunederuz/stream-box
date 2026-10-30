@@ -1,4 +1,4 @@
-// Stream Box: the full TV menu in QML (rendered by the GPU), used when the player is the Qt app
+// Owlink: the full TV menu in QML (rendered by the GPU), used when the player is the Qt app
 // (ui.py). Same tabs and same actions: everything goes through the remote.py API, like the companion app.
 // Keys arrive from ui.py (box.keyPressed) already translated: up, down, left, right, ok, back, home (Menu button,
 // closes), homescreen (WWW), corner (Play), menu (≡: options of the chosen card, including the second stream).
@@ -176,7 +176,7 @@ Item {
     property string pendingDisplay: ""
     property string pendingPlayer: ""        // player chosen with the arrows, applied by OK (the player restarts)
     property string pendingLang: ""          // interface language chosen with the arrows, applied by OK
-    // What this installation has (/api/features): without the system part (Stream Player, the app on an OS that runs
+    // What this installation has (/api/features): without the system part (Owlink app, the app on an OS that runs
     // itself), no power, update, backup, Wi-Fi, Bluetooth, resolution, audio output, SSH or developer mode settings.
     // The box's until read (it has them all)
     property var features: ({ system: true })
@@ -652,7 +652,7 @@ Item {
             menu.kbText = text.slice(0, 80)
             if (submit) menu.kbSubmit()
         }
-        // The computer's keyboard (Stream Player): a character, "\b" erases, "\n" searches
+        // The computer's keyboard (Owlink app): a character, "\b" erases, "\n" searches
         function onKeyTyped(t) {
             if (!menu.kbOpen) return
             if (t === "\b") menu.kbText = menu.kbText.slice(0, -1)
@@ -710,7 +710,7 @@ Item {
     // power actions stay on the list itself. Box status and the companion app's QR code beside the list
     readonly property var sectionIds: ["picture", "playback", "chat", "look", "accounts", "network", "devices", "updates",
                                        "backup", "advanced"].filter(function (id) {
-        return sysOn || (id !== "updates" && id !== "backup")   // (the Stream Player: its OS and its format update it)
+        return sysOn || (id !== "updates" && id !== "backup")   // (the Owlink app: its OS and its format update it)
     })
     function sectionTitle(id) {
         return tr(({ picture: "Picture and sound", playback: "Playback", chat: "Chat", look: "Appearance",
@@ -766,8 +766,8 @@ Item {
             return { label: sectionTitle(id), hint: sectionHint(id), value: (alert ? alert + "   " : "") + "›",
                      ok: function () { openSection(id) }, open: true }
         })
-        if (!sysOn)   // (power: the box's own; the Stream Player leaves it to its OS, and can be closed)
-            return rows.concat([{ header: tr("Stream Player") },
+        if (!sysOn)   // (power: the box's own; the Owlink app leaves it to its OS, and can be closed)
+            return rows.concat([{ header: tr("Owlink") },
                                 { label: tr("✕  Quit"), ok: function () { close(); box.quit() } }])
         return rows.concat([
             { header: tr("Power options") },

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream Box: relay. The user unit stream-box-mqtt.service of images 0.5.0 and older starts ~/stream-box/mqtt_bridge.py:
+"""Owlink: relay. The user unit stream-box-mqtt.service of images 0.5.0 and older starts ~/stream-box/mqtt_bridge.py:
 the module is now app/system/mqtt_bridge.py. To remove once no box runs those images.
 """
 import os, runpy, sys

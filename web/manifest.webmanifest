@@ -1,7 +1,7 @@
 {
-  "name": "Stream Box",
-  "short_name": "Stream Box",
-  "description": "Stream Box companion app",
+  "name": "Owlink",
+  "short_name": "Owlink",
+  "description": "Owlink companion app",
   "lang": "en",
   "start_url": "/",
   "scope": "/",

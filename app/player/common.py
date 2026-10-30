@@ -1,4 +1,4 @@
-"""Stream Box: what the companion app's modules (remote.py and the modules it imports) share: port, paths, mpv's
+"""Owlink: what the companion app's modules (remote.py and the modules it imports) share: port, paths, mpv's
 IPC socket, private JSON files. Standard library only.
 """
 import json, os, shutil, socket
@@ -13,7 +13,7 @@ PUBLISH_EVERY = 10   # seconds between two sends of already known data to mpv: a
 
 def tool(name):
     """Command installed for the box in ~/.local/bin (venvs linked there by install.sh and the image), otherwise the one
-    on the PATH (Stream Player: the app's own, /app/bin in the Flatpak)."""
+    on the PATH (Owlink app: the app's own, /app/bin in the Flatpak)."""
     own = os.path.expanduser(f"~/.local/bin/{name}")
     return own if os.access(own, os.X_OK) else shutil.which(name) or own
 

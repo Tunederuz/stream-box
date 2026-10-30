@@ -1,4 +1,4 @@
-// Stream Box: media drives NetworkManager (Wi-Fi setup mode: hotspot, connection to a network), even outside the TV
+// Owlink: media drives NetworkManager (Wi-Fi setup mode: hotspot, connection to a network), even outside the TV
 // session
 polkit.addRule(function (action, subject) {
     if (subject.user == "media" && action.id.indexOf("org.freedesktop.NetworkManager.") == 0) {

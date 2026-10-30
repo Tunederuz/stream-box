@@ -1,4 +1,4 @@
-"""Stream Box: Bluetooth remotes and gamepads (bluetoothctl): list, scan, pairing, unpairing.
+"""Owlink: Bluetooth remotes and gamepads (bluetoothctl): list, scan, pairing, unpairing.
 
 Used by remote.py (GET / POST /api/bluetooth), itself driven by the TV System menu. Pairing is done without a code
 (NoInputNoOutput agent: "Just Works" remotes, gamepads, keyboards), then the device is marked as trusted (it reconnects

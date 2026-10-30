@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream Box: sound output, chosen and tracked through PipeWire (pactl).
+"""Owlink: sound output, chosen and tracked through PipeWire (pactl).
 
 Outputs offered: the HDMI / DisplayPort connectors where a screen or TV able to play sound is plugged in (the graphics
 card reports it: port "available", device name from its EDID), USB and Bluetooth devices (headset, soundbar,
@@ -18,7 +18,7 @@ remote.py also uses it (outputs, current, set_choice) for /api/audio.
 import json, os, re, subprocess, sys, threading, time
 
 # app/player and app/system on the import path: the modules import each other by name, from either folder (system/
-# is not part of the Stream Player)
+# is not part of the Owlink app)
 sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), d) for d in ("player", "system")]
 
 from i18n import tr

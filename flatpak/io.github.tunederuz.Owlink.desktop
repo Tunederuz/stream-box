@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=Stream Player
+Name=Owlink
 Comment=Twitch, YouTube, Jellyfin and Plex on the TV, with a remote or a controller
-Exec=stream-player
-Icon=io.github.tunederuz.StreamPlayer
+Exec=owlink
+Icon=io.github.tunederuz.Owlink
 Categories=AudioVideo;Video;Player;TV;

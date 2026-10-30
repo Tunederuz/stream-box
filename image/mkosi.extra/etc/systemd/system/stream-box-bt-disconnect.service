@@ -1,8 +1,8 @@
-# Stream Box: Bluetooth devices disconnected at shutdown, before bluetoothd stops (see
+# Owlink: Bluetooth devices disconnected at shutdown, before bluetoothd stops (see
 # /usr/local/lib/stream-box/bt-disconnect). Nothing at start: ExecStop runs when the system shuts down or reboots;
 # sleep does not stop services, so the remote still wakes the box from sleep.
 [Unit]
-Description=Stream Box: Bluetooth off before shutdown
+Description=Owlink: Bluetooth off before shutdown
 Wants=bluetooth.service
 After=bluetooth.service
 

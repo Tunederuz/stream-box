@@ -1,6 +1,6 @@
-# Stream Box: daily check for a newer release (stream-box-update-check.service)
+# Owlink: daily check for a newer release (stream-box-update-check.service)
 [Unit]
-Description=Stream Box: daily check for a system update
+Description=Owlink: daily check for a system update
 
 [Timer]
 OnCalendar=*-*-* 04:00

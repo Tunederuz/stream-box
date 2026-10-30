@@ -1,4 +1,4 @@
-"""Stream Box: HTTP server of the companion app (http://<box>:8080): the page and its PWA files, the locale files, the
+"""Owlink: HTTP server of the companion app (http://<box>:8080): the page and its PWA files, the locale files, the
 GET routes of the API (state, lists, status) and POST /api/<action> (actions.py). Standard library only.
 """
 import json, os, time, urllib.parse
@@ -15,7 +15,7 @@ import playback   # playback.py: videos shared from the phone
 import settings   # settings.py: player, power button, background
 import twitch     # twitch.py: streamers, live, polls, account, followed channels
 import youtube    # youtube.py: channels, search, account, subtitles
-import sysparts   # sysparts.py: the box's system part, absent from the Stream Player
+import sysparts   # sysparts.py: the box's system part, absent from the Owlink app
 from common import DIR, mpv
 # (system part: sound outputs, backup, Bluetooth, resolution, installation, local update, Wi-Fi, status / SSH / dev mode)
 from sysparts import SYSTEM, audio, backup, btsetup, display, installer, localupdate, netsetup, system
@@ -95,7 +95,7 @@ JSON_ROUTES = {
     "/api/plex_link": plex.link_state,   # Plex server, and the sign-in code being waited for
     "/api/features": sysparts.features,   # what this installation has (system part or not)
 }
-if SYSTEM:   # the box's system (the Stream Player leaves it to its OS: these routes answer 404 there)
+if SYSTEM:   # the box's system (the Owlink app leaves it to its OS: these routes answer 404 there)
     JSON_ROUTES.update({
         "/api/bluetooth": btsetup.status,
         "/api/audio": audio_status,

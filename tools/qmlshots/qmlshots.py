@@ -1,4 +1,4 @@
-"""Stream Box: screenshots of the QML TV menu (qml/TvMenu.qml), without a box, mpv or GPU (Xvfb, Mesa).
+"""Owlink: screenshots of the QML TV menu (qml/TvMenu.qml), without a box, mpv or GPU (Xvfb, Mesa).
 
 Mocks the context properties of ui.py (box, pip, i18n with locales/fr.json), serves fixed JSON fixtures on
 127.0.0.1:8080 (the remote.py API the menu calls), opens the menu in a 1920x1080 window and plays a scripted key
@@ -25,7 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 WAIT = int(os.environ.get("QMLSHOTS_WAIT", "900"))   # ms after each step: animations and images done
 NOSHOTS = bool(os.environ.get("QMLSHOTS_NOSHOTS"))   # the scenario and console.log only (checks: no screenshot)
-# The Stream Player (no system part): /api/features {system: false}, and the system's routes answer 404 as there
+# The Owlink app (no system part): /api/features {system: false}, and the system's routes answer 404 as there
 PLAYER = bool(os.environ.get("QMLSHOTS_PLAYER"))
 SYSTEM_ROUTES = ("/api/health", "/api/wifi", "/api/audio", "/api/local_update", "/api/branches", "/api/backup",
                  "/api/bluetooth", "/api/dev", "/api/ssh", "/api/install", "/api/display", "/api/update_prompt")
@@ -78,7 +78,7 @@ STEPS = (
     + [("key", "home"), ("video", True), ("open",)]               # over a video: veil only
     + keys("back down down back")
     + [("video", False), ("power",)] + keys("down back")          # "Box" dialog alone
-    # Mouse (Stream Player on a desktop, menu/Tap.qml): rail tabs at x 150, y 268 + 76 × tab
+    # Mouse (Owlink app on a desktop, menu/Tap.qml): rail tabs at x 150, y 268 + 76 × tab
     + [("key", "home"), ("open",), ("click", 150, 800), ("click", 865, 273), ("rclick", 865, 500)]   # Settings, a section
     + [("wheel", 865, 500, -120), ("wheel", 865, 500, -120), ("click", 865, 273), ("rclick", 1600, 900)]
     + [("click", 150, 268), ("rclick", 700, 420), ("click", 100, 100), ("click", 700, 420), ("open",)]   # Live: options, play
@@ -278,6 +278,10 @@ def shoot(qml_dir, out):
     os.makedirs(out, exist_ok=True)
     root = tempfile.mkdtemp()
     shutil.copytree(qml_dir, os.path.join(root, "qml"))
+    # the logo (qml/Logo.qml reads ../assets/brand): the working tree's
+    brand = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "brand")
+    if os.path.isdir(brand):
+        shutil.copytree(brand, os.path.join(root, "assets", "brand"))
     with open(os.path.join(root, "harness.qml"), "w") as f:
         f.write('import QtQuick\nimport "qml"\nRectangle {\n    width: 1920; height: 1080; color: "#203040"\n'
                 '    TvMenu { objectName: "tvMenu" }\n}\n')

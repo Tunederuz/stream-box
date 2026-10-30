@@ -1,4 +1,4 @@
-// Stream Box: media (remote.py) starts the system update and its check (stream-box-system-update.service,
+// Owlink: media (remote.py) starts the system update and its check (stream-box-system-update.service,
 // stream-box-update-check.service, nothing else): the TV menu's question, Settings → Updates, the companion app
 polkit.addRule(function (action, subject) {
     var unit = action.lookup("unit");

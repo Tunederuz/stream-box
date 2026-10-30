@@ -1,5 +1,5 @@
 [Unit]
-Description=Stream Box: daily update of the dependencies
+Description=Owlink: daily update of the dependencies
 
 [Timer]
 OnCalendar=*-*-* 05:00

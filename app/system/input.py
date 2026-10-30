@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream Box: keys read at the source (Bluetooth remotes, gamepads, keyboards), turned into actions.
+"""Owlink: keys read at the source (Bluetooth remotes, gamepads, keyboards), turned into actions.
 
 Reads /dev/input/event* (the user must be in the input group), with Linux's standard names (KEY_UP, KEY_SELECT,
 BTN_SOUTH…), and sends to mpv, through its IPC:
@@ -14,7 +14,7 @@ the old path (keys received by the Qt app or mpv) takes over again. Started by s
 import json, os, re, select, socket, struct, sys, time
 
 # app/player and app/system on the import path: the modules import each other by name, from either folder (system/
-# is not part of the Stream Player)
+# is not part of the Owlink app)
 sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), d) for d in ("player", "system")]
 
 from i18n import tr

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream Box: permanent Bluetooth agent (BlueZ, D-Bus), started by start.sh with media-venv's Python (dbus-fast).
+"""Owlink: permanent Bluetooth agent (BlueZ, D-Bus), started by start.sh with media-venv's Python (dbus-fast).
 
 Xiaomi remotes (and others) start pairing themselves, or redo it on reconnection: with no agent to answer, BlueZ
 refuses ("No agent available") and the remote reconnects in a loop without ever working.

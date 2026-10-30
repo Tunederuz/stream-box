@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stream Box: applies an update that was waiting for the user (stream-box-apply-update.service, started by remote.py
+# Owlink: applies an update that was waiting for the user (stream-box-apply-update.service, started by remote.py
 # when "Restart now" is chosen in the TV menu's question at start or wake-up; see system-update):
 #   A/B: the boot is no longer pinned on the running version, the box restarts onto the newest one (on trial:
 #        stream-box-boot-check and systemd-boot fall back to the previous one if it doesn't work)

@@ -1,4 +1,4 @@
-"""Stream Box: Jellyfin library for the companion app and the TV menu (server paired with jellyfin-mpv-shim), playback
+"""Owlink: Jellyfin library for the companion app and the TV menu (server paired with jellyfin-mpv-shim), playback
 of its videos and progress reports to the server. Standard library only.
 """
 import json, os, re, shutil, socket, subprocess, threading, time, urllib.parse, urllib.request

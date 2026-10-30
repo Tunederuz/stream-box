@@ -21,7 +21,7 @@ import twitch     # twitch.py: streamers, who is live, followed channels, replay
 import youtube    # youtube.py: favorites, subscriptions
 from common import MPV_SOCKET, mpv
 from i18n import tr
-# The box's system part (sound outputs, screen resolution, sleep, shutdown, system update): None in the Stream Player,
+# The box's system part (sound outputs, screen resolution, sleep, shutdown, system update): None in the Owlink app,
 # whose menu then leaves those rows out
 from sysparts import SYSTEM, audio, display, system
 

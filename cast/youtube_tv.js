@@ -1,4 +1,4 @@
-// Stream Box: YouTube account progress, through the "YouTube TV app" access (youtubei.js, unofficial; the official
+// Owlink: YouTube account progress, through the "YouTube TV app" access (youtubei.js, unofficial; the official
 // API gives neither history nor positions). Sign-in with a code on google.com/device, token in
 // ~/.config/stream-box/youtube-tv-token.json (600). Small local server for remote.py (127.0.0.1:8091):
 //   GET  /status    connected?, pending code

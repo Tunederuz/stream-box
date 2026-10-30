@@ -2,7 +2,7 @@
   "name": "stream-box-cast",
   "private": true,
   "type": "module",
-  "description": "Stream Box: the box shows up as a TV in the YouTube app (Cast button)",
+  "description": "Owlink: the box shows up as a TV in the YouTube app (Cast button)",
   "dependencies": {
     "yt-cast-receiver": "2.1.0"
   }

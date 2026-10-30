@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream Box: full-screen app (Qt Quick) embedding mpv (libmpv).
+"""Owlink: full-screen app (Qt Quick) embedding mpv (libmpv).
 
 Replaces the mpv window in the cage session: the video is drawn by libmpv in the Qt Quick scene (OpenGL,
 GPU), and QML interface elements can sit on top of it with real animations. The
@@ -33,11 +33,11 @@ import mpv
 
 import chat_qt   # chat with emotes (same folder)
 import common    # common.py: built-in battery
-from sysparts import SYSTEM   # False: the Stream Player (an app on an OS that runs itself)
+from sysparts import SYSTEM   # False: the Owlink app (an app on an OS that runs itself)
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 CURSOR_HIDE_MS = 4000   # like mpv's --cursor-autohide=4000
-# Stream Player on a desktop: an ordinary window (F11: full screen). Full screen on the box and in SteamOS's Game mode
+# Owlink app on a desktop: an ordinary window (F11: full screen). Full screen on the box and in SteamOS's Game mode
 WINDOWED = not SYSTEM and os.environ.get("XDG_CURRENT_DESKTOP", "").lower() != "gamescope"
 
 # Qt keys → mpv key names (those stream-box.lua binds). Keys with no name in Qt (OK and Menu of the
@@ -228,7 +228,7 @@ class Box(QObject):
 
     @Slot()
     def quit(self):
-        """Stream Player: "Quit" of the TV menu. mpv quits, the app with it (shutdown event below)."""
+        """Owlink app: "Quit" of the TV menu. mpv quits, the app with it (shutdown event below)."""
         to_mpv(lambda: player.command("quit"))
 
 
@@ -273,7 +273,7 @@ def wayland_display():
 
 
 def x11_display():
-    """Same for an X11 session (Stream Player in SteamOS's Game mode: gamescope only offers X11)."""
+    """Same for an X11 session (Owlink app in SteamOS's Game mode: gamescope only offers X11)."""
     try:
         lib = ctypes.CDLL("libX11.so.6")
         lib.XOpenDisplay.restype = ctypes.c_void_p
@@ -719,7 +719,7 @@ class View(QQuickView):
         if box.menu_open:
             return super().mousePressEvent(event)
         if not SYSTEM and event.button() == Qt.LeftButton:
-            # Stream Player: a click opens the menu (no remote needed); a double click toggles full screen
+            # Owlink app: a click opens the menu (no remote needed); a double click toggles full screen
             if WINDOWED and event.type() == event.Type.MouseButtonDblClick:
                 self.showNormal() if self.visibility() == QQuickView.FullScreen else self.showFullScreen()
             else:
@@ -844,7 +844,7 @@ def main():
         bridge.ready.connect(lambda: to_mpv(player._set_property, "user-data/streambox/menu", "small"),
                              Qt.QueuedConnection)
     if WINDOWED:
-        view.setTitle("Stream Player")
+        view.setTitle("Owlink")
         view.resize(1280, 720)
         view.show()
     else:

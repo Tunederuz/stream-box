@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream Box: system update from a local image (stream-box-local-update.service, started by remote.py: a USB stick or a
+"""Owlink: system update from a local image (stream-box-local-update.service, started by remote.py: a USB stick or a
 file sent from the companion app, see localupdate.py). A/B boxes only.
 
 The full disk image of a release (stream-box.raw.xz, the one used to install) left by remote.py in media's staging
@@ -114,7 +114,7 @@ def verify():
 def partitions(head):
     """GPT of the image (its first bytes): {type: (first byte, size, name)}"""
     if head[512:520] != b"EFI PART":
-        fail("not a Stream Box disk image (no GPT)")
+        fail("not an Owlink disk image (no GPT)")
     entries_lba = int.from_bytes(head[512 + 72:512 + 80], "little")
     count = int.from_bytes(head[512 + 80:512 + 84], "little")
     size = int.from_bytes(head[512 + 84:512 + 88], "little")
@@ -140,11 +140,11 @@ def write(disk, slots, running_root):
             head += d.decompress(chunk, max_length=(1 << 20) - len(head))
     parts = partitions(head)
     if ROOT_TYPE not in parts or ESP_TYPE not in parts:
-        fail("not a Stream Box disk image (no system partition or ESP)")
+        fail("not an Owlink disk image (no system partition or ESP)")
     root_off, root_size, root_name = parts[ROOT_TYPE]
     esp_off, esp_size, _ = parts[ESP_TYPE]
     if not root_name.startswith("stream-box_"):
-        fail("not an A/B Stream Box image (0.2.0 or later)")
+        fail("not an A/B Owlink image (0.2.0 or later)")
     version = root_name[len("stream-box_"):]
     status(version=version)
     if not newer(version, running_version()):

@@ -8,8 +8,8 @@ Item {
 
     Rectangle { width: 400; height: parent.height; color: menu.pal.rail; opacity: 0.55
                 Behavior on color { ColorAnimation { duration: 400 } } }
-    Logo { x: 56; y: 62 }
-    Text { x: 126; y: 88 - height / 2; text: "Stream Box"; color: "white"; font.pixelSize: 28; font.bold: true }
+    Logo { x: 52; y: 58 }
+    Text { x: 126; y: 88 - height / 2; text: "Owlink"; color: "white"; font.pixelSize: 28; font.bold: true }
     Rectangle {   // pill: slides from one entry to the other
         x: 40; width: 320; height: 64; radius: 32
         y: menu.railHome ? 150 : 236 + menu.tab * menu.railStep

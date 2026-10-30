@@ -1,5 +1,5 @@
 [Unit]
-Description=Stream Box: YouTube anti-bot tokens for yt-dlp (bgutil-ytdlp-pot-provider, port 4416)
+Description=Owlink: YouTube anti-bot tokens for yt-dlp (bgutil-ytdlp-pot-provider, port 4416)
 
 [Service]
 WorkingDirectory=%h/.local/share/bgutil-pot-provider/server

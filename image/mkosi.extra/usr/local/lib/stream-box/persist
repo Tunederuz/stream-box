@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stream Box: what must survive a system update (A/B: the system partition is replaced as a whole) lives on the data
+# Owlink: what must survive a system update (A/B: the system partition is replaced as a whole) lives on the data
 # partition (GPT label "data", on the disk of the running system), mounted on /data.
 #   persist mount    early at boot (stream-box-persist.service): /data mounted, then each path below bound from
 #                    /data/<path>, seeded the first time with what the system has there (settings made so far)

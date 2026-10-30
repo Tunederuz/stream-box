@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream Box: companion app for the phone (http://<box>:8080), which drives mpv through its IPC socket.
+"""Owlink: companion app for the phone (http://<box>:8080), which drives mpv through its IPC socket.
 
 Streamer and chat changes go through the script-messages of stream-box.lua, so that the on-screen menu, the chat
 and the page stay in agreement. Standard library only.
@@ -24,7 +24,7 @@ import os, signal, sys, threading
 from http.server import ThreadingHTTPServer
 
 # app/player and app/system on the import path: the modules import each other by name, from either folder (system/
-# is not part of the Stream Player)
+# is not part of the Owlink app)
 sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), d) for d in ("player", "system")]
 
 import ambient   # ambient.py: weather, schedules, QR code
@@ -43,7 +43,7 @@ threading.Thread(target=ambient.ambient_loop, daemon=True).start()
 threading.Thread(target=playback.history_loop, daemon=True).start()
 threading.Thread(target=twitch.events_loop, daemon=True).start()
 threading.Thread(target=quickmenu.listen_loop, daemon=True).start()
-if SYSTEM:   # (the Stream Player leaves the system to its OS)
+if SYSTEM:   # (the Owlink app leaves the system to its OS)
     threading.Thread(target=system.health_loop, daemon=True).start()
     threading.Thread(target=system.resume_loop, daemon=True).start()
     threading.Thread(target=netsetup.setup_loop, daemon=True).start()

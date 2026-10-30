@@ -1,4 +1,4 @@
-// Stream Box: media mounts and unmounts USB drives (settings backup and restore, backup.py), even outside the TV
+// Owlink: media mounts and unmounts USB drives (settings backup and restore, backup.py), even outside the TV
 // session
 polkit.addRule(function (action, subject) {
     if (subject.user == "media" &&

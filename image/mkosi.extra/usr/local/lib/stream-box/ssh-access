@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stream Box: SSH access enabled or disabled from the TV System menu (stream-box-ssh@enable|disable.service).
+# Owlink: SSH access enabled or disabled from the TV System menu (stream-box-ssh@enable|disable.service).
 #   enable  : random password for media (kept while SSH stays enabled, readable by media only in
 #             /var/lib/stream-box/ssh-password, shown on the TV), password login allowed, sshd started
 #   disable : sshd stopped and disabled, password erased, password login removed (keys stay)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stream Box: permanent player, restarted if it closes (started by start.sh, in the cage session).
+# Owlink: permanent player, restarted if it closes (started by start.sh, in the cage session).
 #
 # Player: the Qt Quick app embedding mpv (ui.py, ui-venv venv) if ~/.config/stream-box/player contains "qt", otherwise
 # mpv alone. The file is read again on each restart: to switch, write it then quit the player (quit command through
@@ -9,7 +9,7 @@ DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"   # the repository (thi
 export PATH="$HOME/.local/bin:$PATH"
 UI_PYTHON="$HOME/.local/share/ui-venv/bin/python"
 
-# mpv options, shared with the Stream Player (stream-player.sh)
+# mpv options, shared with the Owlink app (stream-player.sh)
 # shellcheck source=scripts/mpv-args.sh
 . "$DIR/scripts/mpv-args.sh"
 
@@ -21,10 +21,12 @@ while true; do
   stamp="$(stat -c %Y "$HOME/.config/stream-box/player" 2>/dev/null)$choice"
   [ "$stamp" != "$last_choice" ] && quick_fails=0 && last_choice=$stamp
   pkill -u "$USER" -f 'streamlink .*--player-external-http'   # leftovers from a previous player
-  # Jellyfin: "Play on → Stream Box". The shim drives this player through its socket (config in
+  # Jellyfin: "Play on → Owlink". The shim drives this player through its socket (config in
   # ~/.config/jellyfin-mpv-shim/) and doesn't reattach on its own to a restarted player: restart it along. It gives
   # up if the socket doesn't exist yet (the Qt app takes longer than mpv to open it): it waits for it.
   pkill -u "$USER" -f '[j]ellyfin-mpv-shim'
+  # (boxes set up before the rename to Owlink: the old name in the "Play on" list)
+  sed -i 's/"player_name": "Stream Box"/"player_name": "Owlink"/' "$HOME/.config/jellyfin-mpv-shim/conf.json" 2> /dev/null
   rm -f /tmp/stream-box-mpv.sock
   (
     for _ in $(seq 120); do [ -S /tmp/stream-box-mpv.sock ] && break; sleep 0.5; done

@@ -1,4 +1,4 @@
-"""Stream Box: playback of the videos started from the companion app and the TV menu (links, YouTube, Twitch replays
+"""Owlink: playback of the videos started from the companion app and the TV menu (links, YouTube, Twitch replays
 and clips, Jellyfin, Plex), and the history loop that records their position and sends it back to Twitch, YouTube,
 Jellyfin and Plex. Standard library only.
 """

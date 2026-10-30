@@ -1,4 +1,4 @@
-# Stream Box: mpv options of the player (sourced by player.sh and stream-player.sh, which set DIR): MPV_ARGS.
+# Owlink: mpv options of the player (sourced by player.sh and stream-player.sh, which set DIR): MPV_ARGS.
 # shellcheck shell=bash
 
 # Format of videos sent as a link (yt-dlp). By default 1440p at most and no AV1, which many iGPUs can't decode in

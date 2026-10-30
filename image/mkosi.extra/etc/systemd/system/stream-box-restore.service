@@ -1,7 +1,7 @@
-# Stream Box: what lives in /etc put back from the persistent state (machine-id, developer mode, SSH password and
+# Owlink: what lives in /etc put back from the persistent state (machine-id, developer mode, SSH password and
 # host keys: see /usr/local/lib/stream-box/persist), before sshd and the session
 [Unit]
-Description=Stream Box: system state put back
+Description=Owlink: system state put back
 After=stream-box-persist.service
 Before=sshd.service greetd.service
 

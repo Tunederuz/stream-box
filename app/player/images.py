@@ -1,9 +1,9 @@
-"""Stream Box: TV preview for the companion app (preview). Standard library only.
+"""Owlink: TV preview for the companion app (preview). Standard library only.
 """
 import os, shutil, subprocess, threading, time
 
 from common import mpv
-from sysparts import display   # environment of cage's Wayland session, for grim (None in the Stream Player)
+from sysparts import display   # environment of cage's Wayland session, for grim (None in the Owlink app)
 
 # TV preview for the page, only when the page asks for it (section open): the whole screen, ambient screen and
 # menus included, captured by grim through cage's wlr-screencopy protocol. Without grim, mpv capture (window, with

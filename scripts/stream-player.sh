@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stream Player: the player as an app, on a system that runs itself (SteamOS, a desktop…). No system part (app/system
+# Owlink app: the player as an app, on a system that runs itself (SteamOS, a desktop…). No system part (app/system
 # is not shipped: no Wi-Fi, Bluetooth, power, updates of the box) and no restart loop: closing the app (Steam's "Exit
 # game", the window's close button) stops everything it started. The Flatpak's stream-player command; also works
 # from a repository, with the tools on the PATH.

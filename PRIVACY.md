@@ -1,7 +1,7 @@
-# Stream Box Privacy Policy
+# Owlink Privacy Policy
 
-Stream Box is free software that turns a mini PC plugged into a TV into a Twitch, YouTube and Jellyfin player.
-Each box is installed and used by its owner, at home: there is no Stream Box server.
+Owlink is free software that turns a mini PC plugged into a TV into a Twitch, YouTube and Jellyfin player.
+Each box is installed and used by its owner, at home: there is no Owlink server.
 
 ## YouTube account
 
@@ -24,14 +24,14 @@ and how far they got in each video.
 See also the [YouTube Terms of Service](https://www.youtube.com/t/terms) and the
 [Google Privacy Policy](https://policies.google.com/privacy).
 
-## Twitch followed channels (Stream Box Twitch app)
+## Twitch followed channels (Owlink Twitch app)
 
 To show the channels the owner follows, the box asks Twitch for **read-only** access (`user:read:follows`) through the
-Stream Box Twitch app, with a code typed on twitch.tv/activate.
+Owlink Twitch app, with a code typed on twitch.tv/activate.
 
 - Data read: the followed channels (name, picture) and which of them are live (title, game, viewers).
 - Where it goes: nowhere other than the box itself. The token is kept on the box, readable by its user only; the
-  Stream Box app is only an identifier, there is no server behind it and its maintainers see nothing.
+  Owlink app is only an identifier, there is no server behind it and its maintainers see nothing.
 - Removing access: "Disconnect" in the companion app (Settings → Followed channels) deletes the box's token. Access
   can also be revoked at any time from Twitch (Settings → Connections).
 

@@ -1,7 +1,7 @@
-# Stream Box: whether a newer release exists (system-update check), every day (stream-box-update-check.timer) and by
+# Owlink: whether a newer release exists (system-update check), every day (stream-box-update-check.timer) and by
 # hand ("Check for updates": remote.py, polkit rule 56); nothing downloaded, the TV menu offers it
 [Unit]
-Description=Stream Box: check for a system update
+Description=Owlink: check for a system update
 
 [Service]
 Type=oneshot

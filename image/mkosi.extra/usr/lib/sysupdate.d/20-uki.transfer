@@ -1,4 +1,4 @@
-# Stream Box A/B: the UKI of the latest release (stream-box_<version>.efi) into the ESP, with 3 tries: systemd-boot
+# Owlink A/B: the UKI of the latest release (stream-box_<version>.efi) into the ESP, with 3 tries: systemd-boot
 # starts the newest one, systemd-bless-boot keeps it once boot-complete.target is reached (stream-box-boot-check:
 # the box's server answers), otherwise after 3 failed boots systemd-boot goes back to the previous one.
 [Transfer]

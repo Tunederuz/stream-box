@@ -1,4 +1,4 @@
-// TV menu with a mouse (Stream Player on a desktop): a click on an element focuses it as the arrows would (pick),
+// TV menu with a mouse (Owlink app on a desktop): a click on an element focuses it as the arrows would (pick),
 // then left click = OK and right click = ≡ (its options; rightKey "back" where there are none; "" = no key after
 // pick). Off while the element is hidden or faded out (cards scrolled outside their area).
 import QtQuick
