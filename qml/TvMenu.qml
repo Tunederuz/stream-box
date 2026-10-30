@@ -276,6 +276,10 @@ Item {
     // additions, a streamer's replays and clips
     function moreSource(row) {
         if (row.kind === "results" && !libTab && ytResults) return { source: "yt_search", key: "", q: ytResults.query }
+        if (row.kind === "results" && libTab && lib.results) return { source: tabId + "_search", key: "", q: lib.results.query }
+        if (row.kind === "rec") return { source: "yt_recommended", key: "" }
+        if (row.kind === "subs") return { source: "yt_subscriptions", key: "" }
+        if (row.kind === "lib" && (row.key === "resume" || row.key === "nextup")) return { source: tabId + "_" + row.key, key: "" }
         if (row.kind === "channel") return { source: "yt_channel", key: row.key }
         if (row.kind === "preview" && !libTab && ytPreview) return { source: "yt_channel", key: ytPreview.id }
         if (row.kind === "lib" && row.key.indexOf("lib:") === 0)

@@ -113,6 +113,29 @@ def jellyfin_more(library_id, offset, count=16):
     return {"items": [jf_item(i) for i in items], "more": len(items) >= count}
 
 
+def jellyfin_more_home(kind, offset, count=16):
+    """"Load more" in Resume (kind "resume") or Next episodes ("nextup")"""
+    srv = jf_server()
+    if kind == "resume":
+        items = jf_api("/Users/{user}/Items/Resume", params={"StartIndex": offset, "Limit": count,
+                                                             "MediaTypes": "Video", **JF_FIELDS})["Items"]
+    else:
+        items = jf_api("/Shows/NextUp", params={"UserId": srv["user"] if srv else "", "StartIndex": offset,
+                                                "Limit": count, **JF_FIELDS})["Items"]
+    return {"items": [jf_item(i) for i in items], "more": len(items) >= count}
+
+
+def jellyfin_search_more(query, offset, count=30):
+    """"Load more" in the search results"""
+    query = " ".join(query.split())[:100]
+    if not query:
+        return {"items": [], "more": False}
+    items = jf_api("/Users/{user}/Items", params={"searchTerm": query, "IncludeItemTypes": "Movie,Series,Episode",
+                                                  "Recursive": "true", "StartIndex": offset, "Limit": count,
+                                                  **JF_FIELDS})["Items"]
+    return {"items": [jf_item(i) for i in items], "more": len(items) >= count}
+
+
 def jellyfin_search(query):
     query = " ".join(query.split())[:100]
     if not query:

@@ -244,11 +244,24 @@ def plex_home():
     return home
 
 
-def plex_search(query):
+def plex_more_home(kind, offset, count=16):
+    """"Load more" in Resume (kind "resume") or Next episodes ("nextup"): both come from On Deck, read whole"""
+    deck = px_list("/library/onDeck", {"X-Plex-Container-Start": 0, "X-Plex-Container-Size": 200})
+    items = [i for i in deck if bool(i["position"]) == (kind == "resume")]
+    return {"items": items[offset:offset + count], "more": len(items) > offset + count}
+
+
+def plex_search_more(query, offset, count=30):
+    """"Load more" in the search results (Plex's search has no paging: a larger limit, the start cut off)"""
+    items = plex_search(query, offset + count)
+    return {"items": items[offset:], "more": len(items) >= offset + count}
+
+
+def plex_search(query, limit=30):
     query = " ".join(query.split())[:100]
     if not query:
         return []
-    hubs = px_api("/hubs/search", {"query": query, "limit": 30}).get("MediaContainer", {}).get("Hub") or []
+    hubs = px_api("/hubs/search", {"query": query, "limit": limit}).get("MediaContainer", {}).get("Hub") or []
     return [px_item(m) for h in hubs if h.get("type") in ("movie", "show", "episode") for m in h.get("Metadata") or []]
 
 

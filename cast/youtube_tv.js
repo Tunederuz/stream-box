@@ -13,6 +13,8 @@
 //   GET  /meta?id=  { title, seconds } of a video (/player, as the TV app asks before playing it)
 //   GET  /subscriptions  latest videos of the subscribed channels (the TV app's FEsubscriptions, its "All" tab, two
 //                   pages), newest first, lives at the top, without Shorts (kept 15 min; ?fresh=1: read again)
+//   GET  /recommended?offset=N, /subscriptions?offset=N  "Load more": { items (30 from N on), more }, reading the
+//                   feed's next pages when needed
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -32,6 +34,8 @@ let yt = null, connected = false, pending = null, error = null;
 let progress = { at: 0, data: {} };
 let recommended = { at: 0, data: [] };
 let subscriptions = { at: 0, data: [] };
+// "Load more" (TV menu): every video read so far of each feed, past the first page shown, and its next page's token
+const feeds = { rec: { all: [], token: null }, subs: { all: [], token: null } };
 const sessions = new Map();
 
 const saveToken = ({ credentials }) => {
@@ -109,7 +113,7 @@ function count(s) {
 }
 
 // Videos of a TV home response (FEwhat_to_watch): its video tiles, without duplicates, in order
-export function recommendedVideos(data) {
+export function recommendedVideos(data, max = RECOMMENDED_MAX) {
   const out = [], seen = new Set();
   (function walk(n) {
     if (Array.isArray(n)) return n.forEach(walk);
@@ -126,7 +130,7 @@ export function recommendedVideos(data) {
     }
     for (const v of Object.values(n)) walk(v);
   })(data);
-  return out.slice(0, RECOMMENDED_MAX);
+  return out.slice(0, max);
 }
 
 async function getRecommended() {
@@ -135,13 +139,15 @@ async function getRecommended() {
   try {
     const pages = [];
     let r = await yt.actions.execute('/browse', { browseId: 'FEwhat_to_watch', client: 'TV' });
+    let token = null;
     for (let n = 1; ; n++) {
       pages.push(r.data);
-      const token = n < RECOMMENDED_PAGES && nextPage(JSON.stringify(r.data));
-      if (!token) break;
+      token = nextPage(JSON.stringify(r.data));
+      if (!token || n >= RECOMMENDED_PAGES) break;
       r = await yt.actions.execute('/browse', { continuation: token, client: 'TV' });
     }
     recommended = { at: Date.now(), data: recommendedVideos(pages) };
+    feeds.rec = { all: recommendedVideos(pages, Infinity), token };
   } catch (e) {
     console.error('youtube_tv.js: FEwhat_to_watch:', e.message);   // the previous list, retried at the next call
   }
@@ -157,7 +163,7 @@ function age(s) {
 
 // Videos of the subscriptions feed (FEsubscriptions pages): video tiles only (the Shorts shelf has its own type),
 // with the channel (its UC… id, from the tile's menu) and a date worked out from "… ago"; lives ("… watching") first
-export function subscriptionVideos(pages, now = Date.now()) {
+export function subscriptionVideos(pages, now = Date.now(), max = SUBS_MAX) {
   const out = [], seen = new Set();
   (function walk(n) {
     if (Array.isArray(n)) return n.forEach(walk);
@@ -183,7 +189,7 @@ export function subscriptionVideos(pages, now = Date.now()) {
     for (const v of Object.values(n)) walk(v);
   })(pages);
   out.sort((a, b) => a.age - b.age);
-  return out.slice(0, SUBS_MAX).map(({ age: _, ...v }) => v);
+  return out.slice(0, max).map(({ age: _, ...v }) => v);
 }
 
 // Next page of the feed itself (its section list), not of one of its rows
@@ -206,13 +212,14 @@ async function getSubscriptions() {
     // Its first tab ("All"; the others: one per channel)
     const pages = [r.data.contents?.tvBrowseRenderer?.content?.tvSecondaryNavRenderer?.sections?.[0]
       ?.tvSecondaryNavSectionRenderer?.tabs?.[0] || r.data];
-    for (let n = 1; n < SUBS_PAGES; n++) {
-      const token = feedNext(pages[pages.length - 1]);
-      if (!token) break;
+    let token = feedNext(pages[0]);
+    for (let n = 1; n < SUBS_PAGES && token; n++) {
       r = await yt.actions.execute('/browse', { continuation: token, client: 'TV' });
       pages.push(r.data);
+      token = feedNext(r.data);
     }
     subscriptions = { at: Date.now(), data: subscriptionVideos(pages) };
+    feeds.subs = { all: subscriptionVideos(pages, Date.now(), Infinity), token };
   } catch (e) {
     console.error('youtube_tv.js: FEsubscriptions:', e.message);   // the previous list, retried at the next call
   }
@@ -254,6 +261,26 @@ function body(req) {
   });
 }
 
+// "Load more": the feed's videos from offset on (count of them), reading its next pages when the ones already read run
+// out (at most 4 more pages per call); more: there may be others after
+async function feedMore(kind, offset, count = 30) {
+  if (!connected) return { items: [], more: false };
+  if (!feeds[kind].all.length) await (kind === 'rec' ? getRecommended() : getSubscriptions());
+  const f = feeds[kind], seen = new Set(f.all.map((v) => v.id));
+  for (let n = 0; n < 4 && f.all.length < offset + count && f.token; n++) {
+    try {
+      const r = await yt.actions.execute('/browse', { continuation: f.token, client: 'TV' });
+      f.token = kind === 'rec' ? nextPage(JSON.stringify(r.data)) : feedNext(r.data);
+      const page = kind === 'rec' ? recommendedVideos(r.data, Infinity) : subscriptionVideos([r.data], Date.now(), Infinity);
+      for (const v of page) if (!seen.has(v.id)) { seen.add(v.id); f.all.push(v); }
+    } catch (e) {
+      console.error(`youtube_tv.js: next page (${kind}):`, e.message);
+      f.token = null;
+    }
+  }
+  return { items: f.all.slice(offset, offset + count), more: f.all.length > offset + count || !!f.token };
+}
+
 export function startYoutubeTv() {
   resume();
   http.createServer(async (req, res) => {
@@ -262,6 +289,8 @@ export function startYoutubeTv() {
       if (req.method === 'GET' && req.url === '/status') return send(200, { connected, pending, error });
       if (req.method === 'GET' && req.url === '/progress') return send(200, await getProgress());
       if (req.method === 'GET' && req.url === '/recommended') return send(200, await getRecommended());
+      const more = req.method === 'GET' && req.url.match(/^\/(recommended|subscriptions)\?offset=(\d+)$/);
+      if (more) return send(200, await feedMore(more[1] === 'recommended' ? 'rec' : 'subs', Number(more[2])));
       if (req.method === 'GET' && req.url.startsWith('/meta?id=')) {
         const id = decodeURIComponent(req.url.slice(9));
         if (!connected || !/^[\w-]{11}$/.test(id)) return send(404, { error: 'unknown' });
@@ -285,6 +314,7 @@ export function startYoutubeTv() {
         Object.assign(progress, { at: 0, data: {} });
         Object.assign(recommended, { at: 0, data: [] });
         Object.assign(subscriptions, { at: 0, data: [] });
+        feeds.rec = { all: [], token: null }; feeds.subs = { all: [], token: null };
         connected = false; pending = null; yt = null;
         return send(200, { connected });
       }

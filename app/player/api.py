@@ -98,10 +98,20 @@ def more(query):
         return youtube.yt_channel_more(key, offset)
     if source in ("twitch_vods", "twitch_clips"):
         return twitch.replays_more(key, source.split("_")[1], offset)
+    if source in ("yt_recommended", "yt_subscriptions"):
+        return youtube.yt_tv_more(source[3:], offset)
     if source == "jellyfin_lib":
         return jellyfin.jellyfin_more(key, offset)
+    if source in ("jellyfin_resume", "jellyfin_nextup"):
+        return jellyfin.jellyfin_more_home(source.split("_")[1], offset)
+    if source == "jellyfin_search":
+        return jellyfin.jellyfin_search_more(q, offset)
     if source == "plex_lib":
         return plex.plex_more(key, offset)
+    if source in ("plex_resume", "plex_nextup"):
+        return plex.plex_more_home(source.split("_")[1], offset)
+    if source == "plex_search":
+        return plex.plex_search_more(q, offset)
     raise ValueError(tr("not found"))
 
 

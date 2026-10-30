@@ -176,6 +176,15 @@ def yt_tv_recommended():
     return videos if isinstance(videos, list) else []
 
 
+def yt_tv_more(feed, offset):
+    """"Load more" in Recommended for you (feed "recommended") or Subscriptions ("subscriptions"): the next 30 videos,
+    read by youtube_tv.js from the feed's next pages"""
+    d = yt_tv(f"/{feed}?offset={int(offset)}", timeout=30)
+    if not isinstance(d, dict):
+        raise ValueError(tr("YouTube unreachable for now"))
+    return {"items": with_progress(d.get("items") or []), "more": bool(d.get("more"))}
+
+
 def yt_tv_report(video_id, position, final=False):
     threading.Thread(target=yt_tv, args=("/report", {"id": video_id, "position": position, "final": final}),
                      daemon=True).start()
