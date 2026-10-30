@@ -976,6 +976,11 @@ local function controls_key(key)
     elseif key == "right" then ctrl_focus = math.min(#list, ctrl_focus + 1)
     elseif key == "up" then ctrl_focus = nil   -- ↑: back up to the bar
     elseif key == "back" then ctrl_focus = nil
+    elseif key == "down" then   -- ↓ again: the bar closes
+        ctrl_focus = nil
+        hide_bar()
+        publish_controls()
+        return
     elseif key == "ok" then
         local id = (list[ctrl_focus] or {}).id
         if id == "back" or id == "fwd" then media_seek(id == "fwd" and 1 or -1, true)
@@ -1150,8 +1155,8 @@ local function on_key(key)
                 publish_controls()
             elseif bar_visible then hide_bar() else show_bar() end
         elseif key == "down" then
-            if qt_ui() then   -- bar hidden: shows it (focus on the bar); bar focused: the button row, on Pause / Play
-                if bar_visible then ctrl_focus = 2 end   -- (controls_list: Play / Pause is second)
+            if qt_ui() then   -- bar hidden or focused: the button row, on Pause / Play (controls_list: second)
+                ctrl_focus = 2
                 show_bar()
                 publish_controls()
             elseif not mp.get_property_native("pause") then

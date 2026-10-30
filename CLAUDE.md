@@ -729,8 +729,9 @@ title over a light image.
   bar never shows empty (purple, 0 s) nor slides from the previous video's position and colors.
 - Focus in a video, top to bottom: title (OK: Info panel), the bar itself (← → scrub; focused whenever the bar shows
   and neither of the others is: InfoBar.qml `barFocus`, track 8 → 12 px, cursor 22 → 28 px and a faint halo), row of
-  buttons. Bar hidden: ↑ or ↓ shows it, focus on the bar; from the bar ↑ the title, ↓ the buttons; from the title ↓,
-  from the buttons ↑ or Back, back to the bar.
+  buttons. Bar hidden: ↑ shows it with the focus on the bar, ↓ shows it with the focus on the buttons (Pause / Play);
+  from the bar ↑ the title, ↓ the buttons; from the title ↓, from the buttons ↑ or Back, back to the bar; ↓ again from
+  the buttons hides the bar.
 - Row of buttons: ↓ from the bar (focus on Pause/Play, `ctrl_focus = 2`), ← → (in the list's order) and OK;
   −10 s, Pause/Play, +10 s in the middle of the screen, then on the right, ending with the progress bar: Subtitles,
   Quality (YouTube), Chapters (if there are chapters), Next episode (Jellyfin) (InfoBar.qml: `mid` and `side`
