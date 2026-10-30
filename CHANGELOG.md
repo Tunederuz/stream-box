@@ -13,6 +13,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 ### Changed
 - Stream Box is now **Inlet**, with a new logo: TV menu, boot screen, companion app (its icon too), Cast and
   Jellyfin's "Play on" lists, Plex, Home Assistant. Settings, accounts and updates are untouched.
+- Gamepads: Start (≡ on Xbox controllers) now opens the options and Select (View) the TV menu, the other way round
+  from before; the middle button still opens the TV menu.
 
 ### Added
 - Inlet app (preview): the player as a Flatpak app, for SteamOS or a desktop, without the box's system settings
