@@ -57,9 +57,11 @@ Item {
                         Behavior on opacity { NumberAnimation { duration: 90 } }
                         title: it.title || ""
                         thumb: it.thumb || ""
-                        meta: (row.kind === "vods" ? Fmt.dateFr(it.date, menu.tr) + " · " + Fmt.clock(it.seconds)
-                               : Fmt.clock(it.seconds) + " · " + menu.tr("{n} views", { n: Fmt.viewers(it.views, menu.tr) }))
-                              + (it.finished ? " · " + menu.tr("watched") : "")
+                        meta: it.more ? menu.cardMeta(row, it)   // ("Load more")
+                              : (row.kind === "vods" ? Fmt.dateFr(it.date, menu.tr) + " · " + Fmt.clock(it.seconds)
+                                 : Fmt.clock(it.seconds) + " · " + menu.tr("{n} views", { n: Fmt.viewers(it.views, menu.tr) }))
+                                + (it.finished ? " · " + menu.tr("watched") : "")
+                        glyph: it.more ? "+" : "▶"
                         progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
                         focused: menu.area === "content" && menu.rpRow === r && index === (menu.rpSel[r] || 0)
                     }

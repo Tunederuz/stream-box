@@ -214,6 +214,15 @@ def px_list(path, params=None):
     return [px_item(m) for m in px_api(path, params).get("MediaContainer", {}).get("Metadata") or []]
 
 
+def plex_more(section, offset, count=16):
+    """"Load more" in a library's row: the next recently added items"""
+    if not str(section).isdigit():
+        raise ValueError(tr("unknown library"))
+    items = px_list(f"/library/sections/{section}/recentlyAdded",
+                    {"X-Plex-Container-Start": offset, "X-Plex-Container-Size": count})
+    return {"items": items, "more": len(items) >= count}
+
+
 def plex_home():
     cached = px_cache.get("home")
     if cached and time.time() - cached[0] < PX_CACHE:

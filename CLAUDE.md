@@ -1244,6 +1244,17 @@ help, the clock, the home screen's QR code) follows it. `QMLSHOTS_SIZE=1280x800 
 another shape. `Preparing.qml`, on top of everything in ui.qml: "Getting ready…" and the logo until `/api/state`
 answers (asked every 0.7 s, 60 s at most), then a fade: the home screen stayed empty while remote.py started.
 
+### "Load more" (end of rows)
+`GET /api/more?source=&key=&offset=&q=` (api.py `more`) → `{items, more}`: `yt_search` (q; yt-dlp `ytsearch<n>:` with
+`--playlist-items`), `yt_channel` (UC… id; the channel's /videos flat list: older than its RSS feed's 15),
+`twitch_vods` / `twitch_clips` (login; `fetch_replays` with larger counts, the start cut off), `jellyfin_lib` (library
+id; Items by DateCreated with StartIndex: Items/Latest has no paging), `plex_lib` (section; recentlyAdded with
+X-Plex-Container-Start). TV menu: `moreSource(row)` says where a row's next items come from, `withMore` (applied to
+ytRows, libRows, replayRows) appends the items already loaded (`moreRows`, by "<source>|<key>|<query>", duplicates
+dropped) and a "Load more" card (`more: true`, glyph "+") while there may be more; OK on it → `loadMore` (focus stays
+on the place, which becomes the first new item); ≡ does nothing there. Not on Subscriptions and Recommended (60 and 30
+already). qmlshots: fake `/api/more`, steps at the end of a Replays row.
+
 ### Inlet app window
 The TV menu stays driven by keys only (remote, gamepad, keyboard; no mouse navigation, the user's choice). Inlet app
 on a desktop: an ordinary 1280×720 window (`WINDOWED`, F11 or a double click: full screen); full screen in SteamOS's

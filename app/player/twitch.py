@@ -236,13 +236,14 @@ def events_loop():
 replays_cache = {}   # login -> (time, result)
 
 
-def fetch_replays(login):
-    query = ("query($l:String!){user(login:$l){"
-             "videos(first:8,type:ARCHIVE,sort:TIME){edges{node{id title lengthSeconds createdAt "
+def fetch_replays(login, vods=8, clips=6):
+    """The latest replays (vods) and the week's clips of a streamer ("Load more": larger counts, the start cut off)"""
+    query = ("query($l:String!,$v:Int!,$c:Int!){user(login:$l){"
+             "videos(first:$v,type:ARCHIVE,sort:TIME){edges{node{id title lengthSeconds createdAt "
              "previewThumbnailURL(width:320,height:180) self{viewingHistory{position}}}}} "
-             "clips(first:6,criteria:{period:LAST_WEEK}){edges{node{slug title durationSeconds viewCount "
+             "clips(first:$c,criteria:{period:LAST_WEEK}){edges{node{slug title durationSeconds viewCount "
              "thumbnailURL}}}}}")
-    user = twitch_gql(query, {"l": login})["user"] or {}
+    user = twitch_gql(query, {"l": login, "v": vods, "c": clips})["user"] or {}
     vods = [{"title": n["title"], "date": n["createdAt"][:10], "seconds": n["lengthSeconds"],
              "thumb": n["previewThumbnailURL"], "url": f"https://www.twitch.tv/videos/{n['id']}",
              "position": (((n.get("self") or {}).get("viewingHistory") or {}).get("position"))}
@@ -269,6 +270,22 @@ def replays(login):
             item["position"] = entry["position"]
         item["finished"] = history.finished(item.get("position") or 0, item.get("seconds"))
     return result
+
+
+def replays_more(login, kind, offset):
+    """"Load more" in the Replays tab: the next replays (8) or clips (6) after offset"""
+    if login not in read_streamers() or kind not in ("vods", "clips"):
+        raise ValueError(tr("unknown streamer"))
+    page = 8 if kind == "vods" else 6
+    data = fetch_replays(login, offset + page if kind == "vods" else 1, offset + page if kind == "clips" else 1)
+    items = data[kind][offset:]
+    known = {e["key"]: e for e in history.read_history()}
+    for item in items:
+        entry = known.get(history.media_key(item["url"])[0])
+        if entry:
+            item["position"] = entry["position"]
+        item["finished"] = history.finished(item.get("position") or 0, item.get("seconds"))
+    return {"items": items, "more": len(items) >= page}
 
 
 # Streamer list editable from the page: adding (after checking on Twitch) and removing. The comment lines of

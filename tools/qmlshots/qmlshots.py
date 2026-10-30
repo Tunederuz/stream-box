@@ -54,6 +54,7 @@ STEPS = (
     + keys("right down down down down ok back")                   # grid scrolls, options
     + scene(2, "right right ok")                                  # Replays: another streamer
     + keys("down right right right right down right up left left left ok back")   # rows, resume dialog
+    + scene(2, "down" + " right" * 12 + " ok right right")   # Replays: "Load more" at the end of the row, then the new items
     + scene(3, "up down right right")                             # YouTube: first video row, search, recommended
     + keys("down right right right right menu down back")         # subscriptions, options
     + keys("down down right up up up")                            # channel rows

@@ -215,6 +215,13 @@ def yt_search(query):
         entries = json.loads(r.stdout).get("entries") or []
     except ValueError:
         raise ValueError(tr("YouTube search unavailable for now.")) from None
+    results, channels = search_entries(entries)
+    yt_searches[query.lower()] = (time.time(), results, channels)
+    return yt_search_out(results, channels)
+
+
+def search_entries(entries):
+    """Videos and channels of a yt-dlp flat search"""
     results, channels = [], []
     for e in entries:
         if re.fullmatch(r"UC[\w-]{22}", e.get("id") or ""):
@@ -231,8 +238,41 @@ def yt_search(query):
                         "seconds": e.get("duration"), "views": e.get("view_count"),
                         "thumb": f"https://i.ytimg.com/vi/{e['id']}/mqdefault.jpg",
                         "url": f"https://www.youtube.com/watch?v={e['id']}"})
-    yt_searches[query.lower()] = (time.time(), results, channels)
-    return yt_search_out(results, channels)
+    return results, channels
+
+
+def flat_playlist(target, offset, count):
+    """yt-dlp's flat listing of items offset+1 … offset+count of a search or a channel's videos: its JSON"""
+    r = subprocess.run([YTDLP, "--flat-playlist", "-J", "--no-warnings", "--extractor-args", "youtube:lang=fr",
+                        "--playlist-items", f"{offset + 1}:{offset + count}", target],
+                       capture_output=True, text=True, timeout=60)
+    try:
+        return json.loads(r.stdout)
+    except ValueError:
+        raise ValueError(tr("YouTube unreachable for now")) from None
+
+
+def yt_search_more(query, offset, count=20):
+    """"Load more" in the search results: the next videos (TV menu)"""
+    query = " ".join(query.split())[:100]
+    if not query:
+        return {"items": [], "more": False}
+    entries = flat_playlist(f"ytsearch{offset + count}:{query}", offset, count).get("entries") or []
+    return {"items": with_progress(search_entries(entries)[0]), "more": len(entries) >= count}
+
+
+def yt_channel_more(channel_id, offset, count=15):
+    """"Load more" in a channel's row: its older videos (the RSS feed only has the latest 15)"""
+    if not re.fullmatch(r"UC[\w-]{22}", channel_id or ""):
+        raise ValueError(tr("unknown channel"))
+    data = flat_playlist(f"https://www.youtube.com/channel/{channel_id}/videos", offset, count)
+    entries = data.get("entries") or []
+    name = data.get("channel") or data.get("uploader") or data.get("title") or ""
+    videos = [{"id": e["id"], "title": e.get("title") or "", "channel": name, "seconds": e.get("duration"),
+               "views": e.get("view_count"), "thumb": f"https://i.ytimg.com/vi/{e['id']}/mqdefault.jpg",
+               "url": f"https://www.youtube.com/watch?v={e['id']}", "channel_id": channel_id}
+              for e in entries if re.fullmatch(r"[\w-]{11}", e.get("id") or "")]
+    return {"items": with_progress(videos), "more": len(entries) >= count}
 
 
 def yt_search_out(results, channels):

@@ -51,6 +51,8 @@ Item {
     property var follows: null
     property var replays: ({})
     property var history: null
+    // "Load more" at the end of rows (/api/more): id "<source>|<key>|<query>" → {items, loading, done}
+    property var moreRows: ({})
     property var gs: null      // games streamed from PCs (/api/gamestream: the PCs, pairing, their games)
     property int gsPc: 0       // PC link tab: the chosen PC (chips above), focus on the chips (gsRow 0) or its games
     property int gsRow: 0
@@ -270,6 +272,42 @@ Item {
         })
     }
     // Rows of the YouTube tab: search, results, one per channel
+    // Where a row's next items come from (/api/more), or null: search results, a YouTube channel, a library's recent
+    // additions, a streamer's replays and clips
+    function moreSource(row) {
+        if (row.kind === "results" && !libTab && ytResults) return { source: "yt_search", key: "", q: ytResults.query }
+        if (row.kind === "channel") return { source: "yt_channel", key: row.key }
+        if (row.kind === "preview" && !libTab && ytPreview) return { source: "yt_channel", key: ytPreview.id }
+        if (row.kind === "lib" && row.key.indexOf("lib:") === 0)
+            return { source: tabId === "plex" ? "plex_lib" : "jellyfin_lib", key: row.key.slice(4) }
+        if (row.kind === "vods" || row.kind === "clips") return { source: "twitch_" + row.kind, key: rpLogin }
+        return null
+    }
+    // The row with the items already loaded by "Load more", then the "Load more" card itself while there may be more
+    function withMore(row) {
+        var src = row.items && row.items.length && !row.loading ? moreSource(row) : null
+        if (!src) return row
+        var id = src.source + "|" + src.key + "|" + (src.q || ""), m = moreRows[id] || {}
+        var seen = {}, items = []
+        row.items.concat(m.items || []).forEach(function (it) {
+            var k = it.url || it.id || JSON.stringify(it)
+            if (!seen[k]) { seen[k] = true; items.push(it) }
+        })
+        if (!m.done) items.push({ more: true, loading: !!m.loading, title: tr("Load more"), moreId: id, src: src, offset: items.length })
+        return Object.assign({}, row, { items: items })
+    }
+    function loadMore(card) {
+        var m = moreRows[card.moreId] || {}
+        if (m.loading || m.done) return
+        var set = function (v) { var all = Object.assign({}, moreRows); all[card.moreId] = Object.assign({}, moreRows[card.moreId] || {}, v); moreRows = all }
+        set({ loading: true })
+        call("GET", "/api/more?source=" + card.src.source + "&key=" + encodeURIComponent(card.src.key) + "&q="
+             + encodeURIComponent(card.src.q || "") + "&offset=" + card.offset, undefined, function (d) {
+            var have = (moreRows[card.moreId] || {}).items || []
+            if (!d || !d.items) set({ loading: false, done: true })   // (nothing more, or unreachable: the card goes)
+            else set({ loading: false, items: have.concat(d.items), done: !d.more || !d.items.length })
+        })
+    }
     function ytRows() {
         var rows = [{ kind: "search" }]
         if (ytResults && ytResults.channels.length)
@@ -290,7 +328,7 @@ Item {
         var chans = yt ? yt.channels : []
         for (var i = 0; i < chans.length; i++)
             rows.push({ kind: "channel", key: chans[i].id, title: chans[i].name, avatar: chans[i].avatar, items: chans[i].videos || [] })
-        return rows
+        return rows.map(withMore)
     }
     // Channel found by the search: see its videos (row just below the channels), add or remove it
     function ytChannelMenu(c) {
@@ -489,7 +527,7 @@ Item {
             for (var i = 0; i < home.libraries.length; i++)
                 rows.push({ kind: "lib", key: "lib:" + home.libraries[i].id, title: tr("{name} · recently added", { name: home.libraries[i].name }), items: home.libraries[i].items })
         }
-        return rows
+        return rows.map(withMore)
     }
     function mediaRows() { return libTab ? libRows() : ytRows() }
     // Chosen series (or season): its episodes in a row just below the search, focus on the first unwatched
@@ -527,6 +565,7 @@ Item {
         return h > 0 ? h + " h " + (m < 10 ? "0" : "") + m : m + " min"
     }
     function cardMeta(row, it) {
+        if (it.more) return it.loading ? tr("Loading…") : ""
         var parts
         if (libTab)
             parts = it.type === "Series" ? [it.unplayed ? tr("{n} unwatched", { n: it.unplayed }) : tr("Series"), it.year]
@@ -723,7 +762,7 @@ Item {
             if (d.vods.length) rows.push({ kind: "vods", title: tr("Replays"), items: d.vods })
             if (d.clips.length) rows.push({ kind: "clips", title: tr("Clips of the week"), items: d.clips })
         }
-        return rows
+        return rows.map(withMore)
     }
     function prettyMode(m) { return String(m).replace("x", " × ").replace("@", " · ") + " Hz" }
     // Settings tab: sections (one page each, Back or ◀ returns to the list), each with what it holds and an alert when
@@ -1651,6 +1690,8 @@ Item {
         else if (k === "down") rpRow = Math.min(rows.length - 1, rpRow + 1)
         else if (k === "left") { if (sel === 0) area = "rail"; else { s[rpRow] = sel - 1; rpSel = s } }
         else if (k === "right") { s[rpRow] = Math.min(row.items.length - 1, sel + 1); rpSel = s }
+        else if (k === "ok" && row.items[sel] && row.items[sel].more) loadMore(row.items[sel])
+        else if (k === "menu" && row.items[sel] && row.items[sel].more) return
         else if (k === "ok") {
             if (row.kind === "chips") {
                 var name = row.items[sel]
@@ -1676,6 +1717,9 @@ Item {
         else if (k === "down") setRow(Math.min(rows.length - 1, r + 1))
         else if (k === "left") { if (sel === 0) area = "rail"; else { s[row.key] = sel - 1; setMediaSel(s) } }
         else if (k === "right") { s[row.key] = Math.min(row.items.length - 1, sel + 1); setMediaSel(s) }
+        else if ((k === "ok" || k === "menu") && row.items[sel] && row.items[sel].more) {   // "Load more" (no options)
+            if (k === "ok") loadMore(row.items[sel])
+        }
         else if (k === "menu" && row.items[sel]) {   // ≡: the options of the card, whatever the row
             var it = row.items[sel]
             var chan = row.kind === "channel" ? row.key : it.channel_id

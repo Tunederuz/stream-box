@@ -108,7 +108,7 @@ Item {
                             title: it.title || ""
                             thumb: it.thumb || ""
                             meta: menu.cardMeta(row, it)
-                            glyph: it.connect ? "+" : "▶"
+                            glyph: it.connect || it.more ? "+" : "▶"
                             progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : (it.percent || 0) / 100)
                             accent: menu.accent
                             focused: menu.area === "content" && menu.mRow === r && index === (menu.mSel[row.key] || 0)

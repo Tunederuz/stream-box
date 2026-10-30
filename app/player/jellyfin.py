@@ -102,6 +102,17 @@ def jellyfin_home():
     return home
 
 
+def jellyfin_more(library_id, offset, count=16):
+    """"Load more" in a library's row: the next items added, newest first (Items/Latest has no paging: the same order
+    from the items list)"""
+    if not re.fullmatch(r"[0-9a-f]{32}", library_id or ""):
+        raise ValueError(tr("unknown library"))
+    items = jf_api("/Users/{user}/Items", params={
+        "ParentId": library_id, "Recursive": "true", "IncludeItemTypes": "Movie,Series,Video",
+        "SortBy": "DateCreated", "SortOrder": "Descending", "StartIndex": offset, "Limit": count, **JF_FIELDS})["Items"]
+    return {"items": [jf_item(i) for i in items], "more": len(items) >= count}
+
+
 def jellyfin_search(query):
     query = " ".join(query.split())[:100]
     if not query:
