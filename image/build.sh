@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Owlink: builds the disk image (image/mkosi.output/stream-box.raw) in an Arch container with mkosi, without
+# Inlet: builds the disk image (image/mkosi.output/stream-box.raw) in an Arch container with mkosi, without
 # installing anything on the machine. Docker required; the container is privileged (mounts, systemd-repart).
 #   bash image/build.sh            builds the image
 #   bash image/build.sh vm         boots it in a virtual machine (QEMU, UEFI) to try it

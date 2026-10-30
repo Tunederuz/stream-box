@@ -1,4 +1,4 @@
-"""Owlink: backup and restore of settings and connections, without a command line.
+"""Inlet: backup and restore of settings and connections, without a command line.
 
 TV Settings → Backup and installation → "Backup and restore": backup to a USB drive, or restore of a backup found on
 it. Companion app (Settings → Backup and installation): download of the file to the phone, and restore of an uploaded
@@ -94,7 +94,7 @@ def restore(data):
     try:
         tar = tarfile.open(fileobj=io.BytesIO(data), mode="r:*")
     except (tarfile.TarError, EOFError, OSError):
-        raise ValueError(tr("This file is not an Owlink backup."))
+        raise ValueError(tr("This file is not an Inlet backup."))
     with tar:
         members, wifi = [], []
         for m in tar.getmembers():
@@ -113,7 +113,7 @@ def restore(data):
             m.name = f"{HOME.lstrip('/')}/{rel}"
             members.append(m)
         if not members:
-            raise ValueError(tr("This file is not an Owlink backup."))
+            raise ValueError(tr("This file is not an Inlet backup."))
         os.makedirs(os.path.dirname(SAFETY), exist_ok=True)
         with open(os.open(SAFETY, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as f:
             f.write(create())

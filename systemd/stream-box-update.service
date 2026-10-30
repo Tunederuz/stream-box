@@ -1,5 +1,5 @@
 [Unit]
-Description=Owlink: update of the dependencies (streamlink, yt-dlp, jellyfin-mpv-shim…)
+Description=Inlet: update of the dependencies (streamlink, yt-dlp, jellyfin-mpv-shim…)
 
 [Service]
 Type=oneshot

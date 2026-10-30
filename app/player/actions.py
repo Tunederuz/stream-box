@@ -1,4 +1,4 @@
-"""Owlink: actions of the companion app API (POST /api/<name> with a JSON body), also used by the TV menu, ui.py and
+"""Inlet: actions of the companion app API (POST /api/<name> with a JSON body), also used by the TV menu, ui.py and
 mqtt_bridge.py. One small handler per action in ACTIONS; a refused request raises ValueError (HTTP 400). Standard
 library only.
 """
@@ -16,7 +16,7 @@ import youtube    # youtube.py: channels, account, "TV app" access
 from common import mpv
 from i18n import tr
 # The box's system part (sound output, backup, Bluetooth, resolution, installation, local update, Wi-Fi, power, SSH,
-# developer mode, updates): None in the Owlink app, whose actions below are then unknown
+# developer mode, updates): None in the Inlet app, whose actions below are then unknown
 from sysparts import SYSTEM, audio, backup, btsetup, display, installer, localupdate, netsetup, system
 
 keyboard = {}   # TV menu search keyboard: {open, text, target, at}
@@ -228,7 +228,7 @@ ACTIONS = {
     "keyboard_input": keyboard_input,
     "remote_url": lambda body: ambient.set_remote_url(str(body.get("url", ""))[:300]),
 }
-if SYSTEM:   # the box's system (the Owlink app leaves it to its OS: these actions are unknown there)
+if SYSTEM:   # the box's system (the Inlet app leaves it to its OS: these actions are unknown there)
     ACTIONS.update({
         # direct: developer mode, from a branch (main by default)
         "update": lambda body: system.start_update(bool(body.get("direct")), str(body.get("branch") or "main")),

@@ -1,6 +1,6 @@
-# Owlink
+# Inlet
 
-Formerly Stream Box (renamed after 0.5.0): the name shown to people is Owlink; the internal names stay (folder
+Formerly Stream Box (renamed after 0.5.0): the name shown to people is Inlet; the internal names stay (folder
 `stream-box`, `~/.config/stream-box`, `stream-box-*` units and scripts, `user-data/streambox`, image files
 `stream-box_<version>`), so installed boxes, their data and their updates keep working. Logo: `assets/brand/` (SVG,
 written by `tools/brand/make.py`; `tools/brand/render.sh` makes the PNGs: companion app icons, boot screen, Plymouth).
@@ -40,7 +40,7 @@ Installation and update: `install.sh` (see the README); settings backup: TV Sett
 - **Mode depending on the keyboard**: `stream-box-boot-mode.service` (root, before the display manager) runs
   `/usr/local/lib/stream-box/boot-mode.py` (root copy of `boot-mode.py`, installed by `install.sh`, which passes it
   `--dropin` depending on the display manager). A device with letter keys (Q, A, Z, space) = keyboard. Without a
-  keyboard, it writes `<.conf.d folder>/50-stream-box.conf` (autologin media + Owlink session). With a keyboard,
+  keyboard, it writes `<.conf.d folder>/50-stream-box.conf` (autologin media + Inlet session). With a keyboard,
   it deletes it and the login screen is shown. The main config file must not contain an `[Autologin]` section: it
   would take precedence over the `.conf.d` folder (`install.sh` removes it, with a `.bak-stream-box` backup). The
   choice is made at boot only. After changing `boot-mode.py`, run `install.sh` again (or copy it again as root).
@@ -63,29 +63,29 @@ Installation and update: `install.sh` (see the README); settings backup: TV Sett
 - No passwordless sudo for `media`. mpv and cage come from the system packages.
 
 ## Files (`/home/media/stream-box/`)
-Layout (since 0.5.0, phase 1 of the split between the player and the system, see the Owlink app idea):
+Layout (since 0.5.0, phase 1 of the split between the player and the system, see the Inlet app idea):
 `app/player/` the portable modules (TV app, companion app server, Twitch, YouTube, Jellyfin, Plex, playback,
 history, chat, i18n) and `ui.qml` next to `ui.py` (it imports `../../qml`); `app/system/` the box's system (system.py,
 display, audio, input, netsetup, btsetup, btagent, installer, localupdate, backup, boot-mode, mqtt_bridge). Both
 folders are on the import path (the scripts started directly add them, tests/__init__.py too): the modules import
 each other by name; `common.DIR` and `i18n.DIR` are the repository, two levels up. The system part is optional
-(Owlink app: the app on an OS that runs itself): the player's modules take it from `sysparts.py` (`SYSTEM`, and
+(Inlet app: the app on an OS that runs itself): the player's modules take it from `sysparts.py` (`SYSTEM`, and
 each module or None; decided by the folder being there, an import error with the folder is a real error); api.py and
 actions.py then declare no system route or action (404, "unknown action"), quickmenu.py leaves those rows out,
 remote.py starts no system loop, ambient.py and images.py do without the setup access point and grim;
 `GET /api/features` → {system}. tests/test_api.py runs its tests twice: from the repository and from a copy without
-app/system; the interface follows `features.system` (false: Owlink app): the QML menu (`features`, `sysOn`, read at each
+app/system; the interface follows `features.system` (false: Inlet app): the QML menu (`features`, `sysOn`, read at each
 opening; the box's until read) drops the Updates and Backup sections, the power options and the power-key window, the
 resolution, audio output, Bluetooth pairing, power button and dependencies rows, reads no system route, and words the
 section hints for what is left; the companion app sets `.no-system` on its root and hides the `[data-system]` blocks
 (power, Picture and sound, Box status and updates, Backup, Wi-Fi) and reads no system route (`featuresReady`).
 Checked by tests/page/check-page.js (a second pass without the system part) and `QMLSHOTS_PLAYER=1
-tools/qmlshots/run.sh shoot` (system routes 404, as in the Owlink app); `lua/` `stream-box.lua` (its `DIR` is
+tools/qmlshots/run.sh shoot` (system routes 404, as in the Inlet app); `lua/` `stream-box.lua` (its `DIR` is
 the repository, its modules next to it); `qml/` the QML; `web/` the companion app page, PWA files, icons (served by
 api.py from `web/`); `scripts/` start.sh, player.sh, mpv-args.sh (the player's mpv options,
-sourced by player.sh and stream-player.sh), stream-player.sh (the Owlink app: remote.py, cast.js, token server,
+sourced by player.sh and stream-player.sh), stream-player.sh (the Inlet app: remote.py, cast.js, token server,
 Jellyfin shim and ui.py, no restart loop, everything stopped with it), update.sh, install.sh, backup.sh,
-dev-pacman.sh (their `DIR` / `SRC` is the repository, one level up); `flatpak/` the Owlink app's Flatpak
+dev-pacman.sh (their `DIR` / `SRC` is the repository, one level up); `flatpak/` the Inlet app's Flatpak
 (manifest: libmpv built with LuaJIT, libass, libplacebo, krb5 for the PySide6 wheel; pip and npm at build time, with
 the network; `--persist` keeps the box's paths ~/.config/stream-box… in ~/.var/app/<id>; `build.sh` builds it in
 Docker, cache in ~/.cache/stream-box-flatpak). Tools are found by `common.tool()` (~/.local/bin, otherwise the
@@ -806,7 +806,7 @@ remote.py dies).
 ### Wi-Fi setup mode (netsetup.py)
 
 Without network (no active Ethernet or Wi-Fi connection) and with a Wi-Fi card, remote.py (`netsetup.setup_loop`,
-25 s after boot) creates the NetworkManager access point `stream-box-setup` ("Owlink XXXX", password
+25 s after boot) creates the NetworkManager access point `stream-box-setup` ("Inlet XXXX", password
 generated once, `~/.config/stream-box/hotspot.json`, box address 10.42.0.1, dnsmasq for DHCP). The home
 screen (AmbientScreen.qml; text with mpv alone) shows "1. Connect your phone" (WIFI:… QR code) and "2. Open
 the setup" (QR code http://10.42.0.1:8080/). The page, opened on 10.42.0.1, opens on the Wi-Fi section
@@ -900,7 +900,7 @@ The popup is shown alone over the video, without the menu behind it (`powerOnly`
 
 ### YouTube Cast
 
-`cast/cast.js` (Node, `yt-cast-receiver` 2.1.0, unofficial protocol): the box appears as "Owlink" in the
+`cast/cast.js` (Node, `yt-cast-receiver` 2.1.0, unofficial protocol): the box appears as "Inlet" in the
 YouTube app's Cast button (DIAL / SSDP discovery on the local network, TCP port 3000, UDP 1900; firewall to
 open if there is one). Cast video → `POST /api/play` {url, start} (position set by the app, `play(at=)`);
 pause, resume, seek, volume → mpv IPC; state changed from the remote sent back to the app (`notifyExternalStateChange`),
@@ -1010,7 +1010,7 @@ KernelCommandLine): each UKI goes with its own system partition, falling back to
 previous system. `SplitArtifacts=uki,partitions`: `bash image/build.sh release` (after build; `FROM=stream-box-test`
 for the test image) makes mkosi.output/release: stream-box.raw.xz (disk image, to install),
 stream-box_<version>.root-x86-64.raw.xz, stream-box_<version>.efi, SHA256SUMS. The workflow signs SHA256SUMS
-(SHA256SUMS.gpg) with the secret RELEASE_SIGNING_KEY (ed25519 key "Owlink releases", fingerprint
+(SHA256SUMS.gpg) with the secret RELEASE_SIGNING_KEY (ed25519 key "Inlet releases", fingerprint
 21B56DA5485308DDF1F7E8585167D4557A63D205; public part in image/release-signing-key.asc and, binary, in
 /etc/systemd/import-pubring.pgp of the image, which systemd-sysupdate checks) and stops before building without it.
 On the box: /usr/lib/sysupdate.d/10-root.transfer (latest release's system partition → the root partition not in use,
@@ -1190,7 +1190,7 @@ all of them during a scan or pairing from the menu (btsetup.py touches
 
 ### Boot screen (Plymouth, image)
 `stream-box` theme of script type (repository files, `mkosi.extra/usr/share/plymouth/themes/stream-box/`: logo
-`watermark.png` (rounded icon + "Owlink"), spinning wheel `spinner.png`, `stream-box.script`): everything is scaled
+`watermark.png` (rounded icon + "Inlet"), spinning wheel `spinner.png`, `stream-box.script`): everything is scaled
 to the screen height (drawn for 1080 lines), same rendering at 1080p, 4K or 1366 × 768 without forcing
 a mode (no `video=`: a screen that does not accept it would stay black). Plymouth starts from the initrd
 (`InitrdProfiles=plymouth`, theme and `/etc/plymouth` copied by `mkosi.initrd.conf/`), i915 in the initrd and loaded
@@ -1210,15 +1210,15 @@ run, never published: `/etc/ssh/stream-box-test-keys`). QEMU in the mkosi contai
 
 ### Regular keyboard
 By default (input.py `DEFAULTS`, stream-box.lua `KEYS` fallback): arrows, Enter = OK, Esc / Backspace =
-Back, Tab, Windows, Home or M = TV menu (Tab for the Owlink app: a desktop keeps the Windows key), O = options (≡), H = home screen, Space = play / pause (action `corner`),
+Back, Tab, Windows, Home or M = TV menu (Tab for the Inlet app: a desktop keeps the Windows key), O = options (≡), H = home screen, Space = play / pause (action `corner`),
 + / − (and numeric keypad) = volume, media keys (next / previous = → / ←, stop = Back). Linux codes are
 positional (QWERTY): the M of an AZERTY keyboard arrives as KEY_SEMICOLON, mapped too. While the search keyboard
 is open, the Qt app types the computer's keys into it (Box.setTyping / keyTyped: characters, Backspace, Enter).
 
 The qmlshots scenario types in the search keyboard (`type` steps).
 
-### Owlink app window
-The TV menu stays driven by keys only (remote, gamepad, keyboard; no mouse navigation, the user's choice). Owlink app
+### Inlet app window
+The TV menu stays driven by keys only (remote, gamepad, keyboard; no mouse navigation, the user's choice). Inlet app
 on a desktop: an ordinary 1280×720 window (`WINDOWED`, F11 or a double click: full screen); full screen in SteamOS's
 Game mode (XDG_CURRENT_DESKTOP=gamescope).
 

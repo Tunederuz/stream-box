@@ -1,10 +1,10 @@
-# Owlink app: the Owlink player as an app (SteamOS, a desktop…), without the box's system part.
+# Inlet app: the Inlet player as an app (SteamOS, a desktop…), without the box's system part.
 # Built by flatpak/build.sh (in Docker): pip, npm and the token server need the network while building.
-id: io.github.tunederuz.Owlink
+id: io.github.tunederuz.Inlet
 runtime: org.freedesktop.Platform
 runtime-version: '25.08'
 sdk: org.freedesktop.Sdk
-command: owlink
+command: inlet
 finish-args:
   - --share=network
   - --share=ipc
@@ -105,19 +105,19 @@ modules:
         && npm prune --omit=dev --no-audit --no-fund --loglevel=error
       - mkdir -p /app/lib/bgutil-pot && cp -r pot/server /app/lib/bgutil-pot/
 
-  - name: owlink
+  - name: inlet
     buildsystem: simple
     build-options:
       build-args: [--share=network]
     build-commands:
       - mkdir -p /app/stream-box
       - cp -r app lua qml web locales assets cast scripts /app/stream-box/
-      - rm -rf /app/stream-box/app/system   # Owlink app: no system part
+      - rm -rf /app/stream-box/app/system   # Inlet app: no system part
       - cd /app/stream-box/cast && npm ci --omit=dev --no-audit --no-fund --loglevel=error
-      - install -Dm755 flatpak/owlink /app/bin/owlink
-      - install -Dm644 flatpak/io.github.tunederuz.Owlink.desktop -t /app/share/applications
-      - install -Dm644 flatpak/io.github.tunederuz.Owlink.metainfo.xml -t /app/share/metainfo
-      - install -Dm644 assets/brand/owlink-icon.svg /app/share/icons/hicolor/scalable/apps/io.github.tunederuz.Owlink.svg
+      - install -Dm755 flatpak/inlet /app/bin/inlet
+      - install -Dm644 flatpak/io.github.tunederuz.Inlet.desktop -t /app/share/applications
+      - install -Dm644 flatpak/io.github.tunederuz.Inlet.metainfo.xml -t /app/share/metainfo
+      - install -Dm644 assets/brand/inlet-icon.svg /app/share/icons/hicolor/scalable/apps/io.github.tunederuz.Inlet.svg
     sources:
       - type: dir
         path: ..

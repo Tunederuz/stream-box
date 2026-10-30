@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Owlink: system services enabled and graphical boot. Here and not in mkosi.postinst.chroot: mkosi runs
+# Inlet: system services enabled and graphical boot. Here and not in mkosi.postinst.chroot: mkosi runs
 # "systemctl preset-all" in between, which would put everything back to Arch's defaults.
 set -euo pipefail
 systemctl enable greetd.service NetworkManager.service bluetooth.service systemd-timesyncd.service \

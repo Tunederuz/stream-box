@@ -1,4 +1,4 @@
-"""Owlink: installation to an internal disk, from the box running on a USB drive (disk image, image/).
+"""Inlet: installation to an internal disk, from the box running on a USB drive (disk image, image/).
 
 TV System menu → "Install on this PC": disk choice, confirmation, progress. The work is done by root
 (/usr/local/lib/stream-box/install-to-disk, started by stream-box-install@<disk>.service; polkit rule

@@ -1,4 +1,4 @@
--- Owlink: small menu of the simplified version (streamer choice, chat corner, opened by the remote),
+-- Inlet: small menu of the simplified version (streamer choice, chat corner, opened by the remote),
 -- and management of streamlink, which serves the chosen channel's stream over local HTTP to this mpv.
 -- The channel, corner and chat visibility are published in user-data/streambox/* for chat_overlay.py.
 -- Two modes: "twitch" (stream of the chosen channel) and "media" (video sent from the companion app or

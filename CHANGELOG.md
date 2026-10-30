@@ -7,11 +7,11 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 ## [Unreleased]
 
 ### Changed
-- Stream Box is now **Owlink**, with a new logo: TV menu, boot screen, companion app (its icon too), Cast and
+- Stream Box is now **Inlet**, with a new logo: TV menu, boot screen, companion app (its icon too), Cast and
   Jellyfin's "Play on" lists, Plex, Home Assistant. Settings, accounts and updates are untouched.
 
 ### Added
-- Owlink app (preview): the player as a Flatpak app, for SteamOS or a desktop, without the box's system settings
+- Inlet app (preview): the player as a Flatpak app, for SteamOS or a desktop, without the box's system settings
   (its OS runs itself). Built with `flatpak/build.sh`; Settings → "Quit" closes it. It opens in a window (F11 or a
   double click: full screen) and needs no first setup from a phone.
 - Keyboard: Tab opens and closes the TV menu; in the search, the computer's keys type directly.

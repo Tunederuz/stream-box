@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Owlink: prepares pacman on a box installed from the image, in developer mode (sudo without password):
+# Inlet: prepares pacman on a box installed from the image, in developer mode (sudo without password):
 #   ssh media@<box>  then  bash ~/stream-box/scripts/dev-pacman.sh
 # The official image deliberately has neither mirror nor keyring: no packages added outside developer mode.
 set -euo pipefail

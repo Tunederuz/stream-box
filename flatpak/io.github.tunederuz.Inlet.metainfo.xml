@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.tunederuz.Owlink</id>
-  <name>Owlink</name>
+  <id>io.github.tunederuz.Inlet</id>
+  <name>Inlet</name>
   <summary>Twitch, YouTube, Jellyfin and Plex on the TV</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <description>
-    <p>The Owlink player as an app: lives with their chat, YouTube, Jellyfin and Plex in a TV interface driven by
+    <p>The Inlet player as an app: lives with their chat, YouTube, Jellyfin and Plex in a TV interface driven by
     a remote, a controller or the companion app on a phone.</p>
   </description>
-  <launchable type="desktop-id">io.github.tunederuz.Owlink.desktop</launchable>
+  <launchable type="desktop-id">io.github.tunederuz.Inlet.desktop</launchable>
   <url type="homepage">https://github.com/Tunederuz/stream-box</url>
   <content_rating type="oars-1.1"/>
 </component>

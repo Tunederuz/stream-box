@@ -1,4 +1,4 @@
-"""Owlink: interface language (TV and companion app).
+"""Inlet: interface language (TV and companion app).
 
 Texts are written in English in the code; translations live in locales/<lang>.json, a flat map from the English
 text to the translated one. Placeholders use {name}: tr("Connected: {login}", login="abc").

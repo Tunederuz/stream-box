@@ -1,5 +1,5 @@
 #!/bin/sh
-# Owlink: Bluetooth radio off when the box shuts down (stream-box-bt-disconnect.service). A remote still connected
+# Inlet: Bluetooth radio off when the box shuts down (stream-box-bt-disconnect.service). A remote still connected
 # when the power goes off makes the Bluetooth dongle wake the box right back up; a mere disconnection is not enough
 # (the remote reconnects at once, the dongle answers and wakes the box): devices are disconnected, then the adapter is
 # powered off. Nothing is remembered: bluetoothd powers the adapter on again at boot (AutoEnable, default true), and

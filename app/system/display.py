@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Owlink: video output resolution, through wlr-randr (cage supports wlr-output-management).
+"""Inlet: video output resolution, through wlr-randr (cage supports wlr-output-management).
 
 Only 60 Hz modes (or close) are offered: many mini PCs only output 4K at 30 Hz over HDMI, which drops every other
 frame of a 60 fps stream. "auto" = the TV's preferred mode if it is 60 Hz, otherwise the largest resolution at 60 Hz.
@@ -13,7 +13,7 @@ Also imported by remote.py.
 import json, os, re, subprocess, sys
 
 # app/player and app/system on the import path: the modules import each other by name, from either folder (system/
-# is not part of the Owlink app)
+# is not part of the Inlet app)
 sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), d) for d in ("player", "system")]
 
 from i18n import tr

@@ -1,4 +1,4 @@
-"""Owlink: Twitch chat with emotes for the Qt app (ui.py), shown in QML (qml/ChatOverlay.qml).
+"""Inlet: Twitch chat with emotes for the Qt app (ui.py), shown in QML (qml/ChatOverlay.qml).
 
 Same reading as chat_overlay.py (anonymous IRC, read-only), but each message is split into pieces: words and
 emotes. Twitch emotes: positions given by the "emotes" tag of the message. 7TV, BTTV and FFZ emotes: by their name,

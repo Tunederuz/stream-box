@@ -1,4 +1,4 @@
-"""Owlink: YouTube for the companion app and the TV menu. Followed channels (RSS feeds), search (yt-dlp), automatic
+"""Inlet: YouTube for the companion app and the TV menu. Followed channels (RSS feeds), search (yt-dlp), automatic
 subtitles, seek bar preview, and the YouTube account through the "TV app" access (cast/youtube_tv.js: sign-in with a
 code, subscriptions, recommendations, progress synced both ways). Standard library only.
 """

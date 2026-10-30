@@ -1,6 +1,6 @@
-# Owlink: SSH access enabled or disabled from the TV System menu (remote.py, /api/ssh); %i: enable | disable
+# Inlet: SSH access enabled or disabled from the TV System menu (remote.py, /api/ssh); %i: enable | disable
 [Unit]
-Description=Owlink: SSH (%i)
+Description=Inlet: SSH (%i)
 
 [Service]
 Type=oneshot

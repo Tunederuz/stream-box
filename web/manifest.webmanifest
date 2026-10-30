@@ -1,7 +1,7 @@
 {
-  "name": "Owlink",
-  "short_name": "Owlink",
-  "description": "Owlink companion app",
+  "name": "Inlet",
+  "short_name": "Inlet",
+  "description": "Inlet companion app",
   "lang": "en",
   "start_url": "/",
   "scope": "/",

@@ -1,4 +1,4 @@
-// Owlink: media applies an update waiting for the user (stream-box-apply-update.service, nothing else): the
+// Inlet: media applies an update waiting for the user (stream-box-apply-update.service, nothing else): the
 // TV menu's "Restart now" at start or wake-up
 polkit.addRule(function (action, subject) {
     if (subject.user == "media" && action.id == "org.freedesktop.systemd1.manage-units" &&

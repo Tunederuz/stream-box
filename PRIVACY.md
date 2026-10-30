@@ -1,7 +1,7 @@
-# Owlink Privacy Policy
+# Inlet Privacy Policy
 
-Owlink is free software that turns a mini PC plugged into a TV into a Twitch, YouTube and Jellyfin player.
-Each box is installed and used by its owner, at home: there is no Owlink server.
+Inlet is free software that turns a mini PC plugged into a TV into a Twitch, YouTube and Jellyfin player.
+Each box is installed and used by its owner, at home: there is no Inlet server.
 
 ## YouTube account
 
@@ -24,14 +24,14 @@ and how far they got in each video.
 See also the [YouTube Terms of Service](https://www.youtube.com/t/terms) and the
 [Google Privacy Policy](https://policies.google.com/privacy).
 
-## Twitch followed channels (Owlink Twitch app)
+## Twitch followed channels (Inlet Twitch app)
 
 To show the channels the owner follows, the box asks Twitch for **read-only** access (`user:read:follows`) through the
-Owlink Twitch app, with a code typed on twitch.tv/activate.
+Inlet Twitch app, with a code typed on twitch.tv/activate.
 
 - Data read: the followed channels (name, picture) and which of them are live (title, game, viewers).
 - Where it goes: nowhere other than the box itself. The token is kept on the box, readable by its user only; the
-  Owlink app is only an identifier, there is no server behind it and its maintainers see nothing.
+  Inlet app is only an identifier, there is no server behind it and its maintainers see nothing.
 - Removing access: "Disconnect" in the companion app (Settings → Followed channels) deletes the box's token. Access
   can also be revoked at any time from Twitch (Settings → Connections).
 

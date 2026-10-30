@@ -1,9 +1,9 @@
-# Owlink: the latest release (see /usr/local/lib/stream-box/system-update). Started by remote.py when the user
+# Inlet: the latest release (see /usr/local/lib/stream-box/system-update). Started by remote.py when the user
 # accepts (media, allowed by /etc/polkit-1/rules.d/56-stream-box-update.rules).
 # No network-online.target: on the box it pulls systemd-networkd-wait-online, which never sees NetworkManager's network
 # and gives up after 2 min; without network, the update fails at its "download" step and says so.
 [Unit]
-Description=Owlink: system update
+Description=Inlet: system update
 
 [Service]
 Type=oneshot

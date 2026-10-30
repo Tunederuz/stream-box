@@ -1,65 +1,45 @@
 #!/usr/bin/env python3
-# Owlink logo: TV screen with owl tufts, two eyes, a signal in the middle, a link as the stand. Writes the SVG sources
-# of assets/brand/ (tools/brand/render.sh then makes the PNGs from them): python3 tools/brand/make.py
-# One geometry, several color sets (the mono one cuts the pupils out with a mask: true transparency).
-import math, os
+# Inlet logo: a screen open on its left side, a wave flowing into it. Writes the SVG sources of assets/brand/
+# (tools/brand/render.sh then makes the PNGs from them): python3 tools/brand/make.py
+import os, sys
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "brand")
+INK_DARK, INK_LIGHT, WATER, WATER_DEEP, NIGHT = "#e8eef0", "#142026", "#6fc3d9", "#1c7a93", "#101417"
+SCREEN = "M36 22 H74 A14 14 0 0 1 88 36 V64 A14 14 0 0 1 74 78 H36"      # open on the left
+WAVE = "M10 50 Q19.5 39 29 50 T48 50 T67 50"                             # three half-waves, ends inside
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "brand")
-def arc(r, a0, a1, cx=50, cy=18.5):
-    p = lambda a: (cx + r * math.cos(math.radians(a)), cy + r * math.sin(math.radians(a)))
-    (x0, y0), (x1, y1) = p(a0), p(a1)
-    return f"M{x0:.2f} {y0:.2f} A{r} {r} 0 0 1 {x1:.2f} {y1:.2f}"
-SCREEN = "M12 36 L7 13 L31 26 L69 26 L93 13 L88 36 L88 64 Q88 76 76 76 L24 76 Q12 76 12 64 Z"
-CHAIN = ("M45 84 L32.5 84 A6.5 6.5 0 0 0 32.5 97 L45 97 "     # left link, open toward the middle
-         "M55 84 L67.5 84 A6.5 6.5 0 0 1 67.5 97 L55 97 "      # right link
-         "M40 90.5 L60 90.5")                                               # the bar that joins them
+def mark(ink, water, w=8):
+    return (f'<path d="{SCREEN}" stroke="{ink}" stroke-width="{w}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>\n'
+            f'  <path d="{WAVE}" stroke="{water}" stroke-width="{w}" stroke-linecap="round" fill="none"/>')
 
-def mark(p, o, e, pupil, sig, eye_holes=False, bg=None):
-    """p: id prefix; o: outline/chain color; e: eyes; pupil: pupils (None: cut out); sig: signal."""
-    defs = ''
-    if eye_holes:
-        defs = f'''
-    <mask id="{p}e" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><rect width="100" height="100" fill="#fff"/><circle cx="38" cy="50" r="5.5" fill="#000"/><circle cx="62" cy="50" r="5.5" fill="#000"/></mask>'''
-    eyes = (f'<g{f" mask=\"url(#{p}e)\"" if eye_holes else ""}><circle cx="36" cy="49" r="12" fill="{e}"/><circle cx="64" cy="49" r="12" fill="{e}"/></g>'
-            + ("" if eye_holes else f'\n  <circle cx="38" cy="50" r="5.5" fill="{pupil}"/><circle cx="62" cy="50" r="5.5" fill="{pupil}"/>'))
-    return f'''<defs>
-    {defs}
-  </defs>{f"""
-  {bg}""" if bg else ""}
-  <path d="{SCREEN}" fill="none" stroke="{o}" stroke-width="7" stroke-linejoin="round"/>
-  {eyes}
-  <circle cx="50" cy="18.5" r="3" fill="{sig}"/>
-  <path d="{arc(7.5, -138, -42)}" fill="none" stroke="{sig}" stroke-width="5" stroke-linecap="round"/>
-  <path d="{arc(13.5, -136, -44)}" fill="none" stroke="{sig}" stroke-width="5" stroke-linecap="round" stroke-opacity=".5"/>
-  <path d="{CHAIN}" fill="none" stroke="{o}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>'''
+# The name, lowercase, in Jost (render.sh installs it to draw the PNGs)
+WORD = ('<text x="{x}" y="{y}" text-anchor="middle" font-family="Jost, sans-serif" font-weight="500" font-size="80" '
+        f'letter-spacing="2.4" fill="{INK_DARK}">inlet</text>')
 
-def svg(body, extra=""):
-    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"{extra}>\n  {body}\n</svg>\n'
+def svg(body, vb="0 0 100 100"):
+    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb}">\n  {body}\n</svg>\n'
 
 files = {
-    "owlink-mark.svg": svg(mark("d", "#c9b8ff", "#ffb547", "#14101f", "#ffb547")),          # dark backgrounds
-    "owlink-mark-light.svg": svg(mark("l", "#2a1f45", "#ffb547", "#2a1f45", "#e08a00")),    # light backgrounds
-    "owlink-mono.svg": svg(mark("m", "currentColor", "currentColor", None, "currentColor", eye_holes=True)),
-    # App icon: the mark on a night rounded square (Flatpak, Steam, launchers)
-    "owlink-icon.svg": svg('<rect width="100" height="100" rx="22" fill="#14101f"/>\n  <g transform="translate(11 10) scale(.78)">\n  '
-                           + mark("i", "#c9b8ff", "#ffb547", "#14101f", "#ffb547") + "\n  </g>"),
-    # Companion app icon (Android masks it into a circle or a squircle: full-bleed square, the mark in the safe zone)
-    "owlink-icon-maskable.svg": svg('<rect width="100" height="100" fill="#14101f"/>\n  <g transform="translate(20 19) scale(.6)">\n  '
-                                    + mark("k", "#c9b8ff", "#ffb547", "#14101f", "#ffb547") + "\n  </g>"),
-    # Boot screen (start.sh, 1920 × 1080) and the Plymouth watermark (640 × 330): the mark and the name
-    "owlink-splash.svg": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080">\n  <rect width="1920" height="1080" fill="#0b0710"/>\n'
-        '  <g transform="translate(850 300) scale(2.2)">\n  ' + mark("s", "#c9b8ff", "#ffb547", "#0b0710", "#ffb547") + '\n  </g>\n'
-        '  <text x="960" y="600" text-anchor="middle" font-family="Noto Sans, sans-serif" font-weight="700" font-size="64" fill="#ffffff">Owlink</text>\n</svg>\n',
-    "owlink-watermark.svg": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 330">\n'
-        '  <g transform="translate(210 0) scale(2.2)">\n  ' + mark("w", "#c9b8ff", "#ffb547", "#0b0710", "#ffb547") + '\n  </g>\n'
-        '  <text x="320" y="300" text-anchor="middle" font-family="Noto Sans, sans-serif" font-weight="700" font-size="64" fill="#ffffff">Owlink</text>\n</svg>\n',
-    # Favicon (16-32 px): thicker screen, eyes without pupils, the signal reduced to a dot and one wave, no chain
-    "owlink-favicon.svg": svg('''<rect width="100" height="100" rx="20" fill="#14101f"/>
-  <path d="M12 44 L6 18 L30 32 L70 32 L94 18 L88 44 L88 74 Q88 90 72 90 L28 90 Q12 90 12 74 Z" fill="none" stroke="#c9b8ff" stroke-width="11" stroke-linejoin="round"/>
-  <circle cx="36" cy="60" r="12" fill="#ffb547"/><circle cx="64" cy="60" r="12" fill="#ffb547"/>
-  <circle cx="50" cy="17" r="5" fill="#ffb547"/>
-  <path d="''' + arc(13, -140, -40, 50, 19) + '''" fill="none" stroke="#ffb547" stroke-width="7" stroke-linecap="round"/>'''),
+    "inlet-mark.svg": svg(mark(INK_DARK, WATER)),                  # dark backgrounds (TV)
+    "inlet-mark-light.svg": svg(mark(INK_LIGHT, WATER_DEEP)),      # light backgrounds
+    "inlet-mono.svg": svg(mark("currentColor", "currentColor")),   # one color
+    # App icon: night rounded square, the mark inside
+    "inlet-icon.svg": svg(f'<rect width="100" height="100" rx="22" fill="{NIGHT}"/>\n  <g transform="translate(14 14) scale(.72)">\n  '
+                          + mark(INK_DARK, WATER, 9) + "\n  </g>"),
+    # Companion app (Android masks it): full-bleed square, the mark in the safe zone
+    "inlet-icon-maskable.svg": svg(f'<rect width="100" height="100" fill="{NIGHT}"/>\n  <g transform="translate(20 20) scale(.6)">\n  '
+                                   + mark(INK_DARK, WATER, 9) + "\n  </g>"),
+    # 16-32 px: thicker strokes, the wave reduced to two half-waves
+    "inlet-favicon.svg": svg(f'<rect width="100" height="100" rx="20" fill="{NIGHT}"/>\n  '
+                             '<path d="M40 18 H72 A16 16 0 0 1 88 34 V66 A16 16 0 0 1 72 82 H40" stroke="#e8eef0" stroke-width="13" stroke-linecap="round" fill="none"/>\n  '
+                             '<path d="M12 50 Q24 36 36 50 T60 50" stroke="#6fc3d9" stroke-width="13" stroke-linecap="round" fill="none"/>'),
+    # Boot screen of start.sh (1920 × 1080) and the Plymouth watermark (640 × 330): the mark and the name, on the home
+    # screen's background (#0b0710, the same in the Plymouth script)
+    "inlet-splash.svg": svg('<rect width="1920" height="1080" fill="#0b0710"/>\n  <g transform="translate(850 290) scale(2.2)">\n  '
+                            + mark(INK_DARK, WATER) + '\n  </g>\n  ' + WORD.format(x=960, y=610), "0 0 1920 1080"),
+    "inlet-watermark.svg": svg('<g transform="translate(210 0) scale(2.2)">\n  ' + mark(INK_DARK, WATER) + '\n  </g>\n  '
+                               + WORD.format(x=320, y=310), "0 0 640 330"),
 }
+os.makedirs(OUT, exist_ok=True)
 for name, content in files.items():
     with open(os.path.join(OUT, name), "w") as f:
         f.write(content)

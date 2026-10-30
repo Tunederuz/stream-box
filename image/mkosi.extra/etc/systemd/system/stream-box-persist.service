@@ -1,7 +1,7 @@
-# Owlink: data partition mounted on /data and the persistent paths bound from it (see
+# Inlet: data partition mounted on /data and the persistent paths bound from it (see
 # /usr/local/lib/stream-box/persist), before anything uses them: network, Bluetooth, session
 [Unit]
-Description=Owlink: persistent data
+Description=Inlet: persistent data
 DefaultDependencies=no
 After=local-fs.target
 Before=sysinit.target shutdown.target

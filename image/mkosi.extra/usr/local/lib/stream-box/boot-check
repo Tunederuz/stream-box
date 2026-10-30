@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Owlink: is the box working? (stream-box-boot-check.service, required by boot-complete.target). A/B updates: a
+# Inlet: is the box working? (stream-box-boot-check.service, required by boot-complete.target). A/B updates: a
 # new system starts with 3 tries (UKI stream-box_<version>+3-0.efi); systemd-bless-boot keeps it for good only once
 # boot-complete.target is reached, so only once this succeeds: the box's server (remote.py, in the session) answers.
 # Otherwise, on a system still being tried, the PC restarts: after 3 failed boots systemd-boot goes back to the

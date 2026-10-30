@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Owlink: system update (stream-box-system-update.service, started by remote.py when the user accepts: the TV
+# Inlet: system update (stream-box-system-update.service, started by remote.py when the user accepts: the TV
 # menu's question, Settings → Updates, the companion app). Follows the releases (tags v*) of the repository.
 #   system-update check   every day (stream-box-update-check.timer, or "Check for updates"): the newest release, written
 #                         as "available" (and "checked") in system-update.json; nothing downloaded: the TV menu offers it

@@ -1,4 +1,4 @@
-// Owlink: media enables or disables developer mode (stream-box-dev@enable|disable.service, nothing else)
+// Inlet: media enables or disables developer mode (stream-box-dev@enable|disable.service, nothing else)
 polkit.addRule(function (action, subject) {
     if (subject.user == "media" && action.id == "org.freedesktop.systemd1.manage-units" &&
         action.lookup("verb") == "start" && /^stream-box-dev@(enable|disable)\.service$/.test(action.lookup("unit"))) {

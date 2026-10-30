@@ -1,7 +1,7 @@
-# Owlink: system update from a local image (USB stick or companion app; see /usr/local/lib/stream-box/local-update).
+# Inlet: system update from a local image (USB stick or companion app; see /usr/local/lib/stream-box/local-update).
 # Started by remote.py (media, allowed by /etc/polkit-1/rules.d/57-stream-box-local-update.rules).
 [Unit]
-Description=Owlink: system update from a local image
+Description=Inlet: system update from a local image
 
 [Service]
 Type=oneshot

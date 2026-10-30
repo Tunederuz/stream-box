@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Owlink: installs the box running from a USB drive onto an internal disk, settings included.
+# Inlet: installs the box running from a USB drive onto an internal disk, settings included.
 #
 #   install-to-disk <disk>      (nvme0n1, sda…; started by stream-box-install@<disk>.service, see installer.py)
 #

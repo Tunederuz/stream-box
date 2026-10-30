@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Owlink: shows the Twitch chat as an overlay in mpv, through its IPC socket.
+"""Inlet: shows the Twitch chat as an overlay in mpv, through its IPC socket.
 
 The channel and the display corner come from mpv (user-data/streambox/* properties, set
 by stream-box.lua): switching streamer in the menu switches the chat too.

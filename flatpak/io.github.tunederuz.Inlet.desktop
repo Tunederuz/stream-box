@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=Owlink
+Name=Inlet
 Comment=Twitch, YouTube, Jellyfin and Plex on the TV, with a remote or a controller
-Exec=owlink
-Icon=io.github.tunederuz.Owlink
+Exec=inlet
+Icon=io.github.tunederuz.Inlet
 Categories=AudioVideo;Video;Player;TV;

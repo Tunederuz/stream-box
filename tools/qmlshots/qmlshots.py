@@ -1,4 +1,4 @@
-"""Owlink: screenshots of the QML TV menu (qml/TvMenu.qml), without a box, mpv or GPU (Xvfb, Mesa).
+"""Inlet: screenshots of the QML TV menu (qml/TvMenu.qml), without a box, mpv or GPU (Xvfb, Mesa).
 
 Mocks the context properties of ui.py (box, pip, i18n with locales/fr.json), serves fixed JSON fixtures on
 127.0.0.1:8080 (the remote.py API the menu calls), opens the menu in a 1920x1080 window and plays a scripted key
@@ -25,7 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 WAIT = int(os.environ.get("QMLSHOTS_WAIT", "900"))   # ms after each step: animations and images done
 NOSHOTS = bool(os.environ.get("QMLSHOTS_NOSHOTS"))   # the scenario and console.log only (checks: no screenshot)
-# The Owlink app (no system part): /api/features {system: false}, and the system's routes answer 404 as there
+# The Inlet app (no system part): /api/features {system: false}, and the system's routes answer 404 as there
 PLAYER = bool(os.environ.get("QMLSHOTS_PLAYER"))
 SYSTEM_ROUTES = ("/api/health", "/api/wifi", "/api/audio", "/api/local_update", "/api/branches", "/api/backup",
                  "/api/bluetooth", "/api/dev", "/api/ssh", "/api/install", "/api/display", "/api/update_prompt")

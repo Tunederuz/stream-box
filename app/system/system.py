@@ -1,4 +1,4 @@
-"""Owlink: the box as a machine: sleep and shutdown, power key lock, wake-up, SSH access and developer mode,
+"""Inlet: the box as a machine: sleep and shutdown, power key lock, wake-up, SSH access and developer mode,
 status (temperatures, processor, memory, network, services) and system updates. Standard library only.
 """
 import functools, json, os, re, shutil, socket, subprocess, time, urllib.request
@@ -25,8 +25,8 @@ def hold_power_key():
     session (remote.py is started by start.sh); refused elsewhere, and logind then keeps its behavior. Without
     pkill or systemd (tests, container), nothing to hold."""
     try:
-        subprocess.run(["pkill", "-u", str(os.getuid()), "-f", "who=Owlink bouton power"], capture_output=True)
-        subprocess.Popen(["systemd-inhibit", "--what=handle-power-key", "--mode=block", "--who=Owlink bouton power",
+        subprocess.run(["pkill", "-u", str(os.getuid()), "-f", "who=Inlet bouton power"], capture_output=True)
+        subprocess.Popen(["systemd-inhibit", "--what=handle-power-key", "--mode=block", "--who=Inlet bouton power",
                           "--why=Power button: sleep or shutdown depending on the setting", "sleep", "infinity"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     except OSError as e:

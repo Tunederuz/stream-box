@@ -1,4 +1,4 @@
-// Owlink: power off and sleep from the companion app and Home Assistant (media user)
+// Inlet: power off and sleep from the companion app and Home Assistant (media user)
 polkit.addRule(function (action, subject) {
     if (subject.user == "media" &&
         (action.id == "org.freedesktop.login1.power-off" ||

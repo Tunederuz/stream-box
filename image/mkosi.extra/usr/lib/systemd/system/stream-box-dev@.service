@@ -1,6 +1,6 @@
-# Owlink: developer mode (sudo for media, SSH) enabled or disabled from the System menu; %i: enable | disable
+# Inlet: developer mode (sudo for media, SSH) enabled or disabled from the System menu; %i: enable | disable
 [Unit]
-Description=Owlink: developer mode (%i)
+Description=Inlet: developer mode (%i)
 
 [Service]
 Type=oneshot

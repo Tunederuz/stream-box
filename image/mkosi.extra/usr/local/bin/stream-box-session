@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Owlink: box session, started by greetd. Output of cage and everything it starts goes to the journal
+# Inlet: box session, started by greetd. Output of cage and everything it starts goes to the journal
 # (journalctl -t stream-box-session). If cage stops in less than 20 s (no usable graphics acceleration with this card:
 # missing driver…), new try with wlroots' software rendering, slower but displayed.
 # Invisible cage cursor (the repository's assets/cursors/blank theme, also named "default": wlroots ignores XCURSOR_THEME and
