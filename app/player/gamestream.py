@@ -18,6 +18,8 @@ from i18n import tr
 CONF = os.path.join(COOKIES_DIR, "gamestream.json")
 MOONLIGHT = shutil.which("moonlight") or shutil.which("moonlight-qt")
 APPS_CACHE = 60   # seconds: the list of games, asked again when the tab is opened after that
+# Pairing, listing, quitting: no window (moonlight-qt would open its own over the TV menu, full screen in cage)
+QUIET = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
 lock = threading.Lock()
 state = {"pairing": None, "apps": None, "apps_at": 0, "apps_error": "", "found": [], "found_at": 0, "busy": False}
 proc = {"stream": None, "pair": None}
@@ -98,7 +100,7 @@ def serverinfo(host):
 
 def run(args, timeout=30):
     return subprocess.run([MOONLIGHT, *args], capture_output=True, text=True, timeout=timeout,
-                          stdin=subprocess.DEVNULL)
+                          stdin=subprocess.DEVNULL, env=QUIET)
 
 
 def load_apps(host):
@@ -177,7 +179,7 @@ def pair(body):
     pin = f"{random.randint(0, 9999):04d}"
     proc["pair"] = {"pin": pin, "host": host,
                     "proc": subprocess.Popen([MOONLIGHT, "pair", host, "--pin", pin], stdin=subprocess.DEVNULL,
-                                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)}
+                                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=QUIET)}
 
 
 def pair_cancel(body):
