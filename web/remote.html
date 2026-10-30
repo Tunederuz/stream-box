@@ -479,7 +479,7 @@
   </div>
 
   <div class="group" data-group="accounts">
-    <button class="group-head" aria-expanded="false">Accounts and libraries</button>
+    <button class="group-head" aria-expanded="false">Accounts and links</button>
     <div class="group-body" hidden>
 
   <section>
@@ -1917,7 +1917,7 @@ async function refreshLocalUpdate() {
 }
 settingsLoaders.push(refreshLocalUpdate);
 if (!$("tab-settings").hidden) refreshLocalUpdate();
-// Accounts and libraries reread each time Settings is shown (a code started or a connection made on the TV meanwhile)
+// Accounts and links reread each time Settings is shown (a code started or a connection made on the TV meanwhile)
 settingsLoaders.push(refreshJfLink, refreshPlexLink, refreshAccount);
 function sendFile(kind, file, onProgress) {   // XMLHttpRequest: fetch has no upload progress
   return new Promise((resolve, reject) => {

@@ -236,6 +236,24 @@ def pair(body):
                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=QUIET)}
 
 
+def search(body):
+    """Looks for the PC on the network again (Settings: "Search again")"""
+    state["found_at"] = 0
+
+
+def forget(body):
+    """Forgets the PC (another one can then be chosen): its address, the list of games, the cached box art. The
+    pairing stays in Moonlight's settings, so the same PC comes back paired."""
+    try:
+        os.remove(CONF)
+    except OSError:
+        pass
+    for name in os.listdir(ART_DIR) if os.path.isdir(ART_DIR) else []:
+        if name.endswith(".png"):
+            os.remove(os.path.join(ART_DIR, name))
+    state.update({"apps": None, "apps_at": 0, "apps_error": "", "found": [], "found_at": 0})
+
+
 def pair_cancel(body):
     p = proc["pair"]
     if p and p["proc"].poll() is None:

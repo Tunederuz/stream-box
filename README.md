@@ -118,7 +118,7 @@ common on Dell): set it to AHCI (Dell: SATA Operation → AHCI). The installer s
 
 ### Afterwards
 
-- Twitch account, Jellyfin, Plex, YouTube account: from the TV menu (Settings → Accounts and libraries) or the companion app (Settings).
+- Twitch account, Jellyfin, Plex, YouTube account: from the TV menu (Settings → Accounts and links) or the companion app (Settings).
 - Wake-on-LAN is on for Ethernet in the image: enable it in the BIOS too to wake the box from the network.
 - Home Assistant: [docs/home-assistant.md](docs/home-assistant.md).
 - Updates: the box checks every day for a new release and the TV menu offers it ("Update now?"); Settings → Updates

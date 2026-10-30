@@ -589,7 +589,7 @@ reread, "Reload my subscriptions"); `subscriptionVideos(pages)` is the pure pars
 the progress. `GET /api/youtube` → `subs` {authorized, pending, unavailable, videos}; `GET /api/youtube_account` →
 {authorized, pending, unavailable}; `POST /api/youtube_login|youtube_logout|youtube_sync`. TV: "Connect my account"
 card in the Subscriptions row as long as the box is not connected → code popup and QR code (`ytAuth`, reread every
-3 s); "YouTube account" row of Settings → Accounts and libraries (reload subscriptions, disconnect). Page: "YouTube
+3 s); "YouTube account" row of Settings → Accounts and links (reload subscriptions, disconnect). Page: "YouTube
 account" section of Settings (code, status). Video title and duration (`yt_meta`: a video cast from the YouTube app,
 resume at the account's percentage): `GET /meta?id=` of youtube_tv.js (`/player`), oEmbed (title only) otherwise.
 Favorites: RSS feeds read in parallel, failures kept for 10 min (`YT_FEED_RETRY`). The menu keeps `yt` from one

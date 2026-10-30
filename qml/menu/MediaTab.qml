@@ -29,8 +29,8 @@ Item {
     Text {
         visible: menu.libTab ? !!menu.lib.home && !menu.lib.home.configured && !menu.lib.home.error
                             : !!menu.yt && menu.yt.channels.length === 0 && !menu.ytResults && !(menu.yt.subs && menu.yt.subs.configured)
-        y: 320; text: menu.tabId === "plex" ? menu.tr("Plex isn't connected to the box: Settings → Accounts and libraries → Plex.")
-                    : menu.libTab ? menu.tr("Jellyfin isn't connected to the box: Settings → Accounts and libraries → Jellyfin.")
+        y: 320; text: menu.tabId === "plex" ? menu.tr("Plex isn't connected to the box: Settings → Accounts and links → Plex.")
+                    : menu.libTab ? menu.tr("Jellyfin isn't connected to the box: Settings → Accounts and links → Jellyfin.")
                                  : menu.tr("Add favorite channels: Options on a video, or search.")
         color: "#b4afc2"; font.pixelSize: 27
     }

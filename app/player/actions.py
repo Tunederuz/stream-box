@@ -181,6 +181,8 @@ ACTIONS = {
     "channel": channel,
     "gamestream_pair": gamestream.pair,             # pairing with the PC: a code to type in Sunshine
     "gamestream_pair_cancel": gamestream.pair_cancel,
+    "gamestream_search": gamestream.search,         # look for the PC on the network again
+    "gamestream_forget": gamestream.forget,         # forget the PC (another one can be chosen)
     "gamestream_launch": gamestream.launch,         # {app}: stream a game
     "gamestream_stop": gamestream.stop,             # end the stream (the game keeps running on the PC)
     "gamestream_quit": gamestream.quit_game,        # close the game on the PC

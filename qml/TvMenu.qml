@@ -72,7 +72,7 @@ Item {
     // YouTube account: dialog with the code to enter on google.com/device (/api/youtube_account), and its QR code
     property var ytAuth: null
     property var ytAuthQr: null
-    property var ytAccount: null             // same state, for the "YouTube account" row (Settings → Accounts and libraries)
+    property var ytAccount: null             // same state, for the "YouTube account" row (Settings → Accounts and links)
     // Plex account: code to enter on plex.tv/link (/api/plex_link: { pending: { code, error }, configured, name }), QR
     property var plexLink: null
     property var plexLinkQr: null
@@ -356,7 +356,7 @@ Item {
         if (plexLink && plexLink.pending && !plexLink.pending.error) call("POST", "/api/plex_link", { action: "cancel" })
         plexLink = null
     }
-    // "Jellyfin" row (Settings → Accounts and libraries): the servers that answer on the network (Quick Connect), or forget the server
+    // "Jellyfin" row (Settings → Accounts and links): the servers that answer on the network (Quick Connect), or forget the server
     function jellyfinMenu() {
         var on = !!(st.libraries || {}).jellyfin
         openModal(tr("Looking for Jellyfin servers on the network…"), [{ label: tr("Cancel"), ok: function () {} }])
@@ -396,7 +396,7 @@ Item {
         if (jfLink && jfLink.pending && !jfLink.pending.error) call("POST", "/api/jellyfin_link", { action: "cancel" })
         jfLink = null
     }
-    // "Plex" row (Settings → Accounts and libraries): sign in by code, or forget the server
+    // "Plex" row (Settings → Accounts and links): sign in by code, or forget the server
     function plexMenu() {
         var on = !!(st.libraries || {}).plex
         var items = [{ label: tr(on ? "+  Sign in with another Plex account" : "+  Sign in with a Plex account"),
@@ -566,7 +566,10 @@ Item {
     }
     Timer { interval: 4000; repeat: true; running: menu.isOpen; onTriggered: menu.refresh() }
     Timer { id: ytAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadYtAuth() }
-    Timer { interval: 3000; repeat: true; running: menu.isOpen && menu.tabId === "games"; onTriggered: menu.loadGames() }
+    // PC link tab open, or a pairing under way (from Settings too): the PC's state followed
+    Timer { interval: 3000; repeat: true; running: menu.isOpen && (menu.tabId === "games" || !!(menu.gs && menu.gs.pairing && menu.gs.pairing.pin))
+            onTriggered: menu.loadGames() }
+    Timer { id: gsSoon; interval: 4000; onTriggered: menu.loadGames() }   // (a search takes a few seconds)
     Timer { id: plexLinkPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadPlexLink() }
     Timer { id: jfLinkPoll; interval: 2000; onTriggered: if (menu.isOpen) menu.loadJfLink() }
     Timer { id: followsPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadFollows() }
@@ -730,7 +733,7 @@ Item {
     })
     function sectionTitle(id) {
         return tr(({ picture: "Picture and sound", playback: "Playback", chat: "Chat", look: "Appearance",
-                     accounts: "Accounts and libraries", network: "Network", devices: "Devices", updates: "Updates",
+                     accounts: "Accounts and links", network: "Network", devices: "Devices", updates: "Updates",
                      backup: "Backup and installation", advanced: "Advanced" })[id] || "")
     }
     // What a section holds (grey line under its title)
@@ -743,7 +746,7 @@ Item {
         return tr(({ picture: "Resolution, audio output, volume, night mode",
                      playback: "Subtitles, auto switch, polls and predictions",
                      chat: "Chat on the TV, corner, background, text size", look: "Background, colors, language",
-                     accounts: "Twitch, YouTube, Jellyfin, Plex", network: "Wi-Fi, companion app QR code",
+                     accounts: "Twitch, YouTube, Jellyfin, Plex, PC", network: "Wi-Fi, companion app QR code",
                      devices: "Remotes, controllers, keys, power button", updates: "Version, check for updates, USB stick",
                      backup: "Settings backup, installation on this PC", advanced: "Version, SSH, developer mode, dependencies" })[id] || "")
     }
@@ -906,8 +909,8 @@ Item {
                 { open: true, label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
                   hint: login ? tr("No ads on the channels you're subscribed to") : tr("Sign in from the companion app on your phone"),
                   ok: function () {   // (signing in needs typing: the companion app, its QR code beside the list)
-                      openModal(login ? tr("Twitch account: {login}. To change it or log out: the companion app (Settings → Accounts and libraries).", { login: login })
-                                      : tr("Sign in to Twitch from the companion app on your phone (Settings → Accounts and libraries)."),
+                      openModal(login ? tr("Twitch account: {login}. To change it or log out: the companion app (Settings → Accounts and links).", { login: login })
+                                      : tr("Sign in to Twitch from the companion app on your phone (Settings → Accounts and links)."),
                                 [{ label: tr("Close"), ok: function () {} }])
                   } },
                 { open: true, label: tr("YouTube account"), visible: !!(ytAccount && !ytAccount.unavailable),
@@ -922,6 +925,10 @@ Item {
                   hint: (s.libraries || {}).plex ? String(s.plex_server || "").replace(/^https?:\/\//, "")
                                                  : tr("Your movies and series of a Plex server"),
                   ok: function () { plexMenu() } },
+                { open: true, label: tr("PC (Sunshine)"), visible: !!features.gamestream,   // (Moonlight: the box's image)
+                  value: !gs ? "" : gs.paired ? tr("Paired: {name}", { name: gs.name }) : gs.host ? tr("Not paired") : tr("No PC found"),
+                  hint: gs && gs.paired ? tr("Its games in the PC link tab") : tr("Play the games of a PC running Sunshine"),
+                  ok: function () { gamestreamMenu() } },
             ]
         case "network":
             var qi = 0
@@ -1492,6 +1499,7 @@ Item {
     function loadTab(id) {
         if (id === "settings") {
             loadYtAccount()
+            if (features.gamestream) loadGames()
             if (sysOn) {   // (sound outputs, Bluetooth, SSH, developer mode, installation, local update: the system part)
                 loadAudio(); loadBt(); loadSsh()
                 call("GET", "/api/install", undefined, function (d) { if (d) install = d })
@@ -1693,6 +1701,21 @@ Item {
             else if (key === "Search") { if (kbText.trim()) { kbOpen = false; if (libTab) libSearch(kbText); else ytSearch(kbText) } }
             else if (kbText.length < 80) kbText += key
         }
+    }
+    // Settings → Accounts and links → PC: pair (the code to type in Sunshine), search again, forget the PC
+    function gamestreamMenu() {
+        if (!gs) return
+        var pair = function () { call("POST", "/api/gamestream_pair", {}, function () { loadGames() }) }
+        var items = []
+        if (gs.host && gs.online) items.push({ label: gs.paired ? tr("↻  Pair again") : tr("+  Pair with {name}", { name: gs.name }), ok: pair })
+        if (!gs.host || !gs.online) items.push({ label: tr("↻  Search again"), ok: function () {
+            call("POST", "/api/gamestream_search", {}, function () { refreshSoon.restart(); gsSoon.restart() }) } })
+        if (gs.host) items.push({ label: tr("✕  Forget this PC"), danger: true, ok: function () {
+            call("POST", "/api/gamestream_forget", {}, function () { loadGames() }) } })
+        items.push({ label: tr("Close"), ok: function () {} })
+        openModal(!gs.host ? tr("No PC with Sunshine found on the network")
+                  : !gs.online ? tr("{name} is off or unreachable", { name: gs.name })
+                  : gs.paired ? tr("Paired with {name}", { name: gs.name }) : tr("{name} found on the network", { name: gs.name }), items)
     }
     function gsCanPair() { return !!(gs && gs.host && gs.online && !gs.paired && !gs.loading) }
     function keyGames(k) {

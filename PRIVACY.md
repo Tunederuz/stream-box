@@ -17,7 +17,7 @@ and how far they got in each video.
   box's user, readable by that user only, and nothing is transmitted, sold or shared with anyone; there is no Stream
   Box server.
 - Nothing else is changed on the account: the box does not post, comment, like, subscribe or unsubscribe.
-- Removing access: "✕  Disconnect YouTube" in the box menu (Settings → Accounts and libraries → YouTube account) or
+- Removing access: "✕  Disconnect YouTube" in the box menu (Settings → Accounts and links → YouTube account) or
   "Disconnect" in its companion app (Settings → YouTube account) deletes the box's token. Access can also be revoked at
   any time from https://myaccount.google.com/permissions ("YouTube on TV").
 
