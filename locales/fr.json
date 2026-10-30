@@ -958,5 +958,18 @@
  "✕  Remove from history": "✕  Retirer de l'historique",
  "✕  Turn off": "✕  Désactiver",
  "✕  Unpair": "✕  Dissocier",
- "⤓  Install version {version}": "⤓  Installer la version {version}"
+ "⤓  Install version {version}": "⤓  Installer la version {version}",
+ "PC link": "Lien PC",
+ "Pair with {name}": "Appairer avec {name}",
+ "On the PC, open Sunshine (https://localhost:47990), PIN tab, and enter:": "Sur le PC, ouvre Sunshine (https://localhost:47990), onglet PIN, et saisis :",
+ "From a phone: {page}": "Depuis un téléphone : {page}",
+ "No PC with Sunshine found on the network": "Aucun PC avec Sunshine trouvé sur le réseau",
+ "{name} is off or unreachable": "{name} est éteint ou injoignable",
+ "Pair the box with {name} to see its games": "Appaire la box avec {name} pour voir ses jeux",
+ "{name} · {n} games": "{name} · {n} jeux",
+ "a game is running": "un jeu est en cours",
+ "✕  Close the game on the PC": "✕  Fermer le jeu sur le PC",
+ "Pair the box": "Appairer la box",
+ "The pairing failed: try again, and type the code in Sunshine within a minute.": "L'appairage a échoué : réessaie, et saisis le code dans Sunshine dans la minute.",
+ "unknown game": "jeu inconnu"
 }

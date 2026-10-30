@@ -31,12 +31,14 @@ Item {
         { id: "replays", label: "Replays" }, { id: "youtube", label: "YouTube" },
         { id: "jellyfin", label: "Jellyfin", library: true }, { id: "plex", label: "Plex", library: true },
         { id: "libraries", label: "Libraries" },
+        { id: "games", label: "PC link" },
         { id: "history", label: "History" },
         { id: "settings", label: "Settings" }]
     // Video libraries only when connected to the box (/api/state libraries), otherwise one "Libraries" tab that tells how
     // to connect them; the chosen tab stays the same one
     readonly property bool anyLibrary: !!((st.libraries || {}).jellyfin || (st.libraries || {}).plex)
     readonly property var tabs: allTabs.filter(function (t) {
+        if (t.id === "games") return !!features.gamestream   // (Moonlight installed: the box's image)
         return t.library ? !!(st.libraries || {})[t.id] : t.id !== "libraries" || !anyLibrary })
     property string tabKept: "live"
     onTabsChanged: tab = Math.max(0, tabs.findIndex(function (t) { return t.id === tabKept }))
@@ -50,6 +52,8 @@ Item {
     property var follows: null
     property var replays: ({})
     property var history: null
+    property var gs: null      // games streamed from a PC (/api/gamestream: the PC, pairing, its games)
+    property int gsSel: 0
     property var display: null
     property var account: null
     property var followsQr: null
@@ -91,6 +95,12 @@ Item {
                      code: j && j.code && !j.error ? j.code : "",
                      error: j && j.error ? tr("Failed: {error}", { error: j.error }) : "",
                      help: j && j.name ? tr("Server: {server}.", { server: j.name }) : "", qr: null }
+        }
+        if (gs && gs.pairing) {   // pairing with the PC: the code to type in Sunshine
+            return { title: tr("Pair with {name}", { name: gs.name }),
+                     where: tr("On the PC, open Sunshine (https://localhost:47990), PIN tab, and enter:"),
+                     code: gs.pairing.pin || "", error: gs.pairing.error || "",
+                     help: gs.pairing.page ? tr("From a phone: {page}", { page: gs.pairing.page }) : "", qr: null }
         }
         if (plexLink) {
             var q = plexLink.pending
@@ -536,6 +546,11 @@ Item {
             : r ? tr("New search  (\"{query}\")", { query: r.query })
             : tr("Search {service}", { service: libTab ? libName : "YouTube" })
     }
+    function loadGames() { call("GET", "/api/gamestream", undefined, function (d) { if (d) gs = d; checkArea() }) }
+    function gsPairClose() {
+        if (gs && gs.pairing && gs.pairing.pin) call("POST", "/api/gamestream_pair_cancel", {})
+        gs = Object.assign({}, gs, { pairing: null })
+    }
     function loadHistory() { call("GET", "/api/history", undefined, function (d) { history = d || []; checkArea() }) }
     function play(url, fromStart, item) {   // item: title and image for the loading screen and the history
         call("POST", "/api/play", { url: url, from_start: !!fromStart, title: item ? item.title : undefined,
@@ -551,6 +566,7 @@ Item {
     }
     Timer { interval: 4000; repeat: true; running: menu.isOpen; onTriggered: menu.refresh() }
     Timer { id: ytAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadYtAuth() }
+    Timer { interval: 3000; repeat: true; running: menu.isOpen && menu.tabId === "games"; onTriggered: menu.loadGames() }
     Timer { id: plexLinkPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadPlexLink() }
     Timer { id: jfLinkPoll; interval: 2000; onTriggered: if (menu.isOpen) menu.loadJfLink() }
     Timer { id: followsPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadFollows() }
@@ -1223,6 +1239,12 @@ Item {
             return d === "loading" ? tr("{login} · loading…", { login: rpLogin }) : d === false ? tr("Twitch unreachable for now")
                 : (d && replayRows().length === 1) ? tr("{login}: nothing this week", { login: rpLogin })
                 : tr("{login} · replays and clips of the week", { login: rpLogin })
+        case "games":
+            if (!gs) return tr("Loading…")
+            if (!gs.host) return tr("No PC with Sunshine found on the network")
+            if (!gs.online) return tr("{name} is off or unreachable", { name: gs.name })
+            if (!gs.paired) return gs.loading ? tr("Loading…") : tr("Pair the box with {name} to see its games", { name: gs.name })
+            return tr("{name} · {n} games", { name: gs.name, n: gs.apps.length }) + (gs.playing ? "  ·  " + tr("a game is running") : "")
         case "history":
             return history === null ? tr("Loading…") : history.length === 0 ? tr("Videos played on the TV will show up here")
                 : (history.length === 1 ? tr("1 video") : tr("{n} videos", { n: history.length })) + " · " + tr("OK to resume or remove")
@@ -1478,6 +1500,7 @@ Item {
         }
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
+        if (id === "games") loadGames()
         if (id === "youtube") loadYoutube()   // previous rows shown in the meantime
         if ((id === "jellyfin" || id === "plex") && !(libs[id] || {}).home) loadLibrary(id)
         if (id === "replays") {
@@ -1512,6 +1535,7 @@ Item {
         }
         if (ytAuth) { if (k === "back" || k === "left" || k === "ok") ytAuth = null; return }
         if (plexLink) { if (k === "back" || k === "left" || k === "ok") closePlexLink(); return }
+        if (gs && gs.pairing) { if (k === "back" || k === "left" || k === "ok") gsPairClose(); return }
         if (jfLink) { if (k === "back" || k === "left" || k === "ok") closeJfLink(); return }
         if (area === "rail") {
             if (railHome) {   // "Home screen": global, above the tabs
@@ -1535,6 +1559,7 @@ Item {
         case "replays": return keyReplays(k)
         case "youtube": case "jellyfin": case "plex": return keyMedia(k)
         case "history": return keyHistory(k)
+        case "games": return keyGames(k)
         case "settings": return keyRows(k, settingsRows())
         }
     }
@@ -1546,6 +1571,7 @@ Item {
         if (id === "replays") return !list || list.length > 0
         if (id === "follows") return true
         if (id === "history") return !history || history.length > 0
+        if (id === "games") return !!gs && (gs.apps.length > 0 || gsCanPair())
         if (id === "libraries") return false   // explanations only
         return true
     }
@@ -1668,6 +1694,26 @@ Item {
             else if (kbText.length < 80) kbText += key
         }
     }
+    function gsCanPair() { return !!(gs && gs.host && gs.online && !gs.paired && !gs.loading) }
+    function keyGames(k) {
+        if (!gs.paired) {
+            if (k === "ok" && gsCanPair()) call("POST", "/api/gamestream_pair", {}, function () { loadGames() })
+            else if (k === "left") area = "rail"
+            return
+        }
+        var list = gs.apps, a = list[gsSel]
+        if (k === "ok" && a) { call("POST", "/api/gamestream_launch", { app: a.name }); close(); return }
+        if (k === "menu" && a) {
+            var items = [{ label: tr("▶  Play"), ok: function () { call("POST", "/api/gamestream_launch", { app: a.name }); close() } }]
+            if (gs.playing) items.push({ label: tr("✕  Close the game on the PC"), danger: true,
+                                         ok: function () { call("POST", "/api/gamestream_quit", {}, function () { loadGames() }) } })
+            items.push({ label: tr("Cancel"), ok: function () {} })
+            openModal(a.name, items)
+            return
+        }
+        var n = grid(gsSel, list.length, 3, k)
+        if (n < 0) area = "rail"; else gsSel = n
+    }
     function keyHistory(k) {
         var list = history || []
         if ((k === "ok" || k === "menu") && list[histSel]) {   // (several choices: always the dialog)
@@ -1754,6 +1800,7 @@ Item {
             MediaTab { menu: menu }   // YouTube, Jellyfin and Plex
             LibrariesTab { menu: menu }
             HistoryTab { menu: menu }
+            GamesTab { menu: menu }
             RowsTab { menu: menu }
             SystemStatus { menu: menu }
         }

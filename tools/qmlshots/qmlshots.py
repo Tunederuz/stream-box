@@ -64,8 +64,9 @@ STEPS = (
     + scene(4, "up down right ok back down down right right right right down ok")   # Jellyfin: series
     + keys("right ok back up ok back")                            # episodes, dialog, keyboard closed
     + scene(5, "up down right ok back down down right ok")        # Plex: rows, series, episodes
-    + scene(6, "right down down left ok back")                    # History
-    + scene(7, "down down down down down down down down down down down down")   # Settings: sections, power below
+    + scene(6, "right right down menu down back left ok")          # PC games: grid, options (close the game)
+    + scene(7, "right down down left ok back")                    # History
+    + scene(8, "down down down down down down down down down down down down")   # Settings: sections, power below
     + keys("up up up up up up up up up up up up ok down right up right")   # Picture and sound: audio output, resolution
     + keys("back down ok back down ok back down ok")              # Playback, Chat, Appearance
     + keys("back down ok down down ok") + [("pause", 300)] + keys("ok back")   # Accounts: Jellyfin, Quick Connect code
@@ -258,7 +259,7 @@ def shoot(qml_dir, out):
     fixtures = dates(json.load(open(os.path.join(HERE, "fixtures.json"), encoding="utf-8")))
     if PLAYER:
         fixtures = {k: v for k, v in fixtures.items() if k not in SYSTEM_ROUTES}
-        fixtures["/api/features"] = {"system": False}
+        fixtures["/api/features"] = {"system": False, "gamestream": True}
     posts = []
     serve(fixtures, posts)
     console = []

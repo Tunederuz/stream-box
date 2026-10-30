@@ -11,12 +11,13 @@ when it changes. While this service runs, it announces it (user-data/streambox/i
 keys they receive themselves (otherwise each one would count twice); without permissions on the devices, it stops and
 the old path (keys received by the Qt app or mpv) takes over again. Started by start.sh.
 """
-import json, os, re, select, socket, struct, sys, time
+import json, os, re, select, signal, socket, struct, sys, time
 
 # app/player and app/system on the import path: the modules import each other by name, from either folder (system/
 # is not part of the Inlet app)
 sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), d) for d in ("player", "system")]
 
+from common import GAMESTREAM_PID
 from i18n import tr
 
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
@@ -130,11 +131,23 @@ class Mpv:
                 raise OSError("mpv closed the connection")
 
 
+def streaming():
+    """PID of Moonlight while a game streams from a PC (gamestream.py), otherwise None: the keys are then its own"""
+    try:
+        with open(GAMESTREAM_PID) as f:
+            pid = int(f.read())
+        os.kill(pid, 0)
+        return pid
+    except (OSError, ValueError):
+        return None
+
+
 def main():
     mpv, keymap = Mpv(), Keymap()
     devices = {}            # path -> open file
     hat = {}                # (path, axis) -> last value of the gamepad d-pad
     held = {}               # (path, code) -> [press time, name, window already open] for power keys
+    stream_home = {}        # (path, code) -> press time of Home during a game stream (held LONG_PRESS: stream ends)
     repeating = {}          # (path, code or axis) -> [next repeat, name, action, press time] for held keys
     last_scan = last_beat = 0
     allowed = None
@@ -193,6 +206,12 @@ def main():
         if now - last_beat > 5:   # "this service is running" (stream-box.lua and ui.py then ignore their keys)
             last_beat = now
             mpv.send("set_property", "user-data/streambox/input", f"evdev:{int(now)}")
+        for k, t in list(stream_home.items()):   # Home held during a game stream: the stream ends
+            if time.time() - t >= LONG_PRESS:
+                del stream_home[k]
+                pid = streaming()
+                if pid:
+                    os.kill(pid, signal.SIGTERM)
         for k, h in held.items():   # power held long enough: box window, without waiting for the release
             if not h[2] and time.time() - h[0] >= LONG_PRESS:
                 h[2] = True
@@ -204,7 +223,7 @@ def main():
             elif now >= r[0]:
                 r[0] = now + REPEAT_EVERY
                 mpv.send("script-message", "streambox-input", r[1], r[2])
-        wait = min([max(0, r[0] - now) for r in repeating.values()] + [0.2 if held else 1])
+        wait = min([max(0, r[0] - now) for r in repeating.values()] + [0.2 if held or stream_home else 1])
         ready, _, _ = select.select(list(devices.values()), [], [], wait)
         for f in ready:
             path = next(p for p, d in devices.items() if d is f)
@@ -213,8 +232,17 @@ def main():
             except OSError:   # device gone
                 drop(path)
                 continue
+            gaming = streaming()
             for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
                 _, _, etype, code, value = EVENT.unpack_from(data, i)
+                if gaming:   # a game streams from a PC: the keys are Moonlight's, except Home held (ends the stream)
+                    if etype == EV_KEY and keymap.get(key_name(code)) == "home":
+                        if value == 1:
+                            stream_home[(path, code)] = time.time()
+                        elif value == 0:
+                            stream_home.pop((path, code), None)
+                    repeating.clear()
+                    continue
                 if etype == EV_KEY and keymap.get(key_name(code)) == "power":
                     # power: action on release (short press), or window after LONG_PRESS (see above)
                     if value == 1:

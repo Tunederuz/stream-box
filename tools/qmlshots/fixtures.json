@@ -1,6 +1,7 @@
 {
  "/api/features": {
-  "system": true
+  "system": true,
+  "gamestream": true
  },
  "/api/state": {
   "streamers": [
@@ -1867,5 +1868,35 @@
    "url": "https://plex.tv/link",
    "error": null
   }
+ },
+ "/api/gamestream": {
+  "available": true,
+  "host": "192.168.1.30",
+  "name": "gaming-pc",
+  "online": true,
+  "playing": true,
+  "paired": true,
+  "loading": false,
+  "unpaired": false,
+  "pairing": null,
+  "streaming": false,
+  "apps": [
+   {
+    "name": "Desktop",
+    "art": "http://127.0.0.1:8080/img/1db954.png"
+   },
+   {
+    "name": "Steam Big Picture",
+    "art": "http://127.0.0.1:8080/img/f5a623.png"
+   },
+   {
+    "name": "Hollow Knight",
+    "art": "http://127.0.0.1:8080/img/00bcd4.png"
+   },
+   {
+    "name": "Celeste",
+    "art": ""
+   }
+  ]
  }
 }

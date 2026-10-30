@@ -133,7 +133,7 @@ class Api(unittest.TestCase):
         self.assertIn("error", body)
 
     def test_features(self):
-        self.assertEqual(self.request("GET", "/api/features"), (200, {"system": self.SYSTEM}))
+        self.assertEqual(self.request("GET", "/api/features"), (200, {"system": self.SYSTEM, "gamestream": False}))   # (no Moonlight here)
 
     def test_unknown_action(self):
         self.assertGreaterEqual(self.request("POST", "/api/no_such_action", {})[0], 400)

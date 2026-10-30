@@ -6,6 +6,10 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+### Added
+- PC link: a TV menu tab to play the games of a PC running Sunshine, with Moonlight. The box finds the PC on the
+  network, pairs with a code typed in Sunshine, shows its games and streams them; hold Home to end the stream.
+
 ### Changed
 - Stream Box is now **Inlet**, with a new logo: TV menu, boot screen, companion app (its icon too), Cast and
   Jellyfin's "Play on" lists, Plex, Home Assistant. Settings, accounts and updates are untouched.

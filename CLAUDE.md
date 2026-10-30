@@ -1208,6 +1208,17 @@ session starts, removed by ui.py at its first frame (player.sh for mpv alone, 30
 run, never published: `/etc/ssh/stream-box-test-keys`). QEMU in the mkosi container (KVM, OVMF), stick as
 `usb-storage` + blank NVMe for the installer, `-vga std`, QEMU monitor for screenshots (`screendump`).
 
+### PC link (games streamed from a PC)
+`gamestream.py` drives moonlight-qt's command line (in the image; `moonlight pair <pc> --pin`, `list <pc> --csv`,
+`stream <pc> <app>`, `quit <pc>`; its pairing stays in Moonlight's own settings). The PC: an mDNS question for
+`_nvstream._tcp.local` (what Sunshine announces), or the paired one (`~/.config/stream-box/gamestream.json`).
+`GET /api/gamestream` (PC, online, playing, paired, apps with Moonlight's box art cache files, pairing code),
+actions `gamestream_pair` / `_pair_cancel` / `_launch` / `_stop` / `_quit`; `/api/features` has `gamestream`
+(Moonlight installed). TV menu tab "PC link" (`games`, menu/GamesTab.qml): pairing shows a code to type in Sunshine's
+PIN page (CodeDialog), then a grid of games; ≡ closes the running game on the PC. During a stream Moonlight covers
+the screen; its PID is in `/tmp/stream-box-gamestream.pid` and input.py then leaves every key to it, except Home held
+1 s (remote or the gamepad's middle button) which ends the stream; when it ends the TV menu opens again.
+
 ### Regular keyboard
 By default (input.py `DEFAULTS`, stream-box.lua `KEYS` fallback): arrows, Enter = OK, Esc / Backspace =
 Back, Tab, Windows, Home or M = TV menu (Tab for the Inlet app: a desktop keeps the Windows key), O = options (≡), H = home screen, Space = play / pause (action `corner`),

@@ -5,6 +5,7 @@ import json, os, shutil, socket
 
 PORT = 8080
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
+GAMESTREAM_PID = "/tmp/stream-box-gamestream.pid"   # a game streamed from a PC (gamestream.py): Moonlight's PID
 DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # the repository (this is app/player/)
 # Box settings and tokens (700: also protects the files that yt-dlp rewrites as 644, see twitch.py)
 COOKIES_DIR = os.path.expanduser("~/.config/stream-box")

@@ -5,6 +5,7 @@ library only.
 import re, subprocess, time
 
 import ambient    # ambient.py: remote URL, first setup
+import gamestream # gamestream.py: games streamed from a PC (Moonlight)
 import history    # history.py: history edits
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import jellyfin   # jellyfin.py: Jellyfin playback
@@ -178,6 +179,11 @@ def reboot(body):
 # Name in POST /api/<name> → handler(body)
 ACTIONS = {
     "channel": channel,
+    "gamestream_pair": gamestream.pair,             # pairing with the PC: a code to type in Sunshine
+    "gamestream_pair_cancel": gamestream.pair_cancel,
+    "gamestream_launch": gamestream.launch,         # {app}: stream a game
+    "gamestream_stop": gamestream.stop,             # end the stream (the game keeps running on the PC)
+    "gamestream_quit": gamestream.quit_game,        # close the game on the PC
     "chat": lambda body: mpv(["script-message", "streambox-toggle-chat"]),
     # the next corner clockwise, or {corner: tl | tr | br | bl}
     "corner": lambda body: mpv(["script-message", "streambox-cycle-corner"]

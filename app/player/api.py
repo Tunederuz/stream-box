@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler
 
 import actions    # actions.py: POST /api/<name>, TV menu keyboard
 import ambient    # ambient.py: first setup, remote URL, QR codes
+import gamestream # gamestream.py: games streamed from a PC (Moonlight)
 import history    # history.py: history file, kind of the current video
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import images     # images.py: TV preview
@@ -93,7 +94,9 @@ JSON_ROUTES = {
     "/api/youtube_channels": lambda: {"channels": youtube.yt_channels()},
     "/api/youtube_account": youtube.yt_account_status,
     "/api/plex_link": plex.link_state,   # Plex server, and the sign-in code being waited for
-    "/api/features": sysparts.features,   # what this installation has (system part or not)
+    # what this installation has: system part or not, Moonlight for games streamed from a PC
+    "/api/features": lambda: {**sysparts.features(), "gamestream": gamestream.available()},
+    "/api/gamestream": gamestream.status,   # the PC (Sunshine), pairing, its games, a stream running
 }
 if SYSTEM:   # the box's system (the Inlet app leaves it to its OS: these routes answer 404 there)
     JSON_ROUTES.update({
