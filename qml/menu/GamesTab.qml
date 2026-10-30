@@ -1,5 +1,6 @@
 // TV menu, PC link tab: games streamed from a PC with Sunshine (Moonlight, gamestream.py). Not paired yet: a button
-// that shows a code to type in Sunshine (menu/CodeDialog.qml); paired: its games in a grid of cards (box art)
+// that shows a code to type in Sunshine (menu/CodeDialog.qml); paired: its games in a grid of posters (Sunshine's box
+// art is 3:4), 5 per row
 import QtQuick
 import "layout.js" as Layout
 import ".."
@@ -25,21 +26,21 @@ Item {
         x: -53; y: 161; width: Layout.contentW + 80; height: Layout.listBottom - 161; clip: true
         GridView {
             visible: !!page.g.paired
-            y: 15; x: 40; width: Layout.contentW; height: 2 * 400 + 27
-            cellWidth: Layout.cardStep; cellHeight: 400
-            interactive: false; clip: false; topMargin: 27
+            y: 15; x: 40; width: Layout.contentW; height: 2 * 480 + 27
+            cellWidth: Layout.contentW / 5; cellHeight: 480
+            interactive: false; clip: false; topMargin: 47   // (room for the focused poster, which grows)
             model: (page.g.apps || []).length
             currentIndex: menu.gsSel
             onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
             Behavior on contentY { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
             delegate: Item {
-                width: Layout.cardStep; height: 400
+                width: Layout.contentW / 5; height: 480
                 readonly property real rel: y - GridView.view.contentY
-                opacity: rel > -200 && rel < GridView.view.height - 200 ? 1 : 0
+                opacity: rel > -240 && rel < GridView.view.height - 240 ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 150 } }
                 readonly property var a: (page.g.apps || [])[index] || {}
                 VideoCard {
-                    x: 13; y: 13
+                    x: 13; y: 13; width: parent.width - 26; ratio: 3 / 4
                     title: a.name || ""
                     thumb: a.art || ""
                     meta: ""

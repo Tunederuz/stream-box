@@ -1711,7 +1711,7 @@ Item {
             openModal(a.name, items)
             return
         }
-        var n = grid(gsSel, list.length, 3, k)
+        var n = grid(gsSel, list.length, 5, k)   // (5 posters per row: menu/GamesTab.qml)
         if (n < 0) area = "rail"; else gsSel = n
     }
     function keyHistory(k) {
