@@ -1736,21 +1736,6 @@ Item {
             opacity: livePreview.ready && menu.previewFor ? 0.55 : 0
             Behavior on opacity { NumberAnimation { duration: 300 } }
         }
-        MouseArea {   // mouse, under the clickable elements (menu/Tap.qml): right click and the back button = Back,
-            // the wheel = ▲ ▼ (over the content, the focus goes there first); a notch (120) per step, for touchpads
-            anchors.fill: parent
-            acceptedButtons: Qt.RightButton | Qt.BackButton
-            property real wheelSum: 0
-            onClicked: menu.key("back")
-            onWheel: function (w) {
-                wheelSum += w.angleDelta.y
-                if (Math.abs(wheelSum) < 120) return
-                var k = wheelSum > 0 ? "up" : "down"
-                wheelSum = 0
-                if (menu.area === "rail" && w.x > 400 && menu.canEnter(menu.tabs[menu.tab].id)) menu.enterContent()
-                menu.key(k)
-            }
-        }
         Rail { menu: menu }   // (menu: the id of this object, looked up before the property of the same name)
         Header { menu: menu }
 

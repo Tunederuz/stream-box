@@ -14,7 +14,6 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - Owlink app (preview): the player as a Flatpak app, for SteamOS or a desktop, without the box's system settings
   (its OS runs itself). Built with `flatpak/build.sh`; Settings → "Quit" closes it. It opens in a window (F11 or a
   double click: full screen) and needs no first setup from a phone.
-- TV menu with a mouse: a click selects and opens, right click shows the options, the wheel moves through lists.
 - Keyboard: Tab opens and closes the TV menu; in the search, the computer's keys type directly.
 
 ## [0.5.0]

@@ -12,11 +12,6 @@ Item {
     visible: opacity > 0
     Behavior on opacity { NumberAnimation { duration: 160 } }
     Rectangle { anchors.fill: parent; color: "#05030a"; opacity: 0.6 }
-    MouseArea {   // a click closes it, as Back
-        anchors.fill: parent; enabled: !!menu.codeDialog
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
-        onClicked: menu.key("back")
-    }
     Rectangle {
         width: 1240; height: 520; radius: 28
         anchors.centerIn: parent

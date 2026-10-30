@@ -13,10 +13,6 @@ Item {
     readonly property var rows: visible ? menu.mediaRows() : []
     // Fixed-height rows; vertical scrolling to keep the chosen row on screen
     readonly property real scrollY: Math.max(0, (menu.mRow - 1) * Layout.rowH)
-    function pickCard(r, key, i) {   // mouse (Tap): the focus on this card, as the arrows would
-        menu.area = "content"; menu.setRow(r)
-        var s = Object.assign({}, menu.mSel); s[key] = i; menu.setMediaSel(s)
-    }
     Item {   // search row
         y: 200; width: 760; height: 66
         readonly property bool foc: menu.area === "content" && menu.mRow === 0 && !menu.kbOpen
@@ -29,7 +25,6 @@ Item {
             text: menu.searchLabel()
             color: "white"; font.pixelSize: 27
         }
-        Tap { tv: menu; rightKey: "back"; onPick: { menu.area = "content"; menu.setRow(0) } }
     }
     Text {
         visible: menu.libTab ? !!menu.lib.home && !menu.lib.home.configured && !menu.lib.home.error
@@ -99,7 +94,6 @@ Item {
                                       + (c.saved ? (c.followers ? " · " : "") + menu.tr("★ favorite") : "")
                                 color: c.saved ? "#ff6b7f" : "#b4afc2"; font.pixelSize: 20
                             }
-                            Tap { tv: menu; onPick: page.pickCard(r, "chans", index) }
                         }
                     }
                     CardRow {
@@ -118,7 +112,6 @@ Item {
                             progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : (it.percent || 0) / 100)
                             accent: menu.accent
                             focused: menu.area === "content" && menu.mRow === r && index === (menu.mSel[row.key] || 0)
-                            Tap { tv: menu; onPick: page.pickCard(r, row.key, index) }
                         }
                     }
                 }

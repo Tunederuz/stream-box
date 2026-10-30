@@ -709,21 +709,18 @@ class View(QQuickView):
         return int(p.x() * ratio), int(p.y() * ratio)
 
     def mouseMoveEvent(self, event):
+        if box.menu_open:
+            return
         self.setCursor(QCursor(Qt.ArrowCursor))
         self.hide_cursor.start()
-        if box.menu_open:   # the menu's clickable elements (qml/menu/Tap.qml)
-            return super().mouseMoveEvent(event)
         to_mpv(player.command, "mouse", *self.mouse_pos(event))
 
     def mousePressEvent(self, event):
         if box.menu_open:
-            return super().mousePressEvent(event)
-        if not SYSTEM and event.button() == Qt.LeftButton:
-            # Owlink app: a click opens the menu (no remote needed); a double click toggles full screen
-            if WINDOWED and event.type() == event.Type.MouseButtonDblClick:
-                self.showNormal() if self.visibility() == QQuickView.FullScreen else self.showFullScreen()
-            else:
-                box.openRequested.emit()
+            return
+        if WINDOWED and event.type() == event.Type.MouseButtonDblClick and event.button() == Qt.LeftButton:
+            # Owlink app in a window: a double click toggles full screen
+            self.showNormal() if self.visibility() == QQuickView.FullScreen else self.showFullScreen()
             return
         x, y = self.mouse_pos(event)
         double = event.type() == event.Type.MouseButtonDblClick

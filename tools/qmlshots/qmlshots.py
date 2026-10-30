@@ -78,13 +78,7 @@ STEPS = (
     + [("key", "home"), ("video", True), ("open",)]               # over a video: veil only
     + keys("back down down back")
     + [("video", False), ("power",)] + keys("down back")          # "Box" dialog alone
-    # Mouse (Owlink app on a desktop, menu/Tap.qml): rail tabs at x 150, y 268 + 76 × tab
-    + [("key", "home"), ("open",), ("click", 150, 800), ("click", 865, 273), ("rclick", 865, 500)]   # Settings, a section
-    + [("wheel", 865, 500, -120), ("wheel", 865, 500, -120), ("click", 865, 273), ("rclick", 1600, 900)]
-    + [("click", 150, 268), ("rclick", 700, 420), ("click", 100, 100), ("click", 700, 420), ("open",)]   # Live: options, play
-    + [("click", 150, 496), ("click", 700, 233), ("type", "a"), ("type", "b"), ("type", "\b"), ("click", 520, 560)]
-    + [("click", 100, 100)]                                       # search: computer keyboard, a key, outside
-    + [("click", 150, 724), ("click", 700, 420), ("click", 960, 540), ("rclick", 960, 540)]   # History: a card, dialog
+    + scene(3, "up ok") + [("type", "a"), ("type", "b"), ("type", "\b")] + keys("back")   # search: computer keyboard
 )
 
 
@@ -150,9 +144,7 @@ def shoot(qml_dir, out):
         import faulthandler
         faulthandler.dump_traceback_later(60, exit=True)
     from PySide6.QtCore import (Property, QDate, QDateTime, QEventLoop, QTime, QObject, QTimer, QUrl, Signal, Slot, qInstallMessageHandler)
-    from PySide6.QtCore import QPoint, QPointF, Qt
-    from PySide6.QtGui import QColor, QGuiApplication, QWheelEvent
-    from PySide6.QtTest import QTest
+    from PySide6.QtGui import QColor, QGuiApplication
     from PySide6.QtQml import qmlRegisterType
     from PySide6.QtQuick import QQuickPaintedItem, QQuickView, QQuickWindow, QSGRendererInterface
 
@@ -327,13 +319,6 @@ def shoot(qml_dir, out):
             box.set_video(step[1])
         elif step[0] == "pause":
             wait(step[1])
-        elif step[0] in ("click", "rclick"):
-            QTest.mouseClick(view, Qt.RightButton if step[0] == "rclick" else Qt.LeftButton, Qt.NoModifier,
-                             QPoint(step[1], step[2]))
-        elif step[0] == "wheel":
-            pos = QPointF(step[1], step[2])
-            QGuiApplication.sendEvent(view, QWheelEvent(pos, view.mapToGlobal(pos), QPoint(), QPoint(0, step[3]),
-                                                        Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False))
         elif step[0] == "type":
             box.keyTyped.emit(step[1])
         t0 = time.monotonic()

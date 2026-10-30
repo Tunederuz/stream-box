@@ -1215,14 +1215,12 @@ Back, Tab, Windows, Home or M = TV menu (Tab for the Owlink app: a desktop keeps
 positional (QWERTY): the M of an AZERTY keyboard arrives as KEY_SEMICOLON, mapped too. While the search keyboard
 is open, the Qt app types the computer's keys into it (Box.setTyping / keyTyped: characters, Backspace, Enter).
 
-### Mouse (TV menu)
-Still a remote-style interface, with clicks on top (qml/menu/Tap.qml): a click focuses the element as the arrows
-would, then left = OK, right = ≡ (or Back where there are no options); ◀ ▶ rows: left = next value, right =
-previous. A click outside a dialog or the search keyboard = Back; right click and the mouse's back button elsewhere
-= Back, the wheel = ▲ ▼ (a notch per step). ui.py passes the mouse to the QML while the menu is open; menu closed,
-the Owlink app opens it on a click (double click: full screen), the box sends the mouse to mpv as before.
-Owlink app on a desktop: an ordinary 1280×720 window (`WINDOWED`, F11: full screen); full screen in SteamOS's
-Game mode (XDG_CURRENT_DESKTOP=gamescope). Checked by the qmlshots scenario's mouse steps (click, rclick, wheel, type).
+The qmlshots scenario types in the search keyboard (`type` steps).
+
+### Owlink app window
+The TV menu stays driven by keys only (remote, gamepad, keyboard; no mouse navigation, the user's choice). Owlink app
+on a desktop: an ordinary 1280×720 window (`WINDOWED`, F11 or a double click: full screen); full screen in SteamOS's
+Game mode (XDG_CURRENT_DESKTOP=gamescope).
 
 ### pacman (developer mode)
 The official image has neither a pacman mirror nor keyring (mkosi leaves none, and that is intended: no packages
