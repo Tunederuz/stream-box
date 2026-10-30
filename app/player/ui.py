@@ -579,6 +579,7 @@ class Osd(QObject):
                      "waiting": {"cache": False, "seeking": False, "idle": False, "pct": 0, "pause": False},
                      "mode": "", "channel": "", "events": True}
         self._in.connect(self._set, Qt.QueuedConnection)
+        self.wait_state = dict(self.data["waiting"])   # (mpv's event thread only: waiting_prop)
         self.wake = threading.Event()   # bar just shown: read the position at once (InfoBar waits for it to appear)
 
     def _set(self, key, value):
@@ -593,9 +594,12 @@ class Osd(QObject):
         self._in.emit("playback", "{}")
 
     def waiting_prop(self, name):
-        """mpv property → one field of "waiting" (from mpv's threads)"""
+        """mpv property → one field of "waiting" (from mpv's event thread). The state is kept here, on that thread,
+        and sent whole: built from self.data (updated later, on Qt's thread), two changes arriving together (core-idle
+        and seeking at the end of a seek) overwrote each other and the ring stayed, or never came"""
         def cb(_n, v):
-            self._in.emit("waiting", json.dumps({**self.data["waiting"], name: v if v is not None else False}))
+            self.wait_state[name] = v if v is not None else False
+            self._in.emit("waiting", json.dumps(self.wait_state))
         return cb
 
     def receive(self, key):
