@@ -33,7 +33,9 @@ import mpv
 
 import chat_qt   # chat with emotes (same folder)
 import common    # common.py: built-in battery
-from sysparts import SYSTEM   # False: the Inlet app (an app on an OS that runs itself)
+# The box's system part is there (False: the Inlet app, on an OS that runs itself). Decided as in sysparts.py, by the
+# folder, without importing it: its modules are not on this script's import path (nor needed here)
+SYSTEM = os.path.isdir(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "system"))
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 CURSOR_HIDE_MS = 4000   # like mpv's --cursor-autohide=4000
