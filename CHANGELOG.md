@@ -18,6 +18,7 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   percentage.
 
 ### Changed
+- In the TV menu's rows of videos, moving to another row starts at its first card, instead of where it was left.
 - One options menu (≡) for every YouTube video card: play or resume, see the channel's latest videos, add it to the
   favorites or remove it; Recommended for you and search results now have them too.
 - On screens that aren't 16:9 (the Steam Deck's 16:10), the interface now fills the whole screen: no more bands, the

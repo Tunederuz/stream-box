@@ -146,6 +146,16 @@ Item {
     readonly property bool libTab: tabId === "jellyfin" || tabId === "plex"
     readonly property var lib: libs[tabId] || ({})
     readonly property string libName: tabId === "plex" ? "Plex" : "Jellyfin"
+    // Changing tab from the rail: every tab's rows and grids start again from their first card (within a tab, a row
+    // keeps its place). Not when the menu opens on the current media's tab: that one keeps the card being played
+    function resetRows() {
+        ytSel = ({}); ytRow = 0
+        var all = Object.assign({}, libs)
+        for (var id in all) all[id] = Object.assign({}, all[id], { sel: {}, row: 0 })
+        libs = all
+        rpRow = 0; rpSel = [rpSel[0], 0, 0]
+        liveSel = 0; followSel = 0; histSel = 0; gsSel = 0; gsRow = 0
+    }
     function setLib(id, changes) {
         var all = Object.assign({}, libs)
         all[id] = Object.assign({}, all[id] || {}, changes)
@@ -1611,7 +1621,10 @@ Item {
                 return
             }
             if (k === "up" && tab === 0) railHome = true
-            else if (k === "up" || k === "down") tab = Math.max(0, Math.min(tabs.length - 1, tab + (k === "down" ? 1 : -1)))
+            else if (k === "up" || k === "down") {
+                var t = Math.max(0, Math.min(tabs.length - 1, tab + (k === "down" ? 1 : -1)))
+                if (t !== tab) { resetRows(); tab = t }
+            }
             else if (k === "right" || k === "ok") enterContent()
             else if (k === "back" && st.mode !== "home") close()   // nothing playing: the menu stays the main page
             return
@@ -1699,8 +1712,10 @@ Item {
         rpRow = Math.min(rpRow, rows.length - 1)
         var row = rows[rpRow], sel = rpSel[rpRow] || 0
         var s = rpSel.slice()
-        if (k === "up") rpRow = Math.max(0, rpRow - 1)
-        else if (k === "down") rpRow = Math.min(rows.length - 1, rpRow + 1)
+        // Another row: from its first card (not the place it was left at); the streamer chips keep theirs
+        var toRow = function (n) { if (n !== rpRow && n > 0) { s[n] = 0; rpSel = s } rpRow = n }
+        if (k === "up") toRow(Math.max(0, rpRow - 1))
+        else if (k === "down") toRow(Math.min(rows.length - 1, rpRow + 1))
         else if (k === "left") { if (sel === 0) area = "rail"; else { s[rpRow] = sel - 1; rpSel = s } }
         else if (k === "right") { s[rpRow] = Math.min(row.items.length - 1, sel + 1); rpSel = s }
         else if (k === "ok" && row.items[sel] && row.items[sel].more) loadMore(row.items[sel])
@@ -1721,13 +1736,20 @@ Item {
         var row = rows[r]
         if (row.kind === "search") {
             if (k === "ok") { kbOpen = true; kbRow = 0; kbCol = 0 }
-            else if (k === "down" && rows.length > 1) setRow(1)
+            else if (k === "down" && rows.length > 1) {   // (the first row of videos: from its first card)
+                var ns = Object.assign({}, mSel); ns[rows[1].key] = 0; setMediaSel(ns); setRow(1)
+            }
             else if (k === "left") area = "rail"
             return
         }
         var sel = Math.min(mSel[row.key] || 0, Math.max(0, row.items.length - 1)), s = Object.assign({}, mSel)
-        if (k === "up") setRow(r - 1)
-        else if (k === "down") setRow(Math.min(rows.length - 1, r + 1))
+        // Another row: from its first card (not the place it was left at)
+        var toRow = function (n) {
+            if (n !== r && rows[n] && rows[n].key) { var ns = Object.assign({}, mSel); ns[rows[n].key] = 0; setMediaSel(ns) }
+            setRow(n)
+        }
+        if (k === "up") toRow(r - 1)
+        else if (k === "down") toRow(Math.min(rows.length - 1, r + 1))
         else if (k === "left") { if (sel === 0) area = "rail"; else { s[row.key] = sel - 1; setMediaSel(s) } }
         else if (k === "right") { s[row.key] = Math.min(row.items.length - 1, sel + 1); setMediaSel(s) }
         else if ((k === "ok" || k === "menu") && row.items[sel] && row.items[sel].more) {   // "Load more" (no options)
