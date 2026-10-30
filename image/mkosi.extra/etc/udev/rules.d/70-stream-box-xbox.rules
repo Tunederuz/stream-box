@@ -1,0 +1,3 @@
+# Xbox controllers over Bluetooth LE: their HID descriptor also has keyboard keys, so udev classifies them as keyboards
+# only, and SDL (Moonlight, PC link) ignores them: marked as joysticks (which also gives the seat's user access)
+ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Xbox Wireless Controller", ENV{ID_INPUT_JOYSTICK}="1", ENV{ID_INPUT_KEYBOARD}=""
