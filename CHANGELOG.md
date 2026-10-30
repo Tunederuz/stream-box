@@ -6,6 +6,14 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+### Added
+- A "Getting ready…" screen with the logo at start, until the box is ready, instead of an empty home screen (first
+  start, slow USB stick or SD card).
+
+### Changed
+- On screens that aren't 16:9 (the Steam Deck's 16:10), the interface now fills the whole screen: no more bands, the
+  lists reach down to the help at the bottom.
+
 ## [0.6.0]
 
 ### Changed

@@ -13,8 +13,7 @@ import "menu/layout.js" as Layout
 
 Item {
     id: menu
-    width: 1920
-    height: 1080
+    anchors.fill: parent   // (1920x1080, or taller / wider: qml/Fit.qml)
     property bool isOpen: false
     // Closing with the home screen: it fades in over the menu (600 ms), the menu stays shown under it meanwhile
     property bool underHome: false

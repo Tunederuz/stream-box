@@ -1236,6 +1236,14 @@ is open, the Qt app types the computer's keys into it (Box.setTyping / keyTyped:
 
 The qmlshots scenario types in the search keyboard (`type` steps).
 
+### Screen shape and start (qml/Fit.qml, qml/Preparing.qml)
+The interface is drawn in 1920x1080 coordinates inside `Fit` (ui.qml, and the qmlshots harness): its drawing area keeps
+1920 wide and 1080 high at least and stretches the other side to the screen's shape (1920x1200 on 16:10), then scales
+to fill the screen exactly; what is pinned to an edge (`menu.height - 85` for the scrolling areas of the tabs, the
+help, the clock, the home screen's QR code) follows it. `QMLSHOTS_SIZE=1280x800 tools/qmlshots/run.sh shoot` renders
+another shape. `Preparing.qml`, on top of everything in ui.qml: "Getting ready…" and the logo until `/api/state`
+answers (asked every 0.7 s, 60 s at most), then a fade: the home screen stayed empty while remote.py started.
+
 ### Inlet app window
 The TV menu stays driven by keys only (remote, gamepad, keyboard; no mouse navigation, the user's choice). Inlet app
 on a desktop: an ordinary 1280×720 window (`WINDOWED`, F11 or a double click: full screen); full screen in SteamOS's

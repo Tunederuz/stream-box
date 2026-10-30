@@ -37,7 +37,7 @@ Item {
         }
     }
     Item {   // clip: the posters scroll between the chips and the help at the bottom
-        x: -53; y: 276; width: Layout.contentW + 80; height: Layout.listBottom - 276; clip: true
+        x: -53; y: 276; width: Layout.contentW + 80; height: menu.height - 85 - 276; clip: true
         GridView {
             visible: !!page.pc.paired
             y: 0; x: 40; width: Layout.contentW; height: 2 * 480 + 47

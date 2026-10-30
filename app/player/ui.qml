@@ -1,6 +1,6 @@
 // Inlet: scene of the app (ui.py): the video of the main player, the second stream (inset in a corner or
-// side by side, animated transitions), and on top the QML interface (big TV menu), drawn in 1920x1080 and
-// scaled to the screen. The videos keep their render size and are scaled down by the GPU
+// side by side, animated transitions), and on top the QML interface (big TV menu), drawn in 1920x1080 (stretched
+// to the screen's shape, qml/Fit.qml) and scaled to the screen. The videos keep their render size and are scaled down by the GPU
 // (scale): switching from one layout to another stays smooth.
 import QtQuick
 import QtQuick.Effects
@@ -71,14 +71,7 @@ Item {
         }
     }
 
-    Item {
-        width: 1920
-        height: 1080
-        scale: Math.min(parent.width / 1920, parent.height / 1080)
-        transformOrigin: Item.TopLeft
-        // centered when the screen or the window is not 16:9 (Steam Deck 16:10, Inlet app window)
-        x: (parent.width - width * scale) / 2
-        y: (parent.height - height * scale) / 2
+    Fit {   // (the interface's drawing area, stretched to the screen's shape: qml/Fit.qml)
         // background changed in the menu: right away here too
         AmbientScreen { backdrop: tvMenu.st.backdrop || null; covered: tvMenu.isOpen && !tvMenu.powerOnly }
         ChatOverlay {}
@@ -98,5 +91,6 @@ Item {
             z: box.ambientOn && !powerOnly ? -1 : 0
         }
         Notice {}
+        Preparing {}   // until the box's server answers (first start, slow drive)
     }
 }

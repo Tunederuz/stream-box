@@ -276,8 +276,8 @@ def shoot(qml_dir, out):
     if os.path.isdir(brand):
         shutil.copytree(brand, os.path.join(root, "assets", "brand"))
     with open(os.path.join(root, "harness.qml"), "w") as f:
-        f.write('import QtQuick\nimport "qml"\nRectangle {\n    width: 1920; height: 1080; color: "#203040"\n'
-                '    TvMenu { objectName: "tvMenu" }\n}\n')
+        f.write('import QtQuick\nimport "qml"\nRectangle {\n    color: "#203040"\n'
+                '    Fit { TvMenu { objectName: "tvMenu" } }\n}\n')
 
     QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
     app = QGuiApplication(sys.argv[:1])   # noqa: F841  (kept referenced: Qt needs the application object alive)
@@ -292,7 +292,8 @@ def shoot(qml_dir, out):
     view.rootContext().setContextProperty("livePreview", live_preview)
     view.rootContext().setContextProperty("i18n", i18n)
     view.setResizeMode(QQuickView.SizeRootObjectToView)
-    view.resize(1920, 1080)
+    # QMLSHOTS_SIZE=1280x800: another screen shape (Steam Deck), drawn through qml/Fit.qml as by ui.qml
+    view.resize(*[int(n) for n in os.environ.get("QMLSHOTS_SIZE", "1920x1080").split("x")])
     view.setSource(QUrl.fromLocalFile(os.path.join(root, "harness.qml")))
     for e in view.errors():
         console.append("ERROR " + e.toString())

@@ -35,7 +35,7 @@ Item {
         color: "#b4afc2"; font.pixelSize: 27
     }
     Item {   // clip: what scrolls stops at the edge of the area (neither over the title nor over the help at the bottom)
-        x: -40; y: 276; width: parent.width + 80; height: Layout.listBottom - 276; clip: true
+        x: -40; y: 276; width: parent.width + 80; height: menu.height - 85 - 276; clip: true
         Item {   // rows, below the search row
             x: 40; y: 10; width: parent.width - 80; height: menu.height - 286
             Repeater {

@@ -38,7 +38,7 @@ Item {
         }
     }
     Item {   // clip: the rows scroll between the chips and the help at the bottom
-        x: -40; y: 276; width: parent.width + 80; height: Layout.listBottom - 276; clip: true
+        x: -40; y: 276; width: parent.width + 80; height: menu.height - 85 - 276; clip: true
         Repeater {
             model: Math.max(0, page.rows.length - 1)
             Item {

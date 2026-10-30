@@ -6,7 +6,7 @@ import "../fmt.js" as Fmt
 
 Item {   // clip: what scrolls stops at the edge of the area (neither over the title nor over the help at the bottom)
     required property var menu
-    x: -53; y: 161; width: Layout.contentW + 80; height: Layout.listBottom - 161; clip: true
+    x: -53; y: 161; width: Layout.contentW + 80; height: menu.height - 85 - 161; clip: true
     GridView {
         visible: menu.tabId === "history"
         y: 15; x: 40; width: Layout.contentW; height: 2 * 400 + 27

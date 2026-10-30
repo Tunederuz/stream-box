@@ -7,7 +7,7 @@ Item {   // clip: what scrolls stops at the edge of the area (neither over the t
     required property var menu
     readonly property int listW: menu.section ? 980 : 810
     visible: menu.tabId === "settings"
-    x: -40; y: 165; width: listW + 80; height: 830; clip: true
+    x: -40; y: 165; width: listW + 80; height: menu.height - 250; clip: true   // (down to the help: qml/Fit.qml)
     ListView {
         id: rowsView
         visible: menu.tabId === "settings"
@@ -15,7 +15,7 @@ Item {   // clip: what scrolls stops at the edge of the area (neither over the t
         readonly property var sel: menu.selectable(rows)
         readonly property int focusedRow: menu.area === "content" ? (sel[menu.setSel] ?? -1) : -1
         readonly property string section: menu.section
-        y: 15; x: 40; width: parent.listW; height: 800   // stops above the help at the bottom
+        y: 15; x: 40; width: parent.listW; height: parent.height - 30   // stops above the help at the bottom
         spacing: 10; interactive: false; clip: false; topMargin: 30
         model: rows.length
         onFocusedRowChanged: if (focusedRow >= 0) positionViewAtIndex(focusedRow, ListView.Contain)

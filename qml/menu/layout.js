@@ -4,7 +4,8 @@
 
 var contentX = 460      // header and tab content, right of the rail
 var contentW = 1460     // tab content: up to the right edge of the screen
-var listBottom = 995    // scrolling areas stop above the help at the bottom
+var listBottom = 995    // scrolling areas stop above the help at the bottom (on a 1080-high screen: the tabs use
+                       // menu.height - 85, taller on a 16:10 screen, qml/Fit.qml)
 var cardW = 456         // VideoCard: 3 per row (Replays, YouTube, Jellyfin, History)
 var cardH = 363         // its height: 16:9 thumbnail, title, info
 var cardStep = 482      // card and spacing in a row, column of History
