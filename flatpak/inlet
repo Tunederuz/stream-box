@@ -1,0 +1,4 @@
+#!/bin/sh
+# Inlet app (Flatpak): the token server built next to the app, then the launcher of the repository
+export STREAM_PLAYER_POT=/app/lib/bgutil-pot/server
+exec /app/stream-box/scripts/stream-player.sh "$@"

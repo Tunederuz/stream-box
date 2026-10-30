@@ -1,4 +1,4 @@
-"""Stream Box: box settings kept in ~/.config/stream-box: player (Qt app or mpv), action of the power button, animated
+"""Inlet: box settings kept in ~/.config/stream-box: player (Qt app or mpv), action of the power button, animated
 background of the home screen. Standard library only.
 """
 import json, os

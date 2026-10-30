@@ -1,7 +1,7 @@
-# Stream Box: fewer writes when the system runs from a USB drive (see /usr/local/lib/stream-box/flash-mode); does
+# Inlet: fewer writes when the system runs from a USB drive (see /usr/local/lib/stream-box/flash-mode); does
 # nothing on an internal disk. Before the session, so that media's caches are in memory from the start.
 [Unit]
-Description=Stream Box: fewer writes on a USB drive
+Description=Inlet: fewer writes on a USB drive
 After=local-fs.target systemd-journald.service
 Before=greetd.service
 

@@ -10,7 +10,8 @@ Item {
     property bool focused: false
     property color accent: "#9146ff"   // glow and progress: red on the YouTube tab
     property string glyph: "▶"         // in the center, without a thumbnail ("+": action card, "Connect my account")
-    readonly property int picH: Math.round(width * 9 / 16)   // 16:9 thumbnail
+    property real ratio: 16 / 9   // of the picture: 3 / 4 for the box art of PC games (posters)
+    readonly property int picH: Math.round(width / ratio)
     width: 456   // 3 cards per row in the menu
     height: picH + 106
     z: focused ? 2 : 1

@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
-"""Stream Box: keys read at the source (Bluetooth remotes, gamepads, keyboards), turned into actions.
+"""Inlet: keys read at the source (Bluetooth remotes, gamepads, keyboards), turned into actions.
 
 Reads /dev/input/event* (the user must be in the input group), with Linux's standard names (KEY_UP, KEY_SELECT,
 BTN_SOUTH…), and sends to mpv, through its IPC:
   script-message streambox-input <key name> <action or empty>
 stream-box.lua plays the action (or, during the "Set up keys" wizard, learns the key). Actions: up down left right ok
-back home (TV menu) menu (options ≡) homescreen corner power volume_up volume_down mute.
+back home (TV menu) menu (options ≡) corner power volume_up volume_down mute (homescreen: only from keys learned
+before it left the defaults).
 Mapping: DEFAULTS below, then ~/.config/stream-box/keymap.json ({"KEY_…": "action"}, written by the wizard), read again
 when it changes. While this service runs, it announces it (user-data/streambox/input) and the Qt app and mpv ignore the
 keys they receive themselves (otherwise each one would count twice); without permissions on the devices, it stops and
 the old path (keys received by the Qt app or mpv) takes over again. Started by start.sh.
 """
-import json, os, re, select, socket, struct, sys, time
+import json, os, re, select, signal, socket, struct, sys, time
 
 # app/player and app/system on the import path: the modules import each other by name, from either folder (system/
-# is not part of the Stream Player)
+# is not part of the Inlet app)
 sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), d) for d in ("player", "system")]
 
+from common import GAMESTREAM_PID
 from i18n import tr
 
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
@@ -37,18 +39,18 @@ DEFAULTS = {
     "KEY_BACK": "back", "KEY_ESC": "back", "KEY_BACKSPACE": "back",
     "KEY_HOMEPAGE": "home", "KEY_HOME": "home",
     "KEY_MENU": "menu", "KEY_COMPOSE": "menu", "KEY_VIDEOPHONE": "menu", "KEY_VOICECOMMAND": "menu", "KEY_INFO": "menu",
-    "KEY_WWW": "homescreen", "KEY_PLAYPAUSE": "corner", "KEY_PLAY": "corner", "KEY_POWER": "power",
+    "KEY_WWW": "home", "KEY_PLAYPAUSE": "corner", "KEY_PLAY": "corner", "KEY_POWER": "power",
     "KEY_VOLUMEUP": "volume_up", "KEY_VOLUMEDOWN": "volume_down", "KEY_MUTE": "mute",
-    # Regular keyboard: Space play / pause, Windows or M TV menu, O options, H home screen, + / − volume, media keys.
+    # Regular keyboard: Space play / pause, Tab, Windows or M TV menu, O options, + / − volume, media keys.
     # Linux codes are positional (QWERTY): the M of an AZERTY keyboard sends KEY_SEMICOLON
-    "KEY_SPACE": "corner", "KEY_LEFTMETA": "home", "KEY_RIGHTMETA": "home", "KEY_M": "home", "KEY_SEMICOLON": "home", "KEY_O": "menu", "KEY_H": "homescreen",
+    "KEY_SPACE": "corner", "KEY_TAB": "home", "KEY_LEFTMETA": "home", "KEY_RIGHTMETA": "home", "KEY_M": "home", "KEY_SEMICOLON": "home", "KEY_O": "menu",
     "KEY_KPPLUS": "volume_up", "KEY_KPMINUS": "volume_down", "KEY_EQUAL": "volume_up", "KEY_MINUS": "volume_down",
     "KEY_NEXTSONG": "right", "KEY_PREVIOUSSONG": "left", "KEY_STOPCD": "back",
-    # Gamepads. BTN_MODE: the middle button (Xbox, PlayStation, the Steam Deck's Steam button) opens the TV menu, as on
-    # a console; BTN_BASE: the Steam Deck's "…" button, the home screen
+    # Gamepads. The TV menu: the middle button (BTN_MODE: Xbox, PlayStation, the Steam Deck's Steam button), as on a
+    # console, Select (View) and the Steam Deck's "…" (BTN_BASE); Start (≡ on Xbox) the options
     "BTN_DPAD_UP": "up", "BTN_DPAD_DOWN": "down", "BTN_DPAD_LEFT": "left", "BTN_DPAD_RIGHT": "right",
-    "BTN_SOUTH": "ok", "BTN_EAST": "back", "BTN_START": "home", "BTN_SELECT": "menu", "BTN_MODE": "home",
-    "BTN_BASE": "homescreen",
+    "BTN_SOUTH": "ok", "BTN_EAST": "back", "BTN_START": "menu", "BTN_SELECT": "home", "BTN_MODE": "home",
+    "BTN_BASE": "home",
 }
 IGNORED = re.compile(r"HDA |Video Bus|PC Speaker|WMI hotkeys|Sleep Button|Lid Switch|ydotool|Power Button$")
 
@@ -130,11 +132,23 @@ class Mpv:
                 raise OSError("mpv closed the connection")
 
 
+def streaming():
+    """PID of Moonlight while a game streams from a PC (gamestream.py), otherwise None: the keys are then its own"""
+    try:
+        with open(GAMESTREAM_PID) as f:
+            pid = int(f.read())
+        os.kill(pid, 0)
+        return pid
+    except (OSError, ValueError):
+        return None
+
+
 def main():
     mpv, keymap = Mpv(), Keymap()
     devices = {}            # path -> open file
     hat = {}                # (path, axis) -> last value of the gamepad d-pad
     held = {}               # (path, code) -> [press time, name, window already open] for power keys
+    stream_home = {}        # (path, code) -> press time of Home during a game stream (held LONG_PRESS: stream ends)
     repeating = {}          # (path, code or axis) -> [next repeat, name, action, press time] for held keys
     last_scan = last_beat = 0
     allowed = None
@@ -193,6 +207,12 @@ def main():
         if now - last_beat > 5:   # "this service is running" (stream-box.lua and ui.py then ignore their keys)
             last_beat = now
             mpv.send("set_property", "user-data/streambox/input", f"evdev:{int(now)}")
+        for k, t in list(stream_home.items()):   # Home held during a game stream: the stream ends
+            if time.time() - t >= LONG_PRESS:
+                del stream_home[k]
+                pid = streaming()
+                if pid:
+                    os.kill(pid, signal.SIGTERM)
         for k, h in held.items():   # power held long enough: box window, without waiting for the release
             if not h[2] and time.time() - h[0] >= LONG_PRESS:
                 h[2] = True
@@ -204,7 +224,7 @@ def main():
             elif now >= r[0]:
                 r[0] = now + REPEAT_EVERY
                 mpv.send("script-message", "streambox-input", r[1], r[2])
-        wait = min([max(0, r[0] - now) for r in repeating.values()] + [0.2 if held else 1])
+        wait = min([max(0, r[0] - now) for r in repeating.values()] + [0.2 if held or stream_home else 1])
         ready, _, _ = select.select(list(devices.values()), [], [], wait)
         for f in ready:
             path = next(p for p, d in devices.items() if d is f)
@@ -213,8 +233,17 @@ def main():
             except OSError:   # device gone
                 drop(path)
                 continue
+            gaming = streaming()
             for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
                 _, _, etype, code, value = EVENT.unpack_from(data, i)
+                if gaming:   # a game streams from a PC: the keys are Moonlight's, except Home held (ends the stream)
+                    if etype == EV_KEY and keymap.get(key_name(code)) == "home":
+                        if value == 1:
+                            stream_home[(path, code)] = time.time()
+                        elif value == 0:
+                            stream_home.pop((path, code), None)
+                    repeating.clear()
+                    continue
                 if etype == EV_KEY and keymap.get(key_name(code)) == "power":
                     # power: action on release (short press), or window after LONG_PRESS (see above)
                     if value == 1:

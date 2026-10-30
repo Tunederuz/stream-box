@@ -4,7 +4,7 @@ The box announces itself in Home Assistant through **MQTT discovery** (`mqtt_bri
 `stream-box-mqtt`). Config on the box: `~/.config/stream-box/mqtt.json` (`{"host": "<broker-ip>", "port": 1883,
 "user": "<user>"}`) and the password alone in `~/.config/stream-box/mqtt-password` (mode 600).
 
-## Entities ("Stream Box" device)
+## Entities ("Inlet" device)
 
 | Entity | Role |
 |---|---|
@@ -37,7 +37,7 @@ consumption sensor):
 
 ```yaml
 automation:
-  - alias: "Stream Box: turn on with the TV"
+  - alias: "Inlet: turn on with the TV"
     triggers:
       - trigger: state
         entity_id: media_player.<tv>
@@ -51,7 +51,7 @@ automation:
         target:
           entity_id: button.wake_on_lan_<mac>
 
-  - alias: "Stream Box: turn off with the TV"   # optional
+  - alias: "Inlet: turn off with the TV"   # optional
     triggers:
       - trigger: state
         entity_id: media_player.<tv>
@@ -84,7 +84,7 @@ required).
 
 ```yaml
 automation:
-  - alias: "Stream Box: turn on when <streamer> goes live"
+  - alias: "Inlet: turn on when <streamer> goes live"
     triggers:
       - trigger: state
         entity_id: sensor.<streamer>

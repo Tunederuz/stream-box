@@ -1,4 +1,4 @@
-"""Stream Box: screenshots of the QML TV menu (qml/TvMenu.qml), without a box, mpv or GPU (Xvfb, Mesa).
+"""Inlet: screenshots of the QML TV menu (qml/TvMenu.qml), without a box, mpv or GPU (Xvfb, Mesa).
 
 Mocks the context properties of ui.py (box, pip, i18n with locales/fr.json), serves fixed JSON fixtures on
 127.0.0.1:8080 (the remote.py API the menu calls), opens the menu in a 1920x1080 window and plays a scripted key
@@ -25,6 +25,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 WAIT = int(os.environ.get("QMLSHOTS_WAIT", "900"))   # ms after each step: animations and images done
 NOSHOTS = bool(os.environ.get("QMLSHOTS_NOSHOTS"))   # the scenario and console.log only (checks: no screenshot)
+# The Inlet app (no system part): /api/features {system: false}, and the system's routes answer 404 as there
+PLAYER = bool(os.environ.get("QMLSHOTS_PLAYER"))
+SYSTEM_ROUTES = ("/api/health", "/api/wifi", "/api/audio", "/api/local_update", "/api/branches", "/api/backup",
+                 "/api/bluetooth", "/api/dev", "/api/ssh", "/api/install", "/api/display", "/api/update_prompt")
 
 # Key sequence: ("key", name), ("open",), ("power",), ("text", text, submit), ("video", bool), ("close",),
 # ("pause", ms): nothing more than waiting (the live preview starts after a moment on a live streamer).
@@ -60,8 +64,9 @@ STEPS = (
     + scene(4, "up down right ok back down down right right right right down ok")   # Jellyfin: series
     + keys("right ok back up ok back")                            # episodes, dialog, keyboard closed
     + scene(5, "up down right ok back down down right ok")        # Plex: rows, series, episodes
-    + scene(6, "right down down left ok back")                    # History
-    + scene(7, "down down down down down down down down down down down down")   # Settings: sections, power below
+    + scene(6, "right right down menu down back up right right menu back left left")   # PC link: games, options, PCs
+    + scene(7, "right down down left ok back")                    # History
+    + scene(8, "down down down down down down down down down down down down")   # Settings: sections, power below
     + keys("up up up up up up up up up up up up ok down right up right")   # Picture and sound: audio output, resolution
     + keys("back down ok back down ok back down ok")              # Playback, Chat, Appearance
     + keys("back down ok down down ok") + [("pause", 300)] + keys("ok back")   # Accounts: Jellyfin, Quick Connect code
@@ -74,6 +79,7 @@ STEPS = (
     + [("key", "home"), ("video", True), ("open",)]               # over a video: veil only
     + keys("back down down back")
     + [("video", False), ("power",)] + keys("down back")          # "Box" dialog alone
+    + scene(3, "up ok") + [("type", "a"), ("type", "b"), ("type", "\b")] + keys("back")   # search: computer keyboard
 )
 
 
@@ -148,6 +154,7 @@ def shoot(qml_dir, out):
         closeRequested = Signal()
         keyPressed = Signal(str)
         textInput = Signal(str, bool)
+        keyTyped = Signal(str)
         powerMenuRequested = Signal()
         ambientChanged = Signal()
         videoActiveChanged = Signal()
@@ -176,6 +183,14 @@ def shoot(qml_dir, out):
         @Slot(bool)
         def setMenuOpen(self, v):
             self.calls.append("setMenuOpen %s" % v)
+
+        @Slot(bool)
+        def setTyping(self, v):
+            self.calls.append("setTyping %s" % v)
+
+        @Slot()
+        def quit(self):
+            self.calls.append("quit")
 
     class FakeVideo(QQuickPaintedItem):   # MpvVideo of ui.py (libmpv): a pink rectangle where the video would be
         whichChanged = Signal()
@@ -242,6 +257,9 @@ def shoot(qml_dir, out):
         lang = Property(str, lambda self: "fr", notify=changed)
 
     fixtures = dates(json.load(open(os.path.join(HERE, "fixtures.json"), encoding="utf-8")))
+    if PLAYER:
+        fixtures = {k: v for k, v in fixtures.items() if k not in SYSTEM_ROUTES}
+        fixtures["/api/features"] = {"system": False, "gamestream": True}
     posts = []
     serve(fixtures, posts)
     console = []
@@ -253,6 +271,10 @@ def shoot(qml_dir, out):
     os.makedirs(out, exist_ok=True)
     root = tempfile.mkdtemp()
     shutil.copytree(qml_dir, os.path.join(root, "qml"))
+    # the logo (qml/Logo.qml reads ../assets/brand): the working tree's
+    brand = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "brand")
+    if os.path.isdir(brand):
+        shutil.copytree(brand, os.path.join(root, "assets", "brand"))
     with open(os.path.join(root, "harness.qml"), "w") as f:
         f.write('import QtQuick\nimport "qml"\nRectangle {\n    width: 1920; height: 1080; color: "#203040"\n'
                 '    TvMenu { objectName: "tvMenu" }\n}\n')
@@ -298,6 +320,8 @@ def shoot(qml_dir, out):
             box.set_video(step[1])
         elif step[0] == "pause":
             wait(step[1])
+        elif step[0] == "type":
+            box.keyTyped.emit(step[1])
         t0 = time.monotonic()
         wait(WAIT)
         t1 = time.monotonic()

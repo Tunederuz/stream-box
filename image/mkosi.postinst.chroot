@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stream Box: image services and settings (after the packages and mkosi.prepare.chroot)
+# Inlet: image services and settings (after the packages and mkosi.prepare.chroot)
 set -euo pipefail
 BOX_USER=media
 BOX_HOME=/home/$BOX_USER
@@ -25,7 +25,7 @@ as_box '
 # jellyfin-mpv-shim drives the box's mpv (same config as install.sh)
 as_box 'cat > ~/.config/jellyfin-mpv-shim/conf.json' << 'JSON'
 {
-  "player_name": "Stream Box",
+  "player_name": "Inlet",
   "enable_gui": false,
   "headless": true,
   "fullscreen": true,

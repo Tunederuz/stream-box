@@ -1,6 +1,6 @@
 """remote.py (companion app server and API): started for real with a throwaway HOME and a fake mpv IPC socket that
 records the commands it receives. Skipped when port 8080 or the mpv socket are already taken (a running box). Run twice:
-from the repository (Stream Box OS), and from a copy without app/system (Stream Player)."""
+from the repository (Inlet OS), and from a copy without app/system (Inlet app)."""
 import http.client, json, os, shutil, socket, subprocess, sys, tempfile, threading, time, unittest
 
 from tests.helpers import REPO, temp_home
@@ -56,7 +56,7 @@ class FakeMpv:
 
 @unittest.skipIf(port_taken() or os.path.exists(SOCK), "port 8080 or the mpv socket already in use")
 class Api(unittest.TestCase):
-    SYSTEM = True   # the system part is there (Stream Box OS)
+    SYSTEM = True   # the system part is there (Inlet OS)
 
     @classmethod
     def root(cls):
@@ -133,7 +133,7 @@ class Api(unittest.TestCase):
         self.assertIn("error", body)
 
     def test_features(self):
-        self.assertEqual(self.request("GET", "/api/features"), (200, {"system": self.SYSTEM}))
+        self.assertEqual(self.request("GET", "/api/features"), (200, {"system": self.SYSTEM, "gamestream": False}))   # (no Moonlight here)
 
     def test_unknown_action(self):
         self.assertGreaterEqual(self.request("POST", "/api/no_such_action", {})[0], 400)
@@ -153,7 +153,7 @@ if __name__ == "__main__":
 
 
 class PlayerOnly(Api):
-    """The same server and tests from a copy of the repository without app/system: the Stream Player, whose OS runs
+    """The same server and tests from a copy of the repository without app/system: the Inlet app, whose OS runs
     itself. It starts, serves the page and the player's API, and has none of the system's routes and actions."""
     SYSTEM = False
 

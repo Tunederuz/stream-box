@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream Box: full-screen app (Qt Quick) embedding mpv (libmpv).
+"""Inlet: full-screen app (Qt Quick) embedding mpv (libmpv).
 
 Replaces the mpv window in the cage session: the video is drawn by libmpv in the Qt Quick scene (OpenGL,
 GPU), and QML interface elements can sit on top of it with real animations. The
@@ -33,9 +33,14 @@ import mpv
 
 import chat_qt   # chat with emotes (same folder)
 import common    # common.py: built-in battery
+# The box's system part is there (False: the Inlet app, on an OS that runs itself). Decided as in sysparts.py, by the
+# folder, without importing it: its modules are not on this script's import path (nor needed here)
+SYSTEM = os.path.isdir(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "system"))
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 CURSOR_HIDE_MS = 4000   # like mpv's --cursor-autohide=4000
+# Inlet app on a desktop: an ordinary window (F11: full screen). Full screen on the box and in SteamOS's Game mode
+WINDOWED = not SYSTEM and os.environ.get("XDG_CURRENT_DESKTOP", "").lower() != "gamescope"
 
 # Qt keys → mpv key names (those stream-box.lua binds). Keys with no name in Qt (OK and Menu of the
 # Xiaomi remote control) are forwarded by their keysym, under the name mpv gave them (see key_name).
@@ -58,8 +63,8 @@ SPECIAL_KEYSYMS = {0x1008ffa0: "0x21ffa0",   # OK
 
 # Keys for the big menu, same roles as KEYS in stream-box.lua
 MENU_KEYS = {"UP": "up", "DOWN": "down", "LEFT": "left", "RIGHT": "right", "ENTER": "ok", "KP_ENTER": "ok",
-             "0x21ffa0": "ok", "HOMEPAGE": "home", "GO_BACK": "back", "ESC": "back", "0x2111a0": "menu",
-             "WWW": "homescreen", "PLAY": "corner", "PLAYPAUSE": "corner"}
+             "0x21ffa0": "ok", "HOMEPAGE": "home", "TAB": "home", "GO_BACK": "back", "ESC": "back", "0x2111a0": "menu",
+             "WWW": "home", "PLAY": "corner", "PLAYPAUSE": "corner"}
 
 
 # Learned keys (wizard of the System menu, written by stream-box.lua): re-read when the file changes
@@ -148,6 +153,7 @@ class Box(QObject):
     closeRequested = Signal()      # video started from elsewhere (phone, Cast…), keys wizard: menu closed
     keyPressed = Signal(str)
     textInput = Signal(str, bool)
+    keyTyped = Signal(str)   # computer keyboard while the search keyboard is open: a character, "\b" or "\n"
     powerMenuRequested = Signal()   # power held (stream-box.lua): "sleep, restart, shut down" window    # text typed on the phone for the menu keyboard (text, start the search)
     ambientChanged = Signal()
     videoActiveChanged = Signal()
@@ -215,6 +221,18 @@ class Box(QObject):
             chat.set_menu_open(value)
         to_mpv(set_flag, "user-data/streambox/tvmenu", value)   # the chat hides, the mouse does not open the small menu
 
+    typing = False
+
+    @Slot(bool)
+    def setTyping(self, value):
+        """The menu's search keyboard is open: the computer's keys type in it (View.keyPressEvent)."""
+        self.typing = value
+
+    @Slot()
+    def quit(self):
+        """Inlet app: "Quit" of the TV menu. mpv quits, the app with it (shutdown event below)."""
+        to_mpv(lambda: player.command("quit"))
+
 
 box = Box()
 
@@ -256,6 +274,17 @@ def wayland_display():
         return None
 
 
+def x11_display():
+    """Same for an X11 session (Inlet app in SteamOS's Game mode: gamescope only offers X11)."""
+    try:
+        lib = ctypes.CDLL("libX11.so.6")
+        lib.XOpenDisplay.restype = ctypes.c_void_p
+        lib.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        return lib.XOpenDisplay(None) or None
+    except OSError:
+        return None
+
+
 def egl_get_proc_address():
     libegl = ctypes.CDLL("libEGL.so.1")
     libegl.eglGetProcAddress.restype = ctypes.c_void_p
@@ -276,6 +305,8 @@ class MpvRenderer(QQuickFramebufferObject.Renderer):
             display = wayland_display()
             if display:
                 params["wl_display"] = ctypes.c_void_p(display)
+            elif os.environ.get("DISPLAY") and (display := x11_display()):
+                params["x11_display"] = ctypes.c_void_p(display)
             main = self.item.which == "main"
             source = {"pip": pip_player, "preview": preview_player}.get(self.item.which, player)
             self.ctx = mpv.MpvRenderContext(source, "opengl", **params)
@@ -636,9 +667,20 @@ class View(QQuickView):
         self.setColor(Qt.black)
         self.hide_cursor = QTimer(self, singleShot=True, interval=CURSOR_HIDE_MS)
         self.hide_cursor.timeout.connect(lambda: self.setCursor(QCursor(Qt.BlankCursor)))
-        self.setCursor(QCursor(Qt.BlankCursor))
+        if not WINDOWED:
+            self.setCursor(QCursor(Qt.BlankCursor))
 
     def keyPressEvent(self, event):
+        if box.menu_open and box.typing:
+            if event.key() == Qt.Key_Backspace:
+                return box.keyTyped.emit("\b")
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                return box.keyTyped.emit("\n")
+            if event.text() and event.text().isprintable():
+                return box.keyTyped.emit(event.text())
+        if WINDOWED and event.key() == Qt.Key_F11:
+            self.showNormal() if self.visibility() == QQuickView.FullScreen else self.showFullScreen()
+            return
         if time.time() - input_service["beat"] < 15:   # input.py reads the keys at the source: nothing to do here
             return
         name = key_name(event)
@@ -678,6 +720,10 @@ class View(QQuickView):
     def mousePressEvent(self, event):
         if box.menu_open:
             return
+        if WINDOWED and event.type() == event.Type.MouseButtonDblClick and event.button() == Qt.LeftButton:
+            # Inlet app in a window: a double click toggles full screen
+            self.showNormal() if self.visibility() == QQuickView.FullScreen else self.showFullScreen()
+            return
         x, y = self.mouse_pos(event)
         double = event.type() == event.Type.MouseButtonDblClick
         to_mpv(player.command, "mouse", x, y, 0, "double" if double else "single")
@@ -692,6 +738,8 @@ def main():
     opts, appends, files = parse_args(sys.argv[1:])
     force_window = opts.pop("__force_window", None)
     QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
+    # Under X11, Qt's OpenGL through EGL (GLX by default): libmpv takes its functions from EGL (egl_get_proc_address)
+    os.environ.setdefault("QT_XCB_GL_INTEGRATION", "xcb_egl")
     app = QGuiApplication(sys.argv[:1])
     locale.setlocale(locale.LC_NUMERIC, "C")   # required by libmpv, after Qt which applies the system locale
     qmlRegisterType(MpvVideo, "StreamBox", 1, 0, "MpvVideo")
@@ -794,7 +842,12 @@ def main():
     else:   # no big menu: stream-box.lua opens its small menu instead
         bridge.ready.connect(lambda: to_mpv(player._set_property, "user-data/streambox/menu", "small"),
                              Qt.QueuedConnection)
-    view.showFullScreen()
+    if WINDOWED:
+        view.setTitle("Inlet")
+        view.resize(1280, 720)
+        view.show()
+    else:
+        view.showFullScreen()
     # Boot image from start.sh (mpv, same image as the Plymouth screen): removed once the app's first frame is
     # on screen (short delay: cage switches to the most recent window)
     def drop_splash():

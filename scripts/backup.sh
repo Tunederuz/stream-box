@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stream Box: backup of settings and connections, to put them back after a reinstallation:
+# Inlet: backup of settings and connections, to put them back after a reinstallation:
 #
 #   sudo bash backup.sh [archive.tar.gz]      then, on the reinstalled machine:
 #   sudo bash install.sh --restore archive.tar.gz …

@@ -126,7 +126,7 @@ jobs:
           notes=$(printf '%s\n\n### Install\n%s\n' "$changes" "$install")
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" image/mkosi.output/release/* --clobber
-            gh release edit "$TAG" --draft=false --title "Stream Box $TAG" --notes "$notes"
+            gh release edit "$TAG" --draft=false --title "Inlet $TAG" --notes "$notes"
           else
-            gh release create "$TAG" "${target[@]}" image/mkosi.output/release/* --title "Stream Box $TAG" --notes "$notes"
+            gh release create "$TAG" "${target[@]}" image/mkosi.output/release/* --title "Inlet $TAG" --notes "$notes"
           fi

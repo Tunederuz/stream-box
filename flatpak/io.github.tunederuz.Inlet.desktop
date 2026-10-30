@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Inlet
+Comment=Twitch, YouTube, Jellyfin and Plex on the TV, with a remote or a controller
+Exec=inlet
+Icon=io.github.tunederuz.Inlet
+Categories=AudioVideo;Video;Player;TV;

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stream Box: permanent player, restarted if it closes (started by start.sh, in the cage session).
+# Inlet: permanent player, restarted if it closes (started by start.sh, in the cage session).
 #
 # Player: the Qt Quick app embedding mpv (ui.py, ui-venv venv) if ~/.config/stream-box/player contains "qt", otherwise
 # mpv alone. The file is read again on each restart: to switch, write it then quit the player (quit command through
@@ -9,30 +9,9 @@ DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"   # the repository (thi
 export PATH="$HOME/.local/bin:$PATH"
 UI_PYTHON="$HOME/.local/share/ui-venv/bin/python"
 
-# Format of videos sent as a link (yt-dlp). By default 1440p at most and no AV1, which many iGPUs can't decode in
-# hardware (everything would fall back to the CPU); another rule can be put in this file.
-YTDL_FORMAT='bestvideo[height<=?1440][vcodec!^=av01]+bestaudio/best'
-[ -s "$HOME/.config/stream-box/ytdl-format" ] && YTDL_FORMAT=$(head -1 "$HOME/.config/stream-box/ytdl-format")
-
-# hwdec: hardware decoding when it is safe (VA-API, NVDEC…). French and English subtitles, manual and automatic,
-# without the automatic translations ("French from Arabic"… over 100 tracks).
-# player_client: mweb first, tv_simply as a fallback; which client's streams YouTube serves changes from day to day
-# (tv_simply cut after the first megabytes on 2026-10-28, mweb refused on 2026-10-29): stream-box.lua reloads a video
-# refused with HTTP 403 with the next client
-# fetch_pot: anti-bot token (stream-box-pot service) for every request, otherwise YouTube blocks the subtitles
-# shellcheck disable=SC2054  # (commas inside mpv option values, not array separators)
-MPV_ARGS=(
-  --idle=yes --force-window=yes --fs --osc=no --cursor-autohide=4000
-  --input-ipc-server=/tmp/stream-box-mpv.sock --script="$DIR/lua/stream-box.lua"
-  --cache=yes --hwdec=auto-safe
-  --ytdl-format="$YTDL_FORMAT"
-  --ytdl-raw-options-append=sub-langs=fr,fr-FR,fr-orig,en,en-US,en-GB,en-orig
-  --ytdl-raw-options-append=write-subs= --ytdl-raw-options-append=write-auto-subs=
-  --ytdl-raw-options-append=cookies="$HOME/.config/stream-box/twitch-cookies.txt"
-  --ytdl-raw-options-append='extractor-args=youtube:player_client=mweb,tv_simply;fetch_pot=always'
-)
-# YouTube JavaScript challenges: deno if installed (install.sh), otherwise the system Node (image)
-[ -x "$HOME/.local/bin/deno" ] || MPV_ARGS+=(--ytdl-raw-options-append=js-runtimes=node)
+# mpv options, shared with the Inlet app (stream-player.sh)
+# shellcheck source=scripts/mpv-args.sh
+. "$DIR/scripts/mpv-args.sh"
 
 quick_fails=0 last_choice=""
 while true; do
@@ -42,10 +21,12 @@ while true; do
   stamp="$(stat -c %Y "$HOME/.config/stream-box/player" 2>/dev/null)$choice"
   [ "$stamp" != "$last_choice" ] && quick_fails=0 && last_choice=$stamp
   pkill -u "$USER" -f 'streamlink .*--player-external-http'   # leftovers from a previous player
-  # Jellyfin: "Play on → Stream Box". The shim drives this player through its socket (config in
+  # Jellyfin: "Play on → Inlet". The shim drives this player through its socket (config in
   # ~/.config/jellyfin-mpv-shim/) and doesn't reattach on its own to a restarted player: restart it along. It gives
   # up if the socket doesn't exist yet (the Qt app takes longer than mpv to open it): it waits for it.
   pkill -u "$USER" -f '[j]ellyfin-mpv-shim'
+  # (boxes set up before the rename to Inlet: the old name in the "Play on" list)
+  sed -i 's/"player_name": "Stream Box"/"player_name": "Inlet"/' "$HOME/.config/jellyfin-mpv-shim/conf.json" 2> /dev/null
   rm -f /tmp/stream-box-mpv.sock
   (
     for _ in $(seq 120); do [ -S /tmp/stream-box-mpv.sock ] && break; sleep 0.5; done

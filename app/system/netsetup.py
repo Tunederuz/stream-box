@@ -1,6 +1,6 @@
-"""Stream Box: network setup mode (Wi-Fi), through NetworkManager (nmcli).
+"""Inlet: network setup mode (Wi-Fi), through NetworkManager (nmcli).
 
-With no network at boot and a Wi-Fi card, the box creates its own hotspot ("Stream Box XXXX", password shown on the TV
+With no network at boot and a Wi-Fi card, the box creates its own hotspot ("Inlet XXXX", password shown on the TV
 with a QR code): the phone connects to it, opens the companion app (http://10.42.0.1:8080) and picks the home Wi-Fi.
 On Ethernet, nothing to do. Used by remote.py (setup_loop loop, /api/wifi API).
 Permissions: NetworkManager allows the active local session (remote.py runs in the TV session); the image adds a polkit
@@ -108,7 +108,7 @@ def hotspot_conf():
             return c
     except (OSError, ValueError):
         pass
-    c = {"ssid": "Stream Box " + "".join(random.choices(string.ascii_uppercase + string.digits, k=4)),
+    c = {"ssid": "Inlet " + "".join(random.choices(string.ascii_uppercase + string.digits, k=4)),
          "password": "".join(random.choices("abcdefghjkmnpqrstuvwxyz23456789", k=10))}
     os.makedirs(os.path.dirname(CONF), mode=0o700, exist_ok=True)
     with open(CONF, "w", encoding="utf-8") as f:

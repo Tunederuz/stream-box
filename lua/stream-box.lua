@@ -1,4 +1,4 @@
--- Stream Box: small menu of the simplified version (streamer choice, chat corner, opened by the remote),
+-- Inlet: small menu of the simplified version (streamer choice, chat corner, opened by the remote),
 -- and management of streamlink, which serves the chosen channel's stream over local HTTP to this mpv.
 -- The channel, corner and chat visibility are published in user-data/streambox/* for chat_overlay.py.
 -- Two modes: "twitch" (stream of the chosen channel) and "media" (video sent from the companion app or
@@ -1092,7 +1092,7 @@ local function on_key(key)
         publish_controls()
         return
     end
-    if key == "homescreen" then   -- home screen, from any mode
+    if key == "homescreen" then   -- home screen, from any mode (keys learned when the wizard still offered it)
         if mode ~= "home" then show_home() end
         return
     elseif key == "corner" then   -- next corner for the chat

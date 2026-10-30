@@ -1,10 +1,11 @@
-"""Stream Box: actions of the companion app API (POST /api/<name> with a JSON body), also used by the TV menu, ui.py and
+"""Inlet: actions of the companion app API (POST /api/<name> with a JSON body), also used by the TV menu, ui.py and
 mqtt_bridge.py. One small handler per action in ACTIONS; a refused request raises ValueError (HTTP 400). Standard
 library only.
 """
 import re, subprocess, time
 
 import ambient    # ambient.py: remote URL, first setup
+import gamestream # gamestream.py: games streamed from a PC (Moonlight)
 import history    # history.py: history edits
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import jellyfin   # jellyfin.py: Jellyfin playback
@@ -16,7 +17,7 @@ import youtube    # youtube.py: channels, account, "TV app" access
 from common import mpv
 from i18n import tr
 # The box's system part (sound output, backup, Bluetooth, resolution, installation, local update, Wi-Fi, power, SSH,
-# developer mode, updates): None in the Stream Player, whose actions below are then unknown
+# developer mode, updates): None in the Inlet app, whose actions below are then unknown
 from sysparts import SYSTEM, audio, backup, btsetup, display, installer, localupdate, netsetup, system
 
 keyboard = {}   # TV menu search keyboard: {open, text, target, at}
@@ -178,6 +179,13 @@ def reboot(body):
 # Name in POST /api/<name> → handler(body)
 ACTIONS = {
     "channel": channel,
+    "gamestream_pair": gamestream.pair,             # pairing with the PC: a code to type in Sunshine
+    "gamestream_pair_cancel": gamestream.pair_cancel,
+    "gamestream_search": gamestream.search,         # look for the PC on the network again
+    "gamestream_forget": gamestream.forget,         # forget the PC (another one can be chosen)
+    "gamestream_launch": gamestream.launch,         # {app}: stream a game
+    "gamestream_stop": gamestream.stop,             # end the stream (the game keeps running on the PC)
+    "gamestream_quit": gamestream.quit_game,        # close the game on the PC
     "chat": lambda body: mpv(["script-message", "streambox-toggle-chat"]),
     # the next corner clockwise, or {corner: tl | tr | br | bl}
     "corner": lambda body: mpv(["script-message", "streambox-cycle-corner"]
@@ -228,7 +236,7 @@ ACTIONS = {
     "keyboard_input": keyboard_input,
     "remote_url": lambda body: ambient.set_remote_url(str(body.get("url", ""))[:300]),
 }
-if SYSTEM:   # the box's system (the Stream Player leaves it to its OS: these actions are unknown there)
+if SYSTEM:   # the box's system (the Inlet app leaves it to its OS: these actions are unknown there)
     ACTIONS.update({
         # direct: developer mode, from a branch (main by default)
         "update": lambda body: system.start_update(bool(body.get("direct")), str(body.get("branch") or "main")),

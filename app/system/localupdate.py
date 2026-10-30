@@ -1,4 +1,4 @@
-"""Stream Box: system update from a local image, without the Internet (A/B boxes): the full disk image of a release
+"""Inlet: system update from a local image, without the Internet (A/B boxes): the full disk image of a release
 (stream-box.raw.xz, the one used to install), from a USB stick (TV System menu, companion app) or sent from the
 companion app, with the release's SHA256SUMS and SHA256SUMS.gpg next to it (unsigned: developer mode only).
 

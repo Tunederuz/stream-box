@@ -1,24 +1,10 @@
-// Stream Box logo: white tile, charcoal play triangle with rounded corners. Neutral, it fits the purple background
-// as well as the red background of the YouTube tab (same drawing as the companion app icons)
+// Inlet logo (assets/brand/inlet-mark.svg, drawn for dark backgrounds): a screen open on its left side, a wave
+// flowing into it. Made by tools/brand/make.py
 import QtQuick
-import QtQuick.Shapes
 
-Rectangle {
-    id: root
-    width: 52; height: 52
-    radius: width * 0.27
-    color: "#f4f2f7"
-    Shape {
-        anchors.fill: parent
-        preferredRendererType: Shape.CurveRenderer
-        ShapePath {
-            fillColor: "#17151c"; strokeColor: "#17151c"
-            strokeWidth: root.width * 0.09
-            joinStyle: ShapePath.RoundJoin
-            startX: root.width * 0.39; startY: root.height * 0.32
-            PathLine { x: root.width * 0.69; y: root.height * 0.5 }
-            PathLine { x: root.width * 0.39; y: root.height * 0.68 }
-            PathLine { x: root.width * 0.39; y: root.height * 0.32 }
-        }
-    }
+Image {
+    width: 60; height: 60
+    source: Qt.resolvedUrl("../assets/brand/inlet-mark.svg")
+    sourceSize: Qt.size(width * 2, height * 2)   // sharp at 4K as well
+    smooth: true
 }

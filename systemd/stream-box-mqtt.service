@@ -1,5 +1,5 @@
 [Unit]
-Description=Stream Box: MQTT bridge to Home Assistant
+Description=Inlet: MQTT bridge to Home Assistant
 # No MQTT config (~/.config/stream-box/mqtt.json): the service doesn't start
 ConditionPathExists=%h/.config/stream-box/mqtt.json
 

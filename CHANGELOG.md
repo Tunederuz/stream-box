@@ -6,6 +6,31 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+## [0.6.0]
+
+### Changed
+- Stream Box is now **Inlet**, with a new logo: TV menu, boot screen, companion app (its icon too), Cast and
+  Jellyfin's "Play on" lists, Plex, Home Assistant. Settings, accounts and updates are untouched.
+- Gamepads: Start (≡ on Xbox controllers) now opens the options and Select (View) the TV menu, the other way round
+  from before; the middle button and the Steam Deck's "…" open the TV menu too.
+- No more home screen shortcut on the keys (the Steam Deck's "…", the remote's Internet key, H on a keyboard): the
+  TV menu's "Home screen" entry stays.
+
+### Added
+- PC link: a TV menu tab to play the games of PCs running Sunshine, with Moonlight. The box finds the PCs on the
+  network, pairs with a code typed in Sunshine, shows each PC's games and streams them; hold Home to end the stream.
+  The PCs are also managed in Settings → Accounts and links (pair, forget, search again).
+- Inlet app (preview): the player as a Flatpak app, for SteamOS or a desktop, without the box's system settings
+  (its OS runs itself). Built with `flatpak/build.sh`; Settings → "Quit" closes it. It opens in a window (F11 or a
+  double click: full screen) and needs no first setup from a phone.
+- Keyboard: Tab opens and closes the TV menu; in the search, the computer's keys type directly.
+- Moonlight is part of the image (for the PC link): the system takes about 225 MB more.
+
+### Fixed
+- The interface is centered on screens that aren't 16:9 (the Steam Deck's 16:10), instead of leaving all the margin
+  at the bottom or on the right.
+- Xbox controllers over Bluetooth work in games streamed from a PC: they were seen as keyboards only.
+
 ## [0.5.0]
 
 ### Changed

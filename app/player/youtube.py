@@ -1,11 +1,11 @@
-"""Stream Box: YouTube for the companion app and the TV menu. Followed channels (RSS feeds), search (yt-dlp), automatic
+"""Inlet: YouTube for the companion app and the TV menu. Followed channels (RSS feeds), search (yt-dlp), automatic
 subtitles, seek bar preview, and the YouTube account through the "TV app" access (cast/youtube_tv.js: sign-in with a
 code, subscriptions, recommendations, progress synced both ways). Standard library only.
 """
 import json, os, re, subprocess, threading, time, urllib.parse, urllib.request
 
 import history   # history.py: positions of the videos already watched on the box
-from common import COOKIES_DIR, mpv
+from common import COOKIES_DIR, mpv, tool
 from i18n import tr
 
 # YouTube: followed channels (the box's list, ~/.config/stream-box/youtube.json) and their latest videos through the
@@ -18,7 +18,7 @@ YT_FEED_RETRY = 600   # failed feed (address rate-limited by YouTube…): new at
 YT_SEARCH_CACHE = 600
 yt_feeds, yt_searches = {}, {}   # channel id → (time, videos); query → (time, results)
 yt_lock = threading.Lock()
-YTDLP = os.path.expanduser("~/.local/bin/yt-dlp")
+YTDLP = tool("yt-dlp")
 # YouTube JavaScript challenges: deno when installed (install.sh), otherwise the system's Node (image, without deno)
 
 

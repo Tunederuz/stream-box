@@ -1,4 +1,4 @@
-"""Stream Box: HTTP server of the companion app (http://<box>:8080): the page and its PWA files, the locale files, the
+"""Inlet: HTTP server of the companion app (http://<box>:8080): the page and its PWA files, the locale files, the
 GET routes of the API (state, lists, status) and POST /api/<action> (actions.py). Standard library only.
 """
 import json, os, time, urllib.parse
@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler
 
 import actions    # actions.py: POST /api/<name>, TV menu keyboard
 import ambient    # ambient.py: first setup, remote URL, QR codes
+import gamestream # gamestream.py: games streamed from a PC (Moonlight)
 import history    # history.py: history file, kind of the current video
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import images     # images.py: TV preview
@@ -15,7 +16,7 @@ import playback   # playback.py: videos shared from the phone
 import settings   # settings.py: player, power button, background
 import twitch     # twitch.py: streamers, live, polls, account, followed channels
 import youtube    # youtube.py: channels, search, account, subtitles
-import sysparts   # sysparts.py: the box's system part, absent from the Stream Player
+import sysparts   # sysparts.py: the box's system part, absent from the Inlet app
 from common import DIR, mpv
 # (system part: sound outputs, backup, Bluetooth, resolution, installation, local update, Wi-Fi, status / SSH / dev mode)
 from sysparts import SYSTEM, audio, backup, btsetup, display, installer, localupdate, netsetup, system
@@ -93,9 +94,11 @@ JSON_ROUTES = {
     "/api/youtube_channels": lambda: {"channels": youtube.yt_channels()},
     "/api/youtube_account": youtube.yt_account_status,
     "/api/plex_link": plex.link_state,   # Plex server, and the sign-in code being waited for
-    "/api/features": sysparts.features,   # what this installation has (system part or not)
+    # what this installation has: system part or not, Moonlight for games streamed from a PC
+    "/api/features": lambda: {**sysparts.features(), "gamestream": gamestream.available()},
+    "/api/gamestream": gamestream.status,   # the PC (Sunshine), pairing, its games, a stream running
 }
-if SYSTEM:   # the box's system (the Stream Player leaves it to its OS: these routes answer 404 there)
+if SYSTEM:   # the box's system (the Inlet app leaves it to its OS: these routes answer 404 there)
     JSON_ROUTES.update({
         "/api/bluetooth": btsetup.status,
         "/api/audio": audio_status,
@@ -230,6 +233,13 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, twitch.follows_status())
                 except (OSError, ValueError, KeyError) as e:
                     self.send(503, {"error": tr("Twitch unreachable: {error}", error=e)})
+            elif self.path.startswith("/api/gamestream_art?"):   # box art of a PC game (PNG, from Sunshine)
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                data = gamestream.art(query.get("host", [""])[0], query.get("id", [""])[0])
+                if data:
+                    self.send(200, data, "image/png")
+                else:
+                    self.send(404, {"error": tr("not found")})
             elif self.path.startswith("/api/qr?"):
                 text = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("text", [""])[0]
                 self.send(200, {"rows": ambient.qr_rows(text)})

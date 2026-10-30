@@ -1,4 +1,9 @@
-# Stream Box
+# Inlet
+
+<img src="assets/brand/inlet-mark-light.svg" alt="Inlet logo" width="120">
+
+*Formerly Stream Box.* Two forms: **Inlet OS**, the system image of a box (below), and the **Inlet app**, a
+Flatpak for SteamOS or a desktop, without the box's system settings.
 
 A Linux mini PC plugged into the TV that shows your favorite streamers' Twitch streams full screen, with the chat as
 an overlay, without a desktop or keyboard. It is controlled with a Bluetooth remote or a companion app
@@ -24,7 +29,7 @@ that can be installed on a phone (PWA).
   account.
 - **Subtitles and audio track** selectable during a video (≡ button), including Jellyfin's external subtitles.
 - **Video mode**: YouTube and other links (yt-dlp, subtitles), Twitch replays and clips, Android sharing
-  "Share → Stream Box", and **Jellyfin** ("Play on…") via jellyfin-mpv-shim.
+  "Share → Inlet", and **Jellyfin** ("Play on…") via jellyfin-mpv-shim.
 - **YouTube**: list of channels with their latest videos, and search for videos and channels, on the TV (on-screen
   keyboard) and in the companion app, without an API key. Red playback bar for YouTube, blue for Jellyfin.
 - **Jellyfin** in the TV menu and the companion app: continue watching, next up, recently added, search, episodes of a
@@ -50,7 +55,7 @@ that can be installed on a phone (PWA).
 | Folder | Role |
 |---|---|
 | `app/player/` | The player, portable: the Qt Quick app embedding mpv (`ui.py` + `ui.qml`), the companion app server `remote.py` and its modules (`api.py`, `actions.py`, `twitch.py`, `youtube.py`, `jellyfin.py`, `plex.py`, `quickmenu.py`, `playback.py`, `history.py`, …), the chat (`chat_overlay.py`, `chat_qt.py`), translations (`i18n.py`); `sysparts.py` takes the system part when it is there |
-| `app/system/` | The box's system, Stream Box OS only: power, updates, SSH and developer mode (`system.py`), resolution (`display.py`), sound (`audio.py`), keys at the source (`input.py`), Wi-Fi (`netsetup.py`), Bluetooth (`btsetup.py`, `btagent.py`), installer, local update, backup, boot mode, MQTT bridge. The modules of both folders import each other by name |
+| `app/system/` | The box's system, Inlet OS only: power, updates, SSH and developer mode (`system.py`), resolution (`display.py`), sound (`audio.py`), keys at the source (`input.py`), Wi-Fi (`netsetup.py`), Bluetooth (`btsetup.py`, `btagent.py`), installer, local update, backup, boot mode, MQTT bridge. The modules of both folders import each other by name |
 | `lua/` | mpv script `stream-box.lua` and its modules (`lua/streambox/`): streamlink, quick menu of the simplified version, Twitch / video modes, time shifting, playback bar, keys |
 | `qml/`, `qml/menu/` | Large TV menu in the style of Android TV, in QML (animated, rendered by the GPU) |
 | `web/` | Companion app page (`remote.html`), its PWA files and icons |
@@ -113,7 +118,7 @@ common on Dell): set it to AHCI (Dell: SATA Operation → AHCI). The installer s
 
 ### Afterwards
 
-- Twitch account, Jellyfin, Plex, YouTube account: from the TV menu (Settings → Accounts and libraries) or the companion app (Settings).
+- Twitch account, Jellyfin, Plex, YouTube account: from the TV menu (Settings → Accounts and links) or the companion app (Settings).
 - Wake-on-LAN is on for Ethernet in the image: enable it in the BIOS too to wake the box from the network.
 - Home Assistant: [docs/home-assistant.md](docs/home-assistant.md).
 - Updates: the box checks every day for a new release and the TV menu offers it ("Update now?"); Settings → Updates
@@ -125,6 +130,11 @@ common on Dell): set it to AHCI (Dell: SATA Operation → AHCI). The installer s
   Updates) or sent from the companion app.
 - Developer mode (TV menu → Settings → Advanced): passwordless sudo and SSH for the `media` user. The image has no other root
   access.
+
+### Inlet app (preview): the app for SteamOS or a desktop
+The same player as a Flatpak app, without the box's system settings (Wi-Fi, Bluetooth, power, updates: the OS
+handles them). Build it with `flatpak/build.sh` (Docker), then `flatpak install --user Inlet.flatpak`. On
+SteamOS, add it to Steam as a non-Steam game to launch it from Game mode.
 
 ### Advanced: on an existing Arch installation
 

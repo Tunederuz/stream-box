@@ -1,13 +1,13 @@
-"""Stream Box: ambient screen data (weather, upcoming scheduled lives), companion app QR code and first setup, published
+"""Inlet: ambient screen data (weather, upcoming scheduled lives), companion app QR code and first setup, published
 by ambient_loop in user-data/streambox/ambient. Standard library only.
 """
-import datetime, json, os, re, subprocess, time, urllib.parse, urllib.request, zoneinfo
+import datetime, json, os, re, subprocess, sys, time, urllib.parse, urllib.request, zoneinfo
 
 import history   # history.py: a box that has a history counts as set up
 import twitch    # twitch.py: streamer list, Twitch schedules
 from common import COOKIES_DIR, PORT, PUBLISH_EVERY, lan_ip, mpv
 from i18n import tr
-from sysparts import netsetup   # setup Wi-Fi access point (None in the Stream Player)
+from sysparts import netsetup   # setup Wi-Fi access point (None in the Inlet app)
 
 # Ambient screen (drawn by stream-box.lua when nothing is playing): weather and upcoming scheduled lives, published in
 # user-data/streambox/ambient. Weather comes from Open-Meteo (no account); location in ~/.config/stream-box/ambient.json:
@@ -121,6 +121,8 @@ def next_streams(users, now):
 
 REMOTE_URL_FILE = os.path.join(COOKIES_DIR, "remote-url")
 MEDIA_PYTHON = os.path.expanduser("~/.local/share/media-venv/bin/python")
+if not os.access(MEDIA_PYTHON, os.X_OK):
+    MEDIA_PYTHON = sys.executable   # Inlet app: segno is installed next to the app
 
 
 def remote_url():

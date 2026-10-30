@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Stream Box: at boot, before the login screen, picks the mode depending on whether a keyboard is plugged in.
+"""Inlet: at boot, before the login screen, picks the mode depending on whether a keyboard is plugged in.
 
-No keyboard: automatic login of "media" into the Stream Box session.
+No keyboard: automatic login of "media" into the Inlet session.
 With a keyboard: no automatic login, the login screen shows up (account and session of your choice).
 
 Run as root by stream-box-boot-mode.service, from /usr/local/lib/stream-box/ (copy that media can't modify).
@@ -52,7 +52,7 @@ if found:
         except FileNotFoundError:
             pass
 else:
-    print("No keyboard: automatic login into the Stream Box")
+    print("No keyboard: automatic login into Inlet")
     if not dry_run:
         os.makedirs(os.path.dirname(DROPIN), exist_ok=True)
         with open(DROPIN, "w") as f:

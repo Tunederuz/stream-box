@@ -1,4 +1,4 @@
-"""Stream Box: Twitch for the companion app. Streamer list (streamers.txt), who is live, polls and predictions of the
+"""Inlet: Twitch for the companion app. Streamer list (streamers.txt), who is live, polls and predictions of the
 watched channel, replays and clips, followed channels (the box's Twitch app, device code), and the Twitch account.
 
 Twitch account: the site's token (auth-token cookie) is stored in streamlink's Twitch config, which streamlink reads
@@ -362,7 +362,7 @@ def twitch_save_position(video_id, position):
 
 # Followed channels (Following tab of the TV menu). Twitch refuses this list to the site's token (GQL: "service error",
 # Helix: the user:read:follows scope is missing): it takes a Twitch app and a code authorization ("device code
-# flow"): the TV or the page show a code to type on twitch.tv/activate. The Stream Box app by default
+# flow"): the TV or the page show a code to type on twitch.tv/activate. The Inlet app by default
 # (TWITCH_CLIENT_ID, the same for every box: nothing to create). It is of type Public: no secret, its Client ID is
 # public by nature (it travels in the clear with every request), like the ones streamlink or yt-dlp carry. Your own
 # app instead, if you want (companion app, "Use your own Twitch app"): twitch-app.json ({"client_id",

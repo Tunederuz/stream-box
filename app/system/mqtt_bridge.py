@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream Box: MQTT ↔ Home Assistant bridge (automatic discovery).
+"""Inlet: MQTT ↔ Home Assistant bridge (automatic discovery).
 
 Reads the box state through remote.py's API (http://127.0.0.1:8080), publishes it on MQTT and turns the commands
 received from Home Assistant into calls to that same API: remote.py's checks therefore apply here too.
@@ -10,7 +10,7 @@ Entity names and select options are translated (i18n.py) when announced to Home 
 import json, os, signal, subprocess, sys, threading, time, urllib.request
 
 # app/player and app/system on the import path: the modules import each other by name, from either folder (system/
-# is not part of the Stream Player)
+# is not part of the Inlet app)
 sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), d) for d in ("player", "system")]
 
 import paho.mqtt.client as mqtt
@@ -31,7 +31,7 @@ PENDING_FOR = 120                   # a command received before the box is ready
 QR_MODES = {"always": "Always", "timed": "30 seconds", "never": "Never"}   # Home Assistant select (translated with tr)
 POWER_MODES = {"suspend": "Sleep", "poweroff": "Full shutdown"}               # action of the "Turn off" button
 POWER_ACTION_FILE = os.path.join(CONF_DIR, "power-action")                     # same file as remote.py
-DEVICE = {"identifiers": ["stream_box"], "name": "Stream Box", "model": "Stream Box", "manufacturer": "Stream Box"}
+DEVICE = {"identifiers": ["stream_box"], "name": "Inlet", "model": "Inlet", "manufacturer": "Inlet"}
 
 
 def translated(modes):
@@ -267,7 +267,7 @@ class Bridge:
         wake-up. A logind "delay" lock holds off the sleep while the message is sent; logind signals PrepareForSleep
         (true before, false after), followed through gdbus."""
         while True:
-            lock = subprocess.Popen(["systemd-inhibit", "--what=sleep", "--mode=delay", "--who=Stream Box MQTT",
+            lock = subprocess.Popen(["systemd-inhibit", "--what=sleep", "--mode=delay", "--who=Inlet MQTT",
                                      "--why=Announce sleep to Home Assistant", "sleep", "infinity"])
             mon = subprocess.Popen(["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1",
                                     "--object-path", "/org/freedesktop/login1"], stdout=subprocess.PIPE, text=True)

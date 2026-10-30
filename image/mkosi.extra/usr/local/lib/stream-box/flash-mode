@@ -1,5 +1,5 @@
 #!/bin/sh
-# Stream Box: fewer writes when the system runs from a USB drive (the image on a stick, before "Install on this PC", or
+# Inlet: fewer writes when the system runs from a USB drive (the image on a stick, before "Install on this PC", or
 # kept there): flash drives wear out under small scattered writes. At each boot, before the session
 # (stream-box-flash-mode.service); nothing on an internal disk, nothing kept: everything is in /run or in memory.
 #   journal in memory (lost at shutdown), btrfs commits every 2 min instead of 30 s and no access times,
