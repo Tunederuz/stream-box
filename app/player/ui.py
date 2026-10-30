@@ -574,8 +574,9 @@ class Osd(QObject):
         super().__init__()
         self.data = {"bar": False, "toast": {}, "polls": {}, "storyboard": {}, "playback": {}, "live": {}, "tracks": {}, "loading": {}, "learn": {}, "meta": {}, "controls": {}, "seekfx": {},
                      "next_card": {}, "notice": {}, "info": {},
-                     # mpv waiting for data (VideoWait.qml): buffering, seeking, the buffer's percentage, paused
-                     "waiting": {"cache": False, "seeking": False, "pct": 0, "pause": False},
+                     # mpv waiting for data (VideoWait.qml): buffering, seeking, not playing (core-idle: also after a
+                     # seek, waiting for data without paused-for-cache), the buffer's percentage, paused
+                     "waiting": {"cache": False, "seeking": False, "idle": False, "pct": 0, "pause": False},
                      "mode": "", "channel": "", "events": True}
         self._in.connect(self._set, Qt.QueuedConnection)
         self.wake = threading.Event()   # bar just shown: read the position at once (InfoBar waits for it to appear)
@@ -805,8 +806,8 @@ def main():
                 "next_card", "notice", "info"):
         player.observe_property(f"user-data/streambox/{key}", osd.receive(key))
     player.observe_property("path", osd.new_file)
-    for prop, name in (("paused-for-cache", "cache"), ("seeking", "seeking"), ("cache-buffering-state", "pct"),
-                       ("pause", "pause")):
+    for prop, name in (("paused-for-cache", "cache"), ("seeking", "seeking"), ("core-idle", "idle"),
+                       ("cache-buffering-state", "pct"), ("pause", "pause")):
         player.observe_property(prop, osd.waiting_prop(name))
     threading.Thread(target=osd.poll_loop, daemon=True).start()
 

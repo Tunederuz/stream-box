@@ -1260,7 +1260,8 @@ channels and a series' episodes (all there already). qmlshots: fake `/api/more`,
 
 ### Waiting ring and YouTube card options
 `qml/VideoWait.qml` (ui.qml, over the video): a ring and the buffer's percentage while mpv waits for data. ui.py
-observes `paused-for-cache`, `seeking`, `cache-buffering-state` and `pause` into `osd.waiting` ({cache, seeking, pct,
+observes `paused-for-cache`, `seeking`, `core-idle` (after a seek mpv waits for data without paused-for-cache:
+`cache-pause-initial` is off), `cache-buffering-state` and `pause` into `osd.waiting` ({cache, seeking, idle, pct,
 pause}); shown after 0.4 s of waiting, not while paused (PauseScreen has the center) nor during the loading screen.
 TV menu: ≡ on any YouTube video card → `ytVideoOptions` (play or resume / from the beginning, and when the channel is
 known "See latest videos of {channel}" and the favorite toggle); the channel comes from the row (favorites' rows,

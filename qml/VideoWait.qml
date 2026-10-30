@@ -1,5 +1,6 @@
 // Waiting for the video's data, over it: a turning ring, and the buffer's percentage while it
-// fills. After a seek forward, or when the stream slows down (mpv's paused-for-cache, seeking; relay osd.waiting).
+// fills. After a seek forward, or when the stream slows down (mpv's paused-for-cache, seeking, and core-idle without
+// pause: after a seek, mpv waits for the data without paused-for-cache; relay osd.waiting).
 // Not before 0.4 s (a short seek shows nothing), not while paused (the pause screen has the center) nor during the
 // loading screen between two videos.
 import QtQuick
@@ -10,7 +11,7 @@ Item {
     anchors.fill: parent
     readonly property var w: { try { return JSON.parse(osd.waiting || "{}") } catch (e) { return {} } }
     readonly property bool loadingShown: { try { return !!JSON.parse(osd.loading || "{}").title } catch (e) { return false } }
-    readonly property bool waiting: box.videoActive && !w.pause && !loadingShown && (!!w.cache || !!w.seeking)
+    readonly property bool waiting: box.videoActive && !w.pause && !loadingShown && (!!w.cache || !!w.seeking || !!w.idle)
     property bool shown: false
     onWaitingChanged: if (waiting) later.restart(); else { later.stop(); shown = false }
     Timer { id: later; interval: 400; onTriggered: root.shown = root.waiting }
