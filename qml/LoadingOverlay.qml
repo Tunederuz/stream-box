@@ -1,7 +1,8 @@
 // Loading screen between two videos or two channels (stream-box.lua, user-data/streambox/loading: title, thumb,
-// kind). The box logo in the center: a glow in the color of the source (Twitch purple, YouTube red, Jellyfin
-// blue) runs along the outline of the triangle, waves leave the tile like a signal being received, and the tile
-// breathes. Background: blurred and darkened thumbnail. Fade in and out.
+// kind). The Inlet logo in the center (assets/brand: a screen open on its left side, a wave flowing into it): the wave
+// takes the color of the source (Twitch purple, YouTube red, Jellyfin blue, Plex yellow) and a glow runs along it into
+// the screen, rings leave the logo like a signal being received, and the logo breathes. Background: blurred and
+// darkened thumbnail. Fade in and out.
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Shapes
@@ -72,7 +73,8 @@ Item {
         }
     }
 
-    // Logo: white tile, charcoal triangle, and a glow running along its outline
+    // Logo: the screen, the wave in the source's color, and a glow flowing along the wave into the screen (the
+    // drawing of assets/brand/inlet-mark.svg, scaled 1.5)
     Item {
         id: logo
         width: 150; height: 150
@@ -83,32 +85,46 @@ Item {
             NumberAnimation { from: 1; to: 1.05; duration: 1050; easing.type: Easing.InOutSine }
             NumberAnimation { from: 1.05; to: 1; duration: 1050; easing.type: Easing.InOutSine }
         }
-        Rectangle { anchors.fill: parent; radius: width * 0.27; color: "#f4f2f7" }
-        Shape {
+        Shape {   // the screen, open on its left side
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
             ShapePath {
-                fillColor: "#17151c"; strokeColor: "#17151c"
-                strokeWidth: 13; joinStyle: ShapePath.RoundJoin
-                startX: 58; startY: 48
-                PathLine { x: 104; y: 75 }
-                PathLine { x: 58; y: 102 }
-                PathLine { x: 58; y: 48 }
+                fillColor: "transparent"; strokeColor: "#e8eef0"
+                strokeWidth: 12; capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
+                startX: 54; startY: 33
+                PathLine { x: 111; y: 33 }
+                PathArc { x: 132; y: 54; radiusX: 21; radiusY: 21 }
+                PathLine { x: 132; y: 96 }
+                PathArc { x: 111; y: 117; radiusX: 21; radiusY: 21 }
+                PathLine { x: 54; y: 117 }
             }
         }
-        Shape {   // glow: a colored stroke going around the triangle
+        Shape {   // the wave, in the source's color, dimmed
+            anchors.fill: parent
+            opacity: 0.5
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                fillColor: "transparent"; strokeColor: root.accent
+                strokeWidth: 12; capStyle: ShapePath.RoundCap
+                startX: 15; startY: 75
+                PathQuad { controlX: 29.25; controlY: 58.5; x: 43.5; y: 75 }
+                PathQuad { controlX: 57.75; controlY: 91.5; x: 72; y: 75 }
+                PathQuad { controlX: 86.25; controlY: 58.5; x: 100.5; y: 75 }
+            }
+        }
+        Shape {   // glow: a bright piece of the wave flowing into the screen
             anchors.fill: parent
             layer.enabled: true; layer.samples: 4
             ShapePath {
                 fillColor: "transparent"; strokeColor: root.accent
-                strokeWidth: 7; capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
+                strokeWidth: 12; capStyle: ShapePath.RoundCap
                 strokeStyle: ShapePath.DashLine
-                dashPattern: [5, 20]   // in stroke widths: a 35 px stroke over a ~160 px loop
-                NumberAnimation on dashOffset { from: 25; to: 0; duration: 1100; loops: Animation.Infinite; running: root.visible }
-                startX: 58; startY: 48
-                PathLine { x: 104; y: 75 }
-                PathLine { x: 58; y: 102 }
-                PathLine { x: 58; y: 48 }
+                dashPattern: [2, 8]   // in stroke widths: a 24 px piece every 120 px, about the wave's length
+                NumberAnimation on dashOffset { from: 10; to: 0; duration: 1100; loops: Animation.Infinite; running: root.visible }
+                startX: 15; startY: 75
+                PathQuad { controlX: 29.25; controlY: 58.5; x: 43.5; y: 75 }
+                PathQuad { controlX: 57.75; controlY: 91.5; x: 72; y: 75 }
+                PathQuad { controlX: 86.25; controlY: 58.5; x: 100.5; y: 75 }
             }
         }
     }
