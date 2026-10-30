@@ -1209,15 +1209,19 @@ run, never published: `/etc/ssh/stream-box-test-keys`). QEMU in the mkosi contai
 `usb-storage` + blank NVMe for the installer, `-vga std`, QEMU monitor for screenshots (`screendump`).
 
 ### PC link (games streamed from a PC)
-`gamestream.py` drives moonlight-qt's command line (in the image; `moonlight pair <pc> --pin`, `list <pc> --csv`,
-`stream <pc> <app>`, `quit <pc>`; its pairing stays in Moonlight's own settings). The PC: an mDNS question for
-`_nvstream._tcp.local` (what Sunshine announces), or the paired one (`~/.config/stream-box/gamestream.json`).
-`GET /api/gamestream` (PC, online, playing, paired, apps with Moonlight's box art cache files, pairing code),
-actions `gamestream_pair` / `_pair_cancel` / `_launch` / `_stop` / `_quit`; `/api/features` has `gamestream`
-(Moonlight installed). TV menu tab "PC link" (`games`, menu/GamesTab.qml): pairing shows a code to type in Sunshine's
-PIN page (CodeDialog), then a grid of games; ≡ closes the running game on the PC. During a stream Moonlight covers
-the screen; its PID is in `/tmp/stream-box-gamestream.pid` and input.py then leaves every key to it, except Home held
-1 s (remote or the gamepad's middle button) which ends the stream; when it ends the TV menu opens again.
+`gamestream.py`: pairing and streaming through moonlight-qt's command line (in the image; `moonlight pair <pc> --pin`
+with a code the box picks, `moonlight stream <pc> <app>`; pairing, listing and quitting run with Qt's offscreen
+platform, or moonlight-qt opens its own full-screen window over the menu). The games, their box art (served as
+`/api/gamestream_art?id=`, cached in `~/.cache/stream-box/gamestream`) and closing a game go to Sunshine directly
+(HTTPS 47984, Moonlight's client certificate from its settings): `moonlight list` hangs on an assertion once paired
+(6.2), spinning a CPU core. The PC: an mDNS question for `_nvstream._tcp.local`, otherwise the box's /24 tried on
+port 47989 (in the background), or the paired one (`~/.config/stream-box/gamestream.json`). `GET /api/gamestream`
+(PC, online, playing, paired, apps, pairing code), actions `gamestream_pair` / `_pair_cancel` / `_launch` / `_stop` /
+`_quit`; `/api/features` has `gamestream` (Moonlight installed). TV menu tab "PC link" (`games`, menu/GamesTab.qml):
+pairing shows the code to type in Sunshine's PIN page (CodeDialog), then a grid of games; ≡ closes the running game on
+the PC. During a stream Moonlight covers the screen; its PID is in `/tmp/stream-box-gamestream.pid` and input.py then
+leaves every key to it, except Home held 1 s (remote or the gamepad's middle button) which ends the stream; when it
+ends the TV menu opens again.
 
 ### Regular keyboard
 By default (input.py `DEFAULTS`, stream-box.lua `KEYS` fallback): arrows, Enter = OK, Esc / Backspace =

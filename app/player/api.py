@@ -233,6 +233,13 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, twitch.follows_status())
                 except (OSError, ValueError, KeyError) as e:
                     self.send(503, {"error": tr("Twitch unreachable: {error}", error=e)})
+            elif self.path.startswith("/api/gamestream_art?"):   # box art of a PC game (PNG, from Sunshine)
+                app_id = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("id", [""])[0]
+                data = gamestream.art(app_id)
+                if data:
+                    self.send(200, data, "image/png")
+                else:
+                    self.send(404, {"error": tr("not found")})
             elif self.path.startswith("/api/qr?"):
                 text = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("text", [""])[0]
                 self.send(200, {"rows": ambient.qr_rows(text)})

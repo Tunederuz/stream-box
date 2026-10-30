@@ -1,6 +1,7 @@
 """Inlet: games streamed from a PC (Sunshine on the PC, Moonlight on the box), for the TV menu's "PC games" tab.
-Standard library only; Moonlight itself is moonlight-qt's command line (moonlight pair / list / stream / quit), its
-pairing kept in its own settings (~/.config/Moonlight Game Streaming Project/).
+Standard library only; Moonlight itself is moonlight-qt's command line (moonlight pair / stream), its pairing
+kept in its own settings (~/.config/Moonlight Game Streaming Project/); the list of games, their box art and closing a game go to
+Sunshine directly, with the client certificate Moonlight made at pairing.
 
 The PC: found on the network (mDNS, _nvstream._tcp, what Sunshine announces; otherwise the box's /24 tried on
 Sunshine's port 47989), or the one already paired
@@ -9,8 +10,8 @@ TV, and waits in "moonlight pair" while it is typed in Sunshine's PIN page. Whil
 covers the screen; its PID is in GAMESTREAM_PID, so that input.py leaves the keys to it (a long press on Home ends
 the stream).
 """
-import concurrent.futures, csv, io, json, os, random, re, shutil, socket, struct, subprocess, threading, time
-import urllib.request
+import concurrent.futures, html, json, os, random, re, shutil, socket, ssl, struct, subprocess, threading, time
+import urllib.parse, urllib.request
 
 from common import COOKIES_DIR, GAMESTREAM_PID, lan_ip, mpv
 from i18n import tr
@@ -18,7 +19,7 @@ from i18n import tr
 CONF = os.path.join(COOKIES_DIR, "gamestream.json")
 MOONLIGHT = shutil.which("moonlight") or shutil.which("moonlight-qt")
 APPS_CACHE = 60   # seconds: the list of games, asked again when the tab is opened after that
-# Pairing, listing, quitting: no window (moonlight-qt would open its own over the TV menu, full screen in cage)
+# Pairing: no window (moonlight-qt would open its own over the TV menu, full screen in cage)
 QUIET = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
 lock = threading.Lock()
 state = {"pairing": None, "apps": None, "apps_at": 0, "apps_error": "", "found": [], "found_at": 0, "busy": False}
@@ -98,30 +99,83 @@ def serverinfo(host):
     return {"name": field("hostname") or host, "playing": field("currentgame") not in ("", "0")}
 
 
-def run(args, timeout=30):
-    return subprocess.run([MOONLIGHT, *args], capture_output=True, text=True, timeout=timeout,
-                          stdin=subprocess.DEVNULL, env=QUIET)
+MOONLIGHT_CONF = os.path.expanduser("~/.config/Moonlight Game Streaming Project/Moonlight.conf")
+ART_DIR = os.path.expanduser("~/.cache/stream-box/gamestream")
+
+
+def client_identity():
+    """Moonlight's client certificate and key (created at pairing, in its settings: QSettings, @ByteArray(...) with
+    escaped newlines), written as PEM files for ssl; with its uniqueid. None before any pairing."""
+    try:
+        with open(MOONLIGHT_CONF, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return None
+    values = {}
+    for key in ("certificate", "key", "uniqueid"):
+        m = re.search(rf'^{key}="?(?:@ByteArray\()?(.*?)\)?"?$', text, re.M)
+        if m:
+            values[key] = m.group(1).replace("\\n", "\n")
+    if "certificate" not in values or "key" not in values:
+        return None
+    os.makedirs(ART_DIR, mode=0o700, exist_ok=True)
+    paths = (os.path.join(ART_DIR, "client.crt"), os.path.join(ART_DIR, "client.key"))
+    for path, value in zip(paths, (values["certificate"], values["key"])):
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(value)
+    return {"cert": paths[0], "key": paths[1], "uniqueid": values.get("uniqueid", "0123456789ABCDEF")}
+
+
+def sunshine(host, path, **params):
+    """A request to Sunshine's paired API (HTTPS 47984, Moonlight's client certificate): bytes, or None when the
+    box isn't paired (Sunshine answers 401) or the PC is unreachable. Its own certificate is self-signed: not checked."""
+    me = client_identity()
+    if not me:
+        return None
+    ctx = ssl.create_default_context()
+    ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
+    ctx.load_cert_chain(me["cert"], me["key"])
+    query = urllib.parse.urlencode({"uniqueid": me["uniqueid"], **params})
+    try:
+        with urllib.request.urlopen(f"https://{host}:47984/{path}?{query}", context=ctx, timeout=6) as r:
+            return r.read()
+    except (OSError, ValueError):
+        return None
 
 
 def load_apps(host):
-    """Games of the paired PC (moonlight list --csv): [{name, art}], art a local file (Moonlight's box art cache) or
-    empty. Not paired: None, and the reason in state["apps_error"]."""
-    try:
-        r = run(["list", host, "--csv"])
-    except (OSError, subprocess.SubprocessError) as e:
-        state["apps_error"] = str(e)
+    """Games of the paired PC (Sunshine's applist): [{name, id, art}], art served by the box (/api/gamestream_art).
+    Not paired: None. (moonlight list is not used: moonlight-qt 6.2's hangs on an assertion once paired.)"""
+    xml = sunshine(host, "applist")
+    if xml is None or b'status_code="200"' not in xml:
+        state["apps_error"] = "unpaired"
         return None
-    if r.returncode != 0:
-        state["apps_error"] = "unpaired" if "not been paired" in (r.stdout + r.stderr) else (r.stderr.strip() or "error")
-        return None
-    rows = [line for line in r.stdout.splitlines() if line.startswith('"')]
     apps = []
-    for row in csv.reader(io.StringIO("\n".join(rows)), skipinitialspace=True):
-        if len(row) >= 7 and row[4] != "true":   # (hidden apps left out)
-            art = row[6] if row[6].startswith("file:") else ""
-            apps.append({"name": row[0], "art": art})
+    for block in re.findall(rb"<App>(.*?)</App>", xml, re.S):
+        field = lambda tag: (re.search(rb"<%s>(.*?)</%s>" % (tag, tag), block, re.S) or [None, b""])[1].decode("utf-8", "replace")
+        name, app_id = html.unescape(field(b"AppTitle")), field(b"ID")
+        if name and app_id.isdigit():
+            apps.append({"name": name, "id": app_id, "art": f"http://127.0.0.1:8080/api/gamestream_art?id={app_id}"})
     state["apps_error"] = ""
     return apps
+
+
+def art(app_id):
+    """Box art of a game (PNG), asked once to Sunshine then kept in ~/.cache/stream-box/gamestream; None if missing"""
+    if not str(app_id).isdigit():
+        return None
+    path = os.path.join(ART_DIR, f"{app_id}.png")
+    if not os.path.exists(path):
+        host = read_conf().get("host")
+        data = sunshine(host, "appasset", appid=app_id, AssetType=2, AssetIdx=0) if host else None
+        if not data:
+            return None
+        os.makedirs(ART_DIR, mode=0o700, exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+    with open(path, "rb") as f:
+        return f.read()
 
 
 def refresh(host):
@@ -221,7 +275,7 @@ def stop(body):
 
 
 def quit_game(body):
-    """Closes the game on the PC"""
+    """Closes the game on the PC (Sunshine's cancel)"""
     host = read_conf().get("host")
     if host:
-        threading.Thread(target=lambda: run(["quit", host], timeout=20), daemon=True).start()
+        threading.Thread(target=lambda: sunshine(host, "cancel"), daemon=True).start()
