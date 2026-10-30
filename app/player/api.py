@@ -234,8 +234,8 @@ class Handler(BaseHTTPRequestHandler):
                 except (OSError, ValueError, KeyError) as e:
                     self.send(503, {"error": tr("Twitch unreachable: {error}", error=e)})
             elif self.path.startswith("/api/gamestream_art?"):   # box art of a PC game (PNG, from Sunshine)
-                app_id = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("id", [""])[0]
-                data = gamestream.art(app_id)
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                data = gamestream.art(query.get("host", [""])[0], query.get("id", [""])[0])
                 if data:
                     self.send(200, data, "image/png")
                 else:

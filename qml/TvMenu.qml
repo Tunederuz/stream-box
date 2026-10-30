@@ -52,8 +52,11 @@ Item {
     property var follows: null
     property var replays: ({})
     property var history: null
-    property var gs: null      // games streamed from a PC (/api/gamestream: the PC, pairing, its games)
+    property var gs: null      // games streamed from PCs (/api/gamestream: the PCs, pairing, their games)
+    property int gsPc: 0       // PC link tab: the chosen PC (chips above), focus on the chips (gsRow 0) or its games
+    property int gsRow: 0
     property int gsSel: 0
+    readonly property var gsCur: gs && gs.pcs && gs.pcs.length ? gs.pcs[Math.min(gsPc, gs.pcs.length - 1)] : null
     property var display: null
     property var account: null
     property var followsQr: null
@@ -97,7 +100,7 @@ Item {
                      help: j && j.name ? tr("Server: {server}.", { server: j.name }) : "", qr: null }
         }
         if (gs && gs.pairing) {   // pairing with the PC: the code to type in Sunshine
-            return { title: tr("Pair with {name}", { name: gs.name }),
+            return { title: tr("Pair with {name}", { name: gs.pairing.name || "" }),
                      where: tr("On the PC, open Sunshine (https://localhost:47990), PIN tab, and enter:"),
                      code: gs.pairing.pin || "", error: gs.pairing.error || "",
                      help: gs.pairing.page ? tr("From a phone: {page}", { page: gs.pairing.page }) : "", qr: null }
@@ -926,8 +929,8 @@ Item {
                                                  : tr("Your movies and series of a Plex server"),
                   ok: function () { plexMenu() } },
                 { open: true, label: tr("PC (Sunshine)"), visible: !!features.gamestream,   // (Moonlight: the box's image)
-                  value: !gs ? "" : gs.paired ? tr("Paired: {name}", { name: gs.name }) : gs.host ? tr("Not paired") : tr("No PC found"),
-                  hint: gs && gs.paired ? tr("Its games in the PC link tab") : tr("Play the games of a PC running Sunshine"),
+                  value: gsSummary(),
+                  hint: gsPaired().length ? tr("Their games in the PC link tab") : tr("Play the games of a PC running Sunshine"),
                   ok: function () { gamestreamMenu() } },
             ]
         case "network":
@@ -1248,10 +1251,13 @@ Item {
                 : tr("{login} · replays and clips of the week", { login: rpLogin })
         case "games":
             if (!gs) return tr("Loading…")
-            if (!gs.host) return tr("No PC with Sunshine found on the network")
-            if (!gs.online) return tr("{name} is off or unreachable", { name: gs.name })
-            if (!gs.paired) return gs.loading ? tr("Loading…") : tr("Pair the box with {name} to see its games", { name: gs.name })
-            return tr("{name} · {n} games", { name: gs.name, n: gs.apps.length }) + (gs.playing ? "  ·  " + tr("a game is running") : "")
+            var pc = gsCur
+            if (!pc) return gs.searching ? tr("Looking for PCs on the network…") : tr("No PC with Sunshine found on the network")
+            if (!pc.online) return tr("{name} is off or unreachable", { name: pc.name })
+            if (!pc.paired) return tr("OK on {name} to pair the box", { name: pc.name })
+            if (pc.loading) return tr("Loading…")
+            if (pc.unpaired_on_pc) return tr("{name} no longer knows the box: pair it again (≡)", { name: pc.name })
+            return tr("{name} · {n} games", { name: pc.name, n: pc.apps.length }) + (pc.playing ? "  ·  " + tr("a game is running") : "")
         case "history":
             return history === null ? tr("Loading…") : history.length === 0 ? tr("Videos played on the TV will show up here")
                 : (history.length === 1 ? tr("1 video") : tr("{n} videos", { n: history.length })) + " · " + tr("OK to resume or remove")
@@ -1579,7 +1585,7 @@ Item {
         if (id === "replays") return !list || list.length > 0
         if (id === "follows") return true
         if (id === "history") return !history || history.length > 0
-        if (id === "games") return !!gs && (gs.apps.length > 0 || gsCanPair())
+        if (id === "games") return !!(gs && gs.pcs && gs.pcs.length)
         if (id === "libraries") return false   // explanations only
         return true
     }
@@ -1598,6 +1604,7 @@ Item {
         area = "content"
         checkArea()
         if (id === "replays") { rpRow = 0; rpSel = [Math.max(0, (st.streamers || []).indexOf(rpLogin)), rpSel[1], rpSel[2]] }
+        if (id === "games") gsRow = gsCur && gsCur.paired && gsCur.apps.length ? 1 : 0   // the games, or the PCs to pair
     }
     function keyLive(k) {
         var list = st.streamers || []
@@ -1702,39 +1709,63 @@ Item {
             else if (kbText.length < 80) kbText += key
         }
     }
-    // Settings → Accounts and links → PC: pair (the code to type in Sunshine), search again, forget the PC
+    function gsPaired() { return gs && gs.pcs ? gs.pcs.filter(function (p) { return p.paired }) : [] }
+    function gsSummary() {
+        if (!gs) return ""
+        var paired = gsPaired()
+        return paired.length === 1 ? tr("Paired: {name}", { name: paired[0].name })
+             : paired.length ? tr("{n} PCs paired", { n: paired.length })
+             : gs.pcs && gs.pcs.length ? tr("Not paired") : tr("No PC found")
+    }
+    function gsPair(pc) { call("POST", "/api/gamestream_pair", { host: pc.host }, function () { loadGames() }) }
+    // Settings → Accounts and links → PC: the PCs found or paired, each with its own choices; search again
     function gamestreamMenu() {
         if (!gs) return
-        var pair = function () { call("POST", "/api/gamestream_pair", {}, function () { loadGames() }) }
-        var items = []
-        if (gs.host && gs.online) items.push({ label: gs.paired ? tr("↻  Pair again") : tr("+  Pair with {name}", { name: gs.name }), ok: pair })
-        if (!gs.host || !gs.online) items.push({ label: tr("↻  Search again"), ok: function () {
-            call("POST", "/api/gamestream_search", {}, function () { refreshSoon.restart(); gsSoon.restart() }) } })
-        if (gs.host) items.push({ label: tr("✕  Forget this PC"), danger: true, ok: function () {
-            call("POST", "/api/gamestream_forget", {}, function () { loadGames() }) } })
+        var items = (gs.pcs || []).map(function (pc) {
+            return { label: pc.name + "  ·  " + (pc.paired ? tr("paired") : pc.online ? tr("not paired") : tr("off")),
+                     ok: function () { gsPcMenu(pc) } }
+        })
+        items.push({ label: tr("↻  Search again"), ok: function () {
+            call("POST", "/api/gamestream_search", {}, function () { gsSoon.restart() }) } })
         items.push({ label: tr("Close"), ok: function () {} })
-        openModal(!gs.host ? tr("No PC with Sunshine found on the network")
-                  : !gs.online ? tr("{name} is off or unreachable", { name: gs.name })
-                  : gs.paired ? tr("Paired with {name}", { name: gs.name }) : tr("{name} found on the network", { name: gs.name }), items)
+        openModal((gs.pcs || []).length ? tr("PCs with Sunshine") : tr("No PC with Sunshine found on the network"), items)
     }
-    function gsCanPair() { return !!(gs && gs.host && gs.online && !gs.paired && !gs.loading) }
+    function gsPcMenu(pc) {   // one PC: pair (again), forget
+        var items = []
+        if (pc.online) items.push({ label: pc.paired ? tr("↻  Pair again") : tr("+  Pair with {name}", { name: pc.name }),
+                                    ok: function () { gsPair(pc) } })
+        if (pc.paired) items.push({ label: tr("✕  Forget this PC"), danger: true, ok: function () {
+            call("POST", "/api/gamestream_forget", { host: pc.host }, function () { loadGames() }) } })
+        items.push({ label: tr("Close"), ok: function () {} })
+        openModal(!pc.online ? tr("{name} is off or unreachable", { name: pc.name })
+                  : pc.paired ? tr("Paired with {name}", { name: pc.name }) : tr("{name} found on the network", { name: pc.name }), items)
+    }
     function keyGames(k) {
-        if (!gs.paired) {
-            if (k === "ok" && gsCanPair()) call("POST", "/api/gamestream_pair", {}, function () { loadGames() })
-            else if (k === "left") area = "rail"
+        var pcs = gs && gs.pcs || []
+        if (!pcs.length) { if (k === "left") area = "rail"; return }
+        gsPc = Math.min(gsPc, pcs.length - 1)
+        var pc = pcs[gsPc]
+        if (k === "menu" && gsRow === 0) return gsPcMenu(pc)
+        if (gsRow === 0) {   // the PCs' chips
+            if (k === "left") { if (gsPc === 0) area = "rail"; else { gsPc--; gsSel = 0 } }
+            else if (k === "right") { gsPc = Math.min(pcs.length - 1, gsPc + 1); gsSel = 0 }
+            else if ((k === "down" || k === "ok") && pc.paired && pc.apps.length) gsRow = 1
+            else if (k === "ok" && !pc.paired && pc.online) gsPair(pc)
+            else if (k === "ok" && pc.paired && pc.unpaired_on_pc) gsPair(pc)
             return
         }
-        var list = gs.apps, a = list[gsSel]
-        if (k === "ok" && a) { call("POST", "/api/gamestream_launch", { app: a.name }); close(); return }
+        var list = pc.apps, a = list[gsSel]
+        if (k === "ok" && a) { call("POST", "/api/gamestream_launch", { host: pc.host, app: a.name }); close(); return }
         if (k === "menu" && a) {
-            var items = [{ label: tr("▶  Play"), ok: function () { call("POST", "/api/gamestream_launch", { app: a.name }); close() } }]
-            if (gs.playing) items.push({ label: tr("✕  Close the game on the PC"), danger: true,
-                                         ok: function () { call("POST", "/api/gamestream_quit", {}, function () { loadGames() }) } })
+            var items = [{ label: tr("▶  Play"), ok: function () { call("POST", "/api/gamestream_launch", { host: pc.host, app: a.name }); close() } }]
+            if (pc.playing) items.push({ label: tr("✕  Close the game on the PC"), danger: true,
+                                         ok: function () { call("POST", "/api/gamestream_quit", { host: pc.host }, function () { loadGames() }) } })
             items.push({ label: tr("Cancel"), ok: function () {} })
             openModal(a.name, items)
             return
         }
-        var n = grid(gsSel, list.length, 5, k)   // (5 posters per row: menu/GamesTab.qml)
+        if (k === "up" && gsSel < 5) { gsRow = 0; return }   // (5 posters per row: menu/GamesTab.qml)
+        var n = grid(gsSel, list.length, 5, k)
         if (n < 0) area = "rail"; else gsSel = n
     }
     function keyHistory(k) {

@@ -64,7 +64,7 @@ STEPS = (
     + scene(4, "up down right ok back down down right right right right down ok")   # Jellyfin: series
     + keys("right ok back up ok back")                            # episodes, dialog, keyboard closed
     + scene(5, "up down right ok back down down right ok")        # Plex: rows, series, episodes
-    + scene(6, "right right down menu down back left ok")          # PC games: grid, options (close the game)
+    + scene(6, "right right down menu down back up right right menu back left left")   # PC link: games, options, PCs
     + scene(7, "right down down left ok back")                    # History
     + scene(8, "down down down down down down down down down down down down")   # Settings: sections, power below
     + keys("up up up up up up up up up up up up ok down right up right")   # Picture and sound: audio output, resolution

@@ -1871,31 +1871,56 @@
  },
  "/api/gamestream": {
   "available": true,
-  "host": "192.168.1.30",
-  "name": "gaming-pc",
-  "online": true,
-  "playing": true,
-  "paired": true,
-  "loading": false,
-  "unpaired": false,
-  "pairing": null,
+  "searching": false,
   "streaming": false,
-  "apps": [
+  "pairing": null,
+  "pcs": [
    {
-    "name": "Desktop",
-    "art": "http://127.0.0.1:8080/img/1db954.png"
+    "host": "192.168.1.30",
+    "name": "gaming-pc",
+    "online": true,
+    "playing": true,
+    "paired": true,
+    "loading": false,
+    "unpaired_on_pc": false,
+    "apps": [
+     {
+      "name": "Desktop",
+      "art": "http://127.0.0.1:8080/img/1db954.png"
+     },
+     {
+      "name": "Steam Big Picture",
+      "art": "http://127.0.0.1:8080/img/f5a623.png"
+     },
+     {
+      "name": "Hollow Knight",
+      "art": "http://127.0.0.1:8080/img/00bcd4.png"
+     },
+     {
+      "name": "Celeste",
+      "art": ""
+     }
+    ]
    },
    {
-    "name": "Steam Big Picture",
-    "art": "http://127.0.0.1:8080/img/f5a623.png"
+    "host": "192.168.1.31",
+    "name": "salon",
+    "online": true,
+    "playing": false,
+    "paired": false,
+    "loading": false,
+    "unpaired_on_pc": false,
+    "apps": []
    },
    {
-    "name": "Hollow Knight",
-    "art": "http://127.0.0.1:8080/img/00bcd4.png"
-   },
-   {
-    "name": "Celeste",
-    "art": ""
+    "host": "192.168.1.32",
+    "name": "bureau",
+    "online": false,
+    "playing": false,
+    "paired": true,
+    "loading": false,
+    "unpaired_on_pc": false,
+    "apps": []
    }
   ]
  }
