@@ -937,7 +937,6 @@
  "▲▼ scroll": "▲▼ faire défiler",
  "▲▼◀▶ move   ·   OK select   ·   ≡ options   ·   Back go back   ·   Menu close": "▲▼◀▶ se déplacer   ·   OK valider   ·   ≡ options   ·   Retour revenir   ·   Menu fermer",
  "▶  Play": "▶  Lire",
- "▶  Play the video": "▶  Lire la vidéo",
  "▶  Resume at {time}": "▶  Reprendre à {time}",
  "▶  Resume {channel}": "▶  Reprendre {channel}",
  "▶  See latest videos": "▶  Voir ses dernières vidéos",
@@ -993,5 +992,7 @@
  "Getting ready…": "Préparation…",
  "Load more": "Charger plus",
  "unknown channel": "chaîne inconnue",
- "unknown library": "bibliothèque inconnue"
+ "unknown library": "bibliothèque inconnue",
+ "▶  See latest videos of {channel}": "▶  Voir les dernières vidéos de {channel}",
+ "the channel": "la chaîne"
 }

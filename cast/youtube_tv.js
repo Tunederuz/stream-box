@@ -124,7 +124,8 @@ export function recommendedVideos(data, max = RECOMMENDED_MAX) {
       const head = t.header?.tileHeaderRenderer || {}, meta = t.metadata?.tileMetadataRenderer || {};
       const lines = (meta.lines || []).map((l) => (l.lineRenderer?.items || []).map((i) => text(i.lineItemRenderer?.text)));
       const overlay = (head.thumbnailOverlays || []).map((o) => text(o.thumbnailOverlayTimeStatusRenderer?.text)).find(Boolean);
-      out.push({ id: t.contentId, title: text(meta.title), channel: lines[0]?.[0] || '',
+      const channel = (JSON.stringify(t.onLongPressCommand || {}).match(/"browseId":"(UC[\w-]{22})"/) || [])[1] || '';
+      out.push({ id: t.contentId, title: text(meta.title), channel: lines[0]?.[0] || '', channel_id: channel,
                  thumb: `https://i.ytimg.com/vi/${t.contentId}/mqdefault.jpg`, url: `https://www.youtube.com/watch?v=${t.contentId}`,
                  seconds: seconds(overlay), live: overlay === 'LIVE', views: count(lines.flat().join(' ')) });
     }

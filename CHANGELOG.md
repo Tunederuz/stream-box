@@ -14,7 +14,12 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   (older videos than the 15 of their feed), Twitch replays and clips, Jellyfin and Plex resume, next episodes, search
   results and recently added.
 
+- A turning ring over the video while it waits for data (after a seek forward, a slow stream), with the buffer's
+  percentage.
+
 ### Changed
+- One options menu (≡) for every YouTube video card: play or resume, see the channel's latest videos, add it to the
+  favorites or remove it; Recommended for you and search results now have them too.
 - On screens that aren't 16:9 (the Steam Deck's 16:10), the interface now fills the whole screen: no more bands, the
   lists reach down to the help at the bottom.
 

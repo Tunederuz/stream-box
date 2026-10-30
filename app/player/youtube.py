@@ -244,6 +244,7 @@ def search_entries(entries):
         if not re.fullmatch(r"[\w-]{11}", e.get("id") or "") or e.get("live_status") == "is_upcoming":
             continue
         results.append({"id": e["id"], "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or "",
+                        "channel_id": e.get("channel_id") or "",
                         "seconds": e.get("duration"), "views": e.get("view_count"),
                         "thumb": f"https://i.ytimg.com/vi/{e['id']}/mqdefault.jpg",
                         "url": f"https://www.youtube.com/watch?v={e['id']}"})

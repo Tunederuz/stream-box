@@ -78,6 +78,7 @@ Item {
         PollsOverlay {}
         LoadingOverlay {}
         PauseScreen {}
+        VideoWait {}   // waiting for the video's data (seek, slow stream)
         InfoBar {}
         NextUp {}
         Toast {}

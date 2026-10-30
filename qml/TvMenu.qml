@@ -476,14 +476,23 @@ Item {
         openModal(tr("YouTube account"), items)
     }
     // Options on a subscription video: play, channel as favorite (a row of its own)
-    function ytSubOptions(v) {
-        var fav = (yt ? yt.channels : []).some(function (c) { return c.id === v.channel_id })
-        var c = { id: v.channel_id, name: v.channel, avatar: v.avatar, saved: fav }
-        openModal(v.channel, [
-            { label: tr("▶  Play the video"), ok: function () { chooseVideo(v) } },
-            { label: tr("▶  See latest videos"), ok: function () { ytOpenChannel(c) } },
-            { label: tr(fav ? "✕  Remove from favorites" : "★  Add to favorites"), danger: fav, ok: function () { ytToggleSaved(c) } },
-            { label: tr("Cancel"), ok: function () {} }])
+    // ≡ on any YouTube video card (recommended, subscriptions, search, channel rows): play or resume, and when its
+    // channel is known, see its latest videos and add it to the favorites or remove it
+    function ytVideoOptions(v) {
+        var items = []
+        if (Fmt.resumable(v.position, v.seconds, v.finished)) {
+            items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(v.position) }), ok: function () { play(v.url, false, v) } })
+            items.push({ label: tr("↺  From the beginning"), ok: function () { play(v.url, true, v) } })
+        } else items.push({ label: tr(v.finished ? "↺  Watch again" : "▶  Play"), ok: function () { play(v.url, true, v) } })
+        if (v.channel_id) {
+            var fav = (yt ? yt.channels : []).some(function (c) { return c.id === v.channel_id })
+            var c = { id: v.channel_id, name: v.channel, avatar: v.avatar, saved: fav }
+            if (!(ytPreview && ytPreview.id === v.channel_id))   // (its row is already open)
+                items.push({ label: tr("▶  See latest videos of {channel}", { channel: v.channel || tr("the channel") }), ok: function () { ytOpenChannel(c) } })
+            items.push({ label: tr(fav ? "✕  Remove from favorites" : "★  Add to favorites"), danger: fav, ok: function () { ytToggleSaved(c) } })
+        }
+        items.push({ label: tr("Cancel"), ok: function () {} })
+        openModal(v.title, items)
     }
     // Favorite on or off: the mark changes at once (back if the box refuses), the channel rows follow
     function ytToggleSaved(c) {
@@ -1726,12 +1735,15 @@ Item {
         }
         else if (k === "menu" && row.items[sel]) {   // ≡: the options of the card, whatever the row
             var it = row.items[sel]
-            var chan = row.kind === "channel" ? row.key : it.channel_id
             if (row.kind === "chans") ytChannelMenu(it)
             else if (row.kind === "connect") ytConnect()
             else if (libTab) libChoose(it, true)
-            else if (chan) ytSubOptions(Object.assign({}, it, { channel_id: chan, channel: it.channel || row.title, avatar: it.avatar || row.avatar }))
-            else chooseVideo(it, true)
+            else {   // the channel: the row's own (favorites, the found channel's videos), otherwise the card's
+                var own = row.kind === "channel" ? { id: row.key, name: row.title }
+                        : row.kind === "preview" && ytPreview ? { id: ytPreview.id, name: ytPreview.name } : null
+                ytVideoOptions(Object.assign({}, it, { channel_id: own ? own.id : it.channel_id || "",
+                                                       channel: it.channel || (own ? own.name : ""), avatar: it.avatar || row.avatar }))
+            }
         }
         else if (k === "ok" && row.items[sel]) {
             if (row.kind === "chans") ytChannelMenu(row.items[sel])

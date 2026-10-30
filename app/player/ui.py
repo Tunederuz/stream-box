@@ -574,6 +574,8 @@ class Osd(QObject):
         super().__init__()
         self.data = {"bar": False, "toast": {}, "polls": {}, "storyboard": {}, "playback": {}, "live": {}, "tracks": {}, "loading": {}, "learn": {}, "meta": {}, "controls": {}, "seekfx": {},
                      "next_card": {}, "notice": {}, "info": {},
+                     # mpv waiting for data (VideoWait.qml): buffering, seeking, the buffer's percentage, paused
+                     "waiting": {"cache": False, "seeking": False, "pct": 0, "pause": False},
                      "mode": "", "channel": "", "events": True}
         self._in.connect(self._set, Qt.QueuedConnection)
         self.wake = threading.Event()   # bar just shown: read the position at once (InfoBar waits for it to appear)
@@ -588,6 +590,12 @@ class Osd(QObject):
         """Another file (or none): the playback state of the previous one is dropped, the bar never shows it (from mpv's
         thread). Not when the bar hides: it keeps its values while fading out"""
         self._in.emit("playback", "{}")
+
+    def waiting_prop(self, name):
+        """mpv property → one field of "waiting" (from mpv's threads)"""
+        def cb(_n, v):
+            self._in.emit("waiting", json.dumps({**self.data["waiting"], name: v if v is not None else False}))
+        return cb
 
     def receive(self, key):
         return lambda _n, v: self._in.emit(key, json.dumps(v if v is not None else self.data[key]))
@@ -618,6 +626,7 @@ class Osd(QObject):
     storyboard = Property(str, lambda self: json.dumps(self.data["storyboard"] or {}), notify=changed)
     tracks = Property(str, lambda self: json.dumps(self.data["tracks"] or {}), notify=changed)   # TracksPanel.qml
     loading = Property(str, lambda self: json.dumps(self.data["loading"] or {}), notify=changed)   # LoadingOverlay.qml
+    waiting = Property(str, lambda self: json.dumps(self.data["waiting"]), notify=changed)   # VideoWait.qml
     learn = Property(str, lambda self: json.dumps(self.data["learn"] or {}), notify=changed)   # KeyWizard.qml
     # Playback bar: video info, row of buttons, seek shown; "Next episode" card (NextUp.qml)
     meta = Property(str, lambda self: json.dumps(self.data["meta"] or {}), notify=changed)
@@ -796,6 +805,9 @@ def main():
                 "next_card", "notice", "info"):
         player.observe_property(f"user-data/streambox/{key}", osd.receive(key))
     player.observe_property("path", osd.new_file)
+    for prop, name in (("paused-for-cache", "cache"), ("seeking", "seeking"), ("cache-buffering-state", "pct"),
+                       ("pause", "pause")):
+        player.observe_property(prop, osd.waiting_prop(name))
     threading.Thread(target=osd.poll_loop, daemon=True).start()
 
     def dec(v):

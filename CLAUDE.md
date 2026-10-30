@@ -1258,6 +1258,15 @@ dropped) and a "Load more" card (`more: true`, glyph "+") while there may be mor
 on the place, which becomes the first new item); ≡ does nothing there. Every video row has it, except the found
 channels and a series' episodes (all there already). qmlshots: fake `/api/more`, steps at the end of a Replays row.
 
+### Waiting ring and YouTube card options
+`qml/VideoWait.qml` (ui.qml, over the video): a ring and the buffer's percentage while mpv waits for data. ui.py
+observes `paused-for-cache`, `seeking`, `cache-buffering-state` and `pause` into `osd.waiting` ({cache, seeking, pct,
+pause}); shown after 0.4 s of waiting, not while paused (PauseScreen has the center) nor during the loading screen.
+TV menu: ≡ on any YouTube video card → `ytVideoOptions` (play or resume / from the beginning, and when the channel is
+known "See latest videos of {channel}" and the favorite toggle); the channel comes from the row (favorites' rows,
+the found channel's preview) or the card's `channel_id`: youtube_tv.js gives it for Recommended too (the tile's
+long-press menu, as for subscriptions) and the search results carry yt-dlp's.
+
 ### Inlet app window
 The TV menu stays driven by keys only (remote, gamepad, keyboard; no mouse navigation, the user's choice). Inlet app
 on a desktop: an ordinary 1280×720 window (`WINDOWED`, F11 or a double click: full screen); full screen in SteamOS's
