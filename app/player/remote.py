@@ -10,8 +10,8 @@ This file starts the background loops and the HTTP server; the code lives in the
   actions.py   POST actions (one handler per name), TV menu keyboard
   twitch.py    streamer list, who is live, polls and predictions, replays, followed channels, Twitch account
   youtube.py   channels, search, subtitles, storyboard, account subscriptions, "TV app" progress
-  jellyfin.py  Jellyfin library, playback and progress reports
-  plex.py      Plex library, playback and progress reports
+  addons/      the integrations, one folder each (registry and contract in addons/__init__.py): jellyfin/,
+               plex/ (library, playback and progress reports)
   quickmenu.py quick menu of the simplified version (mpv alone): lists drawn by stream-box.lua
   playback.py  videos started from a link or the history, history loop (positions)
   history.py   history file, media keys, video being played

@@ -54,7 +54,7 @@ that can be installed on a phone (PWA).
 
 | Folder | Role |
 |---|---|
-| `app/player/` | The player, portable: the Qt Quick app embedding mpv (`ui.py` + `ui.qml`), the companion app server `remote.py` and its modules (`api.py`, `actions.py`, `twitch.py`, `youtube.py`, `jellyfin.py`, `plex.py`, `quickmenu.py`, `playback.py`, `history.py`, …), the chat (`chat_overlay.py`, `chat_qt.py`), translations (`i18n.py`); `sysparts.py` takes the system part when it is there |
+| `app/player/` | The player, portable: the Qt Quick app embedding mpv (`ui.py` + `ui.qml`), the companion app server `remote.py` and its modules (`api.py`, `actions.py`, `twitch.py`, `youtube.py`, `quickmenu.py`, `playback.py`, `history.py`, …), the chat (`chat_overlay.py`, `chat_qt.py`), translations (`i18n.py`); `sysparts.py` takes the system part when it is there; `addons/` the integrations, one folder each (Jellyfin, Plex) |
 | `app/system/` | The box's system, Inlet OS only: power, updates, SSH and developer mode (`system.py`), resolution (`display.py`), sound (`audio.py`), keys at the source (`input.py`), Wi-Fi (`netsetup.py`), Bluetooth (`btsetup.py`, `btagent.py`), installer, local update, backup, boot mode, MQTT bridge. The modules of both folders import each other by name |
 | `lua/` | mpv script `stream-box.lua` and its modules (`lua/streambox/`): streamlink, quick menu of the simplified version, Twitch / video modes, time shifting, playback bar, keys |
 | `qml/`, `qml/menu/` | Large TV menu in the style of Android TV, in QML (animated, rendered by the GPU) |

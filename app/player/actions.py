@@ -4,13 +4,12 @@ library only.
 """
 import re, subprocess, time
 
+import addons     # addons/: the integrations (Jellyfin, Plex…) and their actions
 import ambient    # ambient.py: remote URL, first setup
 import gamestream # gamestream.py: games streamed from a PC (Moonlight)
 import history    # history.py: history edits
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
-import jellyfin   # jellyfin.py: Jellyfin playback
 import playback   # playback.py: videos started from a link
-import plex       # plex.py: Plex server, playback
 import settings   # settings.py: player, power button, background
 import twitch     # twitch.py: streamers, polls and predictions, account, followed channels
 import youtube    # youtube.py: channels, account, "TV app" access
@@ -206,12 +205,6 @@ ACTIONS = {
     "predict": lambda body: twitch.predict(str(body.get("event", "")), str(body.get("outcome", "")),
                                            int(body.get("points", 0))),
     "player": lambda body: settings.set_player(str(body.get("mode", ""))),
-    "jellyfin_play": lambda body: jellyfin.jellyfin_play(str(body.get("id", "")), bool(body.get("from_start"))),
-    "jellyfin_link": jellyfin.link_action,   # Quick Connect sign-in ({address}), cancel, forget the server
-    "plex_play": lambda body: plex.plex_play(str(body.get("id", "")), bool(body.get("from_start"))),
-    "plex": lambda body: plex.set_plex(str(body.get("address", "")), str(body.get("token", ""))),   # server (empty: forget)
-    # Plex account by code (plex.tv/link): start, or give up
-    "plex_link": lambda body: plex.link_cancel() if body.get("action") == "cancel" else plex.link_start(),
     "youtube_channels": lambda body: youtube.edit_yt_channels(str(body.get("action", "")),
                                                               str(body.get("channel", "")), int(body.get("delta", 0))),
     "qr": qr,
@@ -239,6 +232,7 @@ ACTIONS = {
     "keyboard_input": keyboard_input,
     "remote_url": lambda body: ambient.set_remote_url(str(body.get("url", ""))[:300]),
 }
+ACTIONS.update(addons.actions())   # (jellyfin_play, jellyfin_link, plex_play, plex, plex_link…)
 if SYSTEM:   # the box's system (the Inlet app leaves it to its OS: these actions are unknown there)
     ACTIONS.update({
         # direct: developer mode, from a branch (main by default)

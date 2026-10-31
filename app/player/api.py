@@ -5,13 +5,12 @@ import json, os, time, urllib.parse
 from http.server import BaseHTTPRequestHandler
 
 import actions    # actions.py: POST /api/<name>, TV menu keyboard
+import addons     # addons/: the integrations (Jellyfin, Plex…): their routes, "Load more" sources, state
 import ambient    # ambient.py: first setup, remote URL, QR codes
 import gamestream # gamestream.py: games streamed from a PC (Moonlight)
 import history    # history.py: history file, kind of the current video
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import images     # images.py: TV preview
-import jellyfin   # jellyfin.py: library
-import plex       # plex.py: library
 import playback   # playback.py: videos shared from the phone
 import settings   # settings.py: player, power button, background
 import twitch     # twitch.py: streamers, live, polls, account, followed channels
@@ -62,9 +61,8 @@ def state():
         "power_action": settings.power_action(),
         "remote_url": ambient.custom_remote_url(),
         # Video libraries connected to the box: their TV menu tab only shows when they are
-        "libraries": {"jellyfin": jellyfin.jf_server() is not None, "plex": plex.px_config() is not None},
-        "plex_server": (plex.px_config() or {}).get("address", ""),
-        "jellyfin_server": (jellyfin.jf_server() or {}).get("address", ""),
+        "libraries": {a.id: a.configured() for a in addons.ADDONS if a.library},
+        **addons.state(),   # (jellyfin_server, plex_server…)
         # TV menu search keyboard open (forgotten after 10 min, menu closed in the meantime)
         "keyboard": (actions.keyboard if actions.keyboard.get("open") and time.time() - actions.keyboard.get("at", 0) < 600
                      else None),
@@ -100,18 +98,9 @@ def more(query):
         return twitch.replays_more(key, source.split("_")[1], offset)
     if source in ("yt_recommended", "yt_subscriptions"):
         return youtube.yt_tv_more(source[3:], offset)
-    if source == "jellyfin_lib":
-        return jellyfin.jellyfin_more(key, offset)
-    if source in ("jellyfin_resume", "jellyfin_nextup"):
-        return jellyfin.jellyfin_more_home(source.split("_")[1], offset)
-    if source == "jellyfin_search":
-        return jellyfin.jellyfin_search_more(q, offset)
-    if source == "plex_lib":
-        return plex.plex_more(key, offset)
-    if source in ("plex_resume", "plex_nextup"):
-        return plex.plex_more_home(source.split("_")[1], offset)
-    if source == "plex_search":
-        return plex.plex_search_more(q, offset)
+    fn = addons.more_source(source)
+    if fn:
+        return fn(key, offset, q)
     raise ValueError(tr("not found"))
 
 
@@ -122,7 +111,6 @@ JSON_ROUTES = {
     "/api/youtube": youtube.youtube_home,
     "/api/youtube_channels": lambda: {"channels": youtube.yt_channels()},
     "/api/youtube_account": youtube.yt_account_status,
-    "/api/plex_link": plex.link_state,   # Plex server, and the sign-in code being waited for
     # what this installation has: system part or not, Moonlight for games streamed from a PC
     "/api/features": lambda: {**sysparts.features(), "gamestream": gamestream.available()},
     "/api/gamestream": gamestream.status,   # the PC (Sunshine), pairing, its games, a stream running
@@ -176,6 +164,16 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, f.read(), content_type)
             elif self.path in JSON_ROUTES:
                 self.send(200, JSON_ROUTES[self.path]())
+            elif addons.route(self.path.split("?")[0]):   # routes of the addons (addons/)
+                _, r = addons.route(self.path.split("?")[0])
+                query = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).items()}
+                try:
+                    self.send(200, r.fn(query))
+                except (OSError, ValueError, KeyError) as e:
+                    if r.unreachable:
+                        self.send(503, {"error": r.unreachable(e)})
+                    else:
+                        self.send(400, {"error": str(e)})
             elif self.path.split("?")[0] == "/api/preview":
                 image = images.preview()
                 if image:
@@ -206,39 +204,6 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     self.send(200, {"query": q, **youtube.yt_search(q)})
                 except ValueError as e:
-                    self.send(400, {"error": str(e)})
-            elif self.path == "/api/jellyfin":
-                try:
-                    self.send(200, jellyfin.jellyfin_home())
-                except (OSError, ValueError, KeyError) as e:
-                    self.send(503, {"error": tr("Jellyfin unreachable: {error}", error=e)})
-            elif self.path.startswith("/api/jellyfin_search?") or self.path.startswith("/api/jellyfin_series?"):
-                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                try:
-                    if self.path.startswith("/api/jellyfin_search?"):
-                        query = q.get("q", [""])[0]
-                        self.send(200, {"query": query, "results": jellyfin.jellyfin_search(query)})
-                    else:
-                        self.send(200, jellyfin.jellyfin_series(q.get("id", [""])[0]))
-                except (OSError, ValueError, KeyError) as e:
-                    self.send(400, {"error": str(e)})
-            elif self.path.split("?")[0] == "/api/jellyfin_link":
-                # Jellyfin server, Quick Connect in progress; ?find=1: the servers that answer on the network
-                self.send(200, jellyfin.link_state(find="find=1" in self.path))
-            elif self.path == "/api/plex":
-                try:
-                    self.send(200, plex.plex_home())
-                except (OSError, ValueError, KeyError) as e:
-                    self.send(503, {"error": tr("Plex unreachable: {error}", error=e)})
-            elif self.path.startswith("/api/plex_search?") or self.path.startswith("/api/plex_series?"):
-                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                try:
-                    if self.path.startswith("/api/plex_search?"):
-                        query = q.get("q", [""])[0]
-                        self.send(200, {"query": query, "results": plex.plex_search(query)})
-                    else:
-                        self.send(200, plex.plex_series(q.get("id", [""])[0]))
-                except (OSError, ValueError, KeyError) as e:
                     self.send(400, {"error": str(e)})
             elif self.path.startswith("/api/youtube_channel?"):
                 q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("id", [""])[0]

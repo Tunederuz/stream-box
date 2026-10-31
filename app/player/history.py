@@ -1,5 +1,5 @@
 """Inlet: history and resume of the videos started from the companion app (history.json), and the video being
-played (now_playing, shared with playback.py, jellyfin.py, plex.py and youtube.py). Standard library only.
+played (now_playing, shared with playback.py, the addons and youtube.py). Standard library only.
 """
 import json, os, re, threading, time
 

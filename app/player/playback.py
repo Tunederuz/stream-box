@@ -4,9 +4,8 @@ Jellyfin and Plex. Standard library only.
 """
 import datetime, re, threading, time
 
+import addons    # addons/: the integrations (Jellyfin, Plex…): their links, their progress reports
 import history   # history.py: history file and the video being played
-import jellyfin  # jellyfin.py: Jellyfin videos and progress reports
-import plex      # plex.py: Plex videos and progress reports
 import twitch    # twitch.py: replays and clips (GQL), position saved on the account
 import youtube   # youtube.py: titles, storyboard, progress of the YouTube account
 from common import mpv
@@ -29,10 +28,8 @@ TWITCH_PUSH = 30        # seconds between two position sends to Twitch
 def play(url, from_start=False, title=None, thumb=None, at=None):
     """title, thumb: known by the page or menu starting the video (loading screen, history);
     at: forced position (cast from the YouTube app), otherwise resume from the history"""
-    if re.fullmatch(r"jellyfin:[0-9a-f]{32}", url or ""):   # from the history
-        return jellyfin.jellyfin_play(url.split(":")[1], from_start)
-    if re.fullmatch(r"plex:\d{1,10}", url or ""):
-        return plex.plex_play(url.split(":")[1], from_start)
+    if addons.play_link(url, from_start):   # a link of an addon, from the history (jellyfin:<id>, plex:<id>)
+        return
     if not url or not re.match(r"https?://", url):
         raise ValueError(tr("This is not an http(s) link."))
     key, kind, ident = history.media_key(url)
@@ -85,38 +82,12 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
         threading.Thread(target=youtube.yt_rating_fetch, args=(ident,), daemon=True).start()
 
 
-shim_items = {}   # Jellyfin identifier → card (title, image), for the history of the shim's playbacks
-
-
-def shim_video():
-    """Jellyfin video started by jellyfin-mpv-shim ("Play on…" from a Jellyfin app), from the link being
-    played; None otherwise"""
-    try:
-        user, path = mpv(["get_property", "user-data/streambox"], ["get_property", "path"])
-    except (OSError, ValueError):
-        return None
-    srv = jellyfin.jf_server()
-    if (user or {}).get("mode") != "media" or not srv or not str(path or "").startswith(srv["address"]):
-        return None
-    key, kind, ident = history.media_key(path)
-    if kind != "jellyfin":
-        return None
-    if ident not in shim_items:
-        try:
-            shim_items[ident] = jellyfin.jf_item(jellyfin.jf_api(f"/Users/{{user}}/Items/{ident}"))
-        except (OSError, ValueError, KeyError):
-            return None
-    i = shim_items[ident]
-    return {"key": key, "url": path, "link": key, "kind": kind, "ident": ident, "shim": True, "thumb": i["thumb"],
-            "title": f"{i['title']} · {i['episode']}" if i.get("episode") else i["title"]}
-
-
 def history_loop():
     """Every 10 s, records the position of the video started by play(); sends it to Twitch for a replay."""
     while True:
         time.sleep(10)
         history.flush()   # positions kept in memory on a USB drive (history.WRITE_EVERY)
-        video = dict(history.now_playing) or shim_video()
+        video = dict(history.now_playing) or addons.outside_video()
         if not video:
             continue
         try:
@@ -130,25 +101,15 @@ def history_loop():
             if playing and isinstance(position, (int, float)):
                 history.record(video, position, duration)
             continue
-        if video["kind"] == "jellyfin":
+        addon = addons.reporter(video["kind"])   # a video started by an addon (Jellyfin, Plex): its server follows
+        if addon:
             if playing and isinstance(position, (int, float)):
                 paused = mpv(["get_property", "pause"])[0]
-                jellyfin.jf_report("/Progress", video["ident"], position, bool(paused))
-                history.record(video, position, duration)
-                history.now_playing["position"] = position
-            elif not playing:
-                jellyfin.jf_report("/Stopped", video["ident"], video.get("position") or 0)
-                if history.now_playing.get("key") == video["key"]:
-                    history.now_playing.clear()
-            continue
-        if video["kind"] == "plex":
-            if playing and isinstance(position, (int, float)):
-                paused = mpv(["get_property", "pause"])[0]
-                plex.px_report(video["ident"], position, duration, "playing", bool(paused))
+                addon.report(video, position, duration, bool(paused), False)
                 history.record(video, position, duration)
                 history.now_playing.update(position=position, duration=duration)
             elif not playing:
-                plex.px_report(video["ident"], video.get("position") or 0, video.get("duration"), "stopped")
+                addon.report(video, None, None, False, True)
                 if history.now_playing.get("key") == video["key"]:
                     history.now_playing.clear()
             continue

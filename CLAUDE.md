@@ -121,11 +121,24 @@ Below, file names without a folder are in these folders.
   the system's. Its modules (no import cycle; shared mutable state has one owner module and is always reached as
   `module.attr`, never copied by `from … import`):
   - `common.py`: port, mpv socket and `mpv()`, paths, `lan_ip`, JSON file helpers;
-  - `api.py`: static files, `state()`, GET routes (`JSON_ROUTES` for exact paths, then the others), POST dispatch;
-  - `actions.py`: `POST /api/<name>` handlers (`ACTIONS` dict), the TV menu `keyboard`;
+  - `api.py`: static files, `state()`, GET routes (`JSON_ROUTES` for exact paths, then the addons', then the others),
+    POST dispatch;
+  - `actions.py`: `POST /api/<name>` handlers (`ACTIONS` dict, the addons' added), the TV menu `keyboard`;
+  - `addons/`: the integrations, one folder each (`addons/<id>/__init__.py` declares `ADDON`, its code next to it in
+    `service.py`); `addons/__init__.py` loads them (in their `order`) and holds the contract (`Addon`, `Route`): GET
+    routes (path → `Route(fn(query), unreachable)`: errors 400, or 503 with `unreachable(error)`), POST actions,
+    "Load more" sources (`api.more`), links `<id>:<item>` played from the history (`play_link`), progress reports of
+    a video it started (`report(video, position, duration, paused, stopped)`, `history_loop`), a video started
+    outside the box (`outside_video`: Jellyfin's "Play on…"), keys of `/api/state` (`state()`), its quick menu
+    screens (`library`: home, series, play). `addons.library(...)` builds the routes, actions, sources and link of a
+    media library (`/api/<id>`, `_search`, `_series`, `<id>_play`, sources `<id>_lib|_resume|_nextup|_search`).
+    Step 1 of the addons (2026-10-31): Jellyfin and Plex moved there, the API unchanged; to come: Twitch (the base,
+    always there), YouTube, the PC link, then the TV menu rows built from what the addons return, enabling and
+    disabling them in Settings, playback bar buttons and panels declared by the addon of the video;
   - `twitch.py`: streamers.txt, who is live (`live_now`), polls and predictions, replays, GQL, followed channels,
     Twitch account; `youtube.py`: channels, feeds, search, auto subtitles (`/subs`), storyboard, TV app progress,
-    Google account and subscriptions; `jellyfin.py`: server, home, search, series, play, subtitles, progress;
+    Google account and subscriptions; `addons/jellyfin/service.py`: server, home, search, series, play, subtitles,
+    progress; `addons/plex/service.py`: the same for Plex;
   - `playback.py`: `play()`, `history_loop`; `history.py`: history.json, `media_key`, `now_playing`;
   - `ambient.py`: weather, Twitch schedules, companion app URL and QR code, first setup, `ambient_loop`;
   - `images.py`: TV preview; `settings.py`: player, power button action, backdrop; `system.py`: power, power key
@@ -630,7 +643,7 @@ system; background, glows, rail, focus glows (`FocusFrame.glow`), `VideoCard.acc
 dark knob in neutral), actions popup, keyboard. Blue is left free for Jellyfin. Logo (`qml/Logo.qml`, icons `icon-*.png`): white tile, rounded charcoal triangle, neutral on a purple background as well as on red.
 
 ### Plex (QML menu tab and page)
-`plex.py`: a Plex server of the local network, chosen in the companion app (Settings → Plex, `POST /api/plex
+`addons/plex/service.py`: a Plex server of the local network, chosen in the companion app (Settings → Plex, `POST /api/plex
 {address, token?}`, checked with `/identity` and `/library/sections` before being kept; empty address: forget it), in
 `~/.config/stream-box/plex.json` (600, with the box's `X-Plex-Client-Identifier`). Without a token, Plex must let the
 box's network in (Plex setting "List of IP addresses and networks that are allowed without auth"). Same card fields
@@ -665,7 +678,7 @@ server's position, title passed to mpv (`streambox-play url start title` → `fo
 %n% prefix). Progress reported to the server: `Sessions/Playing` at start, `/Progress` every 10 s by
 history_loop, `/Stopped` on stop (the server decides what is "watched"). Entry in the box's history as
 "jellyfin:ID" (without token; `play()` restarts it through jellyfin_play), also for playbacks started by the shim
-("Play on…", `shim_video`: the shim reports on its own). External subtitles (.srt next to the file) missing from the
+("Play on…", `shim_video` of addons/jellyfin, the addon's `outside_video`: the shim reports on its own). External subtitles (.srt next to the file) missing from the
 direct stream: added by `sub-add` once the video is open (`jf_add_subtitles`). The
 server's images are public (no token in their links).
 TV: "Jellyfin" tab (blue theme) on the same page as YouTube (`mediaRows`, `mRow`/`mSel`, `keyMedia`, its own
@@ -680,7 +693,7 @@ around for the glow) that stops under the title and above the help at the bottom
 according to the targeted row. QML pitfall: a function must not reuse the name of a property
 (`setSel` existed: the tab's keys failed silently, except in the log).
 Page: Jellyfin block of the Remote tab (chips per row, search, episodes of a series).
-Sign-in by Quick Connect (`jellyfin.py`, the shim does it): `POST /api/jellyfin_link {address}` (`qc_start`: address
+Sign-in by Quick Connect (`addons/jellyfin/service.py`, the shim does it): `POST /api/jellyfin_link {address}` (`qc_start`: address
 completed with `http://` and `:8096`, checked with `/System/Info/Public`, `users.json` saved as
 `users.json.before-quick-connect`, then `jellyfin-mpv-shim --no-gui --server <address> --quick-connect clear`, which
 prints the 6-digit code alone on a line, writes `users.json` once approved and goes on as the usual player; it needs

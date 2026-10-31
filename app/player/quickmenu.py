@@ -13,9 +13,8 @@ import actions    # actions.py: language, restart
 import ambient    # ambient.py: companion app address
 import history    # history.py: history file, resume thresholds
 import i18n       # i18n.py: interface language
-import jellyfin   # jellyfin.py: library, playback
+import addons     # addons/: the media libraries (Jellyfin, Plex): home, series, playback
 import playback   # playback.py: links, history entries
-import plex       # plex.py: library, playback
 import settings   # settings.py: back to the full version
 import twitch     # twitch.py: streamers, who is live, followed channels, replays
 import youtube    # youtube.py: favorites, subscriptions
@@ -167,14 +166,15 @@ def youtube_screen():
     return screen("YouTube", build)
 
 
-# Jellyfin and Plex: same card fields (jellyfin.py, plex.py)
+# Media libraries (addons with a library: Jellyfin, Plex): the same card fields
 
-LIBS = {"jellyfin": (jellyfin.jellyfin_home, jellyfin.jellyfin_series, jellyfin.jellyfin_play),
-        "plex": (plex.plex_home, plex.plex_series, plex.plex_play)}
+def lib(service):
+    """(home, series, play) of the library addon"""
+    return addons.get(service).library
 
 
 def lib_items(service, cards, series_id=None):
-    _, series, play = LIBS[service]
+    _, series, play = lib(service)
     out = []
     for c in cards:
         name = f"{c['title']} · {c['episode']}" if c.get("episode") else c["title"]
@@ -196,7 +196,7 @@ def series_screen(service, series_id, title):
     s = screen(title, None)
 
     def build():
-        d = LIBS[service][1](series_id)
+        d = lib(service)[1](series_id)
         s["sel"] = d.get("first") or 0   # first episode not watched yet
         return lib_items(service, d.get("episodes") or [], series_id)
     s["build"] = build
@@ -205,7 +205,7 @@ def series_screen(service, series_id, title):
 
 def lib_screen(service, title):
     def build():
-        d = LIBS[service][0]()
+        d = lib(service)[0]()
         rows = [(tr("Continue watching"), d.get("resume")), (tr("Next up"), d.get("nextup"))]
         rows += [(lib["name"], lib.get("items")) for lib in d.get("libraries") or []]
         return [item(name, lambda name=name, cards=cards: screen(name, lambda: lib_items(service, cards)), str(len(cards)))
@@ -335,10 +335,9 @@ def root():
         if twitch.follows_logins():
             out.append(item(tr("Following"), follows_screen))
         out += [item(tr("Replays"), replays_screen), item("YouTube", youtube_screen)]
-        if jellyfin.jf_server():
-            out.append(item("Jellyfin", lambda: lib_screen("jellyfin", "Jellyfin")))
-        if plex.px_config():
-            out.append(item("Plex", lambda: lib_screen("plex", "Plex")))
+        for a in addons.ADDONS:   # the media libraries set up
+            if a.library and a.configured():
+                out.append(item(a.name, lambda a=a: lib_screen(a.id, a.name)))
         out += [item(tr("History"), history_screen),
                 item(tr("⌂ Home screen"), lambda: playing(lambda: mpv(["script-message", "streambox-home"]))),
                 item(tr("Settings"), settings_screen), item(tr("System"), system_screen)]
