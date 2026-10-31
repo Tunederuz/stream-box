@@ -84,6 +84,7 @@ Item {
         Toast {}
         TracksPanel {}
         InfoPanel {}
+        CommentsPanel {}
         KeyWizard {}
         TvMenu {
             id: tvMenu

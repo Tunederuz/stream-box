@@ -994,5 +994,14 @@
  "unknown library": "bibliothèque inconnue",
  "▶  See latest videos of {channel}": "▶  Voir les dernières vidéos de {channel}",
  "the channel": "la chaîne",
- "Chapters": "Chapitres"
+ "Chapters": "Chapitres",
+ "Like": "J'aime",
+ "Liked": "Aimé",
+ "Dislike": "Je n'aime pas",
+ "Disliked": "Pas aimé",
+ "Comments": "Commentaires",
+ "Loading comments…": "Chargement des commentaires…",
+ "No comments.": "Aucun commentaire.",
+ "{n} replies": "{n} réponses",
+ "No YouTube video playing.": "Aucune vidéo YouTube en cours."
 }

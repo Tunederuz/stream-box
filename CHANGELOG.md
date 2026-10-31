@@ -20,6 +20,9 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - Chapters: a button of the playback bar lists the video's chapters (start time and title) to jump to one; it
   replaces "Next chapter".
 
+- YouTube: like or dislike the video from the playback bar (account connected), and read its comments in a side
+  panel, 20 at a time, more as you scroll down.
+
 ### Changed
 - Playback bar: −10 s, pause and +10 s in the middle, the other buttons (subtitles, quality, chapters, next episode)
   on the right. ↓ goes straight to the buttons, ↓ again hides the bar.
@@ -32,6 +35,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 ### Fixed
 - Twitch replays already watched (on the box or elsewhere) started at their very end, the picture frozen: the date of
   the position saved on Twitch was taken for the position.
+- A YouTube favorite channel could show no videos for a while: when YouTube's feed fails, its videos page is read
+  instead.
 
 ## [0.6.0]
 

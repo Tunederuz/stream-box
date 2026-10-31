@@ -6,7 +6,7 @@ import json, os, re, subprocess, threading, time, urllib.parse, urllib.request
 
 import history   # history.py: positions of the videos already watched on the box
 from common import COOKIES_DIR, mpv, tool
-from i18n import tr
+from i18n import language, tr
 
 # YouTube: followed channels (the box's list, ~/.config/stream-box/youtube.json) and their latest videos through the
 # public RSS feed (no API key, 15 videos), search through yt-dlp ("ytsearch"). Caches: 20 min per feed, 10 min per
@@ -195,6 +195,68 @@ def yt_tv_more(feed, offset):
 def yt_tv_report(video_id, position, final=False):
     threading.Thread(target=yt_tv, args=("/report", {"id": video_id, "position": position, "final": final}),
                      daemon=True).start()
+
+
+# Rating and comments of the video being played (playback bar: 👍 👎, Comments panel), through youtube_tv.js:
+# user-data/streambox/rating { id, status } (account connected only), user-data/streambox/comments
+# { id, items, more, loading, error } (public: no account needed); pages of 20, the next one on "load more"
+yt_comments_state = {"id": None, "items": [], "next": None}
+yt_comments_lock = threading.Lock()
+
+
+def playing_youtube():
+    return history.now_playing.get("ident") if history.now_playing.get("kind") == "youtube" else None
+
+
+def yt_rating_fetch(ident):
+    d = yt_tv(f"/rating?id={urllib.parse.quote(ident)}", timeout=15)
+    if isinstance(d, dict) and d.get("status") and playing_youtube() == ident:
+        mpv(["set_property", "user-data/streambox/rating", {"id": ident, "status": d["status"]}])
+
+
+def yt_rate(body):
+    """{rating: like | dislike | none} on the video being played; the state YouTube confirms is published (the bar
+    showed the new one at once), or read again after a failure"""
+    ident, how = playing_youtube(), str(body.get("rating", ""))
+    if not ident or how not in ("like", "dislike", "none"):
+        raise ValueError(tr("No YouTube video playing."))
+    d = yt_tv("/rate", {"id": ident, "rating": how}, timeout=15)
+    if isinstance(d, dict) and d.get("status"):
+        mpv(["set_property", "user-data/streambox/rating", {"id": ident, "status": d["status"]}])
+    else:
+        yt_rating_fetch(ident)
+        raise ValueError(tr("YouTube unreachable for now"))
+
+
+def yt_comments(body):
+    """First page of the comments of the video being played (kept: opening the panel again reads nothing), or the
+    next one ({more: true})"""
+    ident = playing_youtube()
+    if not ident:
+        raise ValueError(tr("No YouTube video playing."))
+    with yt_comments_lock:
+        st = yt_comments_state
+        if st["id"] != ident:
+            st.update(id=ident, items=[], next=None, loaded=False)
+        if st.get("loaded") and not (body.get("more") and st["next"]):
+            return publish_comments()
+        publish_comments(loading=True)
+        q = {"id": ident, "hl": language()}
+        if st.get("loaded"):
+            q["token"] = st["next"]
+        d = yt_tv("/comments?" + urllib.parse.urlencode(q), timeout=30)
+        if playing_youtube() != ident:
+            return None
+        if not isinstance(d, dict) or not isinstance(d.get("items"), list):
+            return publish_comments(error=tr("YouTube unreachable for now"))
+        st.update(items=st["items"] + d["items"], next=d.get("next"), loaded=True)
+        return publish_comments()
+
+
+def publish_comments(loading=False, error=""):
+    st = yt_comments_state
+    mpv(["set_property", "user-data/streambox/comments",
+         {"id": st["id"], "items": st["items"], "more": bool(st["next"]), "loading": loading, "error": error}])
 
 
 def youtube_home():
