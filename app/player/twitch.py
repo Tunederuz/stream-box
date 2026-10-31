@@ -96,6 +96,7 @@ def live_loop():
 # Twitch no longer has a real-time subscription (PubSub) for a plain viewer: we poll, like the twitch.tv page.
 
 EVENTS_EVERY = 10    # seconds between two polls, only during a live stream with the panel enabled
+PAGE_EVENTS_EVERY = 3   # while the companion app shows them: a poll or prediction that opens shows up sooner
 RESULT_FOR = 60      # seconds the result of a finished poll or prediction is shown
 LOCKED_FOR = 60      # seconds a locked prediction (bets closed, waiting for its result) stays on the TV
 EVENTS_QUERY = (
@@ -110,6 +111,7 @@ EVENTS_SELF = "query($l:String!){user(login:$l){channel{self{communityPoints{bal
     "activePredictionEvents{id self{prediction{points outcome{id}}}} " \
     "lockedPredictionEvents{id self{prediction{points outcome{id}}}}}}}"
 events_now = {"channel": None, "at": 0.0, "data": {"poll": None, "prediction": None}}   # last poll
+events_seen = {}   # fetch_events' seen, shared by the TV's poll and the page's, emptied when the channel changes
 poll_votes = {}   # poll id → choice voted from the box (Twitch does not give it back)
 
 
@@ -206,32 +208,41 @@ def predict(event_id, outcome_id, points):
     events_now["at"] = 0.0
 
 
+def poll_events(login):
+    """fetch_events for the channel, kept in events_now (the seen times start over when the channel changes)"""
+    if login != events_now["channel"]:
+        events_seen.clear()
+    data = fetch_events(login, events_seen)
+    events_now.update(channel=login, at=time.time(), data=data)
+    return data
+
+
 def events_for_page():
-    """Poll and prediction of the watched channel, for the page; polled here when the regular poll is not running
-    (panel disabled), at most every EVENTS_EVERY seconds"""
+    """Poll and prediction of the watched channel, for the page (polled every 3 s while it shows them): read again
+    when the last poll is older than PAGE_EVENTS_EVERY seconds, the TV's panel updated at the same time"""
     user = mpv(["get_property", "user-data/streambox"])[0] or {}
     login = user.get("channel") if user.get("mode") == "twitch" else None
     if not login:
         return {"channel": None, "poll": None, "prediction": None, "logged_in": bool(read_token())}
-    if events_now["channel"] != login or time.time() - events_now["at"] > EVENTS_EVERY:
-        events_now.update(channel=login, at=time.time(), data=fetch_events(login, {}))
+    if events_now["channel"] != login or time.time() - events_now["at"] > PAGE_EVENTS_EVERY:
+        data = poll_events(login)
+        if user.get("events", True):
+            mpv(["set_property", "user-data/streambox/polls", data])
     return {"channel": login, **events_now["data"], "logged_in": bool(read_token())}
 
 
 def events_loop():
-    seen, current = {}, None
     while True:
         data = {"poll": None, "prediction": None}
         try:
             user, playing = mpv(["get_property", "user-data/streambox"], ["get_property", "video-params"])
             user = user or {}
             login = user.get("channel")
-            # Any live channel (also a followed channel or a swapped second stream, outside the list)
+            # Any live channel (also a followed channel or a swapped second stream, outside the list); the page's
+            # poll may have just read it
             if user.get("mode") == "twitch" and user.get("events", True) and playing and login:
-                if login != current:
-                    seen, current = {}, login
-                data = fetch_events(login, seen)
-                events_now.update(channel=login, at=time.time(), data=data)
+                fresh = events_now["channel"] == login and time.time() - events_now["at"] < EVENTS_EVERY
+                data = events_now["data"] if fresh else poll_events(login)
             mpv(["set_property", "user-data/streambox/polls", data])
         except (OSError, ValueError, KeyError, TypeError):
             pass   # mpv or Twitch unreachable: retry on the next round

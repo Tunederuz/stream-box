@@ -242,7 +242,9 @@ Below, file names without a folder are in these folders.
   file `qr`): `always`, `timed` (`QR_SECONDS` = 30 s each time the ambient screen appears and the menu opens),
   `never`; the check is done in `qr_code()`.
 - **Polls and predictions** (`twitch.events_loop` / `fetch_events`): no more PubSub for a viewer, so
-  GQL polling every 10 s, only during a live stream from the list with the panel enabled: `user.viewablePoll`
+  GQL polling every 10 s, only during a live stream from the list with the panel enabled, every 3 s while the page
+  shows the card (`events_for_page`, `PAGE_EVENTS_EVERY`: it updates the TV's panel too; one `poll_events` and its
+  `events_seen` for both): `user.viewablePoll`
   (current or ended poll; no end time, the result is shown for 60 s after it is seen ended),
   `channel.activePredictionEvents`, `lockedPredictionEvents`, and `resolvedPredictionEvents(first:1)` (result shown
   for 60 s after `endedAt`; a locked one, bets closed and waiting for its result, sometimes for the whole stream, stays
