@@ -197,9 +197,9 @@ def yt_tv_report(video_id, position, final=False):
                      daemon=True).start()
 
 
-# Rating and comments of the video being played (playback bar: 👍 👎, Comments panel), through youtube_tv.js:
-# user-data/streambox/rating { id, status } (account connected only), user-data/streambox/comments
-# { id, items, more, loading, error, thread } (public: no account needed); pages of 20, the next one on "load more";
+# Buttons, rating and comments of the video being played (playback bar: 👍 👎 and Comments, addons.publish_actions),
+# through youtube_tv.js: the rating when the account is connected, the comments (public: no account needed),
+# user-data/streambox/comments { id, items, more, loading, error, thread }; pages of 20, the next one on "load more";
 # thread: the replies of the comment opened { index, items, more, loading }, pages of 10
 yt_comments_state = {"id": None, "items": [], "next": None, "loaded": False, "thread": None}
 yt_comments_lock = threading.Lock()
@@ -209,10 +209,21 @@ def playing_youtube():
     return history.now_playing.get("ident") if history.now_playing.get("kind") == "youtube" else None
 
 
+def publish_actions(ident, status):
+    """The playback bar's buttons of this video: 👍 👎 when the account is connected (status: LIKE, DISLIKE,
+    INDIFFERENT; None: not connected), Comments"""
+    import addons
+    rating = [{"id": how, "icon": how, "label": tr(label), "label_on": tr(label_on), "on": status == how.upper(),
+               "group": "rating", "post": "yt_rate", "body": {"rating": how}, "off_body": {"rating": "none"}}
+              for how, label, label_on in (("like", "Like", "Liked"), ("dislike", "Dislike", "Disliked"))] if status else []
+    if playing_youtube() == ident:
+        addons.publish_actions(history.now_playing.get("url"), rating + [
+            {"id": "comments", "icon": "comments", "label": tr("Comments"), "panel": "comments", "post": "yt_comments"}])
+
+
 def yt_rating_fetch(ident):
     d = yt_tv(f"/rating?id={urllib.parse.quote(ident)}", timeout=15)
-    if isinstance(d, dict) and d.get("status") and playing_youtube() == ident:
-        mpv(["set_property", "user-data/streambox/rating", {"id": ident, "status": d["status"]}])
+    publish_actions(ident, d.get("status") if isinstance(d, dict) else None)
 
 
 def yt_rate(body):
@@ -223,7 +234,7 @@ def yt_rate(body):
         raise ValueError(tr("No YouTube video playing."))
     d = yt_tv("/rate", {"id": ident, "rating": how}, timeout=15)
     if isinstance(d, dict) and d.get("status"):
-        mpv(["set_property", "user-data/streambox/rating", {"id": ident, "status": d["status"]}])
+        publish_actions(ident, d["status"])
     else:
         yt_rating_fetch(ident)
         raise ValueError(tr("YouTube unreachable for now"))

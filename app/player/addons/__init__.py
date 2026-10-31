@@ -8,7 +8,7 @@ Standard library only.
 """
 import importlib, os
 
-from common import COOKIES_DIR, read_json_file, write_private_json
+from common import COOKIES_DIR, mpv, read_json_file, write_private_json
 from i18n import tr
 
 # Add-ons turned off by the user (Settings → Add-ons): {"disabled": [id, …]}; Twitch, the base, never is
@@ -240,6 +240,15 @@ def rows(query):
 
 
 CORE_ROUTES = {"/api/rows": Route(rows), "/api/addons": Route(lambda q: listing())}
+
+
+def publish_actions(url, items):
+    """An add-on's buttons in the playback bar's row, for the video at url (stream-box.lua shows them for that video
+    only, after −10 s / Pause / +10 s): items [{id, label, label_on, icon (qml/PlayerIcon.qml), on, group, post, body,
+    off_body, panel}]: post, an action of the add-on (POST /api/<post> with body, off_body when the button was on: the
+    button lit at once, the others of its group off), or panel ("comments": the comments panel, its pages read by
+    post); the add-on publishes again the state it confirms. url None: none"""
+    mpv(["set_property", "user-data/streambox/actions", {"url": url, "items": items} if url else {}])
 
 
 def state():

@@ -339,7 +339,8 @@ Item {
                             anchors.centerIn: parent
                             // −10 / +10: thin circle, enlarged to fill the button like the other icons
                             scale: parent.parent.big ? 1.25 : (parent.parent.it.id === "back" || parent.parent.it.id === "fwd") ? 1.4 : 1
-                            name: parent.parent.it.id === "play" ? (root.pb.pause ? "play" : "pause") : (parent.parent.it.id || "")
+                            // (an add-on's button: its icon, its id is "addon:<n>")
+                            name: parent.parent.it.id === "play" ? (root.pb.pause ? "play" : "pause") : (parent.parent.it.icon || parent.parent.it.id || "")
                             color: parent.parent.foc ? "#17151c" : "white"
                             filled: !!parent.parent.it.on
                         }

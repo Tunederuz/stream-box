@@ -155,7 +155,12 @@ Below, file names without a folder are in these folders.
     `POST /api/addon {id, enabled}`, `/api/state` → `addons` (ids on). TV: Settings → Add-ons (toggles, `setAddon`
     changes `addons` and `st.addons` at once), tabs (`addonOn`) and the accounts rows of an addon off hide; companion
     app: Add-ons group, `[data-addon]` sections hidden (`.addon-off`); quick menu: its YouTube and libraries follow.
-    To come: playback bar buttons and panels declared by the addon of the video;
+    Step 4: the playback bar's buttons of an addon, for the video it plays (`addons.publish_actions(url, items)` →
+    `user-data/streambox/actions` {url, items}; stream-box.lua shows them only while that url plays, after −10 s /
+    Pause / +10 s, as `addon:<n>`; InfoBar draws `icon`): items [{label, label_on, icon, on, group, post, body,
+    off_body, panel}], OK posts `post` (body, or off_body when on) and lights the button at once (its group's others
+    off), or opens the panel (`comments`: CommentsPanel, its pages read by `post`); `playback.play` clears them, the
+    addon publishes its own (YouTube: 👍 👎 when connected, Comments: `publish_actions` of addons/youtube);
   - `addons/twitch/service.py` (Twitch, the base: the core's modules use it directly): streamers.txt, who is live (`live_now`), polls and predictions, replays, GQL, followed channels,
     Twitch account; `addons/youtube/service.py`: channels, feeds, search, auto subtitles (`/subs`), storyboard, TV app progress,
     Google account and subscriptions; `addons/jellyfin/service.py`: server, home, search, series, play, subtitles,
@@ -1378,9 +1383,9 @@ length of the text), Back / OK / ≡ close; closed at the end of the file.
 
 ### YouTube rating and comments (video)
 Like / Dislike buttons of the playback bar: addons/youtube `yt_rating_fetch` at the start of a YouTube video (youtube_tv.js
-`GET /rating?id=`: `likeStatus` of the TV `/next`) → `user-data/streambox/rating` {id, status: LIKE | DISLIKE |
-INDIFFERENT}, empty when not connected (no buttons then). OK: stream-box.lua `rate` lights the button up at once and
-`POST /api/yt_rate` {rating: like | dislike | none} (the same button again: none); youtube_tv.js `POST /rate` calls
+`GET /rating?id=`: `likeStatus` of the TV `/next`) → `publish_actions` (the addon's buttons, step 4 of the addons:
+👍 👎 in the group "rating" when connected, Comments always). OK: stream-box.lua lights the button up at once and
+`POST /api/yt_rate` {rating: like | dislike | none} (the same button again: its off_body, none); youtube_tv.js `POST /rate` calls
 `/like/like`, `/like/dislike` or `/like/removelike` with the params the TV `/next` gives (`likeParams`…, read again each
 time: they carry a time). youtubei.js's `interact.like` is refused (400). The state YouTube confirms is published again.
 Comments: the Comments button opens `qml/CommentsPanel.qml` (right side, like the Info panel); `POST /api/yt_comments`

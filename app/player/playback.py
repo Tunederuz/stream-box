@@ -47,7 +47,7 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
     mpv(["set_property", "user-data/streambox/storyboard", {}])
     mpv(["set_property", "user-data/streambox/meta", {}])
     mpv(["set_property", "user-data/streambox/next_up", {}])
-    mpv(["set_property", "user-data/streambox/rating", {}])
+    addons.publish_actions(None, [])   # (the add-on of this video publishes its own: YouTube's 👍 👎, comments)
     mpv(["set_property", "user-data/streambox/comments", {}])
     if addon and addon.started:
         addon.started(video)

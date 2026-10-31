@@ -845,28 +845,24 @@ local function info_key(key)
 end
 mp.register_event("end-file", close_info)
 
--- YouTube rating and comments of the video being played (remote.py, youtube.py): 👍 👎 in the row of buttons (account
--- connected: user-data/streambox/rating { id, status }), Comments panel (qml/CommentsPanel.qml: the comments in
--- user-data/streambox/comments { items, more, loading, thread }, its state in user-data/streambox/comments_view
--- { open, scroll, thread, tscroll }: ↑ ↓ one comment, OK its replies, Back back to the comments or closes)
+-- Buttons of the video's add-on in the row of buttons (remote.py, addons.publish_actions: user-data/streambox/actions
+-- {url, items}, for the video at url only): items [{label, label_on, icon, on, group, post, body, off_body, panel}].
+-- post: an action of the add-on (POST /api/<post> with body, or off_body when the button was on), the button lit at
+-- once (the others of its group off: 👍 👎), the add-on publishing the state it confirms afterwards; panel "comments":
+-- the comments panel, its pages read by post (qml/CommentsPanel.qml: the comments in user-data/streambox/comments
+-- { items, more, loading, thread }, its state in user-data/streambox/comments_view { open, scroll, thread, tscroll }:
+-- ↑ ↓ one comment, OK its replies, Back back to the comments or closes)
 local function api_post(name, body)
     mp.command_native_async({ name = "subprocess", playback_only = false, capture_stdout = true,
         args = { "curl", "-s", "-m", "40", "-X", "POST", "-H", "Content-Type: application/json", "-d", body,
                  "http://127.0.0.1:8080/api/" .. name } }, function() end)
 end
-local function playing_youtube()
-    return mode == "media" and (mp.get_property("path") or ""):match("^https://[%w.]*youtu") ~= nil
-end
-local yt_rating = {}
-mp.observe_property("user-data/streambox/rating", "native", function(_, v)
-    yt_rating = type(v) == "table" and v or {}
+local addon_actions = {}
+mp.observe_property("user-data/streambox/actions", "native", function(_, v)
+    addon_actions = type(v) == "table" and v or {}
     if publish_controls then publish_controls() end
 end)
-local function rate(how)   -- the button lights up at once; youtube.py publishes what YouTube says afterwards
-    local now = yt_rating.status == how:upper() and "none" or how
-    yt_rating = { id = yt_rating.id, status = now == "none" and "INDIFFERENT" or now:upper() }
-    api_post("yt_rate", ('{"rating":"%s"}'):format(now))
-end
+local comments_action = nil   -- the add-on action reading the comments panel's pages (YouTube: yt_comments)
 
 local comments_open, comments_scroll, comments = false, 0, {}
 local thread_open, thread_scroll = false, 0   -- the replies of the selected comment (comments_scroll), opened with OK
@@ -880,11 +876,11 @@ local function comments_more()   -- the next page, a few comments (or replies) b
     if thread_open then
         if t and t.index == comments_scroll and t.more and not t.loading and thread_scroll >= #(t.items or {}) - 3 then
             t.loading = true
-            api_post("yt_comments", ('{"replies":%d,"more":true}'):format(comments_scroll))
+            api_post(comments_action, ('{"replies":%d,"more":true}'):format(comments_scroll))
         end
     elseif comments.more and not comments.loading and comments_scroll >= #(comments.items or {}) - 4 then
         comments.loading = true
-        api_post("yt_comments", '{"more":true}')
+        api_post(comments_action, '{"more":true}')
     end
 end
 mp.observe_property("user-data/streambox/comments", "native", function(_, v)
@@ -895,7 +891,7 @@ local function open_comments()
     comments_open, comments_scroll, thread_open = true, 0, false
     hide_bar()
     publish_comments_view()
-    api_post("yt_comments", "{}")   -- the first page (read once per video)
+    api_post(comments_action, "{}")   -- the first page (read once per video)
 end
 local function close_comments()
     if not comments_open then return end
@@ -914,12 +910,28 @@ local function comments_key(key)
     elseif key == "ok" then   -- its replies, if it has some
         if (((comments.items or {})[comments_scroll + 1] or {}).replies or "") == "" then return end
         thread_open, thread_scroll = true, 0
-        api_post("yt_comments", ('{"replies":%d}'):format(comments_scroll))
+        api_post(comments_action, ('{"replies":%d}'):format(comments_scroll))
     else return close_comments() end
     publish_comments_view()
     comments_more()
 end
 mp.register_event("end-file", close_comments)
+-- The add-on's buttons of the video playing (published for another one: none); OK on one: true when it opened a panel
+local function video_actions()
+    return addon_actions.url and addon_actions.url == mp.get_property("path") and addon_actions.items or {}
+end
+local function press_action(b)
+    if b.panel == "comments" then
+        comments_action = b.post
+        open_comments()
+        return true
+    end
+    if not b.post then return end
+    local was_on = b.on
+    for _, o in ipairs(video_actions()) do if b.group and o.group == b.group then o.on = false end end
+    b.on = not was_on
+    api_post(b.post, json.format_json((was_on and b.off_body) or b.body or {}))
+end
 
 -- Video playback: accelerating fast forward, row of buttons under the bar (Qt app), next episode
 -- (Jellyfin). States published for InfoBar.qml and NextUp.qml: seekfx, controls, next_card; remote.py publishes next_up.
@@ -1029,16 +1041,11 @@ end)
 local function controls_list()
     local paused = mp.get_property_native("pause")
     -- −10 s, Play / Pause, +10 s first (InfoBar.qml puts them in the middle of the screen), then the others (on the
-    -- right): 👍 👎 and comments (YouTube), subtitles, quality, chapters, next episode
+    -- right): the add-on's (YouTube: 👍 👎, comments), subtitles, quality, chapters, next episode
     local list = { { id = "back", label = "−10 s" }, { id = "play", label = paused and tr("Play") or tr("Pause") },
                    { id = "fwd", label = "+10 s" } }
-    if playing_youtube() then
-        if yt_rating.status then   -- account connected
-            local liked, disliked = yt_rating.status == "LIKE", yt_rating.status == "DISLIKE"
-            list[#list + 1] = { id = "like", label = liked and tr("Liked") or tr("Like"), on = liked }
-            list[#list + 1] = { id = "dislike", label = disliked and tr("Disliked") or tr("Dislike"), on = disliked }
-        end
-        list[#list + 1] = { id = "comments", label = tr("Comments") }
+    for i, b in ipairs(video_actions()) do   -- the add-on's (YouTube: 👍 👎, comments)
+        list[#list + 1] = { id = "addon:" .. i, icon = b.icon, label = b.on and b.label_on or b.label, on = b.on or nil }
     end
     list[#list + 1] = { id = "tracks", label = tr("Subtitles") }
     -- Quality: YouTube only, when several resolutions are offered (Jellyfin: original file)
@@ -1074,8 +1081,9 @@ local function controls_key(key)
         elseif id == "quality" then open_tracks("quality")
         elseif id == "chapters" then open_tracks("chapters")
         elseif id == "next" then play_next()
-        elseif id == "like" or id == "dislike" then rate(id)
-        elseif id == "comments" then return open_comments() end
+        elseif id and id:sub(1, 6) == "addon:" then
+            if press_action(video_actions()[tonumber(id:sub(7))] or {}) then return end
+        end
     end
     show_bar()
     publish_controls()
