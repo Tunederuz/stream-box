@@ -29,6 +29,10 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - On screens that aren't 16:9 (the Steam Deck's 16:10), the interface now fills the whole screen: no more bands, the
   lists reach down to the help at the bottom.
 
+### Fixed
+- Twitch replays already watched (on the box or elsewhere) started at their very end, the picture frozen: the date of
+  the position saved on Twitch was taken for the position.
+
 ## [0.6.0]
 
 ### Changed
