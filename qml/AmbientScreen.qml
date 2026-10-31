@@ -302,7 +302,7 @@ Item {
             visible: opacity > 0 && !!(root.ambient.qr && root.ambient.qr.rows) && !root.setup && !root.firstRun
             opacity: root.qrWanted ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 500 } }
-            x: 1920 - 56 - width; y: 1080 - 44 - height
+            x: root.width - 56 - width; y: root.height - 44 - height
             spacing: 10
             Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.tr("Companion app"); color: "#b4afc2"; font.pixelSize: 21 }
             QrCode { anchors.horizontalCenter: parent.horizontalCenter; size: 230; rows: root.ambient.qr ? root.ambient.qr.rows : [] }

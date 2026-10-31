@@ -6,6 +6,41 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+## [0.7.0]
+
+### Added
+- YouTube: like or dislike the video from the playback bar (account connected), and read its comments in a side
+  panel, 20 at a time, more as you scroll down; OK on a comment shows its replies.
+- "Load more" at the end of the TV menu's rows: YouTube recommended, subscriptions, search results and channels,
+  Twitch replays and clips, Jellyfin and Plex rows and search results.
+- Chapters: a button of the playback bar lists the video's chapters (start time and title) to jump to one; it
+  replaces "Next chapter".
+- A turning ring over the video while it waits for data (after a seek forward, a slow stream), with the buffer's
+  percentage.
+- A "Getting ready…" screen with the logo at start, until the box is ready, instead of an empty home screen.
+
+### Changed
+- Twitch account: sign in with a code on twitch.tv/activate, from the TV menu (Settings → Accounts and links) or
+  the companion app, instead of copying a cookie from a computer; subscriptions stay without ads, and the same
+  sign-in gives the followed channels. Pasting the token stays possible.
+- Playback bar: −10 s, pause and +10 s in the middle, the other buttons on the right. ↓ goes straight to the
+  buttons, ↓ again hides the bar.
+- While videos load in the TV menu, skeleton cards show where they will be, instead of a "Loading…" text.
+- One options menu (≡) for every YouTube video card: play or resume, see the channel's latest videos, add it to the
+  favorites or remove it.
+- In the TV menu's rows of videos, moving to another row starts at its first card.
+- On screens that aren't 16:9 (the Steam Deck's 16:10), the interface now fills the whole screen.
+- youtubei.js (the YouTube account access) updated from 16.0.1 to 18.1.0.
+
+### Fixed
+- Twitch replays already watched (on the box or elsewhere) started at their very end, the picture frozen.
+- A YouTube favorite channel could show no videos for a while: when YouTube's feed fails, its videos page is read
+  instead.
+- A Twitch prediction whose bets were closed stayed at the top of the TV until its result: it now goes away after a
+  minute and comes back with the result.
+- Polls and predictions show up in the companion app as soon as it opens, then within a few seconds (up to 13 s
+  before).
+
 ## [0.6.0]
 
 ### Changed

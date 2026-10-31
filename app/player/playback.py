@@ -58,8 +58,8 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
             duration = v.get("lengthSeconds") or duration
             seen = (v.get("self") or {}).get("viewingHistory") or {}
             if seen.get("updatedAt"):
-                at = datetime.datetime.fromisoformat(seen["updatedAt"].replace("Z", "+00:00")).timestamp()
-                if at > updated:   # watched more recently elsewhere (site, app) than on the box
+                seen_at = datetime.datetime.fromisoformat(seen["updatedAt"].replace("Z", "+00:00")).timestamp()
+                if seen_at > updated:   # watched more recently elsewhere (site, app) than on the box
                     position = seen.get("position") or 0
         elif kind == "twitch-clip":
             c = twitch.twitch_gql("query($s:ID!){clip(slug:$s){title durationSeconds thumbnailURL}}",
@@ -78,8 +78,11 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
     mpv(["set_property", "user-data/streambox/storyboard", {}])
     mpv(["set_property", "user-data/streambox/meta", {}])
     mpv(["set_property", "user-data/streambox/next_up", {}])
+    mpv(["set_property", "user-data/streambox/rating", {}])
+    mpv(["set_property", "user-data/streambox/comments", {}])
     if kind == "youtube":
         threading.Thread(target=youtube.fetch_storyboard, args=(ident,), daemon=True).start()
+        threading.Thread(target=youtube.yt_rating_fetch, args=(ident,), daemon=True).start()
 
 
 shim_items = {}   # Jellyfin identifier → card (title, image), for the history of the shim's playbacks

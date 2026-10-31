@@ -1923,5 +1923,28 @@
     "apps": []
    }
   ]
+ },
+ "/api/more": {
+  "more": false,
+  "items": [
+   {
+    "id": "olderv00001",
+    "title": "Older video one",
+    "seconds": 640,
+    "views": 1200,
+    "date": "2026-10-01",
+    "thumb": "http://127.0.0.1:8080/img/7a5cff.png",
+    "url": "https://www.youtube.com/watch?v=olderv00001"
+   },
+   {
+    "id": "olderv00002",
+    "title": "Older video two",
+    "seconds": 1820,
+    "views": 800,
+    "date": "2026-09-28",
+    "thumb": "http://127.0.0.1:8080/img/ff7a5c.png",
+    "url": "https://www.youtube.com/watch?v=olderv00002"
+   }
+  ]
  }
 }

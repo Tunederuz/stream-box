@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Inlet: the box shows up as a TV in the YouTube app (Cast button)",
   "dependencies": {
+    "youtubei.js": "18.1.0",
     "yt-cast-receiver": "2.1.0"
   }
 }

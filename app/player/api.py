@@ -86,6 +86,35 @@ def audio_status():
             "outputs": [{"id": o["id"], "label": o["label"], "kind": o["kind"]} for o in outs]}
 
 
+def more(query):
+    """The next items of a TV menu row: {source, key, offset, q} → {items, more}"""
+    source, key, q = query.get("source", ""), query.get("key", ""), query.get("q", "")
+    offset = int(query.get("offset", "0") or 0)
+    if not 0 <= offset <= 500:
+        raise ValueError(tr("not found"))
+    if source == "yt_search":
+        return youtube.yt_search_more(q, offset)
+    if source == "yt_channel":
+        return youtube.yt_channel_more(key, offset)
+    if source in ("twitch_vods", "twitch_clips"):
+        return twitch.replays_more(key, source.split("_")[1], offset)
+    if source in ("yt_recommended", "yt_subscriptions"):
+        return youtube.yt_tv_more(source[3:], offset)
+    if source == "jellyfin_lib":
+        return jellyfin.jellyfin_more(key, offset)
+    if source in ("jellyfin_resume", "jellyfin_nextup"):
+        return jellyfin.jellyfin_more_home(source.split("_")[1], offset)
+    if source == "jellyfin_search":
+        return jellyfin.jellyfin_search_more(q, offset)
+    if source == "plex_lib":
+        return plex.plex_more(key, offset)
+    if source in ("plex_resume", "plex_nextup"):
+        return plex.plex_more_home(source.split("_")[1], offset)
+    if source == "plex_search":
+        return plex.plex_search_more(q, offset)
+    raise ValueError(tr("not found"))
+
+
 # GET routes answered with JSON as is (exact path); the others, with parameters or their own errors, are in do_GET
 JSON_ROUTES = {
     "/api/state": state,
@@ -155,6 +184,12 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_response(204)   # nothing to capture (ambient screen)
                     self.send_header("Cache-Control", "no-store")
                     self.end_headers()
+            elif self.path.startswith("/api/more?"):   # "Load more" at the end of a TV menu row
+                query = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).items()}
+                try:
+                    self.send(200, more(query))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
             elif self.path.startswith("/api/replays?"):
                 login = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("login", [""])[0]
                 try:
@@ -246,8 +281,7 @@ class Handler(BaseHTTPRequestHandler):
             elif SYSTEM and self.path == "/api/branches":   # direct update: the repository's branches
                 self.send(200, {"branches": system.branches()})
             elif self.path == "/api/account":
-                with twitch.account_lock:
-                    self.send(200, dict(twitch.account))
+                self.send(200, twitch.account_status())
             else:
                 self.send(404, {"error": tr("not found")})
         except (OSError, ValueError) as e:

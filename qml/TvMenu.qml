@@ -13,8 +13,7 @@ import "menu/layout.js" as Layout
 
 Item {
     id: menu
-    width: 1920
-    height: 1080
+    anchors.fill: parent   // (1920x1080, or taller / wider: qml/Fit.qml)
     property bool isOpen: false
     // Closing with the home screen: it fades in over the menu (600 ms), the menu stays shown under it meanwhile
     property bool underHome: false
@@ -52,6 +51,8 @@ Item {
     property var follows: null
     property var replays: ({})
     property var history: null
+    // "Load more" at the end of rows (/api/more): id "<source>|<key>|<query>" → {items, loading, done}
+    property var moreRows: ({})
     property var gs: null      // games streamed from PCs (/api/gamestream: the PCs, pairing, their games)
     property int gsPc: 0       // PC link tab: the chosen PC (chips above), focus on the chips (gsRow 0) or its games
     property int gsRow: 0
@@ -74,6 +75,8 @@ Item {
     property var yt: null
     // YouTube account: dialog with the code to enter on google.com/device (/api/youtube_account), and its QR code
     property var ytAuth: null
+    property var twAuth: null                // Twitch account: sign-in by code on twitch.tv/activate (/api/account pending)
+    property var twAuthQr: null
     property var ytAuthQr: null
     property var ytAccount: null             // same state, for the "YouTube account" row (Settings → Accounts and links)
     // Plex account: code to enter on plex.tv/link (/api/plex_link: { pending: { code, error }, configured, name }), QR
@@ -83,6 +86,15 @@ Item {
     property var jfLink: null
     // Dialog of the sign-ins by code (menu/CodeDialog.qml): title, where to go, code, error, help, QR code of the page
     readonly property var codeDialog: {
+        if (twAuth) {
+            var t = twAuth.pending
+            return { title: tr("Connect my Twitch account"),
+                     where: tr("On your phone, open twitch.tv/activate and enter:"),
+                     code: t && t.user_code && !t.error ? t.user_code : "",
+                     error: t && t.error ? tr("Authorization denied: {error}", { error: t.error }) : "",
+                     help: tr("The box presents itself as the Twitch app for TVs: your subscriptions without ads, and your followed channels."),
+                     qr: twAuthQr }
+        }
         if (ytAuth) {
             var p = ytAuth.pending
             return { title: tr("Connect my YouTube account"),
@@ -145,6 +157,16 @@ Item {
     readonly property bool libTab: tabId === "jellyfin" || tabId === "plex"
     readonly property var lib: libs[tabId] || ({})
     readonly property string libName: tabId === "plex" ? "Plex" : "Jellyfin"
+    // Changing tab from the rail: every tab's rows and grids start again from their first card (within a tab, a row
+    // keeps its place). Not when the menu opens on the current media's tab: that one keeps the card being played
+    function resetRows() {
+        ytSel = ({}); ytRow = 0
+        var all = Object.assign({}, libs)
+        for (var id in all) all[id] = Object.assign({}, all[id], { sel: {}, row: 0 })
+        libs = all
+        rpRow = 0; rpSel = [rpSel[0], 0, 0]
+        liveSel = 0; followSel = 0; histSel = 0; gsSel = 0; gsRow = 0
+    }
     function setLib(id, changes) {
         var all = Object.assign({}, libs)
         all[id] = Object.assign({}, all[id] || {}, changes)
@@ -271,6 +293,46 @@ Item {
         })
     }
     // Rows of the YouTube tab: search, results, one per channel
+    // Where a row's next items come from (/api/more), or null: search results, a YouTube channel, a library's recent
+    // additions, a streamer's replays and clips
+    function moreSource(row) {
+        if (row.kind === "results" && !libTab && ytResults) return { source: "yt_search", key: "", q: ytResults.query }
+        if (row.kind === "results" && libTab && lib.results) return { source: tabId + "_search", key: "", q: lib.results.query }
+        if (row.kind === "rec") return { source: "yt_recommended", key: "" }
+        if (row.kind === "subs") return { source: "yt_subscriptions", key: "" }
+        if (row.kind === "lib" && (row.key === "resume" || row.key === "nextup")) return { source: tabId + "_" + row.key, key: "" }
+        if (row.kind === "channel") return { source: "yt_channel", key: row.key }
+        if (row.kind === "preview" && !libTab && ytPreview) return { source: "yt_channel", key: ytPreview.id }
+        if (row.kind === "lib" && row.key.indexOf("lib:") === 0)
+            return { source: tabId === "plex" ? "plex_lib" : "jellyfin_lib", key: row.key.slice(4) }
+        if (row.kind === "vods" || row.kind === "clips") return { source: "twitch_" + row.kind, key: rpLogin }
+        return null
+    }
+    // The row with the items already loaded by "Load more", then the "Load more" card itself while there may be more
+    function withMore(row) {
+        var src = row.items && row.items.length && !row.loading ? moreSource(row) : null
+        if (!src) return row
+        var id = src.source + "|" + src.key + "|" + (src.q || ""), m = moreRows[id] || {}
+        var seen = {}, items = []
+        row.items.concat(m.items || []).forEach(function (it) {
+            var k = it.url || it.id || JSON.stringify(it)
+            if (!seen[k]) { seen[k] = true; items.push(it) }
+        })
+        if (!m.done) items.push({ more: true, loading: !!m.loading, title: tr("Load more"), moreId: id, src: src, offset: items.length })
+        return Object.assign({}, row, { items: items })
+    }
+    function loadMore(card) {
+        var m = moreRows[card.moreId] || {}
+        if (m.loading || m.done) return
+        var set = function (v) { var all = Object.assign({}, moreRows); all[card.moreId] = Object.assign({}, moreRows[card.moreId] || {}, v); moreRows = all }
+        set({ loading: true })
+        call("GET", "/api/more?source=" + card.src.source + "&key=" + encodeURIComponent(card.src.key) + "&q="
+             + encodeURIComponent(card.src.q || "") + "&offset=" + card.offset, undefined, function (d) {
+            var have = (moreRows[card.moreId] || {}).items || []
+            if (!d || !d.items) set({ loading: false, done: true })   // (nothing more, or unreachable: the card goes)
+            else set({ loading: false, items: have.concat(d.items), done: !d.more || !d.items.length })
+        })
+    }
     function ytRows() {
         var rows = [{ kind: "search" }]
         if (ytResults && ytResults.channels.length)
@@ -291,7 +353,7 @@ Item {
         var chans = yt ? yt.channels : []
         for (var i = 0; i < chans.length; i++)
             rows.push({ kind: "channel", key: chans[i].id, title: chans[i].name, avatar: chans[i].avatar, items: chans[i].videos || [] })
-        return rows
+        return rows.map(withMore)
     }
     // Channel found by the search: see its videos (row just below the channels), add or remove it
     function ytChannelMenu(c) {
@@ -332,6 +394,31 @@ Item {
                         ytAuthQr = q ? { text: p.verification_uri, rows: q.rows } : null
                     })
                 ytAuthPoll.restart()
+            }
+        })
+    }
+    // Twitch account: code to enter on twitch.tv/activate; the dialog reloads every 3 s until signed in
+    function twConnect() {
+        twAuth = { pending: null }
+        call("POST", "/api/login_code", {}, function (d) {
+            if (!d) twAuth = { pending: { error: tr("Twitch unreachable for now") } }
+            else loadTwAuth()
+        })
+    }
+    function loadTwAuth() {
+        if (!twAuth) return
+        call("GET", "/api/account", undefined, function (d) {
+            if (!twAuth || !d) return
+            account = d
+            if (d.login) { twAuth = null; follows = null; loadFollows(); return }
+            var p = d.pending
+            twAuth = { pending: p }
+            if (p && p.verification_uri && !p.error) {
+                if (!twAuthQr || twAuthQr.text !== p.verification_uri)
+                    call("GET", "/api/qr?text=" + encodeURIComponent(p.verification_uri), undefined, function (q) {
+                        twAuthQr = q ? { text: p.verification_uri, rows: q.rows } : null
+                    })
+                twAuthPoll.restart()
             }
         })
     }
@@ -412,6 +499,20 @@ Item {
         items.push({ label: tr("Close"), ok: function () {} })
         openModal(on ? tr("Plex: {server}", { server: st.plex_server }) : "Plex", items)
     }
+    function twitchAccountMenu() {
+        var login = account && account.login
+        var items = [{ label: tr(login ? "+  Sign in with another Twitch account" : "+  Connect my Twitch account"),
+                       ok: function () { twConnect() } }]
+        if (login)
+            items.push({ label: tr("✕  Disconnect Twitch"), danger: true, ok: function () {
+                confirmModal(tr("Disconnect your Twitch account? The stream restarts"), tr("✕  Disconnect Twitch"), function () {
+                    account = Object.assign({}, account, { login: null })   // at once
+                    call("POST", "/api/logout", {}, function () {
+                        call("GET", "/api/account", undefined, function (d) { if (d) account = d })
+                        follows = null; loadFollows() }) }) } })
+        items.push({ label: tr("Close"), ok: function () {} })
+        openModal(login ? tr("Twitch account: {login}", { login: login }) : tr("Twitch account"), items)
+    }
     function ytAccountMenu() {
         var a = ytAccount
         if (!a || a.unavailable) return
@@ -435,14 +536,23 @@ Item {
         openModal(tr("YouTube account"), items)
     }
     // Options on a subscription video: play, channel as favorite (a row of its own)
-    function ytSubOptions(v) {
-        var fav = (yt ? yt.channels : []).some(function (c) { return c.id === v.channel_id })
-        var c = { id: v.channel_id, name: v.channel, avatar: v.avatar, saved: fav }
-        openModal(v.channel, [
-            { label: tr("▶  Play the video"), ok: function () { chooseVideo(v) } },
-            { label: tr("▶  See latest videos"), ok: function () { ytOpenChannel(c) } },
-            { label: tr(fav ? "✕  Remove from favorites" : "★  Add to favorites"), danger: fav, ok: function () { ytToggleSaved(c) } },
-            { label: tr("Cancel"), ok: function () {} }])
+    // ≡ on any YouTube video card (recommended, subscriptions, search, channel rows): play or resume, and when its
+    // channel is known, see its latest videos and add it to the favorites or remove it
+    function ytVideoOptions(v) {
+        var items = []
+        if (Fmt.resumable(v.position, v.seconds, v.finished)) {
+            items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(v.position) }), ok: function () { play(v.url, false, v) } })
+            items.push({ label: tr("↺  From the beginning"), ok: function () { play(v.url, true, v) } })
+        } else items.push({ label: tr(v.finished ? "↺  Watch again" : "▶  Play"), ok: function () { play(v.url, true, v) } })
+        if (v.channel_id) {
+            var fav = (yt ? yt.channels : []).some(function (c) { return c.id === v.channel_id })
+            var c = { id: v.channel_id, name: v.channel, avatar: v.avatar, saved: fav }
+            if (!(ytPreview && ytPreview.id === v.channel_id))   // (its row is already open)
+                items.push({ label: tr("▶  See latest videos of {channel}", { channel: v.channel || tr("the channel") }), ok: function () { ytOpenChannel(c) } })
+            items.push({ label: tr(fav ? "✕  Remove from favorites" : "★  Add to favorites"), danger: fav, ok: function () { ytToggleSaved(c) } })
+        }
+        items.push({ label: tr("Cancel"), ok: function () {} })
+        openModal(v.title, items)
     }
     // Favorite on or off: the mark changes at once (back if the box refuses), the channel rows follow
     function ytToggleSaved(c) {
@@ -490,7 +600,7 @@ Item {
             for (var i = 0; i < home.libraries.length; i++)
                 rows.push({ kind: "lib", key: "lib:" + home.libraries[i].id, title: tr("{name} · recently added", { name: home.libraries[i].name }), items: home.libraries[i].items })
         }
-        return rows
+        return rows.map(withMore)
     }
     function mediaRows() { return libTab ? libRows() : ytRows() }
     // Chosen series (or season): its episodes in a row just below the search, focus on the first unwatched
@@ -528,6 +638,7 @@ Item {
         return h > 0 ? h + " h " + (m < 10 ? "0" : "") + m : m + " min"
     }
     function cardMeta(row, it) {
+        if (it.more) return it.loading ? tr("Loading…") : ""
         var parts
         if (libTab)
             parts = it.type === "Series" ? [it.unplayed ? tr("{n} unwatched", { n: it.unplayed }) : tr("Series"), it.year]
@@ -569,6 +680,7 @@ Item {
     }
     Timer { interval: 4000; repeat: true; running: menu.isOpen; onTriggered: menu.refresh() }
     Timer { id: ytAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadYtAuth() }
+    Timer { id: twAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadTwAuth() }
     // PC link tab open, or a pairing under way (from Settings too): the PC's state followed
     Timer { interval: 3000; repeat: true; running: menu.isOpen && (menu.tabId === "games" || !!(menu.gs && menu.gs.pairing && menu.gs.pairing.pin))
             onTriggered: menu.loadGames() }
@@ -655,6 +767,7 @@ Item {
         closePlexLink()
         closeJfLink()
         ytAuth = null   // (Google's code expires by itself; reopening the menu must not show a stale one)
+        twAuth = null
         isOpen = false
         modal = null
         btPhase = ""
@@ -724,7 +837,7 @@ Item {
             if (d.vods.length) rows.push({ kind: "vods", title: tr("Replays"), items: d.vods })
             if (d.clips.length) rows.push({ kind: "clips", title: tr("Clips of the week"), items: d.clips })
         }
-        return rows
+        return rows.map(withMore)
     }
     function prettyMode(m) { return String(m).replace("x", " × ").replace("@", " · ") + " Hz" }
     // Settings tab: sections (one page each, Back or ◀ returns to the list), each with what it holds and an alert when
@@ -910,12 +1023,8 @@ Item {
             var login = account && account.login
             return [
                 { open: true, label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
-                  hint: login ? tr("No ads on the channels you're subscribed to") : tr("Sign in from the companion app on your phone"),
-                  ok: function () {   // (signing in needs typing: the companion app, its QR code beside the list)
-                      openModal(login ? tr("Twitch account: {login}. To change it or log out: the companion app (Settings → Accounts and links).", { login: login })
-                                      : tr("Sign in to Twitch from the companion app on your phone (Settings → Accounts and links)."),
-                                [{ label: tr("Close"), ok: function () {} }])
-                  } },
+                  hint: login ? tr("No ads on the channels you're subscribed to") : tr("Subscriptions without ads, and your followed channels"),
+                  ok: function () { twitchAccountMenu() } },
                 { open: true, label: tr("YouTube account"), visible: !!(ytAccount && !ytAccount.unavailable),
                   value: ytAccount && ytAccount.authorized ? tr("Connected") : tr("Not connected"),
                   hint: tr("Subscriptions, recommendations, and progress synced with your account"),
@@ -1548,6 +1657,7 @@ Item {
             return
         }
         if (ytAuth) { if (k === "back" || k === "left" || k === "ok") ytAuth = null; return }
+        if (twAuth) { if (k === "back" || k === "left" || k === "ok") twAuth = null; return }
         if (plexLink) { if (k === "back" || k === "left" || k === "ok") closePlexLink(); return }
         if (gs && gs.pairing) { if (k === "back" || k === "left" || k === "ok") gsPairClose(); return }
         if (jfLink) { if (k === "back" || k === "left" || k === "ok") closeJfLink(); return }
@@ -1560,7 +1670,10 @@ Item {
                 return
             }
             if (k === "up" && tab === 0) railHome = true
-            else if (k === "up" || k === "down") tab = Math.max(0, Math.min(tabs.length - 1, tab + (k === "down" ? 1 : -1)))
+            else if (k === "up" || k === "down") {
+                var t = Math.max(0, Math.min(tabs.length - 1, tab + (k === "down" ? 1 : -1)))
+                if (t !== tab) { resetRows(); tab = t }
+            }
             else if (k === "right" || k === "ok") enterContent()
             else if (k === "back" && st.mode !== "home") close()   // nothing playing: the menu stays the main page
             return
@@ -1627,6 +1740,9 @@ Item {
         if (!follows.authorized) {
             var p = follows.pending
             if (k === "left") area = "rail"
+            // Not signed in to Twitch: the account's sign-in by code gives the followed channels too; signed in with a
+            // pasted token (backup): the followed channels' own authorization
+            else if (k === "ok" && !(account && account.login)) twConnect()
             else if (k === "ok" && !(p && p.user_code && !p.error)) {
                 follows = Object.assign({}, follows, { pending: {} })   // "Requesting the code…" at once
                 call("POST", "/api/follows_login", {}, function () { loadFollows() })
@@ -1648,10 +1764,14 @@ Item {
         rpRow = Math.min(rpRow, rows.length - 1)
         var row = rows[rpRow], sel = rpSel[rpRow] || 0
         var s = rpSel.slice()
-        if (k === "up") rpRow = Math.max(0, rpRow - 1)
-        else if (k === "down") rpRow = Math.min(rows.length - 1, rpRow + 1)
+        // Another row: from its first card (not the place it was left at); the streamer chips keep theirs
+        var toRow = function (n) { if (n !== rpRow && n > 0) { s[n] = 0; rpSel = s } rpRow = n }
+        if (k === "up") toRow(Math.max(0, rpRow - 1))
+        else if (k === "down") toRow(Math.min(rows.length - 1, rpRow + 1))
         else if (k === "left") { if (sel === 0) area = "rail"; else { s[rpRow] = sel - 1; rpSel = s } }
         else if (k === "right") { s[rpRow] = Math.min(row.items.length - 1, sel + 1); rpSel = s }
+        else if (k === "ok" && row.items[sel] && row.items[sel].more) loadMore(row.items[sel])
+        else if (k === "menu" && row.items[sel] && row.items[sel].more) return
         else if (k === "ok") {
             if (row.kind === "chips") {
                 var name = row.items[sel]
@@ -1668,23 +1788,36 @@ Item {
         var row = rows[r]
         if (row.kind === "search") {
             if (k === "ok") { kbOpen = true; kbRow = 0; kbCol = 0 }
-            else if (k === "down" && rows.length > 1) setRow(1)
+            else if (k === "down" && rows.length > 1) {   // (the first row of videos: from its first card)
+                var ns = Object.assign({}, mSel); ns[rows[1].key] = 0; setMediaSel(ns); setRow(1)
+            }
             else if (k === "left") area = "rail"
             return
         }
         var sel = Math.min(mSel[row.key] || 0, Math.max(0, row.items.length - 1)), s = Object.assign({}, mSel)
-        if (k === "up") setRow(r - 1)
-        else if (k === "down") setRow(Math.min(rows.length - 1, r + 1))
+        // Another row: from its first card (not the place it was left at)
+        var toRow = function (n) {
+            if (n !== r && rows[n] && rows[n].key) { var ns = Object.assign({}, mSel); ns[rows[n].key] = 0; setMediaSel(ns) }
+            setRow(n)
+        }
+        if (k === "up") toRow(r - 1)
+        else if (k === "down") toRow(Math.min(rows.length - 1, r + 1))
         else if (k === "left") { if (sel === 0) area = "rail"; else { s[row.key] = sel - 1; setMediaSel(s) } }
         else if (k === "right") { s[row.key] = Math.min(row.items.length - 1, sel + 1); setMediaSel(s) }
+        else if ((k === "ok" || k === "menu") && row.items[sel] && row.items[sel].more) {   // "Load more" (no options)
+            if (k === "ok") loadMore(row.items[sel])
+        }
         else if (k === "menu" && row.items[sel]) {   // ≡: the options of the card, whatever the row
             var it = row.items[sel]
-            var chan = row.kind === "channel" ? row.key : it.channel_id
             if (row.kind === "chans") ytChannelMenu(it)
             else if (row.kind === "connect") ytConnect()
             else if (libTab) libChoose(it, true)
-            else if (chan) ytSubOptions(Object.assign({}, it, { channel_id: chan, channel: it.channel || row.title, avatar: it.avatar || row.avatar }))
-            else chooseVideo(it, true)
+            else {   // the channel: the row's own (favorites, the found channel's videos), otherwise the card's
+                var own = row.kind === "channel" ? { id: row.key, name: row.title }
+                        : row.kind === "preview" && ytPreview ? { id: ytPreview.id, name: ytPreview.name } : null
+                ytVideoOptions(Object.assign({}, it, { channel_id: own ? own.id : it.channel_id || "",
+                                                       channel: it.channel || (own ? own.name : ""), avatar: it.avatar || row.avatar }))
+            }
         }
         else if (k === "ok" && row.items[sel]) {
             if (row.kind === "chans") ytChannelMenu(row.items[sel])

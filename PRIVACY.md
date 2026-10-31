@@ -26,8 +26,10 @@ See also the [YouTube Terms of Service](https://www.youtube.com/t/terms) and the
 
 ## Twitch followed channels (Inlet Twitch app)
 
-To show the channels the owner follows, the box asks Twitch for **read-only** access (`user:read:follows`) through the
-Inlet Twitch app, with a code typed on twitch.tv/activate.
+To show the channels the owner follows, the box asks Twitch for **read-only** access (`user:read:follows`), with a
+code typed on twitch.tv/activate: through the Twitch account's sign-in (the box presents itself as the Twitch app for
+TVs, which also lets Twitch recognize the account on the streams, for subscriptions without ads), or through the
+Inlet Twitch app.
 
 - Data read: the followed channels (name, picture) and which of them are live (title, game, viewers).
 - Where it goes: nowhere other than the box itself. The token is kept on the box, readable by its user only; the

@@ -38,7 +38,8 @@ Item {
         }
     }
     Item {   // clip: the rows scroll between the chips and the help at the bottom
-        x: -40; y: 276; width: parent.width + 80; height: Layout.listBottom - 276; clip: true
+        x: -40; y: 276; width: parent.width + 80; height: menu.height - 85 - 276; clip: true
+        SkeletonRows { visible: menu.replays[menu.rpLogin] === "loading"; x: 40; y: 24; rows: 2 }   // the streamer's replays not read yet
         Repeater {
             model: Math.max(0, page.rows.length - 1)
             Item {
@@ -57,9 +58,11 @@ Item {
                         Behavior on opacity { NumberAnimation { duration: 90 } }
                         title: it.title || ""
                         thumb: it.thumb || ""
-                        meta: (row.kind === "vods" ? Fmt.dateFr(it.date, menu.tr) + " · " + Fmt.clock(it.seconds)
-                               : Fmt.clock(it.seconds) + " · " + menu.tr("{n} views", { n: Fmt.viewers(it.views, menu.tr) }))
-                              + (it.finished ? " · " + menu.tr("watched") : "")
+                        meta: it.more ? menu.cardMeta(row, it)   // ("Load more")
+                              : (row.kind === "vods" ? Fmt.dateFr(it.date, menu.tr) + " · " + Fmt.clock(it.seconds)
+                                 : Fmt.clock(it.seconds) + " · " + menu.tr("{n} views", { n: Fmt.viewers(it.views, menu.tr) }))
+                                + (it.finished ? " · " + menu.tr("watched") : "")
+                        glyph: it.more ? "+" : "▶"
                         progress: it.finished ? 1 : (it.position && it.seconds ? it.position / it.seconds : 0)
                         focused: menu.area === "content" && menu.rpRow === r && index === (menu.rpSel[r] || 0)
                     }

@@ -130,10 +130,16 @@ Below, file names without a folder are in these folders.
   - `ambient.py`: weather, Twitch schedules, companion app URL and QR code, first setup, `ambient_loop`;
   - `images.py`: TV preview; `settings.py`: player, power button action, backdrop; `system.py`: power, power key
     lock, wake-up, SSH, developer mode, health, update.
-- Twitch account (section of the page, `POST /api/login|logout`, `GET /api/account`): the website's token (cookie
-  `auth-token`) is written to `~media/.config/streamlink/config.twitch` (`twitch-api-header=Authorization=OAuth …`,
-  mode 600), which streamlink reads on its own. It is the only token that removes ads on channels you are subscribed to
-  (third-party app OAuth tokens do not). It is checked via `id.twitch.tv/oauth2/validate` when saved, then every
+- Twitch account (TV: Settings → Accounts and links → Twitch account; section of the page; `POST
+  /api/login_code|login|logout`, `GET /api/account` {login, expired, pending}): signed in with a code on
+  twitch.tv/activate as the Twitch app for TVs (`TWITCH_TV_CLIENT_ID`, device code flow, `user:read:follows`, token
+  without expiry), or (backup) the website's token pasted from the `auth-token` cookie. Either is written to
+  `~media/.config/streamlink/config.twitch` (`twitch-api-header=Authorization=OAuth …`, mode 600), which streamlink
+  reads on its own. Twitch takes the TV app's token with the site's Client-ID (GQL, streamlink: the account is
+  recognized on the playback token, `user_id`); whether it removes ads on subscribed channels like the site's token
+  is to be checked during a live (third-party app OAuth tokens do not). The sign-in by code also saves the token for
+  the followed channels (`twitch-follows-token.json` with `client_id`: Helix wants the TV app's), so one sign-in gives
+  both; logging out drops both. It is checked via `id.twitch.tv/oauth2/validate` when saved, then every
   30 min. **A rejected token blocks all playback** ("Unauthorized"): if it expires, `remote.py` deletes it and restarts
   the stream anonymously. Without a token, streamlink skips the ads and the picture freezes for their duration. The
   token is also written as a cookie for yt-dlp (`~media/.config/stream-box/twitch-cookies.txt`, `cookies` option of
@@ -236,10 +242,13 @@ Below, file names without a folder are in these folders.
   file `qr`): `always`, `timed` (`QR_SECONDS` = 30 s each time the ambient screen appears and the menu opens),
   `never`; the check is done in `qr_code()`.
 - **Polls and predictions** (`twitch.events_loop` / `fetch_events`): no more PubSub for a viewer, so
-  GQL polling every 10 s, only during a live stream from the list with the panel enabled: `user.viewablePoll`
+  GQL polling every 10 s, only during a live stream from the list with the panel enabled, every 3 s while the page
+  shows the card (`events_for_page`, `PAGE_EVENTS_EVERY`: it updates the TV's panel too; one `poll_events` and its
+  `events_seen` for both): `user.viewablePoll`
   (current or ended poll; no end time, the result is shown for 60 s after it is seen ended),
   `channel.activePredictionEvents`, `lockedPredictionEvents`, and `resolvedPredictionEvents(first:1)` (result shown
-  for 60 s after `endedAt`). Published in `user-data/streambox/polls` (not to be confused with `user-data/streambox/events`, the
+  for 60 s after `endedAt`; a locked one, bets closed and waiting for its result, sometimes for the whole stream, stays
+  on the TV `LOCKED_FOR` = 60 s after `lockedAt`, then `tv: false` hides it there, the page keeping it). Published in `user-data/streambox/polls` (not to be confused with `user-data/streambox/events`, the
   setting). Panel at the top center (`draw_events`, redrawn every second for the time left), away from the chat
   corners. Yes/no setting `events` (Settings → Playback, MQTT switch). Predictions can be read without an account; no
   poll was open on ~280 live streams at testing time, the display was checked with simulated data
@@ -419,6 +428,10 @@ height…). `CardRow` pitfalls: callers bind `view.model`, `view.currentIndex`, 
 directly on its ListView (going through properties of `CardRow`, the index reset when a row changed was never
 re-applied), and its sizes are literal numbers, not bindings to `layout.js` (the caller's current index arrives
 before, `fits` was then -1 and the first scroll was lost).
+While a tab's or a row's videos load, `SkeletonRows` (qml/menu/) shows skeleton cards (`qml/SkeletonCard.qml`: the
+shapes of VideoCard, breathing, the pulse travelling along the row) where the cards will be, not a "Loading…" text:
+YouTube / Jellyfin / Plex before their lists (`!menu.yt`, `!menu.lib.home`), a row still loading or a search under
+way, Replays (`replays[login] === "loading"`), History (`history === null`). `QMLSHOTS_PENDING` shows them.
 YouTube card previews (the focused card playing its video) were tried and dropped on 2026-10-27: resolving links with
 yt-dlp, in advance for the neighboring cards, got the box taken for a robot by YouTube within two hours ("Sign in to
 confirm you're not a bot" for every video, the player's included). Do not add requests to YouTube per card.
@@ -572,7 +585,8 @@ while the tab is shown, and 1.5 s after an update button: `readBox`).
 Channel list in `~/.config/stream-box/youtube.json` (UC… id, name, @, picture), edited by
 `POST /api/youtube_channels` {action: add|remove|move, channel, delta}; adding resolves "@name", a link or an id with
 `yt-dlp --flat-playlist -J --playlist-items 0` (~1 s). `GET /api/youtube`: 15 latest videos per channel from the
-public RSS feed (`feeds/videos.xml?channel_id=`, no key, Shorts excluded, 20 min cache), merged with
+public RSS feed (`feeds/videos.xml?channel_id=`, no key, Shorts excluded, 20 min cache; it often answers 404 for a
+while, for any channel: then the channel's /videos flat list, `channel_listing`, same 15 without dates), merged with
 the history (position, watched). `GET /api/youtube_search?q=`: `yt-dlp --flat-playlist -J ytsearch20:` (~1.6 s, 10 min
 cache, `youtube:lang=fr`, otherwise titles are translated into English): videos, and channels whose name matches (same
 request; UC… id, subscribers, picture, `saved`), playlists excluded. `GET /api/youtube_channel?id=UC…`: latest videos
@@ -729,11 +743,14 @@ title over a light image.
   bar never shows empty (purple, 0 s) nor slides from the previous video's position and colors.
 - Focus in a video, top to bottom: title (OK: Info panel), the bar itself (← → scrub; focused whenever the bar shows
   and neither of the others is: InfoBar.qml `barFocus`, track 8 → 12 px, cursor 22 → 28 px and a faint halo), row of
-  buttons. Bar hidden: ↑ or ↓ shows it, focus on the bar; from the bar ↑ the title, ↓ the buttons; from the title ↓,
-  from the buttons ↑ or Back, back to the bar.
-- Row of buttons: ↓ from the bar (focus on Pause/Play), ← → and OK;
-  Subtitles, −10 s, Pause/Play, +10 s, Quality (YouTube), Next chapter (if there are chapters), Next
-  episode (Jellyfin). Row centered on Pause/Play (InfoBar.qml `playIndex`). `ctrl_focus`,
+  buttons. Bar hidden: ↑ shows it with the focus on the bar, ↓ shows it with the focus on the buttons (Pause / Play);
+  from the bar ↑ the title, ↓ the buttons; from the title ↓, from the buttons ↑ or Back, back to the bar; ↓ again from
+  the buttons hides the bar.
+- Row of buttons: ↓ from the bar (focus on Pause/Play, `ctrl_focus = 2`), ← → (in the list's order) and OK;
+  −10 s, Pause/Play, +10 s in the middle of the screen, then on the right, ending with the progress bar: Like and
+  Dislike (YouTube, account connected; filled once given), Comments (YouTube), Subtitles, Quality (YouTube), Chapters (if there are chapters), Next episode (Jellyfin) (InfoBar.qml: `mid` and `side`
+  groups, one shared `button` component). Chapters opens the subtitles panel in `chapters` mode (`tracks_mode`):
+  start time and title of each chapter (`chapter-list`), the current one chosen, OK sets `chapter`. `ctrl_focus`,
   `user-data/streambox/controls` {items, focus}; disappears with the bar. Round centered buttons, drawn icons
   (`qml/PlayerIcon.qml`, QtQuick.Shapes: no Unicode characters, whose rendering depends on the fonts), Play / Pause
   larger, name of the selected button below.
@@ -915,9 +932,11 @@ Tested: discovery, playback, pause, seek, volume, queue, pause from the remote, 
 ### Account YouTube progress (mixed)
 
 The official API gives neither history nor positions: `cast/youtube_tv.js` (same process as `cast.js`) signs in
-as the YouTube TV app (youtubei.js, TV client, code on google.com/device, Google shows "YouTube on TV";
+as the YouTube TV app (youtubei.js, a direct dependency of cast/, pinned: yt-cast-receiver keeps the version it asks
+for, nested under it; TV client, code on google.com/device, Google shows "YouTube on TV"; no stream URL deciphering
+here, `retrieve_player: false`: 18.x would need a JavaScript evaluator of our own for it, `Platform.shim.eval`;
 token `~/.config/stream-box/youtube-tv-token.json`), local server 127.0.0.1:8091 (`/status`, `/login`, `/logout`,
-`/progress`, `/report`, `/recommended`, `/subscriptions`, `/meta`). Mixed operation, tried before choosing:
+`/progress`, `/report`, `/recommended`, `/subscriptions`, `/meta`, `/rating`, `/rate`, `/comments`). Mixed operation, tried before choosing:
 - the box keeps its positions (exact resume on the TV) and reports them to YouTube (`history_loop`: every
   `YT_TV_PUSH` = 30 s, and on stop `final`) like a player: `/player` (tracking URL, cpn), `playback` ping, then
   `watchtime` (segment st→et, real time rt). Checked: the phone resumes to the second;
@@ -1236,6 +1255,38 @@ is open, the Qt app types the computer's keys into it (Box.setTyping / keyTyped:
 
 The qmlshots scenario types in the search keyboard (`type` steps).
 
+### Screen shape and start (qml/Fit.qml, qml/Preparing.qml)
+The interface is drawn in 1920x1080 coordinates inside `Fit` (ui.qml, and the qmlshots harness): its drawing area keeps
+1920 wide and 1080 high at least and stretches the other side to the screen's shape (1920x1200 on 16:10), then scales
+to fill the screen exactly; what is pinned to an edge (`menu.height - 85` for the scrolling areas of the tabs, the
+help, the clock, the home screen's QR code) follows it. `QMLSHOTS_SIZE=1280x800 tools/qmlshots/run.sh shoot` renders
+another shape. `Preparing.qml`, on top of everything in ui.qml: "Getting ready…" and the logo until `/api/state`
+answers (asked every 0.7 s, 60 s at most), then a fade: the home screen stayed empty while remote.py started.
+
+### "Load more" (end of rows)
+`GET /api/more?source=&key=&offset=&q=` (api.py `more`) → `{items, more}`: `yt_search` (q; yt-dlp `ytsearch<n>:` with
+`--playlist-items`), `yt_channel` (UC… id; the channel's /videos flat list: older than its RSS feed's 15),
+`twitch_vods` / `twitch_clips` (login; `fetch_replays` with larger counts, the start cut off), `jellyfin_lib` (library
+id; Items by DateCreated with StartIndex: Items/Latest has no paging), `plex_lib` (section; recentlyAdded with
+X-Plex-Container-Start), `yt_recommended` / `yt_subscriptions` (youtube_tv.js `/recommended?offset=` and
+`/subscriptions?offset=`: `feeds` keeps every video read and the next page's token, `feedMore` reads up to 4 more
+pages), `jellyfin_resume` / `_nextup` / `_search` (StartIndex), `plex_resume` / `_nextup` (On Deck read whole, split)
+and `plex_search` (a larger limit, the start cut off). TV menu: `moreSource(row)` says where a row's next items come from, `withMore` (applied to
+ytRows, libRows, replayRows) appends the items already loaded (`moreRows`, by "<source>|<key>|<query>", duplicates
+dropped) and a "Load more" card (`more: true`, glyph "+") while there may be more; OK on it → `loadMore` (focus stays
+on the place, which becomes the first new item); ≡ does nothing there. Every video row has it, except the found
+channels and a series' episodes (all there already). qmlshots: fake `/api/more`, steps at the end of a Replays row.
+
+### Waiting ring and YouTube card options
+`qml/VideoWait.qml` (ui.qml, over the video): a ring and the buffer's percentage while mpv waits for data. ui.py
+observes `paused-for-cache`, `seeking`, `core-idle` (after a seek mpv waits for data without paused-for-cache:
+`cache-pause-initial` is off), `cache-buffering-state` and `pause` into `osd.waiting` ({cache, seeking, idle, pct,
+pause}); shown after 0.4 s of waiting, not while paused (PauseScreen has the center) nor during the loading screen.
+TV menu: ≡ on any YouTube video card → `ytVideoOptions` (play or resume / from the beginning, and when the channel is
+known "See latest videos of {channel}" and the favorite toggle); the channel comes from the row (favorites' rows,
+the found channel's preview) or the card's `channel_id`: youtube_tv.js gives it for Recommended too (the tile's
+long-press menu, as for subscriptions) and the search results carry yt-dlp's.
+
 ### Inlet app window
 The TV menu stays driven by keys only (remote, gamepad, keyboard; no mouse navigation, the user's choice). Inlet app
 on a desktop: an ordinary 1280×720 window (`WINDOWED`, F11 or a double click: full screen); full screen in SteamOS's
@@ -1285,6 +1336,28 @@ characters, `thumb`). Opened from the title: ↑ from the bar selects it (`title
 "OK · Info" frame around the title in InfoBar.qml), OK opens the panel, ↓ goes back down to the buttons, ↑ closes the
 bar, Back leaves the title without stopping the video; stream-box.lua `info_open` / `info_scroll` → `user-data/streambox/info` {open, scroll}; ↑ ↓ scroll by 4 lines (bounded by the
 length of the text), Back / OK / ≡ close; closed at the end of the file.
+
+### YouTube rating and comments (video)
+Like / Dislike buttons of the playback bar: youtube.py `yt_rating_fetch` at the start of a YouTube video (youtube_tv.js
+`GET /rating?id=`: `likeStatus` of the TV `/next`) → `user-data/streambox/rating` {id, status: LIKE | DISLIKE |
+INDIFFERENT}, empty when not connected (no buttons then). OK: stream-box.lua `rate` lights the button up at once and
+`POST /api/yt_rate` {rating: like | dislike | none} (the same button again: none); youtube_tv.js `POST /rate` calls
+`/like/like`, `/like/dislike` or `/like/removelike` with the params the TV `/next` gives (`likeParams`…, read again each
+time: they carry a time). youtubei.js's `interact.like` is refused (400). The state YouTube confirms is published again.
+Comments: the Comments button opens `qml/CommentsPanel.qml` (right side, like the Info panel); `POST /api/yt_comments`
+({more: true}: next page; {replies: n}: the replies of comment n, with {more: true} their next page) → youtube.py reads
+youtube_tv.js `GET /comments?id=&hl=&token=` and publishes `user-data/streambox/comments` {id, items, more, loading,
+error, thread: {index, items, more, loading}} (kept for the video: reopening reads nothing; the reply tokens stay in
+youtube.py). youtube_tv.js: anonymous web session per language (dates "il y a 6 ans"), raw `/next`: the continuation
+near `comment-item-section`, then its pages (20, by relevance); `commentPage` reads a page of comments or of replies
+(same shape): its items in order (`onResponseReceivedEndpoints` continuation items), texts in
+`frameworkUpdates…commentEntityPayload` by the item's `commentKey`, each thread's `replies_token`, `next` from the last
+item's `continuationItemRenderer` (not "the last token": the last thread's replies token would pass for the next page).
+Replies: 10 per page; YouTube nests some replies of replies (not shown). `getComments` fails on YouTube's current
+format. stream-box.lua `comments_open` / `comments_scroll` (the selected comment, framed; the list scrolls only to keep it in view) and `thread_open`
+/ `thread_scroll` → `user-data/streambox/comments_view` {open, scroll, thread, tscroll}: ↑ ↓ one comment, OK its
+replies (if any: "OK · n replies" on it) in the same panel, the comment opened above them, Back back to the comments on
+that one, Back again or ≡ close; the next page 4 comments (3 replies) before the end; closed at the end of the file.
 
 ### YouTube token server (stream-box-pot)
 `systemd/stream-box-pot.service` runs `node build/main.js` (bgutil-ytdlp-pot-provider, port 4416) with the venv's Node

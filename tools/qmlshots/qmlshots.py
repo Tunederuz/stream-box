@@ -27,6 +27,8 @@ WAIT = int(os.environ.get("QMLSHOTS_WAIT", "900"))   # ms after each step: anima
 NOSHOTS = bool(os.environ.get("QMLSHOTS_NOSHOTS"))   # the scenario and console.log only (checks: no screenshot)
 # The Inlet app (no system part): /api/features {system: false}, and the system's routes answer 404 as there
 PLAYER = bool(os.environ.get("QMLSHOTS_PLAYER"))
+# routes that never answer (comma-separated, e.g. "/api/youtube,/api/history"): the tabs as they wait for their data
+PENDING = [r for r in os.environ.get("QMLSHOTS_PENDING", "").split(",") if r]
 SYSTEM_ROUTES = ("/api/health", "/api/wifi", "/api/audio", "/api/local_update", "/api/branches", "/api/backup",
                  "/api/bluetooth", "/api/dev", "/api/ssh", "/api/install", "/api/display", "/api/update_prompt")
 
@@ -54,6 +56,7 @@ STEPS = (
     + keys("right down down down down ok back")                   # grid scrolls, options
     + scene(2, "right right ok")                                  # Replays: another streamer
     + keys("down right right right right down right up left left left ok back")   # rows, resume dialog
+    + scene(2, "down" + " right" * 12 + " ok right right")   # Replays: "Load more" at the end of the row, then the new items
     + scene(3, "up down right right")                             # YouTube: first video row, search, recommended
     + keys("down right right right right menu down back")         # subscriptions, options
     + keys("down down right up up up")                            # channel rows
@@ -123,6 +126,9 @@ def serve(fixtures, log):
             if path.startswith("/img/"):
                 log.append("GET " + self.path)
                 return self.reply(png(path[5:11]), "image/png")
+            if path in PENDING:
+                log.append("GET (pending) " + self.path)
+                return time.sleep(600)
             if path in fixtures:
                 log.append("GET " + self.path)
                 return self.reply(json.dumps(fixtures[path], default=str).encode())
@@ -276,8 +282,8 @@ def shoot(qml_dir, out):
     if os.path.isdir(brand):
         shutil.copytree(brand, os.path.join(root, "assets", "brand"))
     with open(os.path.join(root, "harness.qml"), "w") as f:
-        f.write('import QtQuick\nimport "qml"\nRectangle {\n    width: 1920; height: 1080; color: "#203040"\n'
-                '    TvMenu { objectName: "tvMenu" }\n}\n')
+        f.write('import QtQuick\nimport "qml"\nRectangle {\n    color: "#203040"\n'
+                '    Fit { TvMenu { objectName: "tvMenu" } }\n}\n')
 
     QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
     app = QGuiApplication(sys.argv[:1])   # noqa: F841  (kept referenced: Qt needs the application object alive)
@@ -292,7 +298,8 @@ def shoot(qml_dir, out):
     view.rootContext().setContextProperty("livePreview", live_preview)
     view.rootContext().setContextProperty("i18n", i18n)
     view.setResizeMode(QQuickView.SizeRootObjectToView)
-    view.resize(1920, 1080)
+    # QMLSHOTS_SIZE=1280x800: another screen shape (Steam Deck), drawn through qml/Fit.qml as by ui.qml
+    view.resize(*[int(n) for n in os.environ.get("QMLSHOTS_SIZE", "1920x1080").split("x")])
     view.setSource(QUrl.fromLocalFile(os.path.join(root, "harness.qml")))
     for e in view.errors():
         console.append("ERROR " + e.toString())

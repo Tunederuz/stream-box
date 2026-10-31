@@ -22,5 +22,40 @@
     "copy": null,
     "job": null,
     "usb": []
+  },
+  "/api/events": {
+    "channel": "alpha",
+    "poll": null,
+    "logged_in": true,
+    "balance": 12000,
+    "prediction": {
+      "id": "p1",
+      "title": "Short prediction",
+      "status": "ACTIVE",
+      "tv": true,
+      "ends_at": 4102444800,
+      "outcomes": [
+        {
+          "id": "o1",
+          "title": "Yes",
+          "color": "BLUE",
+          "points": 5000,
+          "users": 12,
+          "winner": false
+        },
+        {
+          "id": "o2",
+          "title": "No",
+          "color": "PINK",
+          "points": 3000,
+          "users": 8,
+          "winner": false
+        }
+      ],
+      "mine": {
+        "outcome": "o1",
+        "points": 100
+      }
+    }
   }
 }

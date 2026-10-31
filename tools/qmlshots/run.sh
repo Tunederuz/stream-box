@@ -9,7 +9,7 @@ repo="$(cd "$here/../.." && pwd)"
 docker build -q -t stream-box-qmlshots "$here" > /dev/null
 run() { docker run --rm --init --user "$(id -u):$(id -g)" -e HOME=/tmp -e QT_QPA_PLATFORM=xcb \
           -e LIBGL_ALWAYS_SOFTWARE=1 \
-          -e QMLSHOTS_DEBUG -e QMLSHOTS_STEPS -e QMLSHOTS_WAIT -e QMLSHOTS_NOSHOTS -e QMLSHOTS_PLAYER -v "$repo:/src:ro" "$@"; }
+          -e QMLSHOTS_DEBUG -e QMLSHOTS_STEPS -e QMLSHOTS_WAIT -e QMLSHOTS_NOSHOTS -e QMLSHOTS_PLAYER -e QMLSHOTS_SIZE -e QMLSHOTS_PENDING -v "$repo:/src:ro" "$@"; }
 case "$1" in
   shoot)
     out="$(mkdir -p "$2" && cd "$2" && pwd)"

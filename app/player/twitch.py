@@ -1,8 +1,9 @@
 """Inlet: Twitch for the companion app. Streamer list (streamers.txt), who is live, polls and predictions of the
 watched channel, replays and clips, followed channels (the box's Twitch app, device code), and the Twitch account.
 
-Twitch account: the site's token (auth-token cookie) is stored in streamlink's Twitch config, which streamlink reads
-by itself. Twitch only removes ads for subscriptions with that token.
+Twitch account: signed in with a code on twitch.tv/activate as the Twitch app for TVs, or (backup) the site's token
+pasted from the auth-token cookie; stored in streamlink's Twitch config, which streamlink reads by itself. Twitch
+only removes ads for subscriptions with an account token.
 """
 import datetime, json, os, re, threading, time, urllib.error, urllib.parse, urllib.request, uuid
 
@@ -95,19 +96,22 @@ def live_loop():
 # Twitch no longer has a real-time subscription (PubSub) for a plain viewer: we poll, like the twitch.tv page.
 
 EVENTS_EVERY = 10    # seconds between two polls, only during a live stream with the panel enabled
+PAGE_EVENTS_EVERY = 3   # while the companion app shows them: a poll or prediction that opens shows up sooner
 RESULT_FOR = 60      # seconds the result of a finished poll or prediction is shown
+LOCKED_FOR = 60      # seconds a locked prediction (bets closed, waiting for its result) stays on the TV
 EVENTS_QUERY = (
     "query($l:String!){user(login:$l){"
     "viewablePoll{id title status startedAt durationSeconds totalVoters choices{id title votes{total}}} "
     "channel{activePredictionEvents{...p} lockedPredictionEvents{...p} "
     "resolvedPredictionEvents(first:1){edges{node{...p endedAt winningOutcome{id}}}}}}}"
-    "fragment p on PredictionEvent{id title status createdAt predictionWindowSeconds "
+    "fragment p on PredictionEvent{id title status createdAt lockedAt predictionWindowSeconds "
     "outcomes{id title color totalPoints totalUsers}}")
 # With the connected account: its current bet and its channel points balance (to vote from the page)
 EVENTS_SELF = "query($l:String!){user(login:$l){channel{self{communityPoints{balance}} " \
     "activePredictionEvents{id self{prediction{points outcome{id}}}} " \
     "lockedPredictionEvents{id self{prediction{points outcome{id}}}}}}}"
 events_now = {"channel": None, "at": 0.0, "data": {"poll": None, "prediction": None}}   # last poll
+events_seen = {}   # fetch_events' seen, shared by the TV's poll and the page's, emptied when the channel changes
 poll_votes = {}   # poll id → choice voted from the box (Twitch does not give it back)
 
 
@@ -138,7 +142,12 @@ def fetch_events(login, seen):
     if events:
         e = events[0]
         winner = (e.get("winningOutcome") or {}).get("id")
+        # Locked: shown LOCKED_FOR seconds on the TV, then hidden there until its result (it can take the whole stream;
+        # the page keeps it, with the bet made)
+        locked_at = (epoch(e["lockedAt"]) if e.get("lockedAt") else seen.setdefault(e["id"] + ":locked", now)) \
+            if e["status"] == "LOCKED" else None
         out["prediction"] = {"id": e["id"], "title": e["title"], "status": e["status"],
+                             "tv": locked_at is None or now - locked_at < LOCKED_FOR,
                              "ends_at": epoch(e["createdAt"]) + (e.get("predictionWindowSeconds") or 0),
                              "outcomes": [{"id": o["id"], "title": o["title"], "color": o.get("color"),
                                            "points": o.get("totalPoints") or 0, "users": o.get("totalUsers") or 0,
@@ -199,32 +208,41 @@ def predict(event_id, outcome_id, points):
     events_now["at"] = 0.0
 
 
+def poll_events(login):
+    """fetch_events for the channel, kept in events_now (the seen times start over when the channel changes)"""
+    if login != events_now["channel"]:
+        events_seen.clear()
+    data = fetch_events(login, events_seen)
+    events_now.update(channel=login, at=time.time(), data=data)
+    return data
+
+
 def events_for_page():
-    """Poll and prediction of the watched channel, for the page; polled here when the regular poll is not running
-    (panel disabled), at most every EVENTS_EVERY seconds"""
+    """Poll and prediction of the watched channel, for the page (polled every 3 s while it shows them): read again
+    when the last poll is older than PAGE_EVENTS_EVERY seconds, the TV's panel updated at the same time"""
     user = mpv(["get_property", "user-data/streambox"])[0] or {}
     login = user.get("channel") if user.get("mode") == "twitch" else None
     if not login:
         return {"channel": None, "poll": None, "prediction": None, "logged_in": bool(read_token())}
-    if events_now["channel"] != login or time.time() - events_now["at"] > EVENTS_EVERY:
-        events_now.update(channel=login, at=time.time(), data=fetch_events(login, {}))
+    if events_now["channel"] != login or time.time() - events_now["at"] > PAGE_EVENTS_EVERY:
+        data = poll_events(login)
+        if user.get("events", True):
+            mpv(["set_property", "user-data/streambox/polls", data])
     return {"channel": login, **events_now["data"], "logged_in": bool(read_token())}
 
 
 def events_loop():
-    seen, current = {}, None
     while True:
         data = {"poll": None, "prediction": None}
         try:
             user, playing = mpv(["get_property", "user-data/streambox"], ["get_property", "video-params"])
             user = user or {}
             login = user.get("channel")
-            # Any live channel (also a followed channel or a swapped second stream, outside the list)
+            # Any live channel (also a followed channel or a swapped second stream, outside the list); the page's
+            # poll may have just read it
             if user.get("mode") == "twitch" and user.get("events", True) and playing and login:
-                if login != current:
-                    seen, current = {}, login
-                data = fetch_events(login, seen)
-                events_now.update(channel=login, at=time.time(), data=data)
+                fresh = events_now["channel"] == login and time.time() - events_now["at"] < EVENTS_EVERY
+                data = events_now["data"] if fresh else poll_events(login)
             mpv(["set_property", "user-data/streambox/polls", data])
         except (OSError, ValueError, KeyError, TypeError):
             pass   # mpv or Twitch unreachable: retry on the next round
@@ -236,13 +254,14 @@ def events_loop():
 replays_cache = {}   # login -> (time, result)
 
 
-def fetch_replays(login):
-    query = ("query($l:String!){user(login:$l){"
-             "videos(first:8,type:ARCHIVE,sort:TIME){edges{node{id title lengthSeconds createdAt "
+def fetch_replays(login, vods=8, clips=6):
+    """The latest replays (vods) and the week's clips of a streamer ("Load more": larger counts, the start cut off)"""
+    query = ("query($l:String!,$v:Int!,$c:Int!){user(login:$l){"
+             "videos(first:$v,type:ARCHIVE,sort:TIME){edges{node{id title lengthSeconds createdAt "
              "previewThumbnailURL(width:320,height:180) self{viewingHistory{position}}}}} "
-             "clips(first:6,criteria:{period:LAST_WEEK}){edges{node{slug title durationSeconds viewCount "
+             "clips(first:$c,criteria:{period:LAST_WEEK}){edges{node{slug title durationSeconds viewCount "
              "thumbnailURL}}}}}")
-    user = twitch_gql(query, {"l": login})["user"] or {}
+    user = twitch_gql(query, {"l": login, "v": vods, "c": clips})["user"] or {}
     vods = [{"title": n["title"], "date": n["createdAt"][:10], "seconds": n["lengthSeconds"],
              "thumb": n["previewThumbnailURL"], "url": f"https://www.twitch.tv/videos/{n['id']}",
              "position": (((n.get("self") or {}).get("viewingHistory") or {}).get("position"))}
@@ -269,6 +288,22 @@ def replays(login):
             item["position"] = entry["position"]
         item["finished"] = history.finished(item.get("position") or 0, item.get("seconds"))
     return result
+
+
+def replays_more(login, kind, offset):
+    """"Load more" in the Replays tab: the next replays (8) or clips (6) after offset"""
+    if login not in read_streamers() or kind not in ("vods", "clips"):
+        raise ValueError(tr("unknown streamer"))
+    page = 8 if kind == "vods" else 6
+    data = fetch_replays(login, offset + page if kind == "vods" else 1, offset + page if kind == "clips" else 1)
+    items = data[kind][offset:]
+    known = {e["key"]: e for e in history.read_history()}
+    for item in items:
+        entry = known.get(history.media_key(item["url"])[0])
+        if entry:
+            item["position"] = entry["position"]
+        item["finished"] = history.finished(item.get("position") or 0, item.get("seconds"))
+    return {"items": items, "more": len(items) >= page}
 
 
 # Streamer list editable from the page: adding (after checking on Twitch) and removing. The comment lines of
@@ -402,9 +437,12 @@ def app_fields():
     return fields
 
 
-def save_follows_token(d):
+def save_follows_token(d, client_id=None):
+    """client_id: the TV app's, for a token from the account's sign-in by code (it does not expire: expires_in 0)"""
+    lasts = int(d.get("expires_in") or 0) or (10 * 365 * 86400 if client_id else 3600)
     write_private_json(FOLLOWS_TOKEN_FILE, {"access_token": d["access_token"], "refresh_token": d.get("refresh_token"),
-                                            "expires_at": time.time() + int(d.get("expires_in") or 3600)})
+                                            "expires_at": time.time() + lasts,
+                                            **({"client_id": client_id} if client_id else {})})
 
 
 def follows_poll(device_code, interval, expires_at):
@@ -453,20 +491,22 @@ def follows_token():
     if time.time() > tok.get("expires_at", 0) - 120:
         if not tok.get("refresh_token"):
             return None
-        code, d = twitch_oauth("token", {**app_fields(), "grant_type": "refresh_token",
-                                         "refresh_token": tok["refresh_token"]})
+        fields = {"client_id": tok["client_id"]} if tok.get("client_id") else app_fields()
+        code, d = twitch_oauth("token", {**fields, "grant_type": "refresh_token", "refresh_token": tok["refresh_token"]})
         if code != 200 or not d.get("access_token"):
             if code in (400, 401):   # authorization revoked on Twitch: it will have to be redone
                 os.remove(FOLLOWS_TOKEN_FILE)
             return None
-        save_follows_token(d)
+        save_follows_token(d, tok.get("client_id"))
         tok = read_json_file(FOLLOWS_TOKEN_FILE)
     return tok["access_token"]
 
 
 def helix(path, token):
+    # Helix wants the Client-ID of the app the token comes from (the TV app's after a sign-in by code)
+    client = read_json_file(FOLLOWS_TOKEN_FILE).get("client_id") or app_fields()["client_id"]
     req = urllib.request.Request(f"https://api.twitch.tv/helix/{path}",
-                                 headers={"Client-Id": app_fields()["client_id"], "Authorization": f"Bearer {token}"})
+                                 headers={"Client-Id": client, "Authorization": f"Bearer {token}"})
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.load(r)
 
@@ -561,6 +601,12 @@ def follows_logout():
 
 account = {"login": None, "expired": False}   # last known result, so as not to query Twitch on every request
 account_lock = threading.Lock()
+# Sign-in by code (twitch.tv/activate) as the Twitch app for TVs: its public device-code client, as the box does for
+# YouTube. Its token works wherever the site's does (streamlink, GQL with the site's Client-ID, yt-dlp's cookie: Twitch
+# recognizes the account on the stream) and, with user:read:follows, it also reads the followed channels (Helix, with
+# its own Client-ID): one sign-in for both, which does not expire. Pasting the site's auth-token stays as a backup.
+TWITCH_TV_CLIENT_ID = "ue6666qo983tsx6so1t0vnawi233wa"
+account_pending = {}   # code in progress: user_code, verification_uri, expires_at, error
 
 
 def read_token():
@@ -668,4 +714,69 @@ def logout():
     write_token(None)
     with account_lock:
         account.update(login=None, expired=False)
+        account_pending.clear()
+    if read_json_file(FOLLOWS_TOKEN_FILE).get("client_id") == TWITCH_TV_CLIENT_ID:
+        follows_logout()   # the same sign-in gave the followed channels
     restart_stream()
+
+
+def account_start():
+    """Sign-in by code: asks Twitch for one (the TV and the page show it), then waits for it in a thread"""
+    code, d = twitch_oauth("device", {"client_id": TWITCH_TV_CLIENT_ID, "scopes": FOLLOWS_SCOPE})
+    if code != 200 or not d.get("device_code"):
+        raise ValueError(tr("Twitch refuses the request: {error}", error=d.get("message") or code))
+    expires_at = time.time() + int(d.get("expires_in") or 1800)
+    with account_lock:
+        account_pending.clear()
+        account_pending.update(user_code=d["user_code"], verification_uri=d["verification_uri"], expires_at=expires_at)
+    threading.Thread(target=account_poll, args=(d["device_code"], int(d.get("interval") or 5), expires_at),
+                     daemon=True).start()
+
+
+def account_poll(device_code, interval, expires_at):
+    """Waits for the code typed on twitch.tv/activate, then signs in: account token and followed channels"""
+    while time.time() < expires_at:
+        time.sleep(interval)
+        try:
+            code, d = twitch_oauth("token", {"client_id": TWITCH_TV_CLIENT_ID, "scopes": FOLLOWS_SCOPE,
+                                              "device_code": device_code,
+                                              "grant_type": "urn:ietf:params:oauth:grant-type:device_code"})
+        except OSError:
+            continue
+        if code == 200 and d.get("access_token"):
+            try:
+                name = validate(d["access_token"])
+            except OSError:
+                name = None
+            if not name:
+                with account_lock:
+                    account_pending.update(error=tr("Twitch refuses this token: it is expired or incomplete."))
+                return
+            write_token(d["access_token"])
+            save_follows_token(d, TWITCH_TV_CLIENT_ID)
+            with account_lock:
+                account.update(login=name, expired=False)
+                account_pending.clear()
+            with follows_lock:
+                follows_pending.clear()
+                follows_cache.update(at=0.0, data=None)
+            restart_stream()
+            return
+        message = d.get("message", "")
+        if message == "slow_down":
+            interval += 5
+        elif message != "authorization_pending":
+            with account_lock:
+                account_pending.update(error=message or tr("refused by Twitch ({code})", code=code))
+            return
+    with account_lock:
+        account_pending.update(error=tr("code expired"))
+
+
+def account_status():
+    """{login, expired, pending}: pending = code in progress (user_code, verification_uri, error)"""
+    with account_lock:
+        out = dict(account)
+        live = account_pending and account_pending.get("expires_at", 0) > time.time()
+        out["pending"] = {k: account_pending.get(k) for k in ("user_code", "verification_uri", "error")} if live else None
+    return out

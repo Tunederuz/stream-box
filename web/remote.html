@@ -490,6 +490,15 @@
     </div>
     <div id="account-off" hidden>
       <p id="account-intro">Connect your account to enjoy your subscriptions without ads.</p>
+      <button id="login-code" class="current" style="width: 100%">Sign in with a code</button>
+      <div id="account-code" hidden style="margin-top: 12px; text-align: center">
+        <p style="margin-bottom: 6px">On <b>twitch.tv/activate</b>, enter this code:</p>
+        <div id="account-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
+        <a id="account-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the activation page</a>
+      </div>
+      <!-- Backup: the site's token pasted by hand, as before the sign-in by code -->
+      <details style="margin-top: 12px">
+        <summary>Or paste a token</summary>
       <details>
         <summary>Where to find the token?</summary>
         <ol>
@@ -505,6 +514,7 @@
         <input id="token" type="password" autocomplete="off" placeholder="auth-token value" aria-label="Twitch token">
         <button id="login" class="current">Connect</button>
       </div>
+      </details>
     </div>
     <div class="status" id="account-status"></div>
   </section>
@@ -900,7 +910,10 @@ function renderPlayback(s) {
   }
 }
 function render(s) {
+  const wasLive = lastState?.mode === "twitch";
   lastState = s;
+  // a live stream: its poll or prediction read right away (at the opening of the page, without waiting for the next round)
+  if (s.mode === "twitch" && !wasLive && typeof refreshEvents === "function") refreshEvents();
   if (s.lang && s.lang !== LANG) setLanguage(s.lang);   // language chosen on the TV or another phone
   renderLanguages(s);
   if (s.first_run && !setupMode) enterSetup();
@@ -1030,15 +1043,29 @@ document.querySelectorAll("button[data-action]").forEach((b) => {
   const delta = b.dataset.delta === "live" ? "live" : Number(b.dataset.delta);
   b.onclick = () => send(b.dataset.action, b.dataset.delta ? { delta } : {});
 });
+let accountTimer = null;
 async function refreshAccount() {
+  clearTimeout(accountTimer);
   try {
     const a = await (await fetch("/api/account")).json();
     $("account-on").hidden = !a.login;
     $("account-off").hidden = !!a.login;
     $("account-name").textContent = a.login ?? "";
     $("account-intro").textContent = a.expired
-      ? tr("The login has expired: paste a new token to get your subscriptions without ads back.")
+      ? tr("The login has expired: sign in again to get your subscriptions without ads back.")
       : tr("Connect your account to enjoy your subscriptions without ads.");
+    // Sign-in by code: the code until it is typed (reread every 3 s), or why it failed
+    const p = !a.login && a.pending;
+    $("account-code").hidden = !p || !!p.error;
+    if (p && !p.error) {
+      $("account-user-code").textContent = p.user_code;
+      $("account-link").href = p.verification_uri;
+      accountTimer = setTimeout(refreshAccount, 3000);
+    }
+    if (p && p.error) {
+      $("account-status").className = "status error";
+      $("account-status").textContent = tr("Authorization denied: {error}", { error: p.error });
+    }
   } catch (e) { bug(e); /* the box status already shows the error */ }
 }
 
@@ -1062,6 +1089,19 @@ async function accountAction(action, body = {}) {
 }
 
 $("login").onclick = () => accountAction("login", { token: $("token").value });
+$("login-code").onclick = () => pressing(async () => {
+  $("account-status").className = "status";
+  $("account-status").textContent = tr("Requesting the code…");
+  try {
+    const r = await fetch("/api/login_code", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    if (!r.ok) throw new Error((await r.json()).error);
+    $("account-status").textContent = "";
+  } catch (e) {
+    $("account-status").className = "status error";
+    $("account-status").textContent = e.message || tr("Box unreachable");
+  }
+  await refreshAccount();
+});
 $("token").onkeydown = (e) => { if (e.key === "Enter") $("login").click(); };
 $("logout").onclick = () => { if (confirm(tr("Disconnect the Twitch account? The stream restarts"))) accountAction("logout"); };
 $("play").onclick = async () => {
@@ -1174,6 +1214,7 @@ function showTab(name) {
   try { localStorage.setItem("tab", name); } catch (e) { /* storage unavailable: the tab is forgotten */ }
   if (name === "settings") { renderManage(); if (typeof refreshAudio === "function") refreshAudio(); if (typeof refreshHealth === "function") refreshHealth(); if (typeof loadYoutube === "function") loadYoutube(); settingsLoaders.forEach((f) => f()); }
   if (typeof previewTick === "function") previewTick();
+  if (name === "remote" && typeof refreshEvents === "function") refreshEvents();
 }
 document.querySelectorAll(".tabs button").forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
 let savedTab = "remote";
@@ -1377,7 +1418,7 @@ $("plex-cancel").onclick = async () => {   // (as Cancel of the Jellyfin code)
   refreshPlexLink();
 };
 // Poll and prediction: fetched every 3 s while the page shows a live stream
-let events = null, eventsTimer = null;
+var events = null, eventsTimer = null;   // var: refreshEvents can run from render(), before this line
 async function refreshEvents() {
   clearTimeout(eventsTimer);
   if (document.hidden || $("tab-remote").hidden || lastState?.mode !== "twitch") {
@@ -1524,7 +1565,7 @@ $("poweroff").onclick = async () => {
     showError(e.message || tr("Box unreachable"));
   }
 };
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); refreshAccount(); } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); refreshAccount(); refreshEvents(); } });
 refreshAccount();
 
 // Followed channels: authorization by code, status

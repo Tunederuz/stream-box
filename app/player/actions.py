@@ -221,6 +221,7 @@ ACTIONS = {
     "pause": lambda body: mpv(["cycle", "pause"]),
     "login": lambda body: twitch.login(str(body.get("token", ""))),
     "logout": lambda body: twitch.logout(),
+    "login_code": lambda body: twitch.account_start(),   # sign-in by code on twitch.tv/activate
     "follows_app": lambda body: twitch.set_twitch_app(str(body.get("client_id", "")),
                                                       str(body.get("client_secret", ""))),
     "follows_login": lambda body: twitch.follows_start(),
@@ -228,6 +229,8 @@ ACTIONS = {
     "youtube_login": youtube_login,
     "youtube_logout": youtube_logout,
     "youtube_sync": lambda body: youtube.yt_reload(),
+    "yt_rate": youtube.yt_rate,           # {rating: like | dislike | none}: the video being played (playback bar)
+    "yt_comments": youtube.yt_comments,   # its comments ({more: true}: the next page), published for the panel
     "key": key,
     "language": language,
     "setup": lambda body: ambient.finish_setup(),   # phone page: "Finish" of the first setup

@@ -573,9 +573,13 @@ class Osd(QObject):
     def __init__(self):
         super().__init__()
         self.data = {"bar": False, "toast": {}, "polls": {}, "storyboard": {}, "playback": {}, "live": {}, "tracks": {}, "loading": {}, "learn": {}, "meta": {}, "controls": {}, "seekfx": {},
-                     "next_card": {}, "notice": {}, "info": {},
+                     "next_card": {}, "notice": {}, "info": {}, "comments": {}, "comments_view": {},
+                     # mpv waiting for data (VideoWait.qml): buffering, seeking, not playing (core-idle: also after a
+                     # seek, waiting for data without paused-for-cache), the buffer's percentage, paused
+                     "waiting": {"cache": False, "seeking": False, "idle": False, "pct": 0, "pause": False},
                      "mode": "", "channel": "", "events": True}
         self._in.connect(self._set, Qt.QueuedConnection)
+        self.wait_state = dict(self.data["waiting"])   # (mpv's event thread only: waiting_prop)
         self.wake = threading.Event()   # bar just shown: read the position at once (InfoBar waits for it to appear)
 
     def _set(self, key, value):
@@ -588,6 +592,15 @@ class Osd(QObject):
         """Another file (or none): the playback state of the previous one is dropped, the bar never shows it (from mpv's
         thread). Not when the bar hides: it keeps its values while fading out"""
         self._in.emit("playback", "{}")
+
+    def waiting_prop(self, name):
+        """mpv property → one field of "waiting" (from mpv's event thread). The state is kept here, on that thread,
+        and sent whole: built from self.data (updated later, on Qt's thread), two changes arriving together (core-idle
+        and seeking at the end of a seek) overwrote each other and the ring stayed, or never came"""
+        def cb(_n, v):
+            self.wait_state[name] = v if v is not None else False
+            self._in.emit("waiting", json.dumps(self.wait_state))
+        return cb
 
     def receive(self, key):
         return lambda _n, v: self._in.emit(key, json.dumps(v if v is not None else self.data[key]))
@@ -618,6 +631,7 @@ class Osd(QObject):
     storyboard = Property(str, lambda self: json.dumps(self.data["storyboard"] or {}), notify=changed)
     tracks = Property(str, lambda self: json.dumps(self.data["tracks"] or {}), notify=changed)   # TracksPanel.qml
     loading = Property(str, lambda self: json.dumps(self.data["loading"] or {}), notify=changed)   # LoadingOverlay.qml
+    waiting = Property(str, lambda self: json.dumps(self.data["waiting"]), notify=changed)   # VideoWait.qml
     learn = Property(str, lambda self: json.dumps(self.data["learn"] or {}), notify=changed)   # KeyWizard.qml
     # Playback bar: video info, row of buttons, seek shown; "Next episode" card (NextUp.qml)
     meta = Property(str, lambda self: json.dumps(self.data["meta"] or {}), notify=changed)
@@ -626,6 +640,9 @@ class Osd(QObject):
     nextCard = Property(str, lambda self: json.dumps(self.data["next_card"] or {}), notify=changed)
     notice = Property(str, lambda self: json.dumps(self.data["notice"] or {}), notify=changed)   # Notice.qml
     info = Property(str, lambda self: json.dumps(self.data["info"] or {}), notify=changed)   # InfoPanel.qml
+    # CommentsPanel.qml: the comments read (youtube.py), the panel's state (stream-box.lua: open, scroll)
+    comments = Property(str, lambda self: json.dumps(self.data["comments"] or {}), notify=changed)
+    commentsView = Property(str, lambda self: json.dumps(self.data["comments_view"] or {}), notify=changed)
     eventsOn = Property(bool, lambda self: self.data["events"] is not False, notify=changed)
 
 
@@ -793,9 +810,12 @@ def main():
     player.observe_property("user-data/streambox/input", input_beat)
 
     for key in ("bar", "toast", "polls", "storyboard", "live", "mode", "channel", "events", "tracks", "loading", "learn", "meta", "controls", "seekfx",
-                "next_card", "notice", "info"):
+                "next_card", "notice", "info", "comments", "comments_view"):
         player.observe_property(f"user-data/streambox/{key}", osd.receive(key))
     player.observe_property("path", osd.new_file)
+    for prop, name in (("paused-for-cache", "cache"), ("seeking", "seeking"), ("core-idle", "idle"),
+                       ("cache-buffering-state", "pct"), ("pause", "pause")):
+        player.observe_property(prop, osd.waiting_prop(name))
     threading.Thread(target=osd.poll_loop, daemon=True).start()
 
     def dec(v):
