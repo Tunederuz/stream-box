@@ -95,8 +95,15 @@ def yt_fetch_feed(channel_id):
     import xml.etree.ElementTree as ET
     ns = {"a": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015",
           "m": "http://search.yahoo.com/mrss/"}
-    with urllib.request.urlopen(f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}", timeout=10) as r:
-        root = ET.fromstring(r.read())
+    try:
+        with urllib.request.urlopen(f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}", timeout=10) as r:
+            root = ET.fromstring(r.read())
+    except (OSError, ET.ParseError):
+        # The RSS feed often answers 404 for a while, for any channel: the channel's videos page instead (yt-dlp,
+        # slower; the same 15 latest videos, without their date)
+        videos = channel_listing(channel_id, 0, 15)[0]
+        yt_feeds[channel_id] = (time.time(), videos)
+        return videos
     videos = []
     for e in root.findall("a:entry", ns):
         vid = e.findtext("yt:videoId", namespaces=ns)
@@ -275,6 +282,12 @@ def yt_channel_more(channel_id, offset, count=15):
     """"Load more" in a channel's row: its older videos (the RSS feed only has the latest 15)"""
     if not re.fullmatch(r"UC[\w-]{22}", channel_id or ""):
         raise ValueError(tr("unknown channel"))
+    videos, more = channel_listing(channel_id, offset, count)
+    return {"items": with_progress(videos), "more": more}
+
+
+def channel_listing(channel_id, offset, count):
+    """Videos offset+1 … offset+count of a channel's videos page (yt-dlp), and whether there are others"""
     data = flat_playlist(f"https://www.youtube.com/channel/{channel_id}/videos", offset, count)
     entries = data.get("entries") or []
     name = data.get("channel") or data.get("uploader") or data.get("title") or ""
@@ -282,7 +295,7 @@ def yt_channel_more(channel_id, offset, count=15):
                "views": e.get("view_count"), "thumb": f"https://i.ytimg.com/vi/{e['id']}/mqdefault.jpg",
                "url": f"https://www.youtube.com/watch?v={e['id']}", "channel_id": channel_id}
               for e in entries if re.fullmatch(r"[\w-]{11}", e.get("id") or "")]
-    return {"items": with_progress(videos), "more": len(entries) >= count}
+    return videos, len(entries) >= count
 
 
 def yt_search_out(results, channels):
