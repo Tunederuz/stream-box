@@ -78,8 +78,11 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
     mpv(["set_property", "user-data/streambox/storyboard", {}])
     mpv(["set_property", "user-data/streambox/meta", {}])
     mpv(["set_property", "user-data/streambox/next_up", {}])
+    mpv(["set_property", "user-data/streambox/rating", {}])
+    mpv(["set_property", "user-data/streambox/comments", {}])
     if kind == "youtube":
         threading.Thread(target=youtube.fetch_storyboard, args=(ident,), daemon=True).start()
+        threading.Thread(target=youtube.yt_rating_fetch, args=(ident,), daemon=True).start()
 
 
 shim_items = {}   # Jellyfin identifier → card (title, image), for the history of the shim's playbacks

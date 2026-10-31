@@ -551,7 +551,6 @@
  "Search {service}": "Rechercher sur {service}",
  "Search: from the companion app": "Recherche : depuis l'appli compagnon",
  "Searching for \"{query}\"…": "Recherche de « {query} »…",
- "Searching…": "Recherche…",
  "Searching… put the remote in pairing mode": "Recherche… mets la télécommande en mode appairage",
  "Secret (confidential app only)": "Secret (appli confidentielle seulement)",
  "Send and install": "Envoyer et installer",
@@ -994,5 +993,19 @@
  "unknown library": "bibliothèque inconnue",
  "▶  See latest videos of {channel}": "▶  Voir les dernières vidéos de {channel}",
  "the channel": "la chaîne",
- "Chapters": "Chapitres"
+ "Chapters": "Chapitres",
+ "Like": "J'aime",
+ "Liked": "Aimé",
+ "Dislike": "Je n'aime pas",
+ "Disliked": "Pas aimé",
+ "Comments": "Commentaires",
+ "Loading comments…": "Chargement des commentaires…",
+ "No comments.": "Aucun commentaire.",
+ "{n} replies": "{n} réponses",
+ "No YouTube video playing.": "Aucune vidéo YouTube en cours.",
+ "Replies": "Réponses",
+ "To {author}": "À {author}",
+ "OK · {n} replies": "OK · {n} réponses",
+ "Loading replies…": "Chargement des réponses…",
+ "Back comments": "Retour commentaires"
 }

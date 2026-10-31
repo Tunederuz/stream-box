@@ -1,6 +1,6 @@
 // Playback bar icons, drawn (no Unicode characters, whose rendering depends on the fonts: emoji…):
-// back (−10 s), fwd (+10 s), play, pause, tracks (subtitles), quality, chapter (next chapter),
-// next (next episode).
+// back (−10 s), fwd (+10 s), play, pause, tracks (subtitles), quality, chapters, next (next episode), like and
+// dislike (filled: the account's vote), comments.
 import QtQuick
 import QtQuick.Shapes
 
@@ -8,6 +8,7 @@ Item {
     id: root
     property string name: "play"
     property color color: "white"
+    property bool filled: false   // like, dislike: the vote given
     width: 34; height: 34
 
     // Play: triangle
@@ -117,5 +118,61 @@ Item {
         visible: root.name === "next"
         x: 27; y: 6
         width: 4; height: 22; radius: 1; color: root.color
+    }
+    // Like: a thumb up, outlined, filled once given; dislike: the same upside down
+    Shape {
+        visible: root.name === "like" || root.name === "dislike"
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+        transform: Scale { origin.y: 17; yScale: root.name === "dislike" ? -1 : 1 }
+        ShapePath {   // cuff
+            fillColor: root.filled ? root.color : "transparent"; strokeColor: root.color; strokeWidth: 2.4
+            joinStyle: ShapePath.RoundJoin
+            startX: 3.5; startY: 14
+            PathLine { x: 8.5; y: 14 }
+            PathLine { x: 8.5; y: 29 }
+            PathLine { x: 3.5; y: 29 }
+            PathLine { x: 3.5; y: 14 }
+        }
+        ShapePath {   // hand
+            fillColor: root.filled ? root.color : "transparent"; strokeColor: root.color; strokeWidth: 2.4
+            joinStyle: ShapePath.RoundJoin
+            startX: 11.5; startY: 14
+            PathLine { x: 16; y: 5 }
+            PathQuad { x: 20.5; y: 6.5; controlX: 19.5; controlY: 2.5 }
+            PathLine { x: 19.5; y: 12 }
+            PathLine { x: 27.5; y: 12 }
+            PathQuad { x: 30.5; y: 15.5; controlX: 31; controlY: 12 }
+            PathLine { x: 28.5; y: 27 }
+            PathQuad { x: 25.5; y: 29; controlX: 28; controlY: 29 }
+            PathLine { x: 11.5; y: 29 }
+            PathLine { x: 11.5; y: 14 }
+        }
+    }
+    // Comments: a speech bubble and two lines
+    Shape {
+        visible: root.name === "comments"
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+        ShapePath {
+            fillColor: "transparent"; strokeColor: root.color; strokeWidth: 2.6; joinStyle: ShapePath.RoundJoin
+            startX: 8; startY: 5
+            PathLine { x: 27; y: 5 }
+            PathQuad { x: 31; y: 9; controlX: 31; controlY: 5 }
+            PathLine { x: 31; y: 20 }
+            PathQuad { x: 27; y: 24; controlX: 31; controlY: 24 }
+            PathLine { x: 14; y: 24 }
+            PathLine { x: 7; y: 30 }
+            PathLine { x: 7.5; y: 24 }
+            PathQuad { x: 3; y: 20; controlX: 3; controlY: 24 }
+            PathLine { x: 3; y: 9 }
+            PathQuad { x: 8; y: 5; controlX: 3; controlY: 5 }
+        }
+    }
+    Column {
+        visible: root.name === "comments"
+        x: 9; y: 11; spacing: 4
+        Rectangle { width: 16; height: 2.6; radius: 1.3; color: root.color }
+        Rectangle { width: 11; height: 2.6; radius: 1.3; color: root.color }
     }
 }

@@ -845,6 +845,82 @@ local function info_key(key)
 end
 mp.register_event("end-file", close_info)
 
+-- YouTube rating and comments of the video being played (remote.py, youtube.py): 👍 👎 in the row of buttons (account
+-- connected: user-data/streambox/rating { id, status }), Comments panel (qml/CommentsPanel.qml: the comments in
+-- user-data/streambox/comments { items, more, loading, thread }, its state in user-data/streambox/comments_view
+-- { open, scroll, thread, tscroll }: ↑ ↓ one comment, OK its replies, Back back to the comments or closes)
+local function api_post(name, body)
+    mp.command_native_async({ name = "subprocess", playback_only = false, capture_stdout = true,
+        args = { "curl", "-s", "-m", "40", "-X", "POST", "-H", "Content-Type: application/json", "-d", body,
+                 "http://127.0.0.1:8080/api/" .. name } }, function() end)
+end
+local function playing_youtube()
+    return mode == "media" and (mp.get_property("path") or ""):match("^https://[%w.]*youtu") ~= nil
+end
+local yt_rating = {}
+mp.observe_property("user-data/streambox/rating", "native", function(_, v)
+    yt_rating = type(v) == "table" and v or {}
+    if publish_controls then publish_controls() end
+end)
+local function rate(how)   -- the button lights up at once; youtube.py publishes what YouTube says afterwards
+    local now = yt_rating.status == how:upper() and "none" or how
+    yt_rating = { id = yt_rating.id, status = now == "none" and "INDIFFERENT" or now:upper() }
+    api_post("yt_rate", ('{"rating":"%s"}'):format(now))
+end
+
+local comments_open, comments_scroll, comments = false, 0, {}
+local thread_open, thread_scroll = false, 0   -- the replies of the selected comment (comments_scroll), opened with OK
+local function publish_comments_view()
+    mp.set_property_native("user-data/streambox/comments_view", comments_open and { open = true, scroll = comments_scroll,
+                           thread = thread_open, tscroll = thread_scroll } or {})
+end
+local function comments_more()   -- the next page, a few comments (or replies) before the end
+    if not comments_open then return end
+    local t = comments.thread
+    if thread_open then
+        if t and t.index == comments_scroll and t.more and not t.loading and thread_scroll >= #(t.items or {}) - 3 then
+            t.loading = true
+            api_post("yt_comments", ('{"replies":%d,"more":true}'):format(comments_scroll))
+        end
+    elseif comments.more and not comments.loading and comments_scroll >= #(comments.items or {}) - 4 then
+        comments.loading = true
+        api_post("yt_comments", '{"more":true}')
+    end
+end
+mp.observe_property("user-data/streambox/comments", "native", function(_, v)
+    comments = type(v) == "table" and v or {}
+    comments_more()
+end)
+local function open_comments()
+    comments_open, comments_scroll, thread_open = true, 0, false
+    hide_bar()
+    publish_comments_view()
+    api_post("yt_comments", "{}")   -- the first page (read once per video)
+end
+local function close_comments()
+    if not comments_open then return end
+    comments_open, thread_open = false, false
+    publish_comments_view()
+end
+local function comments_key(key)
+    if thread_open then   -- in the replies: ↑ ↓ one reply, Back goes back to the comments, on the one opened
+        local t = comments.thread or {}
+        if key == "down" then thread_scroll = math.min(math.max(0, #(t.items or {}) - 1), thread_scroll + 1)
+        elseif key == "up" then thread_scroll = math.max(0, thread_scroll - 1)
+        elseif key == "back" then thread_open = false
+        elseif key ~= "ok" then return close_comments() end
+    elseif key == "down" then comments_scroll = math.min(math.max(0, #(comments.items or {}) - 1), comments_scroll + 1)
+    elseif key == "up" then comments_scroll = math.max(0, comments_scroll - 1)
+    elseif key == "ok" then   -- its replies, if it has some
+        if (((comments.items or {})[comments_scroll + 1] or {}).replies or "") == "" then return end
+        thread_open, thread_scroll = true, 0
+        api_post("yt_comments", ('{"replies":%d}'):format(comments_scroll))
+    else return close_comments() end
+    publish_comments_view()
+    comments_more()
+end
+mp.register_event("end-file", close_comments)
+
 -- Video playback: accelerating fast forward, row of buttons under the bar (Qt app), next episode
 -- (Jellyfin). States published for InfoBar.qml and NextUp.qml: seekfx, controls, next_card; remote.py publishes next_up.
 
@@ -953,9 +1029,18 @@ end)
 local function controls_list()
     local paused = mp.get_property_native("pause")
     -- −10 s, Play / Pause, +10 s first (InfoBar.qml puts them in the middle of the screen), then the others (on the
-    -- right): subtitles, quality, chapters, next episode
+    -- right): 👍 👎 and comments (YouTube), subtitles, quality, chapters, next episode
     local list = { { id = "back", label = "−10 s" }, { id = "play", label = paused and tr("Play") or tr("Pause") },
-                   { id = "fwd", label = "+10 s" }, { id = "tracks", label = tr("Subtitles") } }
+                   { id = "fwd", label = "+10 s" } }
+    if playing_youtube() then
+        if yt_rating.status then   -- account connected
+            local liked, disliked = yt_rating.status == "LIKE", yt_rating.status == "DISLIKE"
+            list[#list + 1] = { id = "like", label = liked and tr("Liked") or tr("Like"), on = liked }
+            list[#list + 1] = { id = "dislike", label = disliked and tr("Disliked") or tr("Dislike"), on = disliked }
+        end
+        list[#list + 1] = { id = "comments", label = tr("Comments") }
+    end
+    list[#list + 1] = { id = "tracks", label = tr("Subtitles") }
     -- Quality: YouTube only, when several resolutions are offered (Jellyfin: original file)
     if #quality.list() > 1 then list[#list + 1] = { id = "quality", label = tr("Quality") } end
     if #(mp.get_property_native("chapter-list") or {}) > 1 then list[#list + 1] = { id = "chapters", label = tr("Chapters") } end
@@ -988,7 +1073,9 @@ local function controls_key(key)
         elseif id == "tracks" then open_tracks()
         elseif id == "quality" then open_tracks("quality")
         elseif id == "chapters" then open_tracks("chapters")
-        elseif id == "next" then play_next() end
+        elseif id == "next" then play_next()
+        elseif id == "like" or id == "dislike" then rate(id)
+        elseif id == "comments" then return open_comments() end
     end
     show_bar()
     publish_controls()
@@ -1083,6 +1170,10 @@ local function on_key(key)
     end
     if info_open then
         info_key(key)
+        return
+    end
+    if comments_open then
+        comments_key(key)
         return
     end
     if scrub and mode == "media" and key ~= "left" and key ~= "right" then   -- scrubbing: OK goes there, the rest gives up

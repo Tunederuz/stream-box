@@ -6,7 +6,7 @@ import json, os, re, subprocess, threading, time, urllib.parse, urllib.request
 
 import history   # history.py: positions of the videos already watched on the box
 from common import COOKIES_DIR, mpv, tool
-from i18n import tr
+from i18n import language, tr
 
 # YouTube: followed channels (the box's list, ~/.config/stream-box/youtube.json) and their latest videos through the
 # public RSS feed (no API key, 15 videos), search through yt-dlp ("ytsearch"). Caches: 20 min per feed, 10 min per
@@ -95,8 +95,15 @@ def yt_fetch_feed(channel_id):
     import xml.etree.ElementTree as ET
     ns = {"a": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015",
           "m": "http://search.yahoo.com/mrss/"}
-    with urllib.request.urlopen(f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}", timeout=10) as r:
-        root = ET.fromstring(r.read())
+    try:
+        with urllib.request.urlopen(f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}", timeout=10) as r:
+            root = ET.fromstring(r.read())
+    except (OSError, ET.ParseError):
+        # The RSS feed often answers 404 for a while, for any channel: the channel's videos page instead (yt-dlp,
+        # slower; the same 15 latest videos, without their date)
+        videos = channel_listing(channel_id, 0, 15)[0]
+        yt_feeds[channel_id] = (time.time(), videos)
+        return videos
     videos = []
     for e in root.findall("a:entry", ns):
         vid = e.findtext("yt:videoId", namespaces=ns)
@@ -190,6 +197,89 @@ def yt_tv_report(video_id, position, final=False):
                      daemon=True).start()
 
 
+# Rating and comments of the video being played (playback bar: 👍 👎, Comments panel), through youtube_tv.js:
+# user-data/streambox/rating { id, status } (account connected only), user-data/streambox/comments
+# { id, items, more, loading, error, thread } (public: no account needed); pages of 20, the next one on "load more";
+# thread: the replies of the comment opened { index, items, more, loading }, pages of 10
+yt_comments_state = {"id": None, "items": [], "next": None, "loaded": False, "thread": None}
+yt_comments_lock = threading.Lock()
+
+
+def playing_youtube():
+    return history.now_playing.get("ident") if history.now_playing.get("kind") == "youtube" else None
+
+
+def yt_rating_fetch(ident):
+    d = yt_tv(f"/rating?id={urllib.parse.quote(ident)}", timeout=15)
+    if isinstance(d, dict) and d.get("status") and playing_youtube() == ident:
+        mpv(["set_property", "user-data/streambox/rating", {"id": ident, "status": d["status"]}])
+
+
+def yt_rate(body):
+    """{rating: like | dislike | none} on the video being played; the state YouTube confirms is published (the bar
+    showed the new one at once), or read again after a failure"""
+    ident, how = playing_youtube(), str(body.get("rating", ""))
+    if not ident or how not in ("like", "dislike", "none"):
+        raise ValueError(tr("No YouTube video playing."))
+    d = yt_tv("/rate", {"id": ident, "rating": how}, timeout=15)
+    if isinstance(d, dict) and d.get("status"):
+        mpv(["set_property", "user-data/streambox/rating", {"id": ident, "status": d["status"]}])
+    else:
+        yt_rating_fetch(ident)
+        raise ValueError(tr("YouTube unreachable for now"))
+
+
+def yt_comments(body):
+    """First page of the comments of the video being played (kept: opening the panel again reads nothing), or the
+    next one ({more: true}); {replies: n}: the replies of comment n (kept while it stays the one opened), with
+    {more: true} their next page"""
+    ident = playing_youtube()
+    if not ident:
+        raise ValueError(tr("No YouTube video playing."))
+    with yt_comments_lock:
+        st = yt_comments_state
+        if st["id"] != ident:
+            st.update(id=ident, items=[], next=None, loaded=False, thread=None)
+        if "replies" in body:
+            n = int(body["replies"])
+            if not 0 <= n < len(st["items"]) or not st["items"][n].get("replies_token"):
+                return publish_comments()
+            if not st["thread"] or st["thread"]["index"] != n:
+                st["thread"] = {"index": n, "items": [], "next": st["items"][n]["replies_token"], "loaded": False}
+            page = st["thread"]
+        else:
+            page = st
+        if page["loaded"] and not (body.get("more") and page["next"]):
+            return publish_comments()
+        page["loading"] = True
+        publish_comments()
+        q = {"id": ident, "hl": language()}
+        if page["next"] and (page["loaded"] or page is not st):
+            q["token"] = page["next"]
+        d = yt_tv("/comments?" + urllib.parse.urlencode(q), timeout=30)
+        page["loading"] = False
+        if playing_youtube() != ident:
+            return None
+        if not isinstance(d, dict) or not isinstance(d.get("items"), list):
+            return publish_comments(error=tr("YouTube unreachable for now"))
+        page.update(items=page["items"] + d["items"], next=d.get("next"), loaded=True)
+        return publish_comments()
+
+
+def shown_comments(items):
+    return [{k: v for k, v in c.items() if k != "replies_token"} for c in items]   # (the tokens stay here)
+
+
+def publish_comments(error=""):
+    st = yt_comments_state
+    t = st["thread"]
+    mpv(["set_property", "user-data/streambox/comments",
+         {"id": st["id"], "items": shown_comments(st["items"]), "more": bool(st["next"]), "loading": bool(st.get("loading")),
+          "error": error,
+          "thread": t and {"index": t["index"], "items": shown_comments(t["items"]), "more": bool(t["next"]),
+                           "loading": bool(t.get("loading"))}}])
+
+
 def youtube_home():
     """Recommended for you and subscriptions (the account, through the "YouTube TV app" access), favorites (one row
     per channel: RSS feeds, read in parallel; yt_feed also keeps failures)"""
@@ -275,6 +365,12 @@ def yt_channel_more(channel_id, offset, count=15):
     """"Load more" in a channel's row: its older videos (the RSS feed only has the latest 15)"""
     if not re.fullmatch(r"UC[\w-]{22}", channel_id or ""):
         raise ValueError(tr("unknown channel"))
+    videos, more = channel_listing(channel_id, offset, count)
+    return {"items": with_progress(videos), "more": more}
+
+
+def channel_listing(channel_id, offset, count):
+    """Videos offset+1 … offset+count of a channel's videos page (yt-dlp), and whether there are others"""
     data = flat_playlist(f"https://www.youtube.com/channel/{channel_id}/videos", offset, count)
     entries = data.get("entries") or []
     name = data.get("channel") or data.get("uploader") or data.get("title") or ""
@@ -282,7 +378,7 @@ def yt_channel_more(channel_id, offset, count=15):
                "views": e.get("view_count"), "thumb": f"https://i.ytimg.com/vi/{e['id']}/mqdefault.jpg",
                "url": f"https://www.youtube.com/watch?v={e['id']}", "channel_id": channel_id}
               for e in entries if re.fullmatch(r"[\w-]{11}", e.get("id") or "")]
-    return {"items": with_progress(videos), "more": len(entries) >= count}
+    return videos, len(entries) >= count
 
 
 def yt_search_out(results, channels):

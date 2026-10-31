@@ -20,11 +20,16 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - Chapters: a button of the playback bar lists the video's chapters (start time and title) to jump to one; it
   replaces "Next chapter".
 
+- YouTube: like or dislike the video from the playback bar (account connected), and read its comments in a side
+  panel, 20 at a time, more as you scroll down; OK on a comment shows its replies.
+
 ### Changed
 - youtubei.js (the YouTube account access: subscriptions, recommendations, progress) updated from 16.0.1 to 18.1.0.
 - Playback bar: −10 s, pause and +10 s in the middle, the other buttons (subtitles, quality, chapters, next episode)
   on the right. ↓ goes straight to the buttons, ↓ again hides the bar.
 - In the TV menu's rows of videos, moving to another row starts at its first card, instead of where it was left.
+- While videos load in the TV menu (YouTube, Jellyfin, Plex, replays, history, a search), skeleton cards show where
+  they will be, instead of a "Loading…" text.
 - One options menu (≡) for every YouTube video card: play or resume, see the channel's latest videos, add it to the
   favorites or remove it; Recommended for you and search results now have them too.
 - On screens that aren't 16:9 (the Steam Deck's 16:10), the interface now fills the whole screen: no more bands, the
@@ -33,6 +38,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 ### Fixed
 - Twitch replays already watched (on the box or elsewhere) started at their very end, the picture frozen: the date of
   the position saved on Twitch was taken for the position.
+- A YouTube favorite channel could show no videos for a while: when YouTube's feed fails, its videos page is read
+  instead.
 
 ## [0.6.0]
 

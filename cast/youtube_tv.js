@@ -15,6 +15,13 @@
 //                   pages), newest first, lives at the top, without Shorts (kept 15 min; ?fresh=1: read again)
 //   GET  /recommended?offset=N, /subscriptions?offset=N  "Load more": { items (30 from N on), more }, reading the
 //                   feed's next pages when needed
+//   GET  /rating?id=  { status: LIKE | DISLIKE | INDIFFERENT } of the account on a video (the TV /next)
+//   POST /rate      { id, rating: like | dislike | none }: rates it as the TV app does (the like endpoints of the TV
+//                   /next with their params; youtubei.js's interact.like is refused), { status } after
+//   GET  /comments?id=&hl=&token=  { items, next } a page of the video's comments (20, by relevance): anonymous web
+//                   session, raw /next (the comments section's continuation, then its pages; getComments fails on
+//                   YouTube's current format); token: the next page's, or a comment's replies_token (its replies, 10
+//                   at a time, the same shape), from a previous answer
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -264,6 +271,71 @@ function body(req) {
 
 // "Load more": the feed's videos from offset on (count of them), reading its next pages when the ones already read run
 // out (at most 4 more pages per call); more: there may be others after
+// Rating of the account on a video, and the params of the three like endpoints offered by the TV /next
+async function rating(id) {
+  const raw = JSON.stringify((await yt.actions.execute('/next', { videoId: id, client: 'TV' })).data);
+  const param = (k) => decodeURIComponent((raw.match(new RegExp(`"${k}":"([^"]+)"`)) || [])[1] || '');
+  return { status: (raw.match(/"likeStatus":"(\w+)"/) || [])[1] || 'INDIFFERENT',
+           like: param('likeParams'), dislike: param('dislikeParams'), none: param('removeLikeParams') };
+}
+
+const RATE_PATH = { like: '/like/like', dislike: '/like/dislike', none: '/like/removelike' };
+const RATED = { like: 'LIKE', dislike: 'DISLIKE', none: 'INDIFFERENT' };
+async function rate(id, how) {
+  const r = await rating(id);   // fresh params (they carry a time)
+  await yt.actions.execute(RATE_PATH[how], { target: { videoId: id }, params: r[how] || undefined, client: 'TV' });
+  return { status: RATED[how] };
+}
+
+// Comments: anonymous web sessions (one per language: the dates, "2 days ago", come translated)
+const webs = new Map();
+async function web(hl) {
+  if (!webs.has(hl)) webs.set(hl, Innertube.create({ retrieve_player: false, lang: hl }));
+  return webs.get(hl);
+}
+const continuations = (raw) => [...raw.matchAll(/"continuationCommand":\{"token":"([^"]+)"/g)];
+async function comments(id, hl, token) {
+  const w = await web(hl);
+  if (!token) {   // the first page's token: the continuation of the comments section of the watch page
+    const raw = JSON.stringify((await w.actions.execute('/next', { videoId: id, client: 'WEB' })).data);
+    const sec = raw.indexOf('"comment-item-section"');
+    if (sec < 0) return { items: [], next: null };   // comments turned off
+    const found = continuations(raw).find((m) => Math.abs(m.index - sec) < 4000);
+    if (!found) return { items: [], next: null };
+    token = found[1];
+  }
+  return commentPage((await w.actions.execute('/next', { continuation: token, client: 'WEB' })).data);
+}
+
+// A page of comments, or of a comment's replies (same shape): its items (comment threads, or replies), in order; the
+// texts are in the entities (commentEntityPayload) found by the item's commentKey. replies: the token of a thread's
+// replies; next: the token of the page's last item, "more comments" / "show more replies"
+const tokenIn = (node) => (JSON.stringify(node || {}).match(/"continuationCommand":\{"token":"([^"]+)"/) || [])[1] || null;
+function commentPage(data) {
+  const byKey = new Map();
+  for (const m of data.frameworkUpdates?.entityBatchUpdate?.mutations || []) {
+    const c = m.payload?.commentEntityPayload;
+    if (c) byKey.set(c.key || m.entityKey, c);
+  }
+  const list = (data.onResponseReceivedEndpoints || [])
+    .flatMap((e) => (e.reloadContinuationItemsCommand || e.appendContinuationItemsAction)?.continuationItems || []);
+  const items = [];
+  for (const it of list) {
+    const thread = it.commentThreadRenderer;
+    const c = byKey.get((thread || it).commentViewModel?.commentViewModel?.commentKey
+                        || it.commentViewModel?.commentKey);
+    if (!c) continue;
+    items.push({
+      author: c.author?.displayName || '', avatar: c.author?.avatarThumbnailUrl || '',
+      date: c.properties?.publishedTime || '', likes: c.toolbar?.likeCountNotliked?.trim() || '',
+      replies: c.toolbar?.replyCount || '', text: (c.properties?.content?.content || '').slice(0, 2000),
+      replies_token: thread ? tokenIn(thread.replies) : null,
+    });
+  }
+  const last = list[list.length - 1];
+  return { items, next: items.length && last?.continuationItemRenderer ? tokenIn(last) : null };
+}
+
 async function feedMore(kind, offset, count = 30) {
   if (!connected) return { items: [], more: false };
   if (!feeds[kind].all.length) await (kind === 'rec' ? getRecommended() : getSubscriptions());
@@ -297,6 +369,23 @@ export function startYoutubeTv() {
         if (!connected || !/^[\w-]{11}$/.test(id)) return send(404, { error: 'unknown' });
         const d = (await yt.actions.execute('/player', { videoId: id, client: 'TV' })).data.videoDetails || {};
         return send(200, { title: d.title || null, seconds: Number(d.lengthSeconds) || null });
+      }
+      if (req.method === 'GET' && req.url.startsWith('/rating?id=')) {
+        const id = decodeURIComponent(req.url.slice(11));
+        if (!connected || !/^[\w-]{11}$/.test(id)) return send(404, { error: 'unknown' });
+        return send(200, { status: (await rating(id)).status });
+      }
+      if (req.method === 'POST' && req.url === '/rate') {
+        const b = await body(req);
+        const id = String(b.id || '');
+        if (!connected || !/^[\w-]{11}$/.test(id) || !RATE_PATH[b.rating]) return send(400, { error: 'bad request' });
+        return send(200, await rate(id, b.rating));
+      }
+      if (req.method === 'GET' && req.url.startsWith('/comments?')) {
+        const q = new URL(req.url, 'http://x').searchParams;
+        const id = q.get('id') || '', hl = /^[a-z]{2}$/.test(q.get('hl') || '') ? q.get('hl') : 'en';
+        if (!/^[\w-]{11}$/.test(id)) return send(400, { error: 'bad request' });
+        return send(200, await comments(id, hl, q.get('token') || null));
       }
       if (req.method === 'GET' && req.url.startsWith('/subscriptions')) {
         if (req.url.endsWith('fresh=1')) subscriptions.at = 0;

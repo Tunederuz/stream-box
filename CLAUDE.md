@@ -419,6 +419,10 @@ height…). `CardRow` pitfalls: callers bind `view.model`, `view.currentIndex`, 
 directly on its ListView (going through properties of `CardRow`, the index reset when a row changed was never
 re-applied), and its sizes are literal numbers, not bindings to `layout.js` (the caller's current index arrives
 before, `fits` was then -1 and the first scroll was lost).
+While a tab's or a row's videos load, `SkeletonRows` (qml/menu/) shows skeleton cards (`qml/SkeletonCard.qml`: the
+shapes of VideoCard, breathing, the pulse travelling along the row) where the cards will be, not a "Loading…" text:
+YouTube / Jellyfin / Plex before their lists (`!menu.yt`, `!menu.lib.home`), a row still loading or a search under
+way, Replays (`replays[login] === "loading"`), History (`history === null`). `QMLSHOTS_PENDING` shows them.
 YouTube card previews (the focused card playing its video) were tried and dropped on 2026-10-27: resolving links with
 yt-dlp, in advance for the neighboring cards, got the box taken for a robot by YouTube within two hours ("Sign in to
 confirm you're not a bot" for every video, the player's included). Do not add requests to YouTube per card.
@@ -572,7 +576,8 @@ while the tab is shown, and 1.5 s after an update button: `readBox`).
 Channel list in `~/.config/stream-box/youtube.json` (UC… id, name, @, picture), edited by
 `POST /api/youtube_channels` {action: add|remove|move, channel, delta}; adding resolves "@name", a link or an id with
 `yt-dlp --flat-playlist -J --playlist-items 0` (~1 s). `GET /api/youtube`: 15 latest videos per channel from the
-public RSS feed (`feeds/videos.xml?channel_id=`, no key, Shorts excluded, 20 min cache), merged with
+public RSS feed (`feeds/videos.xml?channel_id=`, no key, Shorts excluded, 20 min cache; it often answers 404 for a
+while, for any channel: then the channel's /videos flat list, `channel_listing`, same 15 without dates), merged with
 the history (position, watched). `GET /api/youtube_search?q=`: `yt-dlp --flat-playlist -J ytsearch20:` (~1.6 s, 10 min
 cache, `youtube:lang=fr`, otherwise titles are translated into English): videos, and channels whose name matches (same
 request; UC… id, subscribers, picture, `saved`), playlists excluded. `GET /api/youtube_channel?id=UC…`: latest videos
@@ -733,8 +738,8 @@ title over a light image.
   from the bar ↑ the title, ↓ the buttons; from the title ↓, from the buttons ↑ or Back, back to the bar; ↓ again from
   the buttons hides the bar.
 - Row of buttons: ↓ from the bar (focus on Pause/Play, `ctrl_focus = 2`), ← → (in the list's order) and OK;
-  −10 s, Pause/Play, +10 s in the middle of the screen, then on the right, ending with the progress bar: Subtitles,
-  Quality (YouTube), Chapters (if there are chapters), Next episode (Jellyfin) (InfoBar.qml: `mid` and `side`
+  −10 s, Pause/Play, +10 s in the middle of the screen, then on the right, ending with the progress bar: Like and
+  Dislike (YouTube, account connected; filled once given), Comments (YouTube), Subtitles, Quality (YouTube), Chapters (if there are chapters), Next episode (Jellyfin) (InfoBar.qml: `mid` and `side`
   groups, one shared `button` component). Chapters opens the subtitles panel in `chapters` mode (`tracks_mode`):
   start time and title of each chapter (`chapter-list`), the current one chosen, OK sets `chapter`. `ctrl_focus`,
   `user-data/streambox/controls` {items, focus}; disappears with the bar. Round centered buttons, drawn icons
@@ -922,7 +927,7 @@ as the YouTube TV app (youtubei.js, a direct dependency of cast/, pinned: yt-cas
 for, nested under it; TV client, code on google.com/device, Google shows "YouTube on TV"; no stream URL deciphering
 here, `retrieve_player: false`: 18.x would need a JavaScript evaluator of our own for it, `Platform.shim.eval`;
 token `~/.config/stream-box/youtube-tv-token.json`), local server 127.0.0.1:8091 (`/status`, `/login`, `/logout`,
-`/progress`, `/report`, `/recommended`, `/subscriptions`, `/meta`). Mixed operation, tried before choosing:
+`/progress`, `/report`, `/recommended`, `/subscriptions`, `/meta`, `/rating`, `/rate`, `/comments`). Mixed operation, tried before choosing:
 - the box keeps its positions (exact resume on the TV) and reports them to YouTube (`history_loop`: every
   `YT_TV_PUSH` = 30 s, and on stop `final`) like a player: `/player` (tracking URL, cpn), `playback` ping, then
   `watchtime` (segment st→et, real time rt). Checked: the phone resumes to the second;
@@ -1322,6 +1327,28 @@ characters, `thumb`). Opened from the title: ↑ from the bar selects it (`title
 "OK · Info" frame around the title in InfoBar.qml), OK opens the panel, ↓ goes back down to the buttons, ↑ closes the
 bar, Back leaves the title without stopping the video; stream-box.lua `info_open` / `info_scroll` → `user-data/streambox/info` {open, scroll}; ↑ ↓ scroll by 4 lines (bounded by the
 length of the text), Back / OK / ≡ close; closed at the end of the file.
+
+### YouTube rating and comments (video)
+Like / Dislike buttons of the playback bar: youtube.py `yt_rating_fetch` at the start of a YouTube video (youtube_tv.js
+`GET /rating?id=`: `likeStatus` of the TV `/next`) → `user-data/streambox/rating` {id, status: LIKE | DISLIKE |
+INDIFFERENT}, empty when not connected (no buttons then). OK: stream-box.lua `rate` lights the button up at once and
+`POST /api/yt_rate` {rating: like | dislike | none} (the same button again: none); youtube_tv.js `POST /rate` calls
+`/like/like`, `/like/dislike` or `/like/removelike` with the params the TV `/next` gives (`likeParams`…, read again each
+time: they carry a time). youtubei.js's `interact.like` is refused (400). The state YouTube confirms is published again.
+Comments: the Comments button opens `qml/CommentsPanel.qml` (right side, like the Info panel); `POST /api/yt_comments`
+({more: true}: next page; {replies: n}: the replies of comment n, with {more: true} their next page) → youtube.py reads
+youtube_tv.js `GET /comments?id=&hl=&token=` and publishes `user-data/streambox/comments` {id, items, more, loading,
+error, thread: {index, items, more, loading}} (kept for the video: reopening reads nothing; the reply tokens stay in
+youtube.py). youtube_tv.js: anonymous web session per language (dates "il y a 6 ans"), raw `/next`: the continuation
+near `comment-item-section`, then its pages (20, by relevance); `commentPage` reads a page of comments or of replies
+(same shape): its items in order (`onResponseReceivedEndpoints` continuation items), texts in
+`frameworkUpdates…commentEntityPayload` by the item's `commentKey`, each thread's `replies_token`, `next` from the last
+item's `continuationItemRenderer` (not "the last token": the last thread's replies token would pass for the next page).
+Replies: 10 per page; YouTube nests some replies of replies (not shown). `getComments` fails on YouTube's current
+format. stream-box.lua `comments_open` / `comments_scroll` (the selected comment, framed; the list scrolls only to keep it in view) and `thread_open`
+/ `thread_scroll` → `user-data/streambox/comments_view` {open, scroll, thread, tscroll}: ↑ ↓ one comment, OK its
+replies (if any: "OK · n replies" on it) in the same panel, the comment opened above them, Back back to the comments on
+that one, Back again or ≡ close; the next page 4 comments (3 replies) before the end; closed at the end of the file.
 
 ### YouTube token server (stream-box-pot)
 `systemd/stream-box-pot.service` runs `node build/main.js` (bgutil-ytdlp-pot-provider, port 4416) with the venv's Node

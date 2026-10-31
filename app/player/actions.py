@@ -228,6 +228,8 @@ ACTIONS = {
     "youtube_login": youtube_login,
     "youtube_logout": youtube_logout,
     "youtube_sync": lambda body: youtube.yt_reload(),
+    "yt_rate": youtube.yt_rate,           # {rating: like | dislike | none}: the video being played (playback bar)
+    "yt_comments": youtube.yt_comments,   # its comments ({more: true}: the next page), published for the panel
     "key": key,
     "language": language,
     "setup": lambda body: ambient.finish_setup(),   # phone page: "Finish" of the first setup

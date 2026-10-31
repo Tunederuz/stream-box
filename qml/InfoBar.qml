@@ -305,10 +305,10 @@ Item {
             color: root.live && root.delay < 4 ? "#ff4f5e" : "white"
             font.pixelSize: 23; font.bold: root.live && root.delay < 4
         }
-        // Row of buttons (video): −10 s, Play / Pause, +10 s in the middle of the screen, the others (subtitles,
-        // quality, chapters, next episode) on the right; ↓ to go there, ← → (in the list's order) and OK. Round buttons
-        // with drawn icons (PlayerIcon), Play / Pause bigger; the name of the selected button shows below. Dimmed while
-        // none is selected
+        // Row of buttons (video): −10 s, Play / Pause, +10 s in the middle of the screen, the others (like, dislike,
+        // comments, subtitles, quality, chapters, next episode) on the right; ↓ to go there, ← → (in the list's order)
+        // and OK. Round buttons with drawn icons (PlayerIcon), Play / Pause bigger; the name of the selected button
+        // shows below. Dimmed while none is selected
         Item {
             id: controlsRow
             visible: !root.live && (root.ctl.items || []).length > 0
@@ -341,6 +341,7 @@ Item {
                             scale: parent.parent.big ? 1.25 : (parent.parent.it.id === "back" || parent.parent.it.id === "fwd") ? 1.4 : 1
                             name: parent.parent.it.id === "play" ? (root.pb.pause ? "play" : "pause") : (parent.parent.it.id || "")
                             color: parent.parent.foc ? "#17151c" : "white"
+                            filled: !!parent.parent.it.on
                         }
                     }
                     Text {   // name of the selected button
