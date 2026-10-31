@@ -1,8 +1,9 @@
 // Comments of a YouTube video (Qt app): slides in from the right like the Info panel; author, date, text, likes and
 // replies of each, by relevance. The comments come from youtube.py (user-data/streambox/comments, pages of 20 read as
 // the list goes down; thread: the replies of the comment opened, pages of 10), the panel's state from stream-box.lua
-// (user-data/streambox/comments_view {open, scroll, thread, tscroll}): ↑ ↓ go from one comment to the next (framed),
-// OK shows its replies in the same panel (the comment above them), Back goes back to the comments, then closes.
+// (user-data/streambox/comments_view {open, scroll, thread, tscroll}): ↑ ↓ go from one comment to the next (framed;
+// the list scrolls to keep it in view), OK shows its replies in the same panel (the comment above them), Back goes
+// back to the comments, then closes.
 import QtQuick
 import "i18n.js" as I18n
 
@@ -23,12 +24,11 @@ Item {
     readonly property var items: threadMode ? [parentComment].concat(thread.items || []) : (c.items || [])
     readonly property int sel: threadMode ? (st.tscroll || 0) + 1 : scroll   // framed item
     readonly property bool loading: threadMode ? !!thread.loading : !!c.loading
-    onSelChanged: place()
-    onThreadModeChanged: place()
-    onShownChanged: if (shown) place()
-    function place() {   // the selected item at the top (in the replies, the comment opened while on the first one)
-        list.positionViewAtIndex(threadMode && sel === 1 ? 0 : sel, ListView.Beginning)
-    }
+    // The list scrolls only to keep the selected item in view; from the top on opening (the comments, or the comment
+    // opened above its replies), back on the comment opened when leaving its replies
+    onSelChanged: list.positionViewAtIndex(sel, ListView.Contain)
+    onThreadModeChanged: list.positionViewAtIndex(threadMode ? 0 : sel, threadMode ? ListView.Beginning : ListView.Contain)
+    onShownChanged: if (shown) list.positionViewAtIndex(0, ListView.Beginning)
 
     Rectangle {   // veil over the video
         anchors.fill: parent; color: "black"
@@ -73,6 +73,7 @@ Item {
             anchors.top: head.bottom; anchors.topMargin: 14
             anchors.bottom: parent.bottom; anchors.bottomMargin: 70
             interactive: false; clip: true; spacing: 12
+            Behavior on contentY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
             model: root.items.length
             delegate: Item {
                 id: entry
@@ -81,7 +82,6 @@ Item {
                 readonly property bool foc: index === root.sel
                 width: list.width
                 height: body.height + 32
-                opacity: index < root.sel && !(root.threadMode && index === 0) ? 0.3 : 1
                 Rectangle {   // selected; the comment opened, above its replies
                     x: entry.reply ? 40 : 0; width: parent.width - x; height: parent.height; radius: 18
                     color: entry.foc ? "#24ffffff" : root.threadMode && index === 0 ? "#10ffffff" : "transparent"

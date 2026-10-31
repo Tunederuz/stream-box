@@ -1343,7 +1343,7 @@ near `comment-item-section`, then its pages (20, by relevance); `commentPage` re
 `frameworkUpdates…commentEntityPayload` by the item's `commentKey`, each thread's `replies_token`, `next` from the last
 item's `continuationItemRenderer` (not "the last token": the last thread's replies token would pass for the next page).
 Replies: 10 per page; YouTube nests some replies of replies (not shown). `getComments` fails on YouTube's current
-format. stream-box.lua `comments_open` / `comments_scroll` (the selected comment, framed, at the top) and `thread_open`
+format. stream-box.lua `comments_open` / `comments_scroll` (the selected comment, framed; the list scrolls only to keep it in view) and `thread_open`
 / `thread_scroll` → `user-data/streambox/comments_view` {open, scroll, thread, tscroll}: ↑ ↓ one comment, OK its
 replies (if any: "OK · n replies" on it) in the same panel, the comment opened above them, Back back to the comments on
 that one, Back again or ≡ close; the next page 4 comments (3 replies) before the end; closed at the end of the file.
