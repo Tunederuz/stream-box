@@ -561,7 +561,14 @@ Item {
             items.push({ label: tr("↺  From the beginning"), ok: function () { playCard(it, true) } })
         } else items.push({ label: tr(it.finished ? "↺  Watch again" : "▶  Play"), ok: function () { playCard(it, true) } })
         if (items.length === 1 && !always) return items[0].ok()
-        openModal(it.label || it.title, items.concat(options, [{ label: tr("Cancel"), ok: function () {} }]))
+        var cancel = [{ label: tr("Cancel"), ok: function () {} }]
+        if (!always || !it.more_options) return openModal(it.label || it.title, items.concat(options, cancel))
+        // ≡ on a card whose options the box looks up (a YouTube video's channel): the dialog at once, completed after
+        openModal(it.label || it.title, items.concat([{ label: tr("Loading…"), ok: function () {} }], cancel))
+        var opened = modal, id = tabId
+        call("GET", "/api/rows?addon=" + id + "&options=" + encodeURIComponent(it.more_options.target), undefined, function (d) {
+            if (modal === opened) openModal(it.label || it.title, items.concat((d && d.options || []).map(cardOption), cancel))
+        })
     }
     // Info line of a card: its own (the addons' cards bring it translated), "Loading…" on a "Load more" card
     function cardMeta(row, it) {

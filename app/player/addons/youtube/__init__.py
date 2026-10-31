@@ -72,7 +72,9 @@ def video_card(v, kind, favorites, own=None):
     return R.card(v.get("url") or v.get("id"), v.get("title"), R.line(*meta, finished=v.get("finished")), v.get("thumb"),
                   progress=R.progress(v), play={"url": v.get("url")}, position=v.get("position"),
                   seconds=v.get("seconds"), finished=v.get("finished") or None,
-                  options=channel_options(channel_id, name, favorites, see=kind != "preview"))
+                  options=channel_options(channel_id, name, favorites, see=kind != "preview"),
+                  # channel unknown (the TV tiles no longer name it): asked for this card only, when ≡ opens
+                  more_options=None if channel_id or not v.get("id") else {"target": "video:" + v["id"]})
 
 
 def favorites():
@@ -126,6 +128,15 @@ def open_row(target, name):
                            more={"source": "yt_channel", "key": channel_id})]}
 
 
+def card_options(target):
+    """≡ of a card whose channel was not known: its channel (the account's TV access, one request), then its options"""
+    kind, _, video_id = target.partition(":")
+    if kind != "video":
+        raise ValueError(tr("not found"))
+    d = yt.yt_tv(f"/channel?id={video_id}", timeout=15) or {}
+    return {"options": channel_options(d.get("channel_id"), d.get("channel"), favorites())}
+
+
 MORE_KINDS = {"yt_search": "results", "yt_recommended": "rec", "yt_subscriptions": "subs", "yt_channel": "channel"}
 
 
@@ -165,5 +176,5 @@ ADDON = Addon(
     progress=lambda video, position, final: yt.yt_tv_report(video["ident"], position, final=final),
     progress_every=yt.YT_TV_PUSH,
     home=yt.youtube_home,
-    rows={"tab": tab_rows, "search": search_rows, "open": open_row, "more": more_cards},
+    rows={"tab": tab_rows, "search": search_rows, "open": open_row, "more": more_cards, "options": card_options},
 )

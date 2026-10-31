@@ -7,7 +7,8 @@ A card: {key (unique in the row), title, thumb, meta (its info line, translated)
 it does: play ({url}: a link, POST /api/play; or {action, id}: POST /api/<action> {id, from_start}), open ({target,
 name}: a row of its own just below the search, GET /api/rows?addon=…&open=<target>&name=<name>), connect (the addon's
 account sign-in); position, seconds, finished (resume or from the beginning); options ([{label, open} or {label,
-action, body, danger}]: added to its ≡ dialog; with no play, its only choices)}.
+action, body, danger}]: added to its ≡ dialog; with no play, its only choices), more_options ({target}: more of them
+asked when ≡ opens, GET /api/rows?addon=…&options=<target>: one request for that card, never for every card)}.
 """
 import datetime, time
 

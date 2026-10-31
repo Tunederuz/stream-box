@@ -16,6 +16,8 @@
 //   GET  /recommended?offset=N, /subscriptions?offset=N  "Load more": { items (30 from N on), more }, reading the
 //                   feed's next pages when needed
 //   GET  /rating?id=  { status: LIKE | DISLIKE | INDIFFERENT } of the account on a video (the TV /next)
+//   GET  /channel?id=  { channel_id, channel } of a video (the TV /next: its byline; the TV tiles no longer name it):
+//                   asked for one card, when its options are opened
 //   POST /rate      { id, rating: like | dislike | none }: rates it as the TV app does (the like endpoints of the TV
 //                   /next with their params; youtubei.js's interact.like is refused), { status } after
 //   GET  /comments?id=&hl=&token=  { items, next } a page of the video's comments (20, by relevance): anonymous web
@@ -374,6 +376,13 @@ export function startYoutubeTv() {
         const id = decodeURIComponent(req.url.slice(11));
         if (!connected || !/^[\w-]{11}$/.test(id)) return send(404, { error: 'unknown' });
         return send(200, { status: (await rating(id)).status });
+      }
+      if (req.method === 'GET' && req.url.startsWith('/channel?id=')) {
+        const id = decodeURIComponent(req.url.slice(12));
+        if (!connected || !/^[\w-]{11}$/.test(id)) return send(404, { error: 'unknown' });
+        const raw = JSON.stringify((await yt.actions.execute('/next', { videoId: id, client: 'TV' })).data);
+        const m = raw.match(/"shortBylineText":\{"runs":\[\{"text":"((?:[^"\\]|\\.)*)".*?"browseId":"(UC[\w-]{22})"/);
+        return send(200, { channel_id: m ? m[2] : null, channel: m ? JSON.parse(`"${m[1]}"`) : null });
       }
       if (req.method === 'POST' && req.url === '/rate') {
         const b = await body(req);

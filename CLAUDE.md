@@ -1327,9 +1327,11 @@ pause}); shown after 0.4 s of waiting, not while paused (PauseScreen has the cen
 TV menu: ≡ on any YouTube video card → play or resume / from the beginning, and when the channel is known "See latest
 videos of {channel}" and the favorite toggle (the card's `options`, addons/youtube `channel_options`); the channel comes
 from the row (favorites' rows, the opened channel) or the video's `channel_id` (search results: yt-dlp's). Since
-2026-10-31 the TV tiles no longer name their channel (their long-press menu is an engagement panel read apart): the
-Recommended and Subscriptions cards have no channel options until it is asked for on ≡ (one request then, never per
-card).
+2026-10-31 the TV home tiles no longer name their channel (their long-press menu is an engagement panel read apart):
+those cards carry `more_options` ({target: "video:<id>"}) and ≡ opens their dialog at once with "Loading…", then
+`GET /api/rows?addon=youtube&options=video:<id>` (addons/youtube `card_options` → youtube_tv.js `GET /channel?id=`: the
+TV `/next`'s byline, `shortBylineText`) completes it: one request for that card, never per card. The subscriptions'
+tiles still name it.
 
 ### Inlet app window
 The TV menu stays driven by keys only (remote, gamepad, keyboard; no mouse navigation, the user's choice). Inlet app

@@ -38,7 +38,8 @@ class Addon:
     and the companion app hide the rest); home() its lists, for the quick menu; library: the (home, series, play) of a
     media library, for the quick menu; start() at the server's start, loops: functions run each in its thread.
     rows: its TV menu tab (GET /api/rows, addons/cards.py): {"tab": fn() → {rows, …}, "search": fn(q) → {rows},
-    "open": fn(target, name) → {rows: [the opened row]}, "more": fn(source, key, q, offset) → {items, more}}"""
+    "open": fn(target, name) → {rows: [the opened row]}, "more": fn(source, key, q, offset) → {items, more},
+    "options": fn(target) → {options} (a card's ≡ options asked when it opens: its more_options)}"""
     def __init__(self, id, name, order=50, description="", base=False, configured=lambda: True, kinds=None, routes=None,
                  actions=None, more=None,
                  links=None, prepare=None, started=None, progress=None, progress_every=30, report=None,
@@ -223,7 +224,7 @@ def outside_video():
 
 def rows(query):
     """GET /api/rows?addon=<id>: its tab's rows; &q=: a search's; &open=<target>&name=: the row of something opened (a
-    channel, a series); &more=<source>&key=&q=&offset=: the next cards of a row"""
+    channel, a series); &more=<source>&key=&q=&offset=: the next cards of a row; &options=<target>: a card's ≡ options"""
     a = get(query.get("addon", ""))
     if not a or not a.rows or a not in enabled():
         raise ValueError("unknown addon")
@@ -234,6 +235,8 @@ def rows(query):
         return a.rows["more"](query["more"], query.get("key", ""), query.get("q", ""), offset)
     if query.get("open"):
         return a.rows["open"](query["open"], query.get("name", ""))
+    if query.get("options") and a.rows.get("options"):
+        return a.rows["options"](query["options"])
     if query.get("q", "").strip():
         return a.rows["search"](" ".join(query["q"].split())[:100])
     return a.rows["tab"]()
