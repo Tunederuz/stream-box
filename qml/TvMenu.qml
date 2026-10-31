@@ -72,7 +72,6 @@ Item {
     property var localUpd: null              // /api/local_update: A/B box?, images on USB sticks, copy and progress
     property string btPhase: ""              // Bluetooth dialog: "" (list), "scan", "pair" (its 2 s refresh runs while not "")
     // YouTube: channels of the list (/api/youtube), search results, row and choice per row
-    property var yt: null
     // YouTube account: dialog with the code to enter on google.com/device (/api/youtube_account), and its QR code
     property var ytAuth: null
     property var twAuth: null                // Twitch account: sign-in by code on twitch.tv/activate (/api/account pending)
@@ -146,21 +145,17 @@ Item {
         : { accent: "#e8e8ee", veil: "#0b0b0d", rail: "#121214", sheet: "#1e1e22", key: "#2f2f35",
             surface: "#232327", surfaceFocus: "#35353c", label: "#a3a3ad" }
     readonly property color accent: pal.accent
-    property var ytResults: null             // { query, results, channels } or null
-    property var ytPreview: null             // found channel, opened: { id, name, avatar, followers, videos, saved }
-    property bool ytSearching: false
-    property int ytRow: 0                    // 0: search row, then results (if any) and channels
-    property var ytSel: ({})
-    // Video libraries (Jellyfin, Plex: same API, /api/<id>, /api/<id>_search, _series, _play), per library: home,
-    // search results ({ query, results }), opened series ({ id, name, episodes, first }), row and choice per row
-    property var libs: ({})                  // id → { home, results, preview, searching, row, sel }
+    // Tabs of rows built by the addons (YouTube, Jellyfin, Plex: GET /api/rows, app/player/addons/cards.py), per tab:
+    // home ({rows, …}, null until read), search ({query, searching, rows}), preview (something opened, a channel or a
+    // series: {target, name, row}), the row chosen and the card chosen in each row
+    property var libs: ({})                  // id → { home, search, preview, row, sel }
     readonly property bool libTab: tabId === "jellyfin" || tabId === "plex"
+    readonly property bool rowsTab: tabId === "youtube" || libTab   // (mediaTab() is the tab of the current media)
     readonly property var lib: libs[tabId] || ({})
-    readonly property string libName: tabId === "plex" ? "Plex" : "Jellyfin"
+    readonly property string serviceName: tabId === "plex" ? "Plex" : tabId === "jellyfin" ? "Jellyfin" : "YouTube"
     // Changing tab from the rail: every tab's rows and grids start again from their first card (within a tab, a row
     // keeps its place). Not when the menu opens on the current media's tab: that one keeps the card being played
     function resetRows() {
-        ytSel = ({}); ytRow = 0
         var all = Object.assign({}, libs)
         for (var id in all) all[id] = Object.assign({}, all[id], { sel: {}, row: 0 })
         libs = all
@@ -173,16 +168,16 @@ Item {
         libs = all
     }
     // Row-based tabs (YouTube, libraries): same page, same keyboard, separate state for each
-    readonly property int mRow: libTab ? lib.row || 0 : ytRow
-    readonly property var mSel: libTab ? lib.sel || ({}) : ytSel
-    readonly property bool mSearching: libTab ? !!lib.searching : ytSearching
-    readonly property var mResults: libTab ? lib.results || null : ytResults
+    readonly property int mRow: lib.row || 0
+    readonly property var mSel: lib.sel || ({})
+    readonly property bool mSearching: !!(lib.search && lib.search.searching)
+    readonly property var mResults: lib.search || null
     // On-screen keyboard (search): text, chosen row and column
     property bool kbOpen: false
     property string kbText: ""
     // Keyboard opened or closed: reported to the box, the companion app then offers to type the text
     onKbOpenChanged: {
-        call("POST", "/api/keyboard", { open: kbOpen, text: kbText, target: libTab ? libName : "YouTube" })
+        call("POST", "/api/keyboard", { open: kbOpen, text: kbText, target: serviceName })
         box.setTyping(kbOpen)
     }
     property int kbRow: 0
@@ -277,34 +272,36 @@ Item {
             var r2 = Object.assign({}, replays); r2[login] = d && d.vods ? d : false; replays = r2
         })
     }
-    function loadYoutube() {
-        call("GET", "/api/youtube", undefined, function (d) { if (d && d.channels) yt = d; else if (!yt) yt = { channels: [] } })
+    // Home rows of a tab (GET /api/rows?addon=…; the previous ones stay shown meanwhile)
+    function loadRows(id) {
+        call("GET", "/api/rows?addon=" + id, undefined, function (d) { setLib(id, { home: d || { error: true, rows: [] } }) })
     }
-    function ytSearch(q) {
+    function mediaSearch(q) {
         q = q.trim()
-        if (!q) return
-        ytResults = { query: q, results: [], channels: [] }   // before ytSearching: the search row text reads query
-        ytSearching = true
-        ytPreview = null
-        call("GET", "/api/youtube_search?q=" + encodeURIComponent(q), undefined, function (d) {
-            ytSearching = false
-            ytResults = { query: q, results: d && d.results ? d.results : [], channels: d && d.channels ? d.channels : [], error: !d }
-            ytRow = 1; var s = Object.assign({}, ytSel); s["search"] = 0; ytSel = s
+        var id = tabId
+        if (!q || !rowsTab) return
+        // the search row reads the query while it runs, skeleton cards where the results will be
+        setLib(id, { search: { query: q, searching: true, rows: [] }, preview: null })
+        call("GET", "/api/rows?addon=" + id + "&q=" + encodeURIComponent(q), undefined, function (d) {
+            var rows = d && d.rows ? d.rows : [{ key: "search", title: tr("Results for \"{query}\"", { query: q }), items: [] }]
+            var sel = Object.assign({}, (libs[id] || {}).sel)
+            rows.forEach(function (r) { sel[r.key] = 0 })
+            setLib(id, { search: { query: q, rows: rows }, row: 1, sel: sel })
         })
     }
-    // Rows of the YouTube tab: search, results, one per channel
-    // Where a row's next items come from (/api/more), or null: search results, a YouTube channel, a library's recent
-    // additions, a streamer's replays and clips
+    // The search's rows read again in place (a favorite added or removed: its mark), the focus left where it is
+    function refreshSearch(id) {
+        var sr = (libs[id] || {}).search
+        if (!sr || sr.searching) return
+        call("GET", "/api/rows?addon=" + id + "&q=" + encodeURIComponent(sr.query), undefined, function (d) {
+            var now = (libs[id] || {}).search
+            if (d && d.rows && now && now.query === sr.query) setLib(id, { search: Object.assign({}, now, { rows: d.rows }) })
+        })
+    }
+    // Where a row's next items come from, or null: the addons' rows say it (more: {addon, source, key, q}, read from
+    // GET /api/rows), a streamer's replays and clips here (GET /api/more)
     function moreSource(row) {
-        if (row.kind === "results" && !libTab && ytResults) return { source: "yt_search", key: "", q: ytResults.query }
-        if (row.kind === "results" && libTab && lib.results) return { source: tabId + "_search", key: "", q: lib.results.query }
-        if (row.kind === "rec") return { source: "yt_recommended", key: "" }
-        if (row.kind === "subs") return { source: "yt_subscriptions", key: "" }
-        if (row.kind === "lib" && (row.key === "resume" || row.key === "nextup")) return { source: tabId + "_" + row.key, key: "" }
-        if (row.kind === "channel") return { source: "yt_channel", key: row.key }
-        if (row.kind === "preview" && !libTab && ytPreview) return { source: "yt_channel", key: ytPreview.id }
-        if (row.kind === "lib" && row.key.indexOf("lib:") === 0)
-            return { source: tabId === "plex" ? "plex_lib" : "jellyfin_lib", key: row.key.slice(4) }
+        if (row.more) return row.more
         if (row.kind === "vods" || row.kind === "clips") return { source: "twitch_" + row.kind, key: rpLogin }
         return null
     }
@@ -315,7 +312,7 @@ Item {
         var id = src.source + "|" + src.key + "|" + (src.q || ""), m = moreRows[id] || {}
         var seen = {}, items = []
         row.items.concat(m.items || []).forEach(function (it) {
-            var k = it.url || it.id || JSON.stringify(it)
+            var k = it.key || it.url || it.id || JSON.stringify(it)
             if (!seen[k]) { seen[k] = true; items.push(it) }
         })
         if (!m.done) items.push({ more: true, loading: !!m.loading, title: tr("Load more"), moreId: id, src: src, offset: items.length })
@@ -326,48 +323,12 @@ Item {
         if (m.loading || m.done) return
         var set = function (v) { var all = Object.assign({}, moreRows); all[card.moreId] = Object.assign({}, moreRows[card.moreId] || {}, v); moreRows = all }
         set({ loading: true })
-        call("GET", "/api/more?source=" + card.src.source + "&key=" + encodeURIComponent(card.src.key) + "&q="
+        var url = card.src.addon ? "/api/rows?addon=" + card.src.addon + "&more=" + card.src.source : "/api/more?source=" + card.src.source
+        call("GET", url + "&key=" + encodeURIComponent(card.src.key) + "&q="
              + encodeURIComponent(card.src.q || "") + "&offset=" + card.offset, undefined, function (d) {
             var have = (moreRows[card.moreId] || {}).items || []
             if (!d || !d.items) set({ loading: false, done: true })   // (nothing more, or unreachable: the card goes)
             else set({ loading: false, items: have.concat(d.items), done: !d.more || !d.items.length })
-        })
-    }
-    function ytRows() {
-        var rows = [{ kind: "search" }]
-        if (ytResults && ytResults.channels.length)
-            rows.push({ kind: "chans", key: "chans", title: tr("Channels"), items: ytResults.channels })
-        if (ytPreview)
-            rows.push({ kind: "preview", key: "preview", title: tr("{name} · latest videos", { name: ytPreview.name }), avatar: ytPreview.avatar,
-                        items: ytPreview.videos || [], loading: ytPreview.videos === null })
-        if (ytResults) rows.push({ kind: "results", key: "search", title: tr("Results for \"{query}\"", { query: ytResults.query }), items: ytResults.results })
-        // The account's YouTube home ("YouTube TV app" access): its recommended videos, first
-        var rec = yt && yt.recommended
-        if (rec && rec.length) rows.push({ kind: "rec", key: "rec", title: tr("Recommended for you"), items: rec })
-        var subs = yt && yt.subs
-        if (subs && subs.authorized)
-            rows.push({ kind: "subs", key: "subs", title: tr("Subscriptions"), items: subs.videos || [], loading: subs.videos === null })
-        else if (subs && !subs.unavailable)
-            rows.push({ kind: "connect", key: "connect", title: tr("Subscriptions"),
-                        items: [{ title: tr("Connect my account"), connect: true }] })
-        var chans = yt ? yt.channels : []
-        for (var i = 0; i < chans.length; i++)
-            rows.push({ kind: "channel", key: chans[i].id, title: chans[i].name, avatar: chans[i].avatar, items: chans[i].videos || [] })
-        return rows.map(withMore)
-    }
-    // Channel found by the search: see its videos (row just below the channels), add or remove it
-    function ytChannelMenu(c) {
-        openModal(c.name + (c.followers ? " · " + tr("{n} subscribers", { n: Fmt.big(c.followers, tr) }) : ""), [
-            { label: tr("▶  See latest videos"), ok: function () { ytOpenChannel(c) } },
-            { label: tr(c.saved ? "✕  Remove from favorites" : "★  Add to favorites"), danger: !!c.saved, ok: function () { ytToggleSaved(c) } },
-            { label: tr("Cancel"), ok: function () {} }])
-    }
-    function ytOpenChannel(c) {
-        ytPreview = { id: c.id, name: c.name, avatar: c.avatar, videos: null }
-        var s = Object.assign({}, ytSel); s["preview"] = 0; ytSel = s
-        ytRow = Math.max(1, ytRows().findIndex(function (r) { return r.kind === "preview" }))   // just below the found channels
-        call("GET", "/api/youtube_channel?id=" + encodeURIComponent(c.id), undefined, function (d) {
-            if (ytPreview && ytPreview.id === c.id) ytPreview = Object.assign({}, ytPreview, { videos: d ? d.videos : [] })
         })
     }
     // YouTube account ("YouTube TV app" access, cast/youtube_tv.js): code to enter on google.com/device; the dialog
@@ -385,7 +346,7 @@ Item {
         call("GET", "/api/youtube_account", undefined, function (d) {
             if (!ytAuth || !d) return
             ytAccount = d
-            if (d.authorized) { ytAuth = null; yt = null; loadYoutube(); return }
+            if (d.authorized) { ytAuth = null; loadRows("youtube"); return }
             var p = d.pending
             ytAuth = { pending: p }
             if (p && p.verification_uri && !p.error) {
@@ -523,142 +484,89 @@ Item {
             items.push({ label: tr("↻  Reload my subscriptions"), ok: function () {
                 loadingModal("", tr("Reloading your subscriptions…"))
                 call("POST", "/api/youtube_sync", {}, function (d) {
-                    yt = null; loadYoutube(); loadYtAccount()
+                    loadRows("youtube"); loadYtAccount()
                     openModal(d ? tr("Subscriptions reloaded") : tr("YouTube unreachable for now"), [{ label: tr("OK"), ok: function () {} }])
                 }) } })
             items.push({ label: tr("✕  Disconnect YouTube"), danger: true, ok: function () {
                 confirmModal(tr("Disconnect your YouTube account? Subscriptions, recommendations and progress sync stop"),
                              tr("✕  Disconnect YouTube"), function () {
                     ytAccount = Object.assign({}, ytAccount, { authorized: false })   // at once
-                    call("POST", "/api/youtube_logout", {}, function () { yt = null; loadYtAccount() }) }) } })
+                    call("POST", "/api/youtube_logout", {}, function () { loadRows("youtube"); loadYtAccount() }) }) } })
         }
         items.push({ label: tr("Close"), ok: function () {} })
         openModal(tr("YouTube account"), items)
     }
-    // Options on a subscription video: play, channel as favorite (a row of its own)
-    // ≡ on any YouTube video card (recommended, subscriptions, search, channel rows): play or resume, and when its
-    // channel is known, see its latest videos and add it to the favorites or remove it
-    function ytVideoOptions(v) {
-        var items = []
-        if (Fmt.resumable(v.position, v.seconds, v.finished)) {
-            items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(v.position) }), ok: function () { play(v.url, false, v) } })
-            items.push({ label: tr("↺  From the beginning"), ok: function () { play(v.url, true, v) } })
-        } else items.push({ label: tr(v.finished ? "↺  Watch again" : "▶  Play"), ok: function () { play(v.url, true, v) } })
-        if (v.channel_id) {
-            var fav = (yt ? yt.channels : []).some(function (c) { return c.id === v.channel_id })
-            var c = { id: v.channel_id, name: v.channel, avatar: v.avatar, saved: fav }
-            if (!(ytPreview && ytPreview.id === v.channel_id))   // (its row is already open)
-                items.push({ label: tr("▶  See latest videos of {channel}", { channel: v.channel || tr("the channel") }), ok: function () { ytOpenChannel(c) } })
-            items.push({ label: tr(fav ? "✕  Remove from favorites" : "★  Add to favorites"), danger: fav, ok: function () { ytToggleSaved(c) } })
-        }
-        items.push({ label: tr("Cancel"), ok: function () {} })
-        openModal(v.title, items)
-    }
-    // Favorite on or off: the mark changes at once (back if the box refuses), the channel rows follow
-    function ytToggleSaved(c) {
-        function mark(saved) {
-            if (ytResults)
-                ytResults = Object.assign({}, ytResults, { channels: ytResults.channels.map(function (x) {
-                    return x.id === c.id ? Object.assign({}, x, { saved: saved }) : x }) })
-        }
-        mark(!c.saved)
-        call("POST", "/api/youtube_channels", { action: c.saved ? "remove" : "add", channel: c.id }, function (d) {
-            if (!d) mark(c.saved)
-            loadYoutube()
-        })
-    }
-    function ago(iso) {
-        var days = Math.floor((Date.now() - new Date(iso)) / 86400000)
-        return days <= 0 ? tr("today") : days === 1 ? tr("yesterday") : days < 7 ? tr("{n} d ago", { n: days })
-            : days < 31 ? tr("{n} wk ago", { n: Math.floor(days / 7) })
-            : new Date(iso).toLocaleDateString(Qt.locale(i18n.lang === "fr" ? "fr_FR" : "en_US"), "d MMM")
-    }
-    function loadLibrary(id) {
-        call("GET", "/api/" + id, undefined, function (d) { setLib(id, { home: d || { error: true } }) })
-    }
-    function libSearch(q) {
-        q = q.trim()
+    // Rows of a tab, top to bottom: the search, the channels found, what is opened, the other rows of the search (its
+    // results), the home rows; each with its next cards ("Load more") when it says where they come from
+    function mediaRows() {
+        var L = lib, rows = [{ kind: "search", key: "" }]
+        var found = L.search && L.search.rows ? L.search.rows : []
+        rows = rows.concat(found.filter(function (r) { return r.style === "channels" }))
+        if (L.preview) rows.push(L.preview.row ? Object.assign({}, L.preview.row, { key: "preview" })
+                                                : { key: "preview", title: L.preview.name, items: [], loading: true })
+        if (L.search && L.search.searching)
+            rows.push({ key: "search", title: tr("Results for \"{query}\"", { query: L.search.query }), items: [], loading: true })
+        rows = rows.concat(found.filter(function (r) { return r.style !== "channels" }))
+        rows = rows.concat(L.home && L.home.rows ? L.home.rows : [])
         var id = tabId
-        if (!q || !libTab) return
-        // results before searching: the search row text reads query
-        setLib(id, { results: { query: q, results: [] }, searching: true, preview: null })
-        call("GET", "/api/" + id + "_search?q=" + encodeURIComponent(q), undefined, function (d) {
-            setLib(id, { searching: false, results: { query: q, results: d && d.results ? d.results : [], error: !d },
-                         row: 1, sel: Object.assign({}, (libs[id] || {}).sel, { search: 0 }) })
-        })
+        return rows.map(function (r) { return r.more ? withMore(Object.assign({}, r, { more: Object.assign({ addon: id }, r.more) })) : r })
     }
-    // Rows of a library tab: search, opened series, results, resume, next episodes, recently added
-    function libRows() {
-        var rows = [{ kind: "search" }], home = lib.home, preview = lib.preview, results = lib.results
-        if (preview)
-            rows.push({ kind: "preview", key: "preview", title: tr("{name} · episodes", { name: preview.name }), items: preview.episodes || [],
-                        loading: preview.episodes === null })
-        if (results) rows.push({ kind: "results", key: "search", title: tr("Results for \"{query}\"", { query: results.query }), items: results.results })
-        if (home && home.configured) {
-            if (home.resume.length) rows.push({ kind: "lib", key: "resume", title: tr("Resume"), items: home.resume })
-            if (home.nextup.length) rows.push({ kind: "lib", key: "nextup", title: tr("Next episodes"), items: home.nextup })
-            for (var i = 0; i < home.libraries.length; i++)
-                rows.push({ kind: "lib", key: "lib:" + home.libraries[i].id, title: tr("{name} · recently added", { name: home.libraries[i].name }), items: home.libraries[i].items })
-        }
-        return rows.map(withMore)
-    }
-    function mediaRows() { return libTab ? libRows() : ytRows() }
-    // Chosen series (or season): its episodes in a row just below the search, focus on the first unwatched
-    function libOpenSeries(item) {
+    // Something opened (a channel's latest videos, a series' episodes): a row of its own right below the search and the
+    // channels found, focused, on the card the box chooses (a series: the first episode not watched)
+    function openTarget(o) {
         var id = tabId
-        setLib(id, { preview: { id: item.series, name: item.title, episodes: null }, row: 1 })
-        call("GET", "/api/" + id + "_series?id=" + encodeURIComponent(item.series), undefined, function (d) {
-            var preview = (libs[id] || {}).preview
-            if (!preview || preview.id !== item.series) return
-            setLib(id, { preview: Object.assign({}, preview, { episodes: d ? d.episodes : [] }),
-                         sel: Object.assign({}, (libs[id] || {}).sel, { preview: d ? d.first : 0 }) })
+        setLib(id, { preview: { target: o.target, name: o.name, row: null },
+                     sel: Object.assign({}, (libs[id] || {}).sel, { preview: 0 }) })
+        setRow(Math.max(1, mediaRows().findIndex(function (r) { return r.key === "preview" })))
+        call("GET", "/api/rows?addon=" + id + "&open=" + encodeURIComponent(o.target) + "&name=" + encodeURIComponent(o.name || ""),
+             undefined, function (d) {
+            var p = (libs[id] || {}).preview
+            if (!p || p.target !== o.target) return
+            var row = d && d.rows && d.rows[0] ? d.rows[0] : { key: "preview", title: o.name || "", items: [], error: true }
+            setLib(id, { preview: Object.assign({}, p, { row: row }), sel: Object.assign({}, (libs[id] || {}).sel, { preview: row.sel || 0 }) })
         })
     }
-    function libPlay(item, fromStart) {
-        call("POST", "/api/" + tabId + "_play", { id: item.id, from_start: !!fromStart }, function () { refreshSoon.restart() })
+    // A card's play: a link (POST /api/play), or its addon's action (POST /api/<action> {id, from_start})
+    function playCard(it, fromStart) {
+        if (it.play.url) return play(it.play.url, fromStart, it)
+        call("POST", "/api/" + it.play.action, { id: it.play.id, from_start: !!fromStart }, function () { refreshSoon.restart() })
         close()
     }
-    // OK on a card: plays at once when there is a single choice, otherwise a dialog; always (≡): the dialog
-    function libChoose(item, always) {
-        if (item.type === "Series" || item.type === "Season") return libOpenSeries(item)
-        var name = item.episode ? item.title + " · " + item.episode : item.title
+    // An option of a card's ≡ dialog: open something, or an action of its addon (a favorite…), the rows read again after
+    function cardOption(o) {
+        return { label: o.label, danger: !!o.danger, ok: function () {
+            if (o.open) return openTarget(o.open)
+            var id = tabId
+            call("POST", "/api/" + o.action, o.body || {}, function () { loadRows(id); refreshSearch(id) })
+        } }
+    }
+    // OK on a card: what it declares (connect, open, play); plays at once when there is a single choice, otherwise a
+    // dialog (resume or from the beginning, then its options); ≡ (always): the dialog
+    function cardChoose(it, always) {
+        if (it.connect === "youtube") return ytConnect()
+        var options = (it.options || []).map(cardOption)
+        if (!it.play) {
+            if (it.open) return openTarget(it.open)
+            return openModal(it.label || it.title, options.concat([{ label: tr("Cancel"), ok: function () {} }]))
+        }
         var items = []
-        if (Fmt.resumable(item.position, item.seconds, item.finished)) {
-            items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(item.position) }), ok: function () { libPlay(item) } })
-            items.push({ label: tr("↺  From the beginning"), ok: function () { libPlay(item, true) } })
-        } else items.push({ label: tr(item.finished ? "↺  Watch again" : "▶  Play"), ok: function () { libPlay(item, true) } })
-        if (item.type === "Episode" && item.series && !(lib.preview && lib.preview.id === item.series))
-            items.push({ label: tr("☰  All episodes"), ok: function () { libOpenSeries({ series: item.series, title: item.title }) } })
+        if (Fmt.resumable(it.position, it.seconds, it.finished)) {
+            items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(it.position) }), ok: function () { playCard(it, false) } })
+            items.push({ label: tr("↺  From the beginning"), ok: function () { playCard(it, true) } })
+        } else items.push({ label: tr(it.finished ? "↺  Watch again" : "▶  Play"), ok: function () { playCard(it, true) } })
         if (items.length === 1 && !always) return items[0].ok()
-        openModal(name, items.concat([{ label: tr("Cancel"), ok: function () {} }]))
+        openModal(it.label || it.title, items.concat(options, [{ label: tr("Cancel"), ok: function () {} }]))
     }
-    // Info line of a card in the row-based tabs
-    function hm(t) {
-        var h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60
-        return h > 0 ? h + " h " + (m < 10 ? "0" : "") + m : m + " min"
-    }
+    // Info line of a card: its own (the addons' cards bring it translated), "Loading…" on a "Load more" card
     function cardMeta(row, it) {
         if (it.more) return it.loading ? tr("Loading…") : ""
-        var parts
-        if (libTab)
-            parts = it.type === "Series" ? [it.unplayed ? tr("{n} unwatched", { n: it.unplayed }) : tr("Series"), it.year]
-                : it.episode ? [it.episode] : [it.year, it.seconds ? hm(it.seconds) : ""]
-        else if (row.kind === "subs")
-            parts = [it.channel, it.live ? tr("● LIVE") : ago(it.date), it.seconds ? Fmt.clock(it.seconds) : ""]
-        else if (row.kind === "connect")
-            parts = [tr("Your YouTube subscriptions")]
-        else if (row.kind === "results" || row.kind === "rec")
-            parts = [it.channel, it.live ? tr("● LIVE") : it.seconds ? Fmt.clock(it.seconds) : "",
-                     it.views ? tr("{n} views", { n: Fmt.big(it.views, tr) }) : ""]
-        else
-            parts = [ago(it.date), it.views ? tr("{n} views", { n: Fmt.big(it.views, tr) }) : ""]
-        return parts.filter(function (t) { return !!t }).join(" · ") + (it.finished ? " · " + tr("watched") : "")
+        return it.meta || ""
     }
     function searchLabel() {
         var r = mResults
         return mSearching ? tr("Searching for \"{query}\"…", { query: r.query })
             : r ? tr("New search  (\"{query}\")", { query: r.query })
-            : tr("Search {service}", { service: libTab ? libName : "YouTube" })
+            : tr("Search {service}", { service: serviceName })
     }
     function loadGames() { call("GET", "/api/gamestream", undefined, function (d) { if (d) gs = d; checkArea() }) }
     function gsPairClose() {
@@ -712,9 +620,10 @@ Item {
         area = "rail"; railHome = false
         shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0; rebootUntil = 0
         follows = null; replays = ({}); history = null; rpLogin = ""; rpRow = 0; rpSel = [0, 0, 0]
-        // libraries reloaded; search results stay from one opening to the next; yt too (reloaded in the background)
+        // libraries reloaded; search results stay from one opening to the next; YouTube's rows too (reloaded in the
+        // background)
         var all = {}
-        for (var id in libs) all[id] = Object.assign({}, libs[id], { home: null })
+        for (var id in libs) all[id] = id === "youtube" ? libs[id] : Object.assign({}, libs[id], { home: null })
         libs = all
         kbOpen = false
         var list = st.streamers || []
@@ -796,7 +705,7 @@ Item {
         }
     }
     function kbSubmit() {
-        if (kbText.trim()) { kbOpen = false; if (libTab) libSearch(kbText); else ytSearch(kbText) }
+        if (kbText.trim()) { kbOpen = false; mediaSearch(kbText) }
     }
     Component.onCompleted: refresh()
 
@@ -1371,9 +1280,9 @@ Item {
             return history === null ? tr("Loading…") : history.length === 0 ? tr("Videos played on the TV will show up here")
                 : (history.length === 1 ? tr("1 video") : tr("{n} videos", { n: history.length })) + " · " + tr("OK to resume or remove")
         case "youtube":
-            if (!yt) return tr("Loading…")
-            var nc = yt.channels.length
-            if (yt.subs && yt.subs.authorized)
+            if (!lib.home) return tr("Loading…")
+            var nc = lib.home.channels || 0
+            if (lib.home.authorized)
                 return !nc ? tr("Your subscriptions · latest videos")
                     : tr(nc === 1 ? "Your subscriptions and 1 channel · latest videos" : "Your subscriptions and {n} channels · latest videos", { n: nc })
             return nc ? tr(nc === 1 ? "1 channel · latest videos" : "{n} channels · latest videos", { n: nc })
@@ -1381,8 +1290,8 @@ Item {
         case "jellyfin": case "plex":
             var home = lib.home
             if (!home) return tr("Loading…")
-            if (home.error) return tr("{service} unreachable for now", { service: libName })
-            if (!home.configured) return tr("Your {service} library", { service: libName })
+            if (home.error) return tr("{service} unreachable for now", { service: serviceName })
+            if (!home.configured) return tr("Your {service} library", { service: serviceName })
             return tr("{server} · progress follows on all your devices", { server: home.server })
         case "libraries": return tr("Your movies and series from Jellyfin or Plex")
         case "settings": return section ? tr("◀ ▶ to change a value  ·  Back: the sections") : tr("The box and its settings")
@@ -1624,8 +1533,8 @@ Item {
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
         if (id === "games") loadGames()
-        if (id === "youtube") loadYoutube()   // previous rows shown in the meantime
-        if ((id === "jellyfin" || id === "plex") && !(libs[id] || {}).home) loadLibrary(id)
+        if (id === "youtube") loadRows(id)   // previous rows shown in the meantime
+        if ((id === "jellyfin" || id === "plex") && !(libs[id] || {}).home) loadRows(id)
         if (id === "replays") {
             if (!rpLogin) rpLogin = st.channel || (st.streamers || [])[0] || ""
             loadReplays(rpLogin)
@@ -1780,8 +1689,8 @@ Item {
         }
         else if (k === "menu" && row.kind !== "chips" && row.items[sel]) chooseVideo(row.items[sel], true)
     }
-    function setRow(v) { if (libTab) setLib(tabId, { row: v }); else ytRow = v }
-    function setMediaSel(s) { if (libTab) setLib(tabId, { sel: s }); else ytSel = s }   // (setSel is the chosen row of Settings)
+    function setRow(v) { setLib(tabId, { row: v }) }
+    function setMediaSel(s) { setLib(tabId, { sel: s }) }   // (setSel is the chosen row of Settings)
     function keyMedia(k) {
         var rows = mediaRows()
         var r = Math.min(mRow, rows.length - 1)
@@ -1807,24 +1716,7 @@ Item {
         else if ((k === "ok" || k === "menu") && row.items[sel] && row.items[sel].more) {   // "Load more" (no options)
             if (k === "ok") loadMore(row.items[sel])
         }
-        else if (k === "menu" && row.items[sel]) {   // ≡: the options of the card, whatever the row
-            var it = row.items[sel]
-            if (row.kind === "chans") ytChannelMenu(it)
-            else if (row.kind === "connect") ytConnect()
-            else if (libTab) libChoose(it, true)
-            else {   // the channel: the row's own (favorites, the found channel's videos), otherwise the card's
-                var own = row.kind === "channel" ? { id: row.key, name: row.title }
-                        : row.kind === "preview" && ytPreview ? { id: ytPreview.id, name: ytPreview.name } : null
-                ytVideoOptions(Object.assign({}, it, { channel_id: own ? own.id : it.channel_id || "",
-                                                       channel: it.channel || (own ? own.name : ""), avatar: it.avatar || row.avatar }))
-            }
-        }
-        else if (k === "ok" && row.items[sel]) {
-            if (row.kind === "chans") ytChannelMenu(row.items[sel])
-            else if (row.kind === "connect") ytConnect()
-            else if (libTab) libChoose(row.items[sel])
-            else chooseVideo(row.items[sel])
-        }
+        else if ((k === "ok" || k === "menu") && row.items[sel]) cardChoose(row.items[sel], k === "menu")   // ≡: its dialog
     }
     function keyKeyboard(k) {
         var rows = kbKeys
@@ -1838,7 +1730,7 @@ Item {
             if (key === "Space") kbText += " "
             else if (key === "Delete") kbText = kbText.slice(0, -1)
             else if (key === "Clear all") kbText = ""
-            else if (key === "Search") { if (kbText.trim()) { kbOpen = false; if (libTab) libSearch(kbText); else ytSearch(kbText) } }
+            else if (key === "Search") { if (kbText.trim()) { kbOpen = false; mediaSearch(kbText) } }
             else if (kbText.length < 80) kbText += key
         }
     }

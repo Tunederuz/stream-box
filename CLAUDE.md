@@ -142,9 +142,14 @@ Below, file names without a folder are in these folders.
     import its service directly (`from addons.twitch import service as twitch`); its addon declares the rest (routes,
     actions, replays and clips through prepare / progress, state: streamers, avatars, live; its three loops).
     Step 1 of the addons (2026-10-31): Twitch, YouTube, Jellyfin, Plex and the PC link (`gamestream`) moved there, the
-    API unchanged (cast/youtube_tv.js, Node, stays in cast/); to come: the TV menu rows built from what the addons
-    return, enabling and disabling them in Settings, playback bar buttons and panels declared by the addon of the
-    video;
+    API unchanged (cast/youtube_tv.js, Node, stays in cast/). Step 2: the TV menu's rows built by the addons (`rows`
+    of an addon: tab, search, open, more; `GET /api/rows?addon=<id>[&q=|&open=<target>&name=|&more=<source>&key=&q=
+    &offset=]`, `addons.rows`), in one shape (`addons/cards.py`): a row {key, title, items, avatar, style ("channels"),
+    more {source, key, q}, sel, loading, error}, a card {key, title, thumb, meta (translated info line), progress,
+    glyph, play ({url} or {action, id}), open ({target, name}), connect, position, seconds, finished, label (dialog
+    title), options ([{label, open} or {label, action, body, danger}])}; `addons.library` builds a media library's
+    (Jellyfin, Plex), the YouTube addon its own. The companion app keeps its routes. To come: enabling and disabling
+    the addons in Settings, playback bar buttons and panels declared by the addon of the video;
   - `addons/twitch/service.py` (Twitch, the base: the core's modules use it directly): streamers.txt, who is live (`live_now`), polls and predictions, replays, GQL, followed channels,
     Twitch account; `addons/youtube/service.py`: channels, feeds, search, auto subtitles (`/subs`), storyboard, TV app progress,
     Google account and subscriptions; `addons/jellyfin/service.py`: server, home, search, series, play, subtitles,
@@ -441,7 +446,7 @@ on that section (`leaveSection`, `rootSel`). The simplified version has its own 
 Companion app, Settings tab: the same grouping, folded groups (`.group`, `data-group`: channels, accounts, picture,
 look, network, updates, backup, playback; `openGroup(id)`, the open ones remembered in localStorage `groups`).
 Structure: `TvMenu.qml` keeps the data, the API calls, the timers, open / close, the computed rows (`settingsRows`,
-`ytRows`…), the dialog builders and all the key handling; the drawing lives in `qml/menu/`, one component per part,
+`mediaRows`…), the dialog builders and all the key handling; the drawing lives in `qml/menu/`, one component per part,
 each taking the menu as `required property var menu` (`LiveTab { menu: menu }`; no id lookups across files): `Rail`,
 `Header`, `LiveTab`, `FollowsTab`, `ReplaysTab`, `MediaTab` (YouTube and Jellyfin page), `HistoryTab`, `RowsTab`
 (Settings list), `SystemStatus` (QR code and status tiles, beside the list of sections), `SearchKeyboard`, `YtAuthDialog`,
@@ -453,7 +458,7 @@ re-applied), and its sizes are literal numbers, not bindings to `layout.js` (the
 before, `fits` was then -1 and the first scroll was lost).
 While a tab's or a row's videos load, `SkeletonRows` (qml/menu/) shows skeleton cards (`qml/SkeletonCard.qml`: the
 shapes of VideoCard, breathing, the pulse travelling along the row) where the cards will be, not a "Loading…" text:
-YouTube / Jellyfin / Plex before their lists (`!menu.yt`, `!menu.lib.home`), a row still loading or a search under
+YouTube / Jellyfin / Plex before their lists (`!menu.lib.home`), a row still loading or a search under
 way, Replays (`replays[login] === "loading"`), History (`history === null`). `QMLSHOTS_PENDING` shows them.
 YouTube card previews (the focused card playing its video) were tried and dropped on 2026-10-27: resolving links with
 yt-dlp, in advance for the neighboring cards, got the box taken for a robot by YouTube within two hours ("Sign in to
@@ -670,8 +675,10 @@ connections first, plain `http://<LAN address>:<port>` before the plex.direct ht
 server's access token and the account name. TV: "Plex" row of the System menu (`plexMenu`: sign in, disconnect), code
 dialog `CodeDialog` (shared with the YouTube account: `menu.codeDialog` gives its texts, QR code of plex.tv/link);
 companion app: "Sign in with a Plex account" button in the Plex section (polls while a code is shown).
-TV menu: Jellyfin and Plex share the code of the library tabs (`libs[id]`: home, results, preview, searching, row, sel;
-`libRows`, `libChoose`, `libPlay`; `/api/<id>…`). A library tab only shows when it is connected (`st.libraries`);
+TV menu: YouTube, Jellyfin and Plex share the code of the rows tabs (`libs[id]`: home, search, preview, row, sel;
+`loadRows`, `mediaSearch`, `openTarget`, `mediaRows`, `cardChoose`, `playCard`, `cardOption`; the rows from
+`GET /api/rows`, step 2 of the addons). OK on a card: what it declares (connect, open, play); plays at once when there
+is one choice (not resumable), otherwise Resume / From the beginning and its options; ≡: always the dialog. A library tab only shows when it is connected (`st.libraries`);
 while none is, a "Libraries" tab (`LibrariesTab`) tells how to connect Jellyfin or Plex, with the QR code. `tabs` is
 filtered from `allTabs`; `tabKept` keeps the same tab when the list changes; `railStep` 70 instead of 76 with 9 tabs.
 Test server: Docker `plexinc/pms-docker`, port published with `-p` (it then gets past ufw, `--network host` does
@@ -692,8 +699,8 @@ history_loop, `/Stopped` on stop (the server decides what is "watched"). Entry i
 direct stream: added by `sub-add` once the video is open (`jf_add_subtitles`). The
 server's images are public (no token in their links).
 TV: "Jellyfin" tab (blue theme) on the same page as YouTube (`mediaRows`, `mRow`/`mSel`, `keyMedia`, its own
-state `jfRow`/`jfSel`): search with the on-screen keyboard, episodes of an open series, Continue watching, Next
-up, recently added; OK on a movie or an episode: Resume / From the beginning / All episodes. Rail
+state in `libs.jellyfin`): search with the on-screen keyboard, episodes of an open series, Continue watching, Next
+up, recently added; OK on a movie or an episode: plays (or Resume / From the beginning), ≡ adds All episodes. Rail
 tightened (step of 76) for 9 tabs. Horizontal
 rows: card-by-card scrolling aligned to the left (`first`, `fits`), row clipped 28 px before the content
 (`clip` on a wrapper taller than the cards, for the glow) and cards shown according to the targeted window, not
@@ -1294,8 +1301,9 @@ id; Items by DateCreated with StartIndex: Items/Latest has no paging), `plex_lib
 X-Plex-Container-Start), `yt_recommended` / `yt_subscriptions` (youtube_tv.js `/recommended?offset=` and
 `/subscriptions?offset=`: `feeds` keeps every video read and the next page's token, `feedMore` reads up to 4 more
 pages), `jellyfin_resume` / `_nextup` / `_search` (StartIndex), `plex_resume` / `_nextup` (On Deck read whole, split)
-and `plex_search` (a larger limit, the start cut off). TV menu: `moreSource(row)` says where a row's next items come from, `withMore` (applied to
-ytRows, libRows, replayRows) appends the items already loaded (`moreRows`, by "<source>|<key>|<query>", duplicates
+and `plex_search` (a larger limit, the start cut off). TV menu: `moreSource(row)` says where a row's next items come
+from (an addon's row says it, `more`, read through `GET /api/rows?…&more=`, already as cards; the replays here),
+`withMore` (applied to mediaRows and replayRows) appends the items already loaded (`moreRows`, by "<source>|<key>|<query>", duplicates
 dropped) and a "Load more" card (`more: true`, glyph "+") while there may be more; OK on it → `loadMore` (focus stays
 on the place, which becomes the first new item); ≡ does nothing there. Every video row has it, except the found
 channels and a series' episodes (all there already). qmlshots: fake `/api/more`, steps at the end of a Replays row.
@@ -1305,10 +1313,12 @@ channels and a series' episodes (all there already). qmlshots: fake `/api/more`,
 observes `paused-for-cache`, `seeking`, `core-idle` (after a seek mpv waits for data without paused-for-cache:
 `cache-pause-initial` is off), `cache-buffering-state` and `pause` into `osd.waiting` ({cache, seeking, idle, pct,
 pause}); shown after 0.4 s of waiting, not while paused (PauseScreen has the center) nor during the loading screen.
-TV menu: ≡ on any YouTube video card → `ytVideoOptions` (play or resume / from the beginning, and when the channel is
-known "See latest videos of {channel}" and the favorite toggle); the channel comes from the row (favorites' rows,
-the found channel's preview) or the card's `channel_id`: youtube_tv.js gives it for Recommended too (the tile's
-long-press menu, as for subscriptions) and the search results carry yt-dlp's.
+TV menu: ≡ on any YouTube video card → play or resume / from the beginning, and when the channel is known "See latest
+videos of {channel}" and the favorite toggle (the card's `options`, addons/youtube `channel_options`); the channel comes
+from the row (favorites' rows, the opened channel) or the video's `channel_id` (search results: yt-dlp's). Since
+2026-10-31 the TV tiles no longer name their channel (their long-press menu is an engagement panel read apart): the
+Recommended and Subscriptions cards have no channel options until it is asked for on ≡ (one request then, never per
+card).
 
 ### Inlet app window
 The TV menu stays driven by keys only (remote, gamepad, keyboard; no mouse navigation, the user's choice). Inlet app

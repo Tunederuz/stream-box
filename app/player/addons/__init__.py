@@ -29,33 +29,97 @@ class Addon:
     playback's loop. outside_video() returns the video being played when it was started outside the box, None
     otherwise; state() adds keys to /api/state, features() to /api/features (what this installation has: the TV menu
     and the companion app hide the rest); home() its lists, for the quick menu; library: the (home, series, play) of a
-    media library, for the quick menu; start() at the server's start, loops: functions run each in its thread"""
+    media library, for the quick menu; start() at the server's start, loops: functions run each in its thread.
+    rows: its TV menu tab (GET /api/rows, addons/cards.py): {"tab": fn() → {rows, …}, "search": fn(q) → {rows},
+    "open": fn(target, name) → {rows: [the opened row]}, "more": fn(source, key, q, offset) → {items, more}}"""
     def __init__(self, id, name, order=50, configured=lambda: True, kinds=None, routes=None, actions=None, more=None,
                  links=None, prepare=None, started=None, progress=None, progress_every=30, report=None,
-                 outside_video=None, state=None, features=None, home=None, library=None, start=None, loops=()):
+                 outside_video=None, state=None, features=None, home=None, library=None, start=None, loops=(),
+                 rows=None):
         self.id, self.name, self.order, self.configured, self.kinds = id, name, order, configured, kinds or (id,)
         self.routes, self.actions, self.more, self.links = routes or {}, actions or {}, more or {}, links or {}
         self.prepare, self.started, self.progress, self.progress_every = prepare, started, progress, progress_every
         self.report, self.outside_video, self.state, self.home, self.library = report, outside_video, state, home, library
-        self.features, self.start, self.loops = features, start, loops
+        self.features, self.start, self.loops, self.rows = features, start, loops, rows
 
 
 def library(id, home, search, series, play, more_lib, more_home, more_search, unreachable):
-    """Routes, actions, "Load more" sources and link of a media library (Jellyfin, Plex: the same TV tab and cards):
+    """Routes, actions, "Load more" sources, link and TV menu rows of a media library (Jellyfin, Plex: the same cards):
     GET /api/<id>, /api/<id>_search?q=, /api/<id>_series?id=; POST /api/<id>_play {id, from_start}; sources <id>_lib,
     <id>_resume, <id>_nextup, <id>_search; links <id>:<item>"""
+    from addons import cards as R
+    from i18n import tr
+
+    def lib_card(it, in_series=None):
+        """A movie or episode plays (Resume / From the beginning), a series or season opens its episodes; ≡ on an
+        episode: all the episodes of its series (not in that series' opened row)"""
+        if it.get("type") == "Series":
+            meta = [tr("{n} unwatched", n=it["unplayed"]) if it.get("unplayed") else tr("Series"), it.get("year")]
+        elif it.get("episode"):
+            meta = [it["episode"]]
+        else:
+            meta = [it.get("year"), R.hm(it["seconds"]) if it.get("seconds") else ""]
+        name = f"{it['title']} · {it['episode']}" if it.get("episode") else it.get("title")
+        if it.get("type") in ("Series", "Season"):
+            return R.card(it["id"], it.get("title"), R.line(*meta), it.get("thumb"), progress=R.progress(it),
+                          open={"target": "series:" + str(it.get("series") or it["id"]), "name": it.get("title")})
+        options = [{"label": tr("☰  All episodes"), "open": {"target": "series:" + str(it["series"]), "name": it.get("title")}}] \
+            if it.get("type") == "Episode" and it.get("series") and str(it["series"]) != str(in_series) else []
+        return R.card(it["id"], it.get("title"), R.line(*meta, finished=it.get("finished")), it.get("thumb"),
+                      progress=R.progress(it), play={"action": f"{id}_play", "id": it["id"]}, label=name,
+                      position=it.get("position"), seconds=it.get("seconds"), finished=it.get("finished") or None,
+                      options=options)
+
+    def tab_rows():
+        try:
+            d = home()
+        except (OSError, ValueError, KeyError):
+            return {"configured": True, "error": True, "rows": []}
+        if not d.get("configured"):
+            return {"configured": False, "rows": []}
+        rows = []
+        if d.get("resume"):
+            rows.append(R.row("resume", tr("Resume"), [lib_card(i) for i in d["resume"]],
+                              more={"source": f"{id}_resume", "key": ""}))
+        if d.get("nextup"):
+            rows.append(R.row("nextup", tr("Next episodes"), [lib_card(i) for i in d["nextup"]],
+                              more={"source": f"{id}_nextup", "key": ""}))
+        for lib in d.get("libraries") or []:
+            rows.append(R.row("lib:" + str(lib["id"]), tr("{name} · recently added", name=lib["name"]),
+                              [lib_card(i) for i in lib.get("items") or []], more={"source": f"{id}_lib", "key": str(lib["id"])}))
+        return {"configured": True, "server": d.get("server") or "", "rows": rows}
+
+    def search_rows(q):
+        return {"rows": [R.row("search", tr("Results for \"{query}\"", query=q), [lib_card(i) for i in search(q)],
+                               more={"source": f"{id}_search", "key": "", "q": q})]}
+
+    def open_row(target, name):
+        kind, _, series_id = target.partition(":")
+        if kind != "series":
+            raise ValueError(tr("not found"))
+        d = series(series_id)
+        return {"rows": [R.row("preview", tr("{name} · episodes", name=name),
+                               [lib_card(i, series_id) for i in d.get("episodes") or []], sel=d.get("first") or 0)]}
+
+    sources = {f"{id}_lib": lambda key, offset, q: more_lib(key, offset),
+               f"{id}_resume": lambda key, offset, q: more_home("resume", offset),
+               f"{id}_nextup": lambda key, offset, q: more_home("nextup", offset),
+               f"{id}_search": lambda key, offset, q: more_search(q, offset)}
+
+    def more_cards(source, key, q, offset):
+        d = sources[source](key, offset, q)
+        return {"items": [lib_card(i) for i in d.get("items") or []], "more": d.get("more")}
+
     return {
         "routes": {f"/api/{id}": Route(lambda q: home(), unreachable),
                    f"/api/{id}_search": Route(lambda q: {"query": q.get("q", ""), "results": search(q.get("q", ""))}),
                    f"/api/{id}_series": Route(lambda q: series(q.get("id", "")))},
         "actions": {f"{id}_play": lambda body: play(str(body.get("id", "")), bool(body.get("from_start")))},
-        "more": {f"{id}_lib": lambda key, offset, q: more_lib(key, offset),
-                 f"{id}_resume": lambda key, offset, q: more_home("resume", offset),
-                 f"{id}_nextup": lambda key, offset, q: more_home("nextup", offset),
-                 f"{id}_search": lambda key, offset, q: more_search(q, offset)},
+        "more": sources,
         "links": {id: play},
         "home": home,
         "library": (home, series, play),
+        "rows": {"tab": tab_rows, "search": search_rows, "open": open_row, "more": more_cards},
     }
 
 
@@ -75,7 +139,9 @@ def get(addon_id):
 
 
 def route(path):
-    """(addon, Route) of a GET path (without its parameters), or None"""
+    """(addon, Route) of a GET path (without its parameters), or None; the registry's own (/api/rows): no addon"""
+    if path in CORE_ROUTES:
+        return None, CORE_ROUTES[path]
     return next(((a, a.routes[path]) for a in ADDONS if path in a.routes), None)
 
 
@@ -109,6 +175,27 @@ def outside_video():
             if video:
                 return video
     return None
+
+
+def rows(query):
+    """GET /api/rows?addon=<id>: its tab's rows; &q=: a search's; &open=<target>&name=: the row of something opened (a
+    channel, a series); &more=<source>&key=&q=&offset=: the next cards of a row"""
+    a = get(query.get("addon", ""))
+    if not a or not a.rows:
+        raise ValueError("unknown addon")
+    if query.get("more"):
+        offset = int(query.get("offset") or 0)
+        if not 0 <= offset <= 500 or query["more"] not in a.more:
+            raise ValueError("not found")
+        return a.rows["more"](query["more"], query.get("key", ""), query.get("q", ""), offset)
+    if query.get("open"):
+        return a.rows["open"](query["open"], query.get("name", ""))
+    if query.get("q", "").strip():
+        return a.rows["search"](" ".join(query["q"].split())[:100])
+    return a.rows["tab"]()
+
+
+CORE_ROUTES = {"/api/rows": Route(rows)}
 
 
 def state():

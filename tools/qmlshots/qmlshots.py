@@ -19,7 +19,7 @@ import time
 import zlib
 import struct
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -109,6 +109,36 @@ def dates(v):
     return v
 
 
+def rows_answer(query, fixtures):
+    """GET /api/rows, built by the box's own code (app/player/addons) from the fixtures of the routes it reads: the menu
+    gets the rows the box would send, and building them is checked too (in French, as the menu)"""
+    if not getattr(rows_answer, "ready", False):
+        os.makedirs("/tmp/.config/stream-box", exist_ok=True)
+        with open("/tmp/.config/stream-box/language", "w") as f:
+            f.write("fr")
+        sys.path[:0] = [os.path.join(REPO, "app", "player"), os.path.join(REPO, "app", "system")]
+        import addons
+        from addons.youtube import service as yt
+        yt.youtube_home = lambda: fixtures["/api/youtube"]
+        yt.yt_search = lambda q: fixtures["/api/youtube_search"]
+        yt.yt_channel_videos = lambda i: fixtures["/api/youtube_channel"]
+        # the favorites: the list's channels, and the found ones the search fixture marks saved
+        yt.yt_channels = lambda: fixtures["/api/youtube"]["channels"] + [
+            c for c in fixtures["/api/youtube_search"]["channels"] if c.get("saved")]
+        more = lambda key, offset, q: fixtures["/api/more"]   # noqa: E731
+        youtube = addons.get("youtube")
+        youtube.more = {k: more for k in youtube.more}
+        libs = {i: addons.library(i, lambda i=i: fixtures[f"/api/{i}"], lambda q, i=i: fixtures[f"/api/{i}_search"]["results"],
+                                  lambda s, i=i: fixtures[f"/api/{i}_series"], None, lambda *a: fixtures["/api/more"],
+                                  lambda *a: fixtures["/api/more"], lambda *a: fixtures["/api/more"], None)
+                for i in ("jellyfin", "plex")}
+        for i, lib in libs.items():
+            a = addons.get(i)
+            a.rows, a.more = lib["rows"], lib["more"]
+        rows_answer.addons, rows_answer.ready = addons, True
+    return rows_answer.addons.rows(query)
+
+
 def serve(fixtures, log):
     class Handler(BaseHTTPRequestHandler):
         def reply(self, body, ctype="application/json"):
@@ -129,6 +159,10 @@ def serve(fixtures, log):
             if path in PENDING:
                 log.append("GET (pending) " + self.path)
                 return time.sleep(600)
+            if path == "/api/rows":
+                log.append("GET " + self.path)
+                q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+                return self.reply(json.dumps(rows_answer(q, fixtures), default=str).encode())
             if path in fixtures:
                 log.append("GET " + self.path)
                 return self.reply(json.dumps(fixtures[path], default=str).encode())
