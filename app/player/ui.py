@@ -640,7 +640,7 @@ class Osd(QObject):
     nextCard = Property(str, lambda self: json.dumps(self.data["next_card"] or {}), notify=changed)
     notice = Property(str, lambda self: json.dumps(self.data["notice"] or {}), notify=changed)   # Notice.qml
     info = Property(str, lambda self: json.dumps(self.data["info"] or {}), notify=changed)   # InfoPanel.qml
-    # CommentsPanel.qml: the comments read (youtube.py), the panel's state (stream-box.lua: open, scroll)
+    # CommentsPanel.qml: the comments read (addons/youtube), the panel's state (stream-box.lua: open, scroll)
     comments = Property(str, lambda self: json.dumps(self.data["comments"] or {}), notify=changed)
     commentsView = Property(str, lambda self: json.dumps(self.data["comments_view"] or {}), notify=changed)
     eventsOn = Property(bool, lambda self: self.data["events"] is not False, notify=changed)

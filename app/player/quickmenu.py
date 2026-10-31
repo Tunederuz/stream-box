@@ -13,11 +13,10 @@ import actions    # actions.py: language, restart
 import ambient    # ambient.py: companion app address
 import history    # history.py: history file, resume thresholds
 import i18n       # i18n.py: interface language
-import addons     # addons/: the media libraries (Jellyfin, Plex): home, series, playback
+import addons     # addons/: YouTube's lists, the media libraries (Jellyfin, Plex): home, series, playback
 import playback   # playback.py: links, history entries
 import settings   # settings.py: back to the full version
 import twitch     # twitch.py: streamers, who is live, followed channels, replays
-import youtube    # youtube.py: favorites, subscriptions
 from common import MPV_SOCKET, mpv
 from i18n import tr
 # The box's system part (sound outputs, screen resolution, sleep, shutdown, system update): None in the Inlet app,
@@ -148,7 +147,7 @@ def replays_screen():
 
 def youtube_screen():
     def build():
-        d = youtube.youtube_home()
+        d = addons.get("youtube").home()
         out = []
         rec = d.get("recommended") or []
         if rec:

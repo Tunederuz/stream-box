@@ -130,13 +130,18 @@ Below, file names without a folder are in these folders.
     "Load more" sources (`api.more`), links `<id>:<item>` played from the history (`play_link`), progress reports of
     a video it started (`report(video, position, duration, paused, stopped)`, `history_loop`), a video started
     outside the box (`outside_video`: Jellyfin's "Play on…"), keys of `/api/state` (`state()`), its quick menu
-    screens (`library`: home, series, play). `addons.library(...)` builds the routes, actions, sources and link of a
-    media library (`/api/<id>`, `_search`, `_series`, `<id>_play`, sources `<id>_lib|_resume|_nextup|_search`).
-    Step 1 of the addons (2026-10-31): Jellyfin and Plex moved there, the API unchanged; to come: Twitch (the base,
-    always there), YouTube, the PC link, then the TV menu rows built from what the addons return, enabling and
-    disabling them in Settings, playback bar buttons and panels declared by the addon of the video;
+    screens (`home`, `library`: home, series, play). `addons.library(...)` builds the routes, actions, sources and
+    link of a media library (`/api/<id>`, `_search`, `_series`, `<id>_play`, sources `<id>_lib|_resume|_nextup|_search`).
+    Videos played from a link (`playback.play`) belong to the addon of their history `kinds` (`for_kind`): its
+    `prepare(video, position, duration, from_start, at)` before (YouTube: a cast video's title, the account's
+    progress), `started(video)` after (storyboard, rating), `progress(video, position, final)` every `progress_every`
+    seconds (the position to the account). A `Route` with `content_type` answers text (`/subs`).
+    Step 1 of the addons (2026-10-31): YouTube, Jellyfin and Plex moved there, the API unchanged (cast/youtube_tv.js,
+    Node, stays in cast/); to come: Twitch (the base, always there), the PC link, then the TV menu rows built from what
+    the addons return, enabling and disabling them in Settings, playback bar buttons and panels declared by the addon
+    of the video;
   - `twitch.py`: streamers.txt, who is live (`live_now`), polls and predictions, replays, GQL, followed channels,
-    Twitch account; `youtube.py`: channels, feeds, search, auto subtitles (`/subs`), storyboard, TV app progress,
+    Twitch account; `addons/youtube/service.py`: channels, feeds, search, auto subtitles (`/subs`), storyboard, TV app progress,
     Google account and subscriptions; `addons/jellyfin/service.py`: server, home, search, series, play, subtitles,
     progress; `addons/plex/service.py`: the same for Plex;
   - `playback.py`: `play()`, `history_loop`; `history.py`: history.json, `media_key`, `now_playing`;
@@ -612,7 +617,7 @@ app" access of `cast/youtube_tv.js` (below), signed in with a code on google.com
 are one per channel) and the next page of its section list (`feedNext`), video tiles only (`TILE_CONTENT_TYPE_SHORTS`
 left out): channel from the tile's long-press menu (`browseId` UC…), date from "… ago" (`age`), duration and views
 from the overlay and the lines, lives ("… watching") first, then newest first, 60 at most, kept 15 min (`?fresh=1`:
-reread, "Reload my subscriptions"); `subscriptionVideos(pages)` is the pure parsing. `youtube.yt_subscriptions()` with
+reread, "Reload my subscriptions"); `subscriptionVideos(pages)` is the pure parsing. `yt_subscriptions()` (addons/youtube/service.py) with
 the progress. `GET /api/youtube` → `subs` {authorized, pending, unavailable, videos}; `GET /api/youtube_account` →
 {authorized, pending, unavailable}; `POST /api/youtube_login|youtube_logout|youtube_sync`. TV: "Connect my account"
 card in the Subscriptions row as long as the box is not connected → code popup and QR code (`ytAuth`, reread every
@@ -626,7 +631,7 @@ Recommended for you (first row under the search): the account's YouTube home thr
 (cast/youtube_tv.js `GET /recommended`: `/browse` FEwhat_to_watch with the TV client, first two pages, video tiles
 only — `tileRenderer` with `TILE_CONTENT_TYPE_VIDEO`: contentId, title, first line = channel, duration and views from
 the overlay and the lines, "LIVE" overlay — without duplicates, 30 at most, kept 30 min; `recommendedVideos(data)` is
-the pure parsing), `youtube.yt_tv_recommended`, `youtube_home()["recommended"]` with the progress (`with_progress`).
+the pure parsing), `yt_tv_recommended`, `youtube_home()["recommended"]` with the progress (`with_progress`).
 Authenticated requests as the TV app makes them, not yt-dlp extractions: no bot check. Row kind `rec` in the QML menu,
 "Recommended for you" in the quick menu; not in the companion app (it shows no video rows).
 Favorites (`youtube.json` list, one row per channel): Options on a subscription video → "Add to favorites"
@@ -1351,17 +1356,17 @@ bar, Back leaves the title without stopping the video; stream-box.lua `info_open
 length of the text), Back / OK / ≡ close; closed at the end of the file.
 
 ### YouTube rating and comments (video)
-Like / Dislike buttons of the playback bar: youtube.py `yt_rating_fetch` at the start of a YouTube video (youtube_tv.js
+Like / Dislike buttons of the playback bar: addons/youtube `yt_rating_fetch` at the start of a YouTube video (youtube_tv.js
 `GET /rating?id=`: `likeStatus` of the TV `/next`) → `user-data/streambox/rating` {id, status: LIKE | DISLIKE |
 INDIFFERENT}, empty when not connected (no buttons then). OK: stream-box.lua `rate` lights the button up at once and
 `POST /api/yt_rate` {rating: like | dislike | none} (the same button again: none); youtube_tv.js `POST /rate` calls
 `/like/like`, `/like/dislike` or `/like/removelike` with the params the TV `/next` gives (`likeParams`…, read again each
 time: they carry a time). youtubei.js's `interact.like` is refused (400). The state YouTube confirms is published again.
 Comments: the Comments button opens `qml/CommentsPanel.qml` (right side, like the Info panel); `POST /api/yt_comments`
-({more: true}: next page; {replies: n}: the replies of comment n, with {more: true} their next page) → youtube.py reads
+({more: true}: next page; {replies: n}: the replies of comment n, with {more: true} their next page) → addons/youtube reads
 youtube_tv.js `GET /comments?id=&hl=&token=` and publishes `user-data/streambox/comments` {id, items, more, loading,
 error, thread: {index, items, more, loading}} (kept for the video: reopening reads nothing; the reply tokens stay in
-youtube.py). youtube_tv.js: anonymous web session per language (dates "il y a 6 ans"), raw `/next`: the continuation
+addons/youtube). youtube_tv.js: anonymous web session per language (dates "il y a 6 ans"), raw `/next`: the continuation
 near `comment-item-section`, then its pages (20, by relevance); `commentPage` reads a page of comments or of replies
 (same shape): its items in order (`onResponseReceivedEndpoints` continuation items), texts in
 `frameworkUpdates…commentEntityPayload` by the item's `commentKey`, each thread's `replies_token`, `next` from the last

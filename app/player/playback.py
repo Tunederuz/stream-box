@@ -2,12 +2,11 @@
 and clips, Jellyfin, Plex), and the history loop that records their position and sends it back to Twitch, YouTube,
 Jellyfin and Plex. Standard library only.
 """
-import datetime, re, threading, time
+import datetime, re, time
 
-import addons    # addons/: the integrations (Jellyfin, Plex…): their links, their progress reports
+import addons    # addons/: the integrations (YouTube, Jellyfin, Plex…): their links, their videos, progress reports
 import history   # history.py: history file and the video being played
 import twitch    # twitch.py: replays and clips (GQL), position saved on the account
-import youtube   # youtube.py: titles, storyboard, progress of the YouTube account
 from common import mpv
 from i18n import tr
 
@@ -35,17 +34,11 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
     key, kind, ident = history.media_key(url)
     entry = next((e for e in history.read_history() if e["key"] == key), None) or {}
     video = {"key": key, "url": url, "kind": kind, "ident": ident, "title": entry.get("title") or title,
-             "thumb": entry.get("thumb") or thumb or (f"https://i.ytimg.com/vi/{ident}/mqdefault.jpg" if kind == "youtube" else None)}
+             "thumb": entry.get("thumb") or thumb}
     position, updated, duration = entry.get("position", 0), entry.get("updated", 0), entry.get("duration", 0)
-    if kind == "youtube" and not video["title"]:   # video cast from the YouTube app: only its identifier is known
-        video["title"], duration = youtube.yt_meta(ident)
-        duration = duration or 0
-    if kind == "youtube" and not from_start and at is None:
-        # Watched further elsewhere (phone…): resume at the account's percentage, if beyond the box's position
-        pct = youtube.yt_tv_progress().get(ident) or 0
-        if 3 <= pct and (not duration or pct / 100 * duration > position + 30):
-            duration = duration or youtube.yt_meta(ident)[1] or 0
-            position = int(pct / 100 * duration)
+    addon = addons.for_kind(kind)
+    if addon and addon.prepare:   # (YouTube: title of a cast video, the account's progress)
+        position, duration = addon.prepare(video, position, duration, from_start, at)
     try:   # Twitch: title, thumbnail, duration and position saved on the account
         if kind == "twitch-vod":
             v = twitch.twitch_gql("query($id:ID!){video(id:$id){title lengthSeconds "
@@ -77,9 +70,8 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
     mpv(["set_property", "user-data/streambox/next_up", {}])
     mpv(["set_property", "user-data/streambox/rating", {}])
     mpv(["set_property", "user-data/streambox/comments", {}])
-    if kind == "youtube":
-        threading.Thread(target=youtube.fetch_storyboard, args=(ident,), daemon=True).start()
-        threading.Thread(target=youtube.yt_rating_fetch, args=(ident,), daemon=True).start()
+    if addon and addon.started:
+        addon.started(video)
 
 
 def history_loop():
@@ -101,8 +93,8 @@ def history_loop():
             if playing and isinstance(position, (int, float)):
                 history.record(video, position, duration)
             continue
-        addon = addons.reporter(video["kind"])   # a video started by an addon (Jellyfin, Plex): its server follows
-        if addon:
+        addon = addons.for_kind(video["kind"])
+        if addon and addon.report:   # a video an addon plays itself (Jellyfin, Plex): its server follows
             if playing and isinstance(position, (int, float)):
                 paused = mpv(["get_property", "pause"])[0]
                 addon.report(video, position, duration, bool(paused), False)
@@ -122,8 +114,8 @@ def history_loop():
                     history.now_playing["pushed"] = time.time()
                 except (OSError, ValueError, KeyError):
                     pass
-            if video["kind"] == "youtube" and time.time() - video["pushed"] >= youtube.YT_TV_PUSH:
-                youtube.yt_tv_report(video["ident"], position)
+            if addon and addon.progress and time.time() - video["pushed"] >= addon.progress_every:
+                addon.progress(video, position, False)   # (YouTube: the position to the account)
                 history.now_playing["pushed"] = time.time()
         elif not playing:   # video finished or replaced: last position sent to Twitch
             if video["kind"] == "twitch-vod" and video.get("position"):
@@ -131,7 +123,7 @@ def history_loop():
                     twitch.twitch_save_position(video["ident"], video["position"])
                 except (OSError, ValueError, KeyError):
                     pass
-            if video["kind"] == "youtube" and video.get("position"):
-                youtube.yt_tv_report(video["ident"], video["position"], final=True)
+            if addon and addon.progress and video.get("position"):
+                addon.progress(video, video["position"], True)
             if history.now_playing.get("key") == video["key"]:
                 history.now_playing.clear()

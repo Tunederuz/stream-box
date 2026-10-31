@@ -5,7 +5,7 @@ import json, os, time, urllib.parse
 from http.server import BaseHTTPRequestHandler
 
 import actions    # actions.py: POST /api/<name>, TV menu keyboard
-import addons     # addons/: the integrations (Jellyfin, Plex…): their routes, "Load more" sources, state
+import addons     # addons/: the integrations (YouTube, Jellyfin, Plex…): their routes, "Load more" sources, state
 import ambient    # ambient.py: first setup, remote URL, QR codes
 import gamestream # gamestream.py: games streamed from a PC (Moonlight)
 import history    # history.py: history file, kind of the current video
@@ -14,7 +14,6 @@ import images     # images.py: TV preview
 import playback   # playback.py: videos shared from the phone
 import settings   # settings.py: player, power button, background
 import twitch     # twitch.py: streamers, live, polls, account, followed channels
-import youtube    # youtube.py: channels, search, account, subtitles
 import sysparts   # sysparts.py: the box's system part, absent from the Inlet app
 from common import DIR, mpv
 # (system part: sound outputs, backup, Bluetooth, resolution, installation, local update, Wi-Fi, status / SSH / dev mode)
@@ -90,14 +89,8 @@ def more(query):
     offset = int(query.get("offset", "0") or 0)
     if not 0 <= offset <= 500:
         raise ValueError(tr("not found"))
-    if source == "yt_search":
-        return youtube.yt_search_more(q, offset)
-    if source == "yt_channel":
-        return youtube.yt_channel_more(key, offset)
     if source in ("twitch_vods", "twitch_clips"):
         return twitch.replays_more(key, source.split("_")[1], offset)
-    if source in ("yt_recommended", "yt_subscriptions"):
-        return youtube.yt_tv_more(source[3:], offset)
     fn = addons.more_source(source)
     if fn:
         return fn(key, offset, q)
@@ -108,9 +101,6 @@ def more(query):
 JSON_ROUTES = {
     "/api/state": state,
     "/api/history": history.read_history,
-    "/api/youtube": youtube.youtube_home,
-    "/api/youtube_channels": lambda: {"channels": youtube.yt_channels()},
-    "/api/youtube_account": youtube.yt_account_status,
     # what this installation has: system part or not, Moonlight for games streamed from a PC
     "/api/features": lambda: {**sysparts.features(), "gamestream": gamestream.available()},
     "/api/gamestream": gamestream.status,   # the PC (Sunshine), pairing, its games, a stream running
@@ -154,10 +144,6 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Location", location)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
-            elif self.path.startswith("/subs?"):
-                # Called by stream-box.lua (sub-add) for YouTube automatic subtitles
-                url = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("u", [""])[0]
-                self.send(200, youtube.fetch_auto_subs(url).encode(), "application/x-subrip; charset=utf-8")
             elif self.path.split("?")[0] in STATIC:
                 name, content_type = STATIC[self.path.split("?")[0]]
                 with open(os.path.join(DIR, name), "rb") as f:
@@ -168,7 +154,11 @@ class Handler(BaseHTTPRequestHandler):
                 _, r = addons.route(self.path.split("?")[0])
                 query = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).items()}
                 try:
-                    self.send(200, r.fn(query))
+                    data = r.fn(query)
+                    if r.content_type:   # text (subtitles…)
+                        self.send(200, data.encode(), r.content_type)
+                    else:
+                        self.send(200, data)
                 except (OSError, ValueError, KeyError) as e:
                     if r.unreachable:
                         self.send(503, {"error": r.unreachable(e)})
@@ -199,18 +189,6 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, display.info())
                 except OSError as e:
                     self.send(503, {"error": str(e)})
-            elif self.path.startswith("/api/youtube_search?"):
-                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("q", [""])[0]
-                try:
-                    self.send(200, {"query": q, **youtube.yt_search(q)})
-                except ValueError as e:
-                    self.send(400, {"error": str(e)})
-            elif self.path.startswith("/api/youtube_channel?"):
-                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("id", [""])[0]
-                try:
-                    self.send(200, youtube.yt_channel_videos(q))
-                except ValueError as e:
-                    self.send(400, {"error": str(e)})
             elif SYSTEM and self.path == "/api/ssh":
                 self.send(200, system.ssh_status(local=self.client_address[0] == "127.0.0.1"))
             elif SYSTEM and self.path.startswith("/api/backup/download"):

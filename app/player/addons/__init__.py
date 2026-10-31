@@ -1,30 +1,38 @@
 """Inlet: addons, the box's integrations, one folder each (addons/<id>/, whose __init__.py declares ADDON). What an
-addon brings, all optional: GET routes of the API (path → Route), POST actions (/api/<name>), "Load more" sources of the
-TV menu, the links it plays ("<id>:<item>", from the history), the progress reports of a video it started, a video
-started outside the box (Jellyfin's "Play on…"), keys of /api/state, its screens in the quick menu (mpv alone).
-Jellyfin and Plex first; Twitch (the base, always there), YouTube and the PC link to follow. Standard library only.
+addon brings, all optional: GET routes (path → Route), POST actions (/api/<name>), "Load more" sources of the TV menu,
+the links it plays ("<id>:<item>", from the history), what happens around the videos of its kinds (before and once
+started, progress), a video started outside the box (Jellyfin's "Play on…"), keys of /api/state, its home for the
+quick menu (mpv alone). Jellyfin, Plex and YouTube so far; Twitch (the base, always there) and the PC link to follow.
+Standard library only.
 """
 import importlib, os
 
 
 class Route:
-    """A GET route: fn(query) → JSON (query: the first value of each parameter). Its errors (OSError, ValueError,
-    KeyError) answer 400 with their message, or 503 with unreachable(error) when given"""
-    def __init__(self, fn, unreachable=None):
-        self.fn, self.unreachable = fn, unreachable
+    """A GET route: fn(query) → JSON (query: the first value of each parameter), or text of content_type when given.
+    Its errors (OSError, ValueError, KeyError) answer 400 with their message, or 503 with unreachable(error)"""
+    def __init__(self, fn, unreachable=None, content_type=None):
+        self.fn, self.unreachable, self.content_type = fn, unreachable, content_type
 
 
 class Addon:
     """id: its folder and the prefix of its routes, actions, sources and links; order: its place in the lists (TV
-    menu, quick menu); configured(): whether it can be used (a server chosen…). report(video, position, duration,
-    paused, stopped) follows a video it started (history.now_playing, kind = id); outside_video() returns the video
-    being played when it was started outside the box, None otherwise; state() adds keys to /api/state; library: the
-    (home, series, play) of a media library, for the quick menu"""
-    def __init__(self, id, name, order=50, configured=lambda: True, routes=None, actions=None, more=None, links=None,
-                 report=None, outside_video=None, state=None, library=None):
-        self.id, self.name, self.order, self.configured = id, name, order, configured
+    menu, quick menu); configured(): whether it can be used (a server chosen…); kinds: the history kinds of its videos
+    (history.media_key; its id by default).
+    Videos played from a link (playback.play): prepare(video, position, duration, from_start, at) → (position,
+    duration) before, it may fill video's title and thumb; started(video) once mpv has it; progress(video, position,
+    final) every progress_every seconds while it plays, and once at the end (final).
+    Videos it plays itself (its links): report(video, position, duration, paused, stopped) instead, the history kept by
+    playback's loop. outside_video() returns the video being played when it was started outside the box, None
+    otherwise; state() adds keys to /api/state; home() its lists, for the quick menu; library: the (home, series, play)
+    of a media library, for the quick menu"""
+    def __init__(self, id, name, order=50, configured=lambda: True, kinds=None, routes=None, actions=None, more=None,
+                 links=None, prepare=None, started=None, progress=None, progress_every=30, report=None,
+                 outside_video=None, state=None, home=None, library=None):
+        self.id, self.name, self.order, self.configured, self.kinds = id, name, order, configured, kinds or (id,)
         self.routes, self.actions, self.more, self.links = routes or {}, actions or {}, more or {}, links or {}
-        self.report, self.outside_video, self.state, self.library = report, outside_video, state, library
+        self.prepare, self.started, self.progress, self.progress_every = prepare, started, progress, progress_every
+        self.report, self.outside_video, self.state, self.home, self.library = report, outside_video, state, home, library
 
 
 def library(id, home, search, series, play, more_lib, more_home, more_search, unreachable):
@@ -41,6 +49,7 @@ def library(id, home, search, series, play, more_lib, more_home, more_search, un
                  f"{id}_nextup": lambda key, offset, q: more_home("nextup", offset),
                  f"{id}_search": lambda key, offset, q: more_search(q, offset)},
         "links": {id: play},
+        "home": home,
         "library": (home, series, play),
     }
 
@@ -83,10 +92,9 @@ def play_link(url, from_start=False):
     return True
 
 
-def reporter(kind):
-    """The addon that reports the progress of a video of this kind, or None"""
-    a = get(kind)
-    return a if a and a.report else None
+def for_kind(kind):
+    """The addon whose videos are of this history kind (youtube, jellyfin…), or None"""
+    return next((a for a in ADDONS if kind in a.kinds), None)
 
 
 def outside_video():

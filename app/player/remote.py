@@ -9,9 +9,8 @@ This file starts the background loops and the HTTP server; the code lives in the
   api.py       HTTP server: page, PWA and locale files, GET routes, POST /api/<action>
   actions.py   POST actions (one handler per name), TV menu keyboard
   twitch.py    streamer list, who is live, polls and predictions, replays, followed channels, Twitch account
-  youtube.py   channels, search, subtitles, storyboard, account subscriptions, "TV app" progress
-  addons/      the integrations, one folder each (registry and contract in addons/__init__.py): jellyfin/,
-               plex/ (library, playback and progress reports)
+  addons/      the integrations, one folder each (registry and contract in addons/__init__.py): youtube/
+               (channels, search, subtitles, storyboard, account), jellyfin/, plex/ (library, playback, progress)
   quickmenu.py quick menu of the simplified version (mpv alone): lists drawn by stream-box.lua
   playback.py  videos started from a link or the history, history loop (positions)
   history.py   history file, media keys, video being played

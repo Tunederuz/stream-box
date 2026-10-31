@@ -4,7 +4,7 @@ library only.
 """
 import re, subprocess, time
 
-import addons     # addons/: the integrations (Jellyfin, Plex…) and their actions
+import addons     # addons/: the integrations (YouTube, Jellyfin, Plex…) and their actions
 import ambient    # ambient.py: remote URL, first setup
 import gamestream # gamestream.py: games streamed from a PC (Moonlight)
 import history    # history.py: history edits
@@ -12,7 +12,6 @@ import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import playback   # playback.py: videos started from a link
 import settings   # settings.py: player, power button, background
 import twitch     # twitch.py: streamers, polls and predictions, account, followed channels
-import youtube    # youtube.py: channels, account, "TV app" access
 from common import mpv
 from i18n import tr
 # The box's system part (sound output, backup, Bluetooth, resolution, installation, local update, Wi-Fi, power, SSH,
@@ -71,19 +70,6 @@ def set_number(body):
     if body.get("key") not in ("chat_bg", "chat_size", "sub_size", "sub_bg"):
         raise ValueError(tr("unknown setting"))
     mpv(["script-message", "streambox-set", body["key"], str(int(body.get("value", 0)))])
-
-
-def youtube_login(body):
-    """YouTube account (subscriptions, recommendations, progress): a code to type on google.com/device"""
-    d = youtube.yt_tv("/login", {}, timeout=15)
-    if not d or d.get("error"):
-        raise ValueError(tr("Unable to connect: {error}",
-                            error=(d or {}).get("error") or tr("cast service stopped")))
-
-
-def youtube_logout(body):
-    youtube.yt_tv("/logout", {})
-    youtube.yt_tv_cache.update(at=0.0, data={})
 
 
 def poweroff(body):
@@ -205,8 +191,6 @@ ACTIONS = {
     "predict": lambda body: twitch.predict(str(body.get("event", "")), str(body.get("outcome", "")),
                                            int(body.get("points", 0))),
     "player": lambda body: settings.set_player(str(body.get("mode", ""))),
-    "youtube_channels": lambda body: youtube.edit_yt_channels(str(body.get("action", "")),
-                                                              str(body.get("channel", "")), int(body.get("delta", 0))),
     "qr": qr,
     "set": set_number,
     "volume": lambda body: mpv(["add", "volume", max(-20, min(20, int(body.get("delta", 0))))]),
@@ -219,11 +203,6 @@ ACTIONS = {
                                                       str(body.get("client_secret", ""))),
     "follows_login": lambda body: twitch.follows_start(),
     "follows_logout": lambda body: twitch.follows_logout(),
-    "youtube_login": youtube_login,
-    "youtube_logout": youtube_logout,
-    "youtube_sync": lambda body: youtube.yt_reload(),
-    "yt_rate": youtube.yt_rate,           # {rating: like | dislike | none}: the video being played (playback bar)
-    "yt_comments": youtube.yt_comments,   # its comments ({more: true}: the next page), published for the panel
     "key": key,
     "language": language,
     "setup": lambda body: ambient.finish_setup(),   # phone page: "Finish" of the first setup
@@ -232,7 +211,7 @@ ACTIONS = {
     "keyboard_input": keyboard_input,
     "remote_url": lambda body: ambient.set_remote_url(str(body.get("url", ""))[:300]),
 }
-ACTIONS.update(addons.actions())   # (jellyfin_play, jellyfin_link, plex_play, plex, plex_link…)
+ACTIONS.update(addons.actions())   # (youtube_login, yt_rate, jellyfin_play, plex_link…)
 if SYSTEM:   # the box's system (the Inlet app leaves it to its OS: these actions are unknown there)
     ACTIONS.update({
         # direct: developer mode, from a branch (main by default)
