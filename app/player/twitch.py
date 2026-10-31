@@ -97,12 +97,13 @@ def live_loop():
 
 EVENTS_EVERY = 10    # seconds between two polls, only during a live stream with the panel enabled
 RESULT_FOR = 60      # seconds the result of a finished poll or prediction is shown
+LOCKED_FOR = 60      # seconds a locked prediction (bets closed, waiting for its result) stays on the TV
 EVENTS_QUERY = (
     "query($l:String!){user(login:$l){"
     "viewablePoll{id title status startedAt durationSeconds totalVoters choices{id title votes{total}}} "
     "channel{activePredictionEvents{...p} lockedPredictionEvents{...p} "
     "resolvedPredictionEvents(first:1){edges{node{...p endedAt winningOutcome{id}}}}}}}"
-    "fragment p on PredictionEvent{id title status createdAt predictionWindowSeconds "
+    "fragment p on PredictionEvent{id title status createdAt lockedAt predictionWindowSeconds "
     "outcomes{id title color totalPoints totalUsers}}")
 # With the connected account: its current bet and its channel points balance (to vote from the page)
 EVENTS_SELF = "query($l:String!){user(login:$l){channel{self{communityPoints{balance}} " \
@@ -139,7 +140,12 @@ def fetch_events(login, seen):
     if events:
         e = events[0]
         winner = (e.get("winningOutcome") or {}).get("id")
+        # Locked: shown LOCKED_FOR seconds on the TV, then hidden there until its result (it can take the whole stream;
+        # the page keeps it, with the bet made)
+        locked_at = (epoch(e["lockedAt"]) if e.get("lockedAt") else seen.setdefault(e["id"] + ":locked", now)) \
+            if e["status"] == "LOCKED" else None
         out["prediction"] = {"id": e["id"], "title": e["title"], "status": e["status"],
+                             "tv": locked_at is None or now - locked_at < LOCKED_FOR,
                              "ends_at": epoch(e["createdAt"]) + (e.get("predictionWindowSeconds") or 0),
                              "outcomes": [{"id": o["id"], "title": o["title"], "color": o.get("color"),
                                            "points": o.get("totalPoints") or 0, "users": o.get("totalUsers") or 0,

@@ -1423,6 +1423,7 @@ local events_data, events_on = {}, true
 
 local function draw_events()
     local poll, pred = events_data.poll, events_data.prediction
+    if pred and pred.tv == false then pred = nil end   -- locked for more than a minute: hidden until its result
     local w, h = mp.get_osd_size()
     -- Qt app: box drawn by qml/PollsOverlay.qml (user-data/streambox/polls and events)
     if qt_ui() or not events_on or mode ~= "twitch" or not (poll or pred) or not w or w == 0 then
@@ -1430,7 +1431,7 @@ local function draw_events()
         return
     end
     events.res_x, events.res_y = w, h
-    events.data = polls.draw(w, h, events_data)
+    events.data = polls.draw(w, h, { poll = poll, prediction = pred })
     events:update()
 end
 

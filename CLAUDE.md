@@ -245,7 +245,8 @@ Below, file names without a folder are in these folders.
   GQL polling every 10 s, only during a live stream from the list with the panel enabled: `user.viewablePoll`
   (current or ended poll; no end time, the result is shown for 60 s after it is seen ended),
   `channel.activePredictionEvents`, `lockedPredictionEvents`, and `resolvedPredictionEvents(first:1)` (result shown
-  for 60 s after `endedAt`). Published in `user-data/streambox/polls` (not to be confused with `user-data/streambox/events`, the
+  for 60 s after `endedAt`; a locked one, bets closed and waiting for its result, sometimes for the whole stream, stays
+  on the TV `LOCKED_FOR` = 60 s after `lockedAt`, then `tv: false` hides it there, the page keeping it). Published in `user-data/streambox/polls` (not to be confused with `user-data/streambox/events`, the
   setting). Panel at the top center (`draw_events`, redrawn every second for the time left), away from the chat
   corners. Yes/no setting `events` (Settings → Playback, MQTT switch). Predictions can be read without an account; no
   poll was open on ~280 live streams at testing time, the display was checked with simulated data

@@ -11,7 +11,8 @@ Item {
     function tr(s, a) { return I18n.t(i18n.dict, s, a) }
     readonly property var e: { try { return JSON.parse(osd.polls || "{}") } catch (x) { return {} } }
     readonly property var poll: e.poll || null
-    readonly property var pred: e.prediction || null
+    // a prediction locked for more than a minute is no longer shown (its result will be): twitch.py's "tv"
+    readonly property var pred: e.prediction && e.prediction.tv !== false ? e.prediction : null
     readonly property bool shown: osd.eventsOn && JSON.parse(osd.bar || "{}").mode === "twitch" && !!(poll || pred)
     property real now: Date.now() / 1000
     opacity: shown ? 1 : 0

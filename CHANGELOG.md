@@ -39,6 +39,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   lists reach down to the help at the bottom.
 
 ### Fixed
+- A Twitch prediction whose bets were closed stayed at the top of the TV until its result, sometimes for the whole
+  stream: it now goes away after a minute and comes back with the result.
 - Twitch replays already watched (on the box or elsewhere) started at their very end, the picture frozen: the date of
   the position saved on Twitch was taken for the position.
 - A YouTube favorite channel could show no videos for a while: when YouTube's feed fails, its videos page is read
