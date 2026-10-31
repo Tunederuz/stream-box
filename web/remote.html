@@ -910,7 +910,10 @@ function renderPlayback(s) {
   }
 }
 function render(s) {
+  const wasLive = lastState?.mode === "twitch";
   lastState = s;
+  // a live stream: its poll or prediction read right away (at the opening of the page, without waiting for the next round)
+  if (s.mode === "twitch" && !wasLive && typeof refreshEvents === "function") refreshEvents();
   if (s.lang && s.lang !== LANG) setLanguage(s.lang);   // language chosen on the TV or another phone
   renderLanguages(s);
   if (s.first_run && !setupMode) enterSetup();
@@ -1211,6 +1214,7 @@ function showTab(name) {
   try { localStorage.setItem("tab", name); } catch (e) { /* storage unavailable: the tab is forgotten */ }
   if (name === "settings") { renderManage(); if (typeof refreshAudio === "function") refreshAudio(); if (typeof refreshHealth === "function") refreshHealth(); if (typeof loadYoutube === "function") loadYoutube(); settingsLoaders.forEach((f) => f()); }
   if (typeof previewTick === "function") previewTick();
+  if (name === "remote" && typeof refreshEvents === "function") refreshEvents();
 }
 document.querySelectorAll(".tabs button").forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
 let savedTab = "remote";
@@ -1414,7 +1418,7 @@ $("plex-cancel").onclick = async () => {   // (as Cancel of the Jellyfin code)
   refreshPlexLink();
 };
 // Poll and prediction: fetched every 3 s while the page shows a live stream
-let events = null, eventsTimer = null;
+var events = null, eventsTimer = null;   // var: refreshEvents can run from render(), before this line
 async function refreshEvents() {
   clearTimeout(eventsTimer);
   if (document.hidden || $("tab-remote").hidden || lastState?.mode !== "twitch") {
@@ -1561,7 +1565,7 @@ $("poweroff").onclick = async () => {
     showError(e.message || tr("Box unreachable"));
   }
 };
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); refreshAccount(); } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); refreshAccount(); refreshEvents(); } });
 refreshAccount();
 
 // Followed channels: authorization by code, status
