@@ -21,6 +21,7 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   replaces "Next chapter".
 
 ### Changed
+- youtubei.js (the YouTube account access: subscriptions, recommendations, progress) updated from 16.0.1 to 18.1.0.
 - Playback bar: −10 s, pause and +10 s in the middle, the other buttons (subtitles, quality, chapters, next episode)
   on the right. ↓ goes straight to the buttons, ↓ again hides the bar.
 - In the TV menu's rows of videos, moving to another row starts at its first card, instead of where it was left.

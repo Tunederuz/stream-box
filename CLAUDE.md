@@ -918,7 +918,9 @@ Tested: discovery, playback, pause, seek, volume, queue, pause from the remote, 
 ### Account YouTube progress (mixed)
 
 The official API gives neither history nor positions: `cast/youtube_tv.js` (same process as `cast.js`) signs in
-as the YouTube TV app (youtubei.js, TV client, code on google.com/device, Google shows "YouTube on TV";
+as the YouTube TV app (youtubei.js, a direct dependency of cast/, pinned: yt-cast-receiver keeps the version it asks
+for, nested under it; TV client, code on google.com/device, Google shows "YouTube on TV"; no stream URL deciphering
+here, `retrieve_player: false`: 18.x would need a JavaScript evaluator of our own for it, `Platform.shim.eval`;
 token `~/.config/stream-box/youtube-tv-token.json`), local server 127.0.0.1:8091 (`/status`, `/login`, `/logout`,
 `/progress`, `/report`, `/recommended`, `/subscriptions`, `/meta`). Mixed operation, tried before choosing:
 - the box keeps its positions (exact resume on the TV) and reports them to YouTube (`history_loop`: every
