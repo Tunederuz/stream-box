@@ -135,11 +135,12 @@ Below, file names without a folder are in these folders.
     Videos played from a link (`playback.play`) belong to the addon of their history `kinds` (`for_kind`): its
     `prepare(video, position, duration, from_start, at)` before (YouTube: a cast video's title, the account's
     progress), `started(video)` after (storyboard, rating), `progress(video, position, final)` every `progress_every`
-    seconds (the position to the account). A `Route` with `content_type` answers text (`/subs`).
-    Step 1 of the addons (2026-10-31): YouTube, Jellyfin and Plex moved there, the API unchanged (cast/youtube_tv.js,
-    Node, stays in cast/); to come: Twitch (the base, always there), the PC link, then the TV menu rows built from what
-    the addons return, enabling and disabling them in Settings, playback bar buttons and panels declared by the addon
-    of the video;
+    seconds (the position to the account). A `Route` with `content_type` answers text (`/subs`) or bytes (the PC
+    link's box art; None: 404); `features()` adds to `/api/features` (`gamestream`: Moonlight there).
+    Step 1 of the addons (2026-10-31): YouTube, Jellyfin, Plex and the PC link (`gamestream`) moved there, the API
+    unchanged (cast/youtube_tv.js, Node, stays in cast/); to come: Twitch (the base, always there), then the TV menu
+    rows built from what the addons return, enabling and disabling them in Settings, playback bar buttons and panels
+    declared by the addon of the video;
   - `twitch.py`: streamers.txt, who is live (`live_now`), polls and predictions, replays, GQL, followed channels,
     Twitch account; `addons/youtube/service.py`: channels, feeds, search, auto subtitles (`/subs`), storyboard, TV app progress,
     Google account and subscriptions; `addons/jellyfin/service.py`: server, home, search, series, play, subtitles,
@@ -1247,7 +1248,7 @@ run, never published: `/etc/ssh/stream-box-test-keys`). QEMU in the mkosi contai
 `usb-storage` + blank NVMe for the installer, `-vga std`, QEMU monitor for screenshots (`screendump`).
 
 ### PC link (games streamed from PCs)
-`gamestream.py`: pairing and streaming through moonlight-qt's command line (in the image; `moonlight pair <pc> --pin`
+`addons/gamestream/service.py`: pairing and streaming through moonlight-qt's command line (in the image; `moonlight pair <pc> --pin`
 with a code the box picks, `moonlight stream <pc> <app>`; pairing runs with Qt's offscreen platform, or moonlight-qt
 opens its own full-screen window over the menu). The games, their box art (`/api/gamestream_art?host=&id=`, cached in
 `~/.cache/stream-box/gamestream/<PC>`) and closing a game go to Sunshine directly (HTTPS 47984, Moonlight's client

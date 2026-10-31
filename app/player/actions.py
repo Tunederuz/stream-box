@@ -4,9 +4,8 @@ library only.
 """
 import re, subprocess, time
 
-import addons     # addons/: the integrations (YouTube, Jellyfin, Plex…) and their actions
+import addons     # addons/: the integrations (YouTube, Jellyfin, Plex, PC link) and their actions
 import ambient    # ambient.py: remote URL, first setup
-import gamestream # gamestream.py: games streamed from a PC (Moonlight)
 import history    # history.py: history edits
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import playback   # playback.py: videos started from a link
@@ -164,13 +163,6 @@ def reboot(body):
 # Name in POST /api/<name> → handler(body)
 ACTIONS = {
     "channel": channel,
-    "gamestream_pair": gamestream.pair,             # pairing with the PC: a code to type in Sunshine
-    "gamestream_pair_cancel": gamestream.pair_cancel,
-    "gamestream_search": gamestream.search,         # look for the PC on the network again
-    "gamestream_forget": gamestream.forget,         # forget the PC (another one can be chosen)
-    "gamestream_launch": gamestream.launch,         # {app}: stream a game
-    "gamestream_stop": gamestream.stop,             # end the stream (the game keeps running on the PC)
-    "gamestream_quit": gamestream.quit_game,        # close the game on the PC
     "chat": lambda body: mpv(["script-message", "streambox-toggle-chat"]),
     # the next corner clockwise, or {corner: tl | tr | br | bl}
     "corner": lambda body: mpv(["script-message", "streambox-cycle-corner"]

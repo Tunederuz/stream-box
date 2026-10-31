@@ -133,7 +133,7 @@ class Mpv:
 
 
 def streaming():
-    """PID of Moonlight while a game streams from a PC (gamestream.py), otherwise None: the keys are then its own"""
+    """PID of Moonlight while a game streams from a PC (addons/gamestream), otherwise None: the keys are then its own"""
     try:
         with open(GAMESTREAM_PID) as f:
             pid = int(f.read())

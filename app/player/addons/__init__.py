@@ -1,16 +1,17 @@
 """Inlet: addons, the box's integrations, one folder each (addons/<id>/, whose __init__.py declares ADDON). What an
 addon brings, all optional: GET routes (path → Route), POST actions (/api/<name>), "Load more" sources of the TV menu,
 the links it plays ("<id>:<item>", from the history), what happens around the videos of its kinds (before and once
-started, progress), a video started outside the box (Jellyfin's "Play on…"), keys of /api/state, its home for the
-quick menu (mpv alone). Jellyfin, Plex and YouTube so far; Twitch (the base, always there) and the PC link to follow.
+started, progress), a video started outside the box (Jellyfin's "Play on…"), keys of /api/state and /api/features, its home for the
+quick menu (mpv alone). YouTube, Jellyfin, Plex and the PC link so far; Twitch (the base, always there) to follow.
 Standard library only.
 """
 import importlib, os
 
 
 class Route:
-    """A GET route: fn(query) → JSON (query: the first value of each parameter), or text of content_type when given.
-    Its errors (OSError, ValueError, KeyError) answer 400 with their message, or 503 with unreachable(error)"""
+    """A GET route: fn(query) → JSON (query: the first value of each parameter), or, with content_type, text or bytes
+    (None: 404). Its errors (OSError, ValueError, KeyError) answer 400 with their message, or 503 with
+    unreachable(error)"""
     def __init__(self, fn, unreachable=None, content_type=None):
         self.fn, self.unreachable, self.content_type = fn, unreachable, content_type
 
@@ -24,15 +25,17 @@ class Addon:
     final) every progress_every seconds while it plays, and once at the end (final).
     Videos it plays itself (its links): report(video, position, duration, paused, stopped) instead, the history kept by
     playback's loop. outside_video() returns the video being played when it was started outside the box, None
-    otherwise; state() adds keys to /api/state; home() its lists, for the quick menu; library: the (home, series, play)
-    of a media library, for the quick menu"""
+    otherwise; state() adds keys to /api/state, features() to /api/features (what this installation has: the TV menu
+    and the companion app hide the rest); home() its lists, for the quick menu; library: the (home, series, play) of a
+    media library, for the quick menu"""
     def __init__(self, id, name, order=50, configured=lambda: True, kinds=None, routes=None, actions=None, more=None,
                  links=None, prepare=None, started=None, progress=None, progress_every=30, report=None,
-                 outside_video=None, state=None, home=None, library=None):
+                 outside_video=None, state=None, features=None, home=None, library=None):
         self.id, self.name, self.order, self.configured, self.kinds = id, name, order, configured, kinds or (id,)
         self.routes, self.actions, self.more, self.links = routes or {}, actions or {}, more or {}, links or {}
         self.prepare, self.started, self.progress, self.progress_every = prepare, started, progress, progress_every
         self.report, self.outside_video, self.state, self.home, self.library = report, outside_video, state, home, library
+        self.features = features
 
 
 def library(id, home, search, series, play, more_lib, more_home, more_search, unreachable):
@@ -111,6 +114,14 @@ def state():
     for a in ADDONS:
         if a.state:
             out.update(a.state())
+    return out
+
+
+def features():
+    out = {}
+    for a in ADDONS:
+        if a.features:
+            out.update(a.features())
     return out
 
 

@@ -5,9 +5,8 @@ import json, os, time, urllib.parse
 from http.server import BaseHTTPRequestHandler
 
 import actions    # actions.py: POST /api/<name>, TV menu keyboard
-import addons     # addons/: the integrations (YouTube, Jellyfin, Plex…): their routes, "Load more" sources, state
+import addons     # addons/: the integrations (YouTube, Jellyfin, Plex, PC link): their routes, sources, state
 import ambient    # ambient.py: first setup, remote URL, QR codes
-import gamestream # gamestream.py: games streamed from a PC (Moonlight)
 import history    # history.py: history file, kind of the current video
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import images     # images.py: TV preview
@@ -102,8 +101,7 @@ JSON_ROUTES = {
     "/api/state": state,
     "/api/history": history.read_history,
     # what this installation has: system part or not, Moonlight for games streamed from a PC
-    "/api/features": lambda: {**sysparts.features(), "gamestream": gamestream.available()},
-    "/api/gamestream": gamestream.status,   # the PC (Sunshine), pairing, its games, a stream running
+    "/api/features": lambda: {**sysparts.features(), **addons.features()},   # (system, gamestream…)
 }
 if SYSTEM:   # the box's system (the Inlet app leaves it to its OS: these routes answer 404 there)
     JSON_ROUTES.update({
@@ -155,10 +153,12 @@ class Handler(BaseHTTPRequestHandler):
                 query = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).items()}
                 try:
                     data = r.fn(query)
-                    if r.content_type:   # text (subtitles…)
-                        self.send(200, data.encode(), r.content_type)
-                    else:
+                    if not r.content_type:
                         self.send(200, data)
+                    elif data is None:   # (no box art…)
+                        self.send(404, {"error": tr("not found")})
+                    else:   # text (subtitles) or bytes (images)
+                        self.send(200, data.encode() if isinstance(data, str) else data, r.content_type)
                 except (OSError, ValueError, KeyError) as e:
                     if r.unreachable:
                         self.send(503, {"error": r.unreachable(e)})
@@ -211,13 +211,6 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, twitch.follows_status())
                 except (OSError, ValueError, KeyError) as e:
                     self.send(503, {"error": tr("Twitch unreachable: {error}", error=e)})
-            elif self.path.startswith("/api/gamestream_art?"):   # box art of a PC game (PNG, from Sunshine)
-                query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                data = gamestream.art(query.get("host", [""])[0], query.get("id", [""])[0])
-                if data:
-                    self.send(200, data, "image/png")
-                else:
-                    self.send(404, {"error": tr("not found")})
             elif self.path.startswith("/api/qr?"):
                 text = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("text", [""])[0]
                 self.send(200, {"rows": ambient.qr_rows(text)})
