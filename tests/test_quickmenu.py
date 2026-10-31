@@ -7,7 +7,7 @@ from tests.helpers import temp_home
 HOME = os.environ.get("HOME", "")
 os.environ["HOME"] = temp_home()   # while importing: the modules read their paths from it
 import quickmenu as qm   # noqa: E402
-import twitch            # noqa: E402
+from addons.twitch import service as twitch   # noqa: E402
 import addons            # noqa: E402
 os.environ["HOME"] = HOME
 

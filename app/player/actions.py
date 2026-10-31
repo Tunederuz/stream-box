@@ -4,13 +4,12 @@ library only.
 """
 import re, subprocess, time
 
-import addons     # addons/: the integrations (YouTube, Jellyfin, Plex, PC link) and their actions
+import addons     # addons/: the integrations (Twitch, YouTube, Jellyfin, Plex, PC link) and their actions
 import ambient    # ambient.py: remote URL, first setup
 import history    # history.py: history edits
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import playback   # playback.py: videos started from a link
 import settings   # settings.py: player, power button, background
-import twitch     # twitch.py: streamers, polls and predictions, account, followed channels
 from common import mpv
 from i18n import tr
 # The box's system part (sound output, backup, Bluetooth, resolution, installation, local update, Wi-Fi, power, SSH,
@@ -18,13 +17,6 @@ from i18n import tr
 from sysparts import SYSTEM, audio, backup, btsetup, display, installer, localupdate, netsetup, system
 
 keyboard = {}   # TV menu search keyboard: {open, text, target, at}
-
-
-def channel(body):
-    # Streamer from the list, or followed channel (Following tab of the TV menu)
-    if body.get("name") not in twitch.read_streamers() and body.get("name") not in twitch.follows_logins():
-        raise ValueError(tr("unknown streamer"))
-    mpv(["script-message", "streambox-channel", body["name"]])
 
 
 def play_url(body):
@@ -162,39 +154,25 @@ def reboot(body):
 
 # Name in POST /api/<name> → handler(body)
 ACTIONS = {
-    "channel": channel,
     "chat": lambda body: mpv(["script-message", "streambox-toggle-chat"]),
     # the next corner clockwise, or {corner: tl | tr | br | bl}
     "corner": lambda body: mpv(["script-message", "streambox-cycle-corner"]
                                + ([body["corner"]] if body.get("corner") in ("tl", "tr", "br", "bl") else [])),
     "play": play_url,
     "history": lambda body: history.edit_history(str(body.get("action", "")), str(body.get("key", ""))),
-    "twitch": lambda body: mpv(["script-message", "streambox-twitch"]),
     "home": lambda body: mpv(["script-message", "streambox-home"]),
-    "streamers": lambda body: twitch.edit_streamers(str(body.get("action", "")), str(body.get("login", "")),
-                                                    int(body.get("delta", 0))),
     "live_seek": live_seek,
     "auto_switch": lambda body: mpv(["script-message", "streambox-auto-switch",
                                      "yes" if body.get("enabled") else "no"]),
     "backdrop": settings.set_backdrop,   # {"base", "overlay", "color"} (one or more)
     "flag": flag,
     "pip": pip,
-    "vote": lambda body: twitch.vote_poll(str(body.get("poll", "")), str(body.get("choice", ""))),
-    "predict": lambda body: twitch.predict(str(body.get("event", "")), str(body.get("outcome", "")),
-                                           int(body.get("points", 0))),
     "player": lambda body: settings.set_player(str(body.get("mode", ""))),
     "qr": qr,
     "set": set_number,
     "volume": lambda body: mpv(["add", "volume", max(-20, min(20, int(body.get("delta", 0))))]),
     "mute": lambda body: mpv(["cycle", "mute"]),
     "pause": lambda body: mpv(["cycle", "pause"]),
-    "login": lambda body: twitch.login(str(body.get("token", ""))),
-    "logout": lambda body: twitch.logout(),
-    "login_code": lambda body: twitch.account_start(),   # sign-in by code on twitch.tv/activate
-    "follows_app": lambda body: twitch.set_twitch_app(str(body.get("client_id", "")),
-                                                      str(body.get("client_secret", ""))),
-    "follows_login": lambda body: twitch.follows_start(),
-    "follows_logout": lambda body: twitch.follows_logout(),
     "key": key,
     "language": language,
     "setup": lambda body: ambient.finish_setup(),   # phone page: "Finish" of the first setup
@@ -203,7 +181,7 @@ ACTIONS = {
     "keyboard_input": keyboard_input,
     "remote_url": lambda body: ambient.set_remote_url(str(body.get("url", ""))[:300]),
 }
-ACTIONS.update(addons.actions())   # (youtube_login, yt_rate, jellyfin_play, plex_link…)
+ACTIONS.update(addons.actions())   # (channel, vote, youtube_login, yt_rate, jellyfin_play, plex_link…)
 if SYSTEM:   # the box's system (the Inlet app leaves it to its OS: these actions are unknown there)
     ACTIONS.update({
         # direct: developer mode, from a branch (main by default)

@@ -16,7 +16,7 @@ import i18n       # i18n.py: interface language
 import addons     # addons/: YouTube's lists, the media libraries (Jellyfin, Plex): home, series, playback
 import playback   # playback.py: links, history entries
 import settings   # settings.py: back to the full version
-import twitch     # twitch.py: streamers, who is live, followed channels, replays
+from addons.twitch import service as twitch   # Twitch, the base: streamers, who is live, followed channels, replays
 from common import MPV_SOCKET, mpv
 from i18n import tr
 # The box's system part (sound outputs, screen resolution, sleep, shutdown, system update): None in the Inlet app,

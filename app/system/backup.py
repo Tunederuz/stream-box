@@ -22,7 +22,7 @@ HOME = os.path.expanduser("~")
 # Relative to the home directory; in the archive: home/<user>/… like backup.sh
 PATHS = (".local/state/stream-box", ".config/stream-box", ".config/streamlink/config.twitch",
          ".config/jellyfin-mpv-shim", ".local/state/wireplumber")
-# Also restored: the streamer list of older backups, next to the code (twitch.py moves it into the settings)
+# Also restored: the streamer list of older backups, next to the code (addons/twitch/service.py moves it into the settings)
 RESTORED = PATHS + ("stream-box/streamers.txt",)
 SKIP = re.compile(r"(^|/)(fonts|scripts|offline)(/|$)|\.lock|\.bak$|(^|/)update\.log$|(^|/)before-restore\.tar\.gz$")
 MANIFEST = "stream-box-backup.json"

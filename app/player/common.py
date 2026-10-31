@@ -7,7 +7,7 @@ PORT = 8080
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
 GAMESTREAM_PID = "/tmp/stream-box-gamestream.pid"   # a game streamed from a PC (addons/gamestream): Moonlight's PID
 DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # the repository (this is app/player/)
-# Box settings and tokens (700: also protects the files that yt-dlp rewrites as 644, see twitch.py)
+# Box settings and tokens (700: also protects the files that yt-dlp rewrites as 644, see addons/twitch/service.py)
 COOKIES_DIR = os.path.expanduser("~/.config/stream-box")
 PUBLISH_EVERY = 10   # seconds between two sends of already known data to mpv: a restarted mpv gets them quickly
 

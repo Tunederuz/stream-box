@@ -137,11 +137,15 @@ Below, file names without a folder are in these folders.
     progress), `started(video)` after (storyboard, rating), `progress(video, position, final)` every `progress_every`
     seconds (the position to the account). A `Route` with `content_type` answers text (`/subs`) or bytes (the PC
     link's box art; None: 404); `features()` adds to `/api/features` (`gamestream`: Moonlight there).
-    Step 1 of the addons (2026-10-31): YouTube, Jellyfin, Plex and the PC link (`gamestream`) moved there, the API
-    unchanged (cast/youtube_tv.js, Node, stays in cast/); to come: Twitch (the base, always there), then the TV menu
-    rows built from what the addons return, enabling and disabling them in Settings, playback bar buttons and panels
-    declared by the addon of the video;
-  - `twitch.py`: streamers.txt, who is live (`live_now`), polls and predictions, replays, GQL, followed channels,
+    `start()` runs at the server's start and each of `loops` in its thread (remote.py). Twitch is the base: always
+    there, its live streams played by stream-box.lua itself (streamlink); the core's modules (ambient.py, quickmenu.py)
+    import its service directly (`from addons.twitch import service as twitch`); its addon declares the rest (routes,
+    actions, replays and clips through prepare / progress, state: streamers, avatars, live; its three loops).
+    Step 1 of the addons (2026-10-31): Twitch, YouTube, Jellyfin, Plex and the PC link (`gamestream`) moved there, the
+    API unchanged (cast/youtube_tv.js, Node, stays in cast/); to come: the TV menu rows built from what the addons
+    return, enabling and disabling them in Settings, playback bar buttons and panels declared by the addon of the
+    video;
+  - `addons/twitch/service.py` (Twitch, the base: the core's modules use it directly): streamers.txt, who is live (`live_now`), polls and predictions, replays, GQL, followed channels,
     Twitch account; `addons/youtube/service.py`: channels, feeds, search, auto subtitles (`/subs`), storyboard, TV app progress,
     Google account and subscriptions; `addons/jellyfin/service.py`: server, home, search, series, play, subtitles,
     progress; `addons/plex/service.py`: the same for Plex;
@@ -260,7 +264,7 @@ Below, file names without a folder are in these folders.
   Adjustable display (Settings → Network, "Companion app QR code", `POST /api/qr {mode}`, MQTT select, script-message `streambox-qr`, state
   file `qr`): `always`, `timed` (`QR_SECONDS` = 30 s each time the ambient screen appears and the menu opens),
   `never`; the check is done in `qr_code()`.
-- **Polls and predictions** (`twitch.events_loop` / `fetch_events`): no more PubSub for a viewer, so
+- **Polls and predictions** (addons/twitch `events_loop` / `fetch_events`): no more PubSub for a viewer, so
   GQL polling every 10 s, only during a live stream from the list with the panel enabled, every 3 s while the page
   shows the card (`events_for_page`, `PAGE_EVENTS_EVERY`: it updates the TV's panel too; one `poll_events` and its
   `events_seen` for both): `user.viewablePoll`
@@ -1033,7 +1037,7 @@ restore`), media's SSH password and sshd enabled (`ssh-access restore`, start --
 there would wait for itself); SSH host keys in /etc/ssh/keys (sshd_config.d/40-stream-box-keys.conf), copied from
 /etc/ssh the first time (same identity) or made. Without a data partition (box installed before), persist mount does
 nothing and the settings stay on the system partition. The streamer list moved to ~/.config/stream-box/streamers.txt
-(the code folder is replaced with the system): twitch.py moves a list still next to the code there at its start
+(the code folder is replaced with the system): addons/twitch/service.py moves a list still next to the code there at its start
 (also one restored from an older backup), stream-box.lua reads the old place until then. The installer copies the USB
 drive's /data to the disk's. The data partition is found with `blkid -p` on the disk of / (persist runs before udev
 has read the labels: lsblk returned nothing on the installed disk). Tested in QEMU with the test image: stick (first

@@ -8,8 +8,8 @@ This file starts the background loops and the HTTP server; the code lives in the
   common.py    port, paths, mpv IPC, private JSON files
   api.py       HTTP server: page, PWA and locale files, GET routes, POST /api/<action>
   actions.py   POST actions (one handler per name), TV menu keyboard
-  twitch.py    streamer list, who is live, polls and predictions, replays, followed channels, Twitch account
-  addons/      the integrations, one folder each (registry and contract in addons/__init__.py): youtube/
+  addons/      the integrations, one folder each (registry and contract in addons/__init__.py): twitch/, the
+               base (streamers, who is live, polls and predictions, replays, followed channels, account), youtube/
                (channels, search, subtitles, storyboard, account), jellyfin/, plex/ (library, playback, progress),
                gamestream/ (the PC link: games streamed from PCs with Moonlight)
   quickmenu.py quick menu of the simplified version (mpv alone): lists drawn by stream-box.lua
@@ -33,15 +33,16 @@ import api       # api.py: HTTP request handler
 import playback  # playback.py: history loop
 import quickmenu # quickmenu.py: quick menu of the simplified version
 from sysparts import SYSTEM, netsetup, system   # the box's system part (setup access point, status, power key)
-import twitch    # twitch.py: account, who is live, polls
+import addons    # addons/: the integrations, their start and background loops
 from common import PORT
 
-twitch.write_cookies(twitch.read_token())   # at startup: cookies aligned with the saved token
-threading.Thread(target=twitch.account_loop, daemon=True).start()
-threading.Thread(target=twitch.live_loop, daemon=True).start()
+for addon in addons.ADDONS:   # (Twitch: cookies aligned with the saved token; its account, live and polls loops)
+    if addon.start:
+        addon.start()
+    for loop in addon.loops:
+        threading.Thread(target=loop, daemon=True).start()
 threading.Thread(target=ambient.ambient_loop, daemon=True).start()
 threading.Thread(target=playback.history_loop, daemon=True).start()
-threading.Thread(target=twitch.events_loop, daemon=True).start()
 threading.Thread(target=quickmenu.listen_loop, daemon=True).start()
 if SYSTEM:   # (the Inlet app leaves the system to its OS)
     threading.Thread(target=system.health_loop, daemon=True).start()

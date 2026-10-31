@@ -8,8 +8,9 @@ from i18n import tr
 from . import service as yt
 
 
-def prepare(video, position, duration, from_start, at):
+def prepare(video, entry, from_start, at):
     ident = video["ident"]
+    position, duration = entry.get("position", 0), entry.get("duration", 0)
     video["thumb"] = video["thumb"] or f"https://i.ytimg.com/vi/{ident}/mqdefault.jpg"
     if not video["title"]:   # video cast from the YouTube app: only its identifier is known
         video["title"], duration = yt.yt_meta(ident)

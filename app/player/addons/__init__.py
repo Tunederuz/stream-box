@@ -1,8 +1,9 @@
 """Inlet: addons, the box's integrations, one folder each (addons/<id>/, whose __init__.py declares ADDON). What an
 addon brings, all optional: GET routes (path → Route), POST actions (/api/<name>), "Load more" sources of the TV menu,
 the links it plays ("<id>:<item>", from the history), what happens around the videos of its kinds (before and once
-started, progress), a video started outside the box (Jellyfin's "Play on…"), keys of /api/state and /api/features, its home for the
-quick menu (mpv alone). YouTube, Jellyfin, Plex and the PC link so far; Twitch (the base, always there) to follow.
+started, progress), a video started outside the box (Jellyfin's "Play on…"), keys of /api/state and /api/features, background loops, its home
+for the quick menu (mpv alone). Twitch is the base (always there, its live streams played by stream-box.lua itself):
+the core's modules may use its service directly; YouTube, Jellyfin, Plex and the PC link.
 Standard library only.
 """
 import importlib, os
@@ -20,22 +21,23 @@ class Addon:
     """id: its folder and the prefix of its routes, actions, sources and links; order: its place in the lists (TV
     menu, quick menu); configured(): whether it can be used (a server chosen…); kinds: the history kinds of its videos
     (history.media_key; its id by default).
-    Videos played from a link (playback.play): prepare(video, position, duration, from_start, at) → (position,
-    duration) before, it may fill video's title and thumb; started(video) once mpv has it; progress(video, position,
-    final) every progress_every seconds while it plays, and once at the end (final).
+    Videos played from a link (playback.play): prepare(video, entry, from_start, at) → (position, duration) before
+    (entry: its history entry, {} when new: position, duration, updated), it may fill video's title and thumb;
+    started(video) once mpv has it; progress(video, position, final) every progress_every seconds while it plays, and
+    once at the end (final).
     Videos it plays itself (its links): report(video, position, duration, paused, stopped) instead, the history kept by
     playback's loop. outside_video() returns the video being played when it was started outside the box, None
     otherwise; state() adds keys to /api/state, features() to /api/features (what this installation has: the TV menu
     and the companion app hide the rest); home() its lists, for the quick menu; library: the (home, series, play) of a
-    media library, for the quick menu"""
+    media library, for the quick menu; start() at the server's start, loops: functions run each in its thread"""
     def __init__(self, id, name, order=50, configured=lambda: True, kinds=None, routes=None, actions=None, more=None,
                  links=None, prepare=None, started=None, progress=None, progress_every=30, report=None,
-                 outside_video=None, state=None, features=None, home=None, library=None):
+                 outside_video=None, state=None, features=None, home=None, library=None, start=None, loops=()):
         self.id, self.name, self.order, self.configured, self.kinds = id, name, order, configured, kinds or (id,)
         self.routes, self.actions, self.more, self.links = routes or {}, actions or {}, more or {}, links or {}
         self.prepare, self.started, self.progress, self.progress_every = prepare, started, progress, progress_every
         self.report, self.outside_video, self.state, self.home, self.library = report, outside_video, state, home, library
-        self.features = features
+        self.features, self.start, self.loops = features, start, loops
 
 
 def library(id, home, search, series, play, more_lib, more_home, more_search, unreachable):

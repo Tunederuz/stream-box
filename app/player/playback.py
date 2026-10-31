@@ -2,11 +2,10 @@
 and clips, Jellyfin, Plex), and the history loop that records their position and sends it back to Twitch, YouTube,
 Jellyfin and Plex. Standard library only.
 """
-import datetime, re, time
+import re, time
 
 import addons    # addons/: the integrations (YouTube, Jellyfin, Plex…): their links, their videos, progress reports
 import history   # history.py: history file and the video being played
-import twitch    # twitch.py: replays and clips (GQL), position saved on the account
 from common import mpv
 from i18n import tr
 
@@ -21,7 +20,6 @@ def find_url(*texts):
     return None
 
 
-TWITCH_PUSH = 30        # seconds between two position sends to Twitch
 
 
 def play(url, from_start=False, title=None, thumb=None, at=None):
@@ -35,29 +33,10 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
     entry = next((e for e in history.read_history() if e["key"] == key), None) or {}
     video = {"key": key, "url": url, "kind": kind, "ident": ident, "title": entry.get("title") or title,
              "thumb": entry.get("thumb") or thumb}
-    position, updated, duration = entry.get("position", 0), entry.get("updated", 0), entry.get("duration", 0)
+    position, duration = entry.get("position", 0), entry.get("duration", 0)
     addon = addons.for_kind(kind)
-    if addon and addon.prepare:   # (YouTube: title of a cast video, the account's progress)
-        position, duration = addon.prepare(video, position, duration, from_start, at)
-    try:   # Twitch: title, thumbnail, duration and position saved on the account
-        if kind == "twitch-vod":
-            v = twitch.twitch_gql("query($id:ID!){video(id:$id){title lengthSeconds "
-                                  "previewThumbnailURL(width:320,height:180) self{viewingHistory{position updatedAt}}}}",
-                                  {"id": ident}).get("video") or {}
-            video.update(title=v.get("title") or video["title"], thumb=v.get("previewThumbnailURL") or video["thumb"])
-            duration = v.get("lengthSeconds") or duration
-            seen = (v.get("self") or {}).get("viewingHistory") or {}
-            if seen.get("updatedAt"):
-                seen_at = datetime.datetime.fromisoformat(seen["updatedAt"].replace("Z", "+00:00")).timestamp()
-                if seen_at > updated:   # watched more recently elsewhere (site, app) than on the box
-                    position = seen.get("position") or 0
-        elif kind == "twitch-clip":
-            c = twitch.twitch_gql("query($s:ID!){clip(slug:$s){title durationSeconds thumbnailURL}}",
-                                  {"s": ident}).get("clip") or {}
-            video.update(title=c.get("title") or video["title"], thumb=c.get("thumbnailURL") or video["thumb"])
-            duration = c.get("durationSeconds") or duration
-    except (OSError, ValueError, KeyError):
-        pass   # Twitch unreachable: make do with the box's history
+    if addon and addon.prepare:   # (YouTube: title of a cast video, the account's progress; Twitch: replays and clips)
+        position, duration = addon.prepare(video, entry, from_start, at)
     start = 0 if from_start or position < history.RESUME_MIN or history.finished(position, duration) else int(position)
     if at is not None:
         start = max(0, int(at))
@@ -108,21 +87,10 @@ def history_loop():
         if playing and isinstance(position, (int, float)):
             history.record(video, position, duration, title if title and title != video["url"] else None)
             history.now_playing["position"] = position
-            if video["kind"] == "twitch-vod" and time.time() - video["pushed"] >= TWITCH_PUSH:
-                try:
-                    twitch.twitch_save_position(video["ident"], position)
-                    history.now_playing["pushed"] = time.time()
-                except (OSError, ValueError, KeyError):
-                    pass
             if addon and addon.progress and time.time() - video["pushed"] >= addon.progress_every:
-                addon.progress(video, position, False)   # (YouTube: the position to the account)
+                addon.progress(video, position, False)   # (YouTube, Twitch replays: the position to the account)
                 history.now_playing["pushed"] = time.time()
         elif not playing:   # video finished or replaced: last position sent to Twitch
-            if video["kind"] == "twitch-vod" and video.get("position"):
-                try:
-                    twitch.twitch_save_position(video["ident"], video["position"])
-                except (OSError, ValueError, KeyError):
-                    pass
             if addon and addon.progress and video.get("position"):
                 addon.progress(video, video["position"], True)
             if history.now_playing.get("key") == video["key"]:
