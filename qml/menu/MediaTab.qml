@@ -40,7 +40,7 @@ Item {
             x: 40; y: 10; width: parent.width - 80; height: menu.height - 286
             SkeletonRows {   // the tab's lists not read yet
                 visible: page.visible && (menu.libTab ? !menu.lib.home : !menu.yt)
-                y: 10; rows: 2
+                y: 10; rows: 2; shade: menu.pal.surface
             }
             Repeater {
                 model: Math.max(0, page.rows.length - 1)
@@ -61,7 +61,7 @@ Item {
                     }
                     readonly property bool waiting: !!row && row.items.length === 0
                                                     && (row.kind === "results" ? menu.mSearching : !!row.loading)
-                    SkeletonRows { visible: parent.waiting && near; y: 60; titles: false }   // where its cards will be
+                    SkeletonRows { visible: parent.waiting && near; y: 60; titles: false; shade: menu.pal.surface }   // where its cards will be
                     Text {
                         visible: !!row && row.items.length === 0 && !parent.waiting
                         y: 70; text: row && row.kind === "results" ? menu.tr("No results")
