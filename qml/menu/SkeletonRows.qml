@@ -8,15 +8,16 @@ Column {
     id: root
     property int rows: 1
     property bool titles: true
+    property color shade: "#2a2034"   // the tab's surface (menu.pal.surface)
     spacing: Layout.rowH - Layout.cardH - (titles ? 50 : 0)
     Repeater {
         model: root.rows
         Column {
             spacing: 28
-            Rectangle { visible: root.titles; width: 260; height: 22; radius: 11; color: "#2a2034"; opacity: 0.8 }
+            Rectangle { visible: root.titles; width: 260; height: 22; radius: 11; color: root.shade; opacity: 0.8 }
             Row {
                 spacing: Layout.cardStep - Layout.cardW
-                Repeater { model: 3; SkeletonCard { delay: index * 150 } }
+                Repeater { model: 3; SkeletonCard { delay: index * 150; shade: root.shade } }
             }
         }
     }
