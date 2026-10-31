@@ -199,8 +199,9 @@ def yt_tv_report(video_id, position, final=False):
 
 # Rating and comments of the video being played (playback bar: 👍 👎, Comments panel), through youtube_tv.js:
 # user-data/streambox/rating { id, status } (account connected only), user-data/streambox/comments
-# { id, items, more, loading, error } (public: no account needed); pages of 20, the next one on "load more"
-yt_comments_state = {"id": None, "items": [], "next": None}
+# { id, items, more, loading, error, thread } (public: no account needed); pages of 20, the next one on "load more";
+# thread: the replies of the comment opened { index, items, more, loading }, pages of 10
+yt_comments_state = {"id": None, "items": [], "next": None, "loaded": False, "thread": None}
 yt_comments_lock = threading.Lock()
 
 
@@ -230,33 +231,53 @@ def yt_rate(body):
 
 def yt_comments(body):
     """First page of the comments of the video being played (kept: opening the panel again reads nothing), or the
-    next one ({more: true})"""
+    next one ({more: true}); {replies: n}: the replies of comment n (kept while it stays the one opened), with
+    {more: true} their next page"""
     ident = playing_youtube()
     if not ident:
         raise ValueError(tr("No YouTube video playing."))
     with yt_comments_lock:
         st = yt_comments_state
         if st["id"] != ident:
-            st.update(id=ident, items=[], next=None, loaded=False)
-        if st.get("loaded") and not (body.get("more") and st["next"]):
+            st.update(id=ident, items=[], next=None, loaded=False, thread=None)
+        if "replies" in body:
+            n = int(body["replies"])
+            if not 0 <= n < len(st["items"]) or not st["items"][n].get("replies_token"):
+                return publish_comments()
+            if not st["thread"] or st["thread"]["index"] != n:
+                st["thread"] = {"index": n, "items": [], "next": st["items"][n]["replies_token"], "loaded": False}
+            page = st["thread"]
+        else:
+            page = st
+        if page["loaded"] and not (body.get("more") and page["next"]):
             return publish_comments()
-        publish_comments(loading=True)
+        page["loading"] = True
+        publish_comments()
         q = {"id": ident, "hl": language()}
-        if st.get("loaded"):
-            q["token"] = st["next"]
+        if page["next"] and (page["loaded"] or page is not st):
+            q["token"] = page["next"]
         d = yt_tv("/comments?" + urllib.parse.urlencode(q), timeout=30)
+        page["loading"] = False
         if playing_youtube() != ident:
             return None
         if not isinstance(d, dict) or not isinstance(d.get("items"), list):
             return publish_comments(error=tr("YouTube unreachable for now"))
-        st.update(items=st["items"] + d["items"], next=d.get("next"), loaded=True)
+        page.update(items=page["items"] + d["items"], next=d.get("next"), loaded=True)
         return publish_comments()
 
 
-def publish_comments(loading=False, error=""):
+def shown_comments(items):
+    return [{k: v for k, v in c.items() if k != "replies_token"} for c in items]   # (the tokens stay here)
+
+
+def publish_comments(error=""):
     st = yt_comments_state
+    t = st["thread"]
     mpv(["set_property", "user-data/streambox/comments",
-         {"id": st["id"], "items": st["items"], "more": bool(st["next"]), "loading": loading, "error": error}])
+         {"id": st["id"], "items": shown_comments(st["items"]), "more": bool(st["next"]), "loading": bool(st.get("loading")),
+          "error": error,
+          "thread": t and {"index": t["index"], "items": shown_comments(t["items"]), "more": bool(t["next"]),
+                           "loading": bool(t.get("loading"))}}])
 
 
 def youtube_home():

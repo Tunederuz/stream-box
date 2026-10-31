@@ -21,7 +21,7 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   replaces "Next chapter".
 
 - YouTube: like or dislike the video from the playback bar (account connected), and read its comments in a side
-  panel, 20 at a time, more as you scroll down.
+  panel, 20 at a time, more as you scroll down; OK on a comment shows its replies.
 
 ### Changed
 - Playback bar: −10 s, pause and +10 s in the middle, the other buttons (subtitles, quality, chapters, next episode)

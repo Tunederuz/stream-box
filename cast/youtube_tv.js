@@ -20,7 +20,8 @@
 //                   /next with their params; youtubei.js's interact.like is refused), { status } after
 //   GET  /comments?id=&hl=&token=  { items, next } a page of the video's comments (20, by relevance): anonymous web
 //                   session, raw /next (the comments section's continuation, then its pages; getComments fails on
-//                   YouTube's current format); token: the next page's, from the previous answer
+//                   YouTube's current format); token: the next page's, or a comment's replies_token (its replies, 10
+//                   at a time, the same shape), from a previous answer
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -303,23 +304,36 @@ async function comments(id, hl, token) {
     if (!found) return { items: [], next: null };
     token = found[1];
   }
-  const data = (await w.actions.execute('/next', { continuation: token, client: 'WEB' })).data;
-  const raw = JSON.stringify(data);
-  // Texts in the entities (commentEntityPayload), in the threads' order (their commentKey)
+  return commentPage((await w.actions.execute('/next', { continuation: token, client: 'WEB' })).data);
+}
+
+// A page of comments, or of a comment's replies (same shape): its items (comment threads, or replies), in order; the
+// texts are in the entities (commentEntityPayload) found by the item's commentKey. replies: the token of a thread's
+// replies; next: the token of the page's last item, "more comments" / "show more replies"
+const tokenIn = (node) => (JSON.stringify(node || {}).match(/"continuationCommand":\{"token":"([^"]+)"/) || [])[1] || null;
+function commentPage(data) {
   const byKey = new Map();
   for (const m of data.frameworkUpdates?.entityBatchUpdate?.mutations || []) {
     const c = m.payload?.commentEntityPayload;
     if (c) byKey.set(c.key || m.entityKey, c);
   }
-  const order = [...raw.matchAll(/"commentKey":"([^"]+)"/g)].map((m) => m[1]).filter((k) => byKey.has(k));
-  const list = order.length ? [...new Set(order)].map((k) => byKey.get(k)) : [...byKey.values()];
-  const items = list.map((c) => ({
-    author: c.author?.displayName || '', avatar: c.author?.avatarThumbnailUrl || '',
-    date: c.properties?.publishedTime || '', likes: c.toolbar?.likeCountNotliked?.trim() || '',
-    replies: c.toolbar?.replyCount || '', text: (c.properties?.content?.content || '').slice(0, 2000),
-  }));
-  const next = continuations(raw);
-  return { items, next: items.length && next.length ? next[next.length - 1][1] : null };
+  const list = (data.onResponseReceivedEndpoints || [])
+    .flatMap((e) => (e.reloadContinuationItemsCommand || e.appendContinuationItemsAction)?.continuationItems || []);
+  const items = [];
+  for (const it of list) {
+    const thread = it.commentThreadRenderer;
+    const c = byKey.get((thread || it).commentViewModel?.commentViewModel?.commentKey
+                        || it.commentViewModel?.commentKey);
+    if (!c) continue;
+    items.push({
+      author: c.author?.displayName || '', avatar: c.author?.avatarThumbnailUrl || '',
+      date: c.properties?.publishedTime || '', likes: c.toolbar?.likeCountNotliked?.trim() || '',
+      replies: c.toolbar?.replyCount || '', text: (c.properties?.content?.content || '').slice(0, 2000),
+      replies_token: thread ? tokenIn(thread.replies) : null,
+    });
+  }
+  const last = list[list.length - 1];
+  return { items, next: items.length && last?.continuationItemRenderer ? tokenIn(last) : null };
 }
 
 async function feedMore(kind, offset, count = 30) {

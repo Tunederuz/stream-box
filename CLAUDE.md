@@ -1334,13 +1334,19 @@ INDIFFERENT}, empty when not connected (no buttons then). OK: stream-box.lua `ra
 `/like/like`, `/like/dislike` or `/like/removelike` with the params the TV `/next` gives (`likeParams`…, read again each
 time: they carry a time). youtubei.js's `interact.like` is refused (400). The state YouTube confirms is published again.
 Comments: the Comments button opens `qml/CommentsPanel.qml` (right side, like the Info panel); `POST /api/yt_comments`
-({more: true}: next page) → youtube.py reads youtube_tv.js `GET /comments?id=&hl=&token=` and publishes
-`user-data/streambox/comments` {id, items, more, loading, error} (kept for the video: reopening reads nothing).
-youtube_tv.js: anonymous web session per language (dates "il y a 6 ans"), raw `/next`: the continuation near
-`comment-item-section`, then its pages (20, by relevance; texts in `frameworkUpdates…commentEntityPayload`, ordered by
-the threads' `commentKey`); `getComments` fails on YouTube's current format. stream-box.lua `comments_open` /
-`comments_scroll` → `user-data/streambox/comments_view` {open, scroll}: ↑ ↓ one comment, the next page 4 comments
-before the end, Back / OK / ≡ close; closed at the end of the file.
+({more: true}: next page; {replies: n}: the replies of comment n, with {more: true} their next page) → youtube.py reads
+youtube_tv.js `GET /comments?id=&hl=&token=` and publishes `user-data/streambox/comments` {id, items, more, loading,
+error, thread: {index, items, more, loading}} (kept for the video: reopening reads nothing; the reply tokens stay in
+youtube.py). youtube_tv.js: anonymous web session per language (dates "il y a 6 ans"), raw `/next`: the continuation
+near `comment-item-section`, then its pages (20, by relevance); `commentPage` reads a page of comments or of replies
+(same shape): its items in order (`onResponseReceivedEndpoints` continuation items), texts in
+`frameworkUpdates…commentEntityPayload` by the item's `commentKey`, each thread's `replies_token`, `next` from the last
+item's `continuationItemRenderer` (not "the last token": the last thread's replies token would pass for the next page).
+Replies: 10 per page; YouTube nests some replies of replies (not shown). `getComments` fails on YouTube's current
+format. stream-box.lua `comments_open` / `comments_scroll` (the selected comment, framed, at the top) and `thread_open`
+/ `thread_scroll` → `user-data/streambox/comments_view` {open, scroll, thread, tscroll}: ↑ ↓ one comment, OK its
+replies (if any: "OK · n replies" on it) in the same panel, the comment opened above them, Back back to the comments on
+that one, Back again or ≡ close; the next page 4 comments (3 replies) before the end; closed at the end of the file.
 
 ### YouTube token server (stream-box-pot)
 `systemd/stream-box-pot.service` runs `node build/main.js` (bgutil-ytdlp-pot-provider, port 4416) with the venv's Node

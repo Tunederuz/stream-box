@@ -847,7 +847,8 @@ mp.register_event("end-file", close_info)
 
 -- YouTube rating and comments of the video being played (remote.py, youtube.py): 👍 👎 in the row of buttons (account
 -- connected: user-data/streambox/rating { id, status }), Comments panel (qml/CommentsPanel.qml: the comments in
--- user-data/streambox/comments { items, more, loading }, its state in user-data/streambox/comments_view { open, scroll })
+-- user-data/streambox/comments { items, more, loading, thread }, its state in user-data/streambox/comments_view
+-- { open, scroll, thread, tscroll }: ↑ ↓ one comment, OK its replies, Back back to the comments or closes)
 local function api_post(name, body)
     mp.command_native_async({ name = "subprocess", playback_only = false, capture_stdout = true,
         args = { "curl", "-s", "-m", "40", "-X", "POST", "-H", "Content-Type: application/json", "-d", body,
@@ -868,12 +869,20 @@ local function rate(how)   -- the button lights up at once; youtube.py publishes
 end
 
 local comments_open, comments_scroll, comments = false, 0, {}
+local thread_open, thread_scroll = false, 0   -- the replies of the selected comment (comments_scroll), opened with OK
 local function publish_comments_view()
-    mp.set_property_native("user-data/streambox/comments_view", comments_open and { open = true, scroll = comments_scroll } or {})
+    mp.set_property_native("user-data/streambox/comments_view", comments_open and { open = true, scroll = comments_scroll,
+                           thread = thread_open, tscroll = thread_scroll } or {})
 end
-local function comments_more()   -- the next page, a few comments before the end
-    local n = #(comments.items or {})
-    if comments_open and comments.more and not comments.loading and comments_scroll >= n - 4 then
+local function comments_more()   -- the next page, a few comments (or replies) before the end
+    if not comments_open then return end
+    local t = comments.thread
+    if thread_open then
+        if t and t.index == comments_scroll and t.more and not t.loading and thread_scroll >= #(t.items or {}) - 3 then
+            t.loading = true
+            api_post("yt_comments", ('{"replies":%d,"more":true}'):format(comments_scroll))
+        end
+    elseif comments.more and not comments.loading and comments_scroll >= #(comments.items or {}) - 4 then
         comments.loading = true
         api_post("yt_comments", '{"more":true}')
     end
@@ -883,19 +892,29 @@ mp.observe_property("user-data/streambox/comments", "native", function(_, v)
     comments_more()
 end)
 local function open_comments()
-    comments_open, comments_scroll = true, 0
+    comments_open, comments_scroll, thread_open = true, 0, false
     hide_bar()
     publish_comments_view()
     api_post("yt_comments", "{}")   -- the first page (read once per video)
 end
 local function close_comments()
     if not comments_open then return end
-    comments_open = false
+    comments_open, thread_open = false, false
     publish_comments_view()
 end
 local function comments_key(key)
-    if key == "down" then comments_scroll = math.min(math.max(0, #(comments.items or {}) - 1), comments_scroll + 1)
+    if thread_open then   -- in the replies: ↑ ↓ one reply, Back goes back to the comments, on the one opened
+        local t = comments.thread or {}
+        if key == "down" then thread_scroll = math.min(math.max(0, #(t.items or {}) - 1), thread_scroll + 1)
+        elseif key == "up" then thread_scroll = math.max(0, thread_scroll - 1)
+        elseif key == "back" then thread_open = false
+        elseif key ~= "ok" then return close_comments() end
+    elseif key == "down" then comments_scroll = math.min(math.max(0, #(comments.items or {}) - 1), comments_scroll + 1)
     elseif key == "up" then comments_scroll = math.max(0, comments_scroll - 1)
+    elseif key == "ok" then   -- its replies, if it has some
+        if (((comments.items or {})[comments_scroll + 1] or {}).replies or "") == "" then return end
+        thread_open, thread_scroll = true, 0
+        api_post("yt_comments", ('{"replies":%d}'):format(comments_scroll))
     else return close_comments() end
     publish_comments_view()
     comments_more()

@@ -1002,5 +1002,10 @@
  "Loading comments…": "Chargement des commentaires…",
  "No comments.": "Aucun commentaire.",
  "{n} replies": "{n} réponses",
- "No YouTube video playing.": "Aucune vidéo YouTube en cours."
+ "No YouTube video playing.": "Aucune vidéo YouTube en cours.",
+ "Replies": "Réponses",
+ "To {author}": "À {author}",
+ "OK · {n} replies": "OK · {n} réponses",
+ "Loading replies…": "Chargement des réponses…",
+ "Back comments": "Retour commentaires"
 }
