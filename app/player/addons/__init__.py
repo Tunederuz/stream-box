@@ -8,6 +8,12 @@ Standard library only.
 """
 import importlib, os
 
+from common import COOKIES_DIR, read_json_file, write_private_json
+from i18n import tr
+
+# Add-ons turned off by the user (Settings → Add-ons): {"disabled": [id, …]}; Twitch, the base, never is
+CONF = os.path.join(COOKIES_DIR, "addons.json")
+
 
 class Route:
     """A GET route: fn(query) → JSON (query: the first value of each parameter), or, with content_type, text or bytes
@@ -19,7 +25,8 @@ class Route:
 
 class Addon:
     """id: its folder and the prefix of its routes, actions, sources and links; order: its place in the lists (TV
-    menu, quick menu); configured(): whether it can be used (a server chosen…); kinds: the history kinds of its videos
+    menu, quick menu); description: what it brings (Settings → Add-ons); base: always on (Twitch); configured():
+    whether it can be used (a server chosen…); kinds: the history kinds of its videos
     (history.media_key; its id by default).
     Videos played from a link (playback.play): prepare(video, entry, from_start, at) → (position, duration) before
     (entry: its history entry, {} when new: position, duration, updated), it may fill video's title and thumb;
@@ -32,11 +39,13 @@ class Addon:
     media library, for the quick menu; start() at the server's start, loops: functions run each in its thread.
     rows: its TV menu tab (GET /api/rows, addons/cards.py): {"tab": fn() → {rows, …}, "search": fn(q) → {rows},
     "open": fn(target, name) → {rows: [the opened row]}, "more": fn(source, key, q, offset) → {items, more}}"""
-    def __init__(self, id, name, order=50, configured=lambda: True, kinds=None, routes=None, actions=None, more=None,
+    def __init__(self, id, name, order=50, description="", base=False, configured=lambda: True, kinds=None, routes=None,
+                 actions=None, more=None,
                  links=None, prepare=None, started=None, progress=None, progress_every=30, report=None,
                  outside_video=None, state=None, features=None, home=None, library=None, start=None, loops=(),
                  rows=None):
         self.id, self.name, self.order, self.configured, self.kinds = id, name, order, configured, kinds or (id,)
+        self.description, self.base = description, base   # (description: English, translated when shown)
         self.routes, self.actions, self.more, self.links = routes or {}, actions or {}, more or {}, links or {}
         self.prepare, self.started, self.progress, self.progress_every = prepare, started, progress, progress_every
         self.report, self.outside_video, self.state, self.home, self.library = report, outside_video, state, home, library
@@ -123,7 +132,7 @@ def library(id, home, search, series, play, more_lib, more_home, more_search, un
     }
 
 
-ADDONS = []   # in their order
+ADDONS = []   # all of them, in their order; enabled(): those turned on
 
 
 def load():
@@ -134,29 +143,64 @@ def load():
     ADDONS.sort(key=lambda a: a.order)
 
 
+def enabled():
+    """The add-ons turned on: everything they bring is there; an add-on turned off answers nothing (its routes 404, its
+    actions unknown, no rows, state, features nor hooks), its tabs and sections hide"""
+    off = set(read_json_file(CONF).get("disabled") or [])
+    return [a for a in ADDONS if a.base or a.id not in off]
+
+
 def get(addon_id):
+    """An add-on, on or off (its own code and the quick menu's lists use it)"""
     return next((a for a in ADDONS if a.id == addon_id), None)
+
+
+def listing():
+    """GET /api/addons: each add-on, what it brings and whether it is on"""
+    on = {a.id for a in enabled()}
+    return {"addons": [{"id": a.id, "name": tr(a.name), "description": tr(a.description) if a.description else "",
+                        "base": a.base, "enabled": a.id in on} for a in ADDONS]}
+
+
+def set_enabled(body):
+    """POST /api/addon {id, enabled}"""
+    a = get(str(body.get("id", "")))
+    if not a or a.base:
+        raise ValueError(tr("unknown add-on"))
+    off = set(read_json_file(CONF).get("disabled") or [])
+    if body.get("enabled"):
+        off.discard(a.id)
+    else:
+        off.add(a.id)
+    write_private_json(CONF, {"disabled": sorted(off)})
 
 
 def route(path):
     """(addon, Route) of a GET path (without its parameters), or None; the registry's own (/api/rows): no addon"""
     if path in CORE_ROUTES:
         return None, CORE_ROUTES[path]
-    return next(((a, a.routes[path]) for a in ADDONS if path in a.routes), None)
+    return next(((a, a.routes[path]) for a in enabled() if path in a.routes), None)
 
 
 def actions():
-    return {name: fn for a in ADDONS for name, fn in a.actions.items()}
+    """Every add-on's actions (actions.py adds them at its start), each refused while its add-on is off"""
+    def guarded(a, fn):
+        def run(body):
+            if a not in enabled():
+                raise ValueError(tr("{name} is turned off (Settings → Add-ons).", name=tr(a.name)))
+            return fn(body)
+        return run
+    return {name: guarded(a, fn) for a in ADDONS for name, fn in a.actions.items()}
 
 
 def more_source(source):
-    return next((a.more[source] for a in ADDONS if source in a.more), None)
+    return next((a.more[source] for a in enabled() if source in a.more), None)
 
 
 def play_link(url, from_start=False):
     """Plays a link "<id>:<item>" of an addon (from the history); False when no addon has it"""
     prefix, _, item = (url or "").partition(":")
-    a = next((a for a in ADDONS if prefix in a.links), None)
+    a = next((a for a in enabled() if prefix in a.links), None)
     if not a:
         return False
     a.links[prefix](item, from_start)
@@ -165,11 +209,11 @@ def play_link(url, from_start=False):
 
 def for_kind(kind):
     """The addon whose videos are of this history kind (youtube, jellyfin…), or None"""
-    return next((a for a in ADDONS if kind in a.kinds), None)
+    return next((a for a in enabled() if kind in a.kinds), None)
 
 
 def outside_video():
-    for a in ADDONS:
+    for a in enabled():
         if a.outside_video:
             video = a.outside_video()
             if video:
@@ -181,7 +225,7 @@ def rows(query):
     """GET /api/rows?addon=<id>: its tab's rows; &q=: a search's; &open=<target>&name=: the row of something opened (a
     channel, a series); &more=<source>&key=&q=&offset=: the next cards of a row"""
     a = get(query.get("addon", ""))
-    if not a or not a.rows:
+    if not a or not a.rows or a not in enabled():
         raise ValueError("unknown addon")
     if query.get("more"):
         offset = int(query.get("offset") or 0)
@@ -195,12 +239,12 @@ def rows(query):
     return a.rows["tab"]()
 
 
-CORE_ROUTES = {"/api/rows": Route(rows)}
+CORE_ROUTES = {"/api/rows": Route(rows), "/api/addons": Route(lambda q: listing())}
 
 
 def state():
-    out = {}
-    for a in ADDONS:
+    out = {"addons": [a.id for a in enabled()]}   # (the TV menu and the companion app hide the others' tabs and sections)
+    for a in enabled():
         if a.state:
             out.update(a.state())
     return out
@@ -208,7 +252,7 @@ def state():
 
 def features():
     out = {}
-    for a in ADDONS:
+    for a in enabled():
         if a.features:
             out.update(a.features())
     return out

@@ -1013,5 +1013,18 @@
  "To {author}": "À {author}",
  "OK · {n} replies": "OK · {n} réponses",
  "Loading replies…": "Chargement des réponses…",
- "Back comments": "Retour commentaires"
+ "Back comments": "Retour commentaires",
+ "Add-ons": "Extensions",
+ "unknown add-on": "extension inconnue",
+ "{name} is turned off (Settings → Add-ons).": "{name} est désactivé (Réglages → Extensions).",
+ "Live streams, followed channels, replays, polls and predictions": "Lives, chaînes suivies, rediffusions, sondages et prédictions",
+ "Favorite channels, search, your account's subscriptions and recommendations": "Chaînes favorites, recherche, abonnements et recommandations de ton compte",
+ "Your Jellyfin server's movies and series": "Les films et séries de ton serveur Jellyfin",
+ "Your Plex server's movies and series": "Les films et séries de ton serveur Plex",
+ "Games of your PCs, streamed with Moonlight": "Les jeux de tes PC, en streaming avec Moonlight",
+ "Always on": "Toujours actif",
+ "YouTube, Jellyfin, Plex, PC link: on or off": "YouTube, Jellyfin, Plex, Lien PC : à activer ou non",
+ "What the box brings besides Twitch: an add-on turned off leaves the TV menu and these settings.": "Ce que la box apporte en plus de Twitch : une extension désactivée quitte le menu TV et ces réglages.",
+ "Turned on": "Activée",
+ "Turned off": "Désactivée"
 }

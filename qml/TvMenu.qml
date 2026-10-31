@@ -36,9 +36,14 @@ Item {
     // Video libraries only when connected to the box (/api/state libraries), otherwise one "Libraries" tab that tells how
     // to connect them; the chosen tab stays the same one
     readonly property bool anyLibrary: !!((st.libraries || {}).jellyfin || (st.libraries || {}).plex)
+    // An add-on turned off (Settings → Add-ons; /api/state addons: those on, everything until the state is read): its
+    // tab and its rows hide
+    function addonOn(id) { return !st.addons || st.addons.indexOf(id) >= 0 }
     readonly property var tabs: allTabs.filter(function (t) {
-        if (t.id === "games") return !!features.gamestream   // (Moonlight installed: the box's image)
-        return t.library ? !!(st.libraries || {})[t.id] : t.id !== "libraries" || !anyLibrary })
+        if (t.id === "games") return !!features.gamestream && addonOn("gamestream")   // (Moonlight installed: the box's image)
+        if (t.id === "youtube") return addonOn("youtube")
+        if (t.id === "libraries") return !anyLibrary && (addonOn("jellyfin") || addonOn("plex"))
+        return t.library ? !!(st.libraries || {})[t.id] : true })
     property string tabKept: "live"
     onTabsChanged: tab = Math.max(0, tabs.findIndex(function (t) { return t.id === tabKept }))
     readonly property var corners: ({ tl: "↖ top left", tr: "↗ top right", br: "↘ bottom right", bl: "↙ bottom left" })
@@ -48,6 +53,7 @@ Item {
 
     // Data (reloaded on open; reassigned as a whole so bindings follow)
     property var st: ({})
+    property var addons: null   // GET /api/addons: each add-on, its description, on or off (Settings → Add-ons)
     property var follows: null
     property var replays: ({})
     property var history: null
@@ -752,13 +758,13 @@ Item {
     // Settings tab: sections (one page each, Back or ◀ returns to the list), each with what it holds and an alert when
     // something needs attention (update ready, no network…); the
     // power actions stay on the list itself. Box status and the companion app's QR code beside the list
-    readonly property var sectionIds: ["picture", "playback", "chat", "look", "accounts", "network", "devices", "updates",
-                                       "backup", "advanced"].filter(function (id) {
+    readonly property var sectionIds: ["picture", "playback", "chat", "look", "accounts", "addons", "network", "devices",
+                                       "updates", "backup", "advanced"].filter(function (id) {
         return sysOn || (id !== "updates" && id !== "backup")   // (the Inlet app: its OS and its format update it)
     })
     function sectionTitle(id) {
         return tr(({ picture: "Picture and sound", playback: "Playback", chat: "Chat", look: "Appearance",
-                     accounts: "Accounts and links", network: "Network", devices: "Devices", updates: "Updates",
+                     accounts: "Accounts and links", addons: "Add-ons", network: "Network", devices: "Devices", updates: "Updates",
                      backup: "Backup and installation", advanced: "Advanced" })[id] || "")
     }
     // What a section holds (grey line under its title)
@@ -771,7 +777,8 @@ Item {
         return tr(({ picture: "Resolution, audio output, volume, night mode",
                      playback: "Subtitles, auto switch, polls and predictions",
                      chat: "Chat on the TV, corner, background, text size", look: "Background, colors, language",
-                     accounts: "Twitch, YouTube, Jellyfin, Plex, PC", network: "Wi-Fi, companion app QR code",
+                     accounts: "Twitch, YouTube, Jellyfin, Plex, PC", addons: "YouTube, Jellyfin, Plex, PC link: on or off",
+                     network: "Wi-Fi, companion app QR code",
                      devices: "Remotes, controllers, keys, power button", updates: "Version, check for updates, USB stick",
                      backup: "Settings backup, installation on this PC", advanced: "Version, SSH, developer mode, dependencies" })[id] || "")
     }
@@ -792,6 +799,7 @@ Item {
         return ""
     }
     function openSection(id) { section = id; rootSel = setSel; setSel = 0; pendingDisplay = ""; pendingPlayer = ""; pendingLang = ""; pendingBranch = ""
+        if (id === "addons") loadAddons()
         if (id === "updates" && dev && dev.enabled)
             call("GET", "/api/branches", undefined, function (d) { if (d && d.branches && d.branches.length) branches = d.branches })
     }
@@ -934,23 +942,29 @@ Item {
                 { open: true, label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
                   hint: login ? tr("No ads on the channels you're subscribed to") : tr("Subscriptions without ads, and your followed channels"),
                   ok: function () { twitchAccountMenu() } },
-                { open: true, label: tr("YouTube account"), visible: !!(ytAccount && !ytAccount.unavailable),
+                { open: true, label: tr("YouTube account"), visible: !!(ytAccount && !ytAccount.unavailable) && addonOn("youtube"),
                   value: ytAccount && ytAccount.authorized ? tr("Connected") : tr("Not connected"),
                   hint: tr("Subscriptions, recommendations, and progress synced with your account"),
                   ok: function () { ytAccountMenu() } },
-                { open: true, label: "Jellyfin", value: (s.libraries || {}).jellyfin ? tr("Connected") : tr("Not connected"),
+                { open: true, label: "Jellyfin", visible: addonOn("jellyfin"),
+                  value: (s.libraries || {}).jellyfin ? tr("Connected") : tr("Not connected"),
                   hint: (s.libraries || {}).jellyfin ? String(s.jellyfin_server || "").replace(/^https?:\/\//, "")
                                                      : tr("Your movies and series of a Jellyfin server"),
                   ok: function () { jellyfinMenu() } },
-                { open: true, label: "Plex", value: (s.libraries || {}).plex ? tr("Connected") : tr("Not connected"),
+                { open: true, label: "Plex", visible: addonOn("plex"), value: (s.libraries || {}).plex ? tr("Connected") : tr("Not connected"),
                   hint: (s.libraries || {}).plex ? String(s.plex_server || "").replace(/^https?:\/\//, "")
                                                  : tr("Your movies and series of a Plex server"),
                   ok: function () { plexMenu() } },
-                { open: true, label: tr("PC (Sunshine)"), visible: !!features.gamestream,   // (Moonlight: the box's image)
+                { open: true, label: tr("PC (Sunshine)"), visible: !!features.gamestream && addonOn("gamestream"),   // (Moonlight: the box's image)
                   value: gsSummary(),
                   hint: gsPaired().length ? tr("Their games in the PC link tab") : tr("Play the games of a PC running Sunshine"),
                   ok: function () { gamestreamMenu() } },
             ]
+        case "addons":   // each add-on on or off (Twitch, the base: always on); the tab and the rows follow at once
+            return (addons || []).map(function (a) {
+                return a.base ? { label: a.name, hint: a.description, value: tr("Always on") }
+                    : { label: a.name, hint: a.description, toggle: a.enabled, ok: function () { setAddon(a.id, !a.enabled) } }
+            })
         case "network":
             var qi = 0
             for (var i = 0; i < qrModes.length; i++) if (qrModes[i][0] === s.qr) qi = i
@@ -1220,6 +1234,12 @@ Item {
         openModal(title, [{ label: label, danger: true, ok: action }, { label: tr("Cancel"), ok: function () {} }])
     }
     // Settings switches: the new value on screen at once, the box's state read again right after (act → refreshSoon)
+    function loadAddons() { call("GET", "/api/addons", undefined, function (d) { if (d && d.addons) addons = d.addons }) }
+    function setAddon(id, on) {
+        addons = addons.map(function (a) { return a.id === id ? Object.assign({}, a, { enabled: on }) : a })   // at once
+        st = Object.assign({}, st, { addons: addons.filter(function (a) { return a.enabled }).map(function (a) { return a.id }) })
+        call("POST", "/api/addon", { id: id, enabled: on }, function () { loadAddons(); refresh() })
+    }
     function setFlag(name, body, change) {
         st = Object.assign({}, st, change)
         act(name, body)

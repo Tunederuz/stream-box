@@ -58,7 +58,7 @@ def state():
         "power_action": settings.power_action(),
         "remote_url": ambient.custom_remote_url(),
         # Video libraries connected to the box: their TV menu tab only shows when they are
-        "libraries": {a.id: a.configured() for a in addons.ADDONS if a.library},
+        "libraries": {a.id: a.configured() for a in addons.enabled() if a.library},
         **addons.state(),   # (streamers, avatars and live from Twitch; jellyfin_server, plex_server…)
         # TV menu search keyboard open (forgotten after 10 min, menu closed in the meantime)
         "keyboard": (actions.keyboard if actions.keyboard.get("open") and time.time() - actions.keyboard.get("at", 0) < 600

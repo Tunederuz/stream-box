@@ -182,6 +182,7 @@ ACTIONS = {
     "remote_url": lambda body: ambient.set_remote_url(str(body.get("url", ""))[:300]),
 }
 ACTIONS.update(addons.actions())   # (channel, vote, youtube_login, yt_rate, jellyfin_play, plex_link…)
+ACTIONS["addon"] = addons.set_enabled   # {id, enabled}: an add-on on or off (Settings → Add-ons)
 if SYSTEM:   # the box's system (the Inlet app leaves it to its OS: these actions are unknown there)
     ACTIONS.update({
         # direct: developer mode, from a branch (main by default)

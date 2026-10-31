@@ -333,8 +333,10 @@ def root():
         out = [item(tr("Live"), live_screen)]
         if twitch.follows_logins():
             out.append(item(tr("Following"), follows_screen))
-        out += [item(tr("Replays"), replays_screen), item("YouTube", youtube_screen)]
-        for a in addons.ADDONS:   # the media libraries set up
+        out.append(item(tr("Replays"), replays_screen))
+        if addons.get("youtube") in addons.enabled():
+            out.append(item("YouTube", youtube_screen))
+        for a in addons.enabled():   # the media libraries set up (add-ons on)
             if a.library and a.configured():
                 out.append(item(a.name, lambda a=a: lib_screen(a.id, a.name)))
         out += [item(tr("History"), history_screen),

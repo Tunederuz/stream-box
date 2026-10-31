@@ -1946,5 +1946,44 @@
     "url": "https://www.youtube.com/watch?v=olderv00002"
    }
   ]
+ },
+ "/api/addons": {
+  "addons": [
+   {
+    "id": "twitch",
+    "name": "Twitch",
+    "description": "Live streams",
+    "base": true,
+    "enabled": true
+   },
+   {
+    "id": "youtube",
+    "name": "YouTube",
+    "description": "Favorite channels",
+    "base": false,
+    "enabled": true
+   },
+   {
+    "id": "jellyfin",
+    "name": "Jellyfin",
+    "description": "Movies and series",
+    "base": false,
+    "enabled": true
+   },
+   {
+    "id": "plex",
+    "name": "Plex",
+    "description": "Movies and series",
+    "base": false,
+    "enabled": false
+   },
+   {
+    "id": "gamestream",
+    "name": "PC link",
+    "description": "Games",
+    "base": false,
+    "enabled": true
+   }
+  ]
  }
 }

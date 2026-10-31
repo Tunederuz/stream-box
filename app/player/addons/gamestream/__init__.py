@@ -5,6 +5,7 @@ from . import service as gs
 
 ADDON = Addon(
     "gamestream", "PC link", order=40,
+    description="Games of your PCs, streamed with Moonlight",
     routes={
         "/api/gamestream": Route(lambda q: gs.status()),   # the PCs (Sunshine), pairing, their games, a stream running
         "/api/gamestream_art": Route(lambda q: gs.art(q.get("host", ""), q.get("id", "")),   # box art of a game

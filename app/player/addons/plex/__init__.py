@@ -22,5 +22,5 @@ lib["actions"].update({
     "plex_link": lambda body: px.link_cancel() if body.get("action") == "cancel" else px.link_start(),
 })
 
-ADDON = Addon("plex", "Plex", order=30, configured=lambda: px.px_config() is not None, report=report,
+ADDON = Addon("plex", "Plex", order=30, description="Your Plex server's movies and series", configured=lambda: px.px_config() is not None, report=report,
               state=lambda: {"plex_server": (px.px_config() or {}).get("address", "")}, **lib)

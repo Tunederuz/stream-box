@@ -46,6 +46,6 @@ lib = library("jellyfin", jf.jellyfin_home, jf.jellyfin_search, jf.jellyfin_seri
 lib["routes"]["/api/jellyfin_link"] = Route(lambda q: jf.link_state(find=q.get("find") == "1"))
 lib["actions"]["jellyfin_link"] = jf.link_action
 
-ADDON = Addon("jellyfin", "Jellyfin", order=20, configured=lambda: jf.jf_server() is not None, report=report,
+ADDON = Addon("jellyfin", "Jellyfin", order=20, description="Your Jellyfin server's movies and series", configured=lambda: jf.jf_server() is not None, report=report,
               outside_video=shim_video, state=lambda: {"jellyfin_server": (jf.jf_server() or {}).get("address", "")},
               **lib)

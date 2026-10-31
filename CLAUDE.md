@@ -148,8 +148,14 @@ Below, file names without a folder are in these folders.
     more {source, key, q}, sel, loading, error}, a card {key, title, thumb, meta (translated info line), progress,
     glyph, play ({url} or {action, id}), open ({target, name}), connect, position, seconds, finished, label (dialog
     title), options ([{label, open} or {label, action, body, danger}])}; `addons.library` builds a media library's
-    (Jellyfin, Plex), the YouTube addon its own. The companion app keeps its routes. To come: enabling and disabling
-    the addons in Settings, playback bar buttons and panels declared by the addon of the video;
+    (Jellyfin, Plex), the YouTube addon its own. The companion app keeps its routes. Step 3: an addon on or off
+    (`~/.config/stream-box/addons.json` {disabled: [id…]}; `base` = Twitch, always on; each has a `description`):
+    `addons.enabled()` is what the registry serves (an addon off: routes 404, actions refused, no rows, state,
+    features nor hooks; `addons.get` still finds it), `GET /api/addons` (listing: name, description, base, enabled),
+    `POST /api/addon {id, enabled}`, `/api/state` → `addons` (ids on). TV: Settings → Add-ons (toggles, `setAddon`
+    changes `addons` and `st.addons` at once), tabs (`addonOn`) and the accounts rows of an addon off hide; companion
+    app: Add-ons group, `[data-addon]` sections hidden (`.addon-off`); quick menu: its YouTube and libraries follow.
+    To come: playback bar buttons and panels declared by the addon of the video;
   - `addons/twitch/service.py` (Twitch, the base: the core's modules use it directly): streamers.txt, who is live (`live_now`), polls and predictions, replays, GQL, followed channels,
     Twitch account; `addons/youtube/service.py`: channels, feeds, search, auto subtitles (`/subs`), storyboard, TV app progress,
     Google account and subscriptions; `addons/jellyfin/service.py`: server, home, search, series, play, subtitles,

@@ -30,6 +30,7 @@
   /* Without the system part (Inlet app, /api/features): power, sound output, updates, box status, backup and
      Wi-Fi are left to the OS */
   .no-system [data-system] { display: none !important; }
+  .addon-off { display: none !important; }   /* a section of an add-on turned off (Settings → Add-ons) */
   html { background: var(--bg); }
   body {
     margin: 0; color: var(--text); min-height: 100vh;
@@ -463,7 +464,7 @@
     <div id="manage-list"></div>
   </section>
 
-  <section>
+  <section data-addon="youtube">
     <h2>YouTube favorites</h2>
     <p>Their latest videos show up in the YouTube block of the companion app and in the TV menu.</p>
     <div class="field">
@@ -560,7 +561,7 @@
     <div class="status" id="follows-status"></div>
   </section>
 
-  <section>
+  <section data-addon="youtube">
     <h2>YouTube account</h2>
     <!-- The "YouTube TV app" access: sign-in by code on google.com/device, nothing to create -->
     <div id="ytacc-auth" hidden>
@@ -583,7 +584,7 @@
     <div class="status" id="ytacc-status"></div>
   </section>
 
-  <section>
+  <section data-addon="jellyfin">
     <h2>Jellyfin</h2>
     <p style="margin-top: 0">Your Jellyfin server in the TV menu (a Jellyfin tab), and the box in "Play on…" of your
       Jellyfin apps. Signing in by Quick Connect: no password to type.</p>
@@ -602,7 +603,7 @@
     <div class="status" id="jf-status"></div>
   </section>
 
-  <section>
+  <section data-addon="plex">
     <h2>Plex</h2>
     <p style="margin-top: 0">Your Plex server in the TV menu (a Plex tab): resume, next episodes, recent additions,
       search. Progress follows on your other Plex apps.</p>
@@ -628,6 +629,20 @@
     <button id="plex-save" style="width: 100%; margin-top: 8px">Connect</button>
     <button id="plex-forget" style="width: 100%; margin-top: 8px" hidden>Disconnect</button>
     <div class="status" id="plex-status"></div>
+  </section>
+
+    </div>
+  </div>
+
+  <div class="group" data-group="addons">
+    <button class="group-head" aria-expanded="false">Add-ons</button>
+    <div class="group-body" hidden>
+
+  <!-- The TV's Settings → Add-ons (refreshAddons, from /api/addons) -->
+  <section>
+    <h2>Add-ons</h2>
+    <p>What the box brings besides Twitch: an add-on turned off leaves the TV menu and these settings.</p>
+    <div id="addons-list"></div>
   </section>
 
     </div>
@@ -912,6 +927,8 @@ function renderPlayback(s) {
 function render(s) {
   const wasLive = lastState?.mode === "twitch";
   lastState = s;
+  if (s.addons)   // the sections of an add-on turned off hide (Settings → Add-ons)
+    document.querySelectorAll("[data-addon]").forEach((el) => el.classList.toggle("addon-off", !s.addons.includes(el.dataset.addon)));
   // a live stream: its poll or prediction read right away (at the opening of the page, without waiting for the next round)
   if (s.mode === "twitch" && !wasLive && typeof refreshEvents === "function") refreshEvents();
   if (s.lang && s.lang !== LANG) setLanguage(s.lang);   // language chosen on the TV or another phone
@@ -1960,6 +1977,27 @@ settingsLoaders.push(refreshLocalUpdate);
 if (!$("tab-settings").hidden) refreshLocalUpdate();
 // Accounts and links reread each time Settings is shown (a code started or a connection made on the TV meanwhile)
 settingsLoaders.push(refreshJfLink, refreshPlexLink, refreshAccount);
+// Add-ons (Settings): each one on or off, Twitch (the base) always on; the state that follows hides their sections
+async function refreshAddons() {
+  try {
+    const r = await fetch("/api/addons");
+    if (!r.ok) return;
+    const box = $("addons-list");
+    box.replaceChildren();
+    for (const a of (await r.json()).addons) {
+      const id = "addon-" + a.id;
+      const label = Object.assign(document.createElement("label"), { className: "setting", htmlFor: id, textContent: a.name });
+      const sel = Object.assign(document.createElement("select"), { id, disabled: a.base });
+      const opts = a.base ? [["true", tr("Always on")]] : [["true", tr("Turned on")], ["false", tr("Turned off")]];
+      sel.replaceChildren(...opts.map(([v, t]) => Object.assign(document.createElement("option"), { value: v, textContent: t })));
+      sel.value = String(a.enabled);
+      sel.onchange = async () => { if (await send("addon", { id: a.id, enabled: sel.value === "true" })) { refresh(); refreshAddons(); } };
+      box.append(label, sel);
+      if (a.description) box.append(Object.assign(document.createElement("p"), { textContent: a.description }));
+    }
+  } catch (e) { bug(e); }
+}
+settingsLoaders.push(refreshAddons);
 function sendFile(kind, file, onProgress) {   // XMLHttpRequest: fetch has no upload progress
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();

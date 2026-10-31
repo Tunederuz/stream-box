@@ -55,7 +55,8 @@ def unreachable(e):
 
 
 ADDON = Addon(
-    "twitch", "Twitch", order=0, kinds=("twitch-vod", "twitch-clip"),
+    "twitch", "Twitch", order=0, base=True, kinds=("twitch-vod", "twitch-clip"),
+    description="Live streams, followed channels, replays, polls and predictions",
     routes={
         "/api/replays": Route(lambda q: twitch.replays(q.get("login", ""))),
         "/api/events": Route(lambda q: twitch.events_for_page(), unreachable),   # poll and prediction being watched
