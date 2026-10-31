@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stream Box: update of the dependencies, streamlink, yt-dlp, jellyfin-mpv-shim… (they break when Twitch or YouTube
+# Inlet: update of the dependencies, streamlink, yt-dlp, jellyfin-mpv-shim… (they break when Twitch or YouTube
 # change something), every day by itself and without a word, or by hand (Settings → Advanced → "Update dependencies").
 # Each venv is tested after the update; on failure, the exact previous versions are put back. Not the box's system
 # (system-update: checked every day, installed when the user accepts). Started by stream-box-update.timer (systemd

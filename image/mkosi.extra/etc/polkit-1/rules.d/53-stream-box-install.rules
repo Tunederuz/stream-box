@@ -1,4 +1,4 @@
-// Stream Box: media starts the installation to an internal disk (stream-box-install@<disk>.service, nothing else)
+// Inlet: media starts the installation to an internal disk (stream-box-install@<disk>.service, nothing else)
 polkit.addRule(function (action, subject) {
     if (subject.user == "media" && action.id == "org.freedesktop.systemd1.manage-units" &&
         action.lookup("verb") == "start" && /^stream-box-install@[a-z0-9]+\.service$/.test(action.lookup("unit"))) {

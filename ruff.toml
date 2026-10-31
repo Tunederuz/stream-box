@@ -7,4 +7,4 @@ select = ["F"]
 exclude = ["cast"]
 
 [lint.per-file-ignores]
-"app/btagent.py" = ["F821"]   # D-Bus signatures written as annotations ("o", "s"…), read by dbus-next
+"app/system/btagent.py" = ["F821"]   # D-Bus signatures written as annotations ("o", "s"…), read by dbus-next

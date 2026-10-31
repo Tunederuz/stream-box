@@ -6,10 +6,68 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+### Added
+- A "Getting ready…" screen with the logo at start, until the box is ready, instead of an empty home screen (first
+  start, slow USB stick or SD card).
+
+- "Load more" at the end of the TV menu's rows: YouTube recommended, subscriptions, search results and channels
+  (older videos than the 15 of their feed), Twitch replays and clips, Jellyfin and Plex resume, next episodes, search
+  results and recently added.
+
+- A turning ring over the video while it waits for data (after a seek forward, a slow stream), with the buffer's
+  percentage.
+
+- Chapters: a button of the playback bar lists the video's chapters (start time and title) to jump to one; it
+  replaces "Next chapter".
+
+- YouTube: like or dislike the video from the playback bar (account connected), and read its comments in a side
+  panel, 20 at a time, more as you scroll down; OK on a comment shows its replies.
+
 ### Changed
-- Twitch account: sign in with a code on twitch.tv/activate, from the TV menu (Settings → Accounts and libraries) or
+- Twitch account: sign in with a code on twitch.tv/activate, from the TV menu (Settings → Accounts and links) or
   the companion app, instead of copying a cookie from a computer; the same sign-in gives the followed channels.
   Pasting the token stays possible.
+- youtubei.js (the YouTube account access: subscriptions, recommendations, progress) updated from 16.0.1 to 18.1.0.
+- Playback bar: −10 s, pause and +10 s in the middle, the other buttons (subtitles, quality, chapters, next episode)
+  on the right. ↓ goes straight to the buttons, ↓ again hides the bar.
+- In the TV menu's rows of videos, moving to another row starts at its first card, instead of where it was left.
+- While videos load in the TV menu (YouTube, Jellyfin, Plex, replays, history, a search), skeleton cards show where
+  they will be, instead of a "Loading…" text.
+- One options menu (≡) for every YouTube video card: play or resume, see the channel's latest videos, add it to the
+  favorites or remove it; Recommended for you and search results now have them too.
+- On screens that aren't 16:9 (the Steam Deck's 16:10), the interface now fills the whole screen: no more bands, the
+  lists reach down to the help at the bottom.
+
+### Fixed
+- Twitch replays already watched (on the box or elsewhere) started at their very end, the picture frozen: the date of
+  the position saved on Twitch was taken for the position.
+- A YouTube favorite channel could show no videos for a while: when YouTube's feed fails, its videos page is read
+  instead.
+
+## [0.6.0]
+
+### Changed
+- Stream Box is now **Inlet**, with a new logo: TV menu, boot screen, companion app (its icon too), Cast and
+  Jellyfin's "Play on" lists, Plex, Home Assistant. Settings, accounts and updates are untouched.
+- Gamepads: Start (≡ on Xbox controllers) now opens the options and Select (View) the TV menu, the other way round
+  from before; the middle button and the Steam Deck's "…" open the TV menu too.
+- No more home screen shortcut on the keys (the Steam Deck's "…", the remote's Internet key, H on a keyboard): the
+  TV menu's "Home screen" entry stays.
+
+### Added
+- PC link: a TV menu tab to play the games of PCs running Sunshine, with Moonlight. The box finds the PCs on the
+  network, pairs with a code typed in Sunshine, shows each PC's games and streams them; hold Home to end the stream.
+  The PCs are also managed in Settings → Accounts and links (pair, forget, search again).
+- Inlet app (preview): the player as a Flatpak app, for SteamOS or a desktop, without the box's system settings
+  (its OS runs itself). Built with `flatpak/build.sh`; Settings → "Quit" closes it. It opens in a window (F11 or a
+  double click: full screen) and needs no first setup from a phone.
+- Keyboard: Tab opens and closes the TV menu; in the search, the computer's keys type directly.
+- Moonlight is part of the image (for the PC link): the system takes about 225 MB more.
+
+### Fixed
+- The interface is centered on screens that aren't 16:9 (the Steam Deck's 16:10), instead of leaving all the margin
+  at the bottom or on the right.
+- Xbox controllers over Bluetooth work in games streamed from a PC: they were seen as keyboards only.
 
 ## [0.5.0]
 

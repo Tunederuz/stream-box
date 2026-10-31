@@ -1,4 +1,4 @@
-// Stream Box: YouTube account progress, through the "YouTube TV app" access (youtubei.js, unofficial; the official
+// Inlet: YouTube account progress, through the "YouTube TV app" access (youtubei.js, unofficial; the official
 // API gives neither history nor positions). Sign-in with a code on google.com/device, token in
 // ~/.config/stream-box/youtube-tv-token.json (600). Small local server for remote.py (127.0.0.1:8091):
 //   GET  /status    connected?, pending code
@@ -13,6 +13,15 @@
 //   GET  /meta?id=  { title, seconds } of a video (/player, as the TV app asks before playing it)
 //   GET  /subscriptions  latest videos of the subscribed channels (the TV app's FEsubscriptions, its "All" tab, two
 //                   pages), newest first, lives at the top, without Shorts (kept 15 min; ?fresh=1: read again)
+//   GET  /recommended?offset=N, /subscriptions?offset=N  "Load more": { items (30 from N on), more }, reading the
+//                   feed's next pages when needed
+//   GET  /rating?id=  { status: LIKE | DISLIKE | INDIFFERENT } of the account on a video (the TV /next)
+//   POST /rate      { id, rating: like | dislike | none }: rates it as the TV app does (the like endpoints of the TV
+//                   /next with their params; youtubei.js's interact.like is refused), { status } after
+//   GET  /comments?id=&hl=&token=  { items, next } a page of the video's comments (20, by relevance): anonymous web
+//                   session, raw /next (the comments section's continuation, then its pages; getComments fails on
+//                   YouTube's current format); token: the next page's, or a comment's replies_token (its replies, 10
+//                   at a time, the same shape), from a previous answer
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -32,6 +41,8 @@ let yt = null, connected = false, pending = null, error = null;
 let progress = { at: 0, data: {} };
 let recommended = { at: 0, data: [] };
 let subscriptions = { at: 0, data: [] };
+// "Load more" (TV menu): every video read so far of each feed, past the first page shown, and its next page's token
+const feeds = { rec: { all: [], token: null }, subs: { all: [], token: null } };
 const sessions = new Map();
 
 const saveToken = ({ credentials }) => {
@@ -109,7 +120,7 @@ function count(s) {
 }
 
 // Videos of a TV home response (FEwhat_to_watch): its video tiles, without duplicates, in order
-export function recommendedVideos(data) {
+export function recommendedVideos(data, max = RECOMMENDED_MAX) {
   const out = [], seen = new Set();
   (function walk(n) {
     if (Array.isArray(n)) return n.forEach(walk);
@@ -120,13 +131,14 @@ export function recommendedVideos(data) {
       const head = t.header?.tileHeaderRenderer || {}, meta = t.metadata?.tileMetadataRenderer || {};
       const lines = (meta.lines || []).map((l) => (l.lineRenderer?.items || []).map((i) => text(i.lineItemRenderer?.text)));
       const overlay = (head.thumbnailOverlays || []).map((o) => text(o.thumbnailOverlayTimeStatusRenderer?.text)).find(Boolean);
-      out.push({ id: t.contentId, title: text(meta.title), channel: lines[0]?.[0] || '',
+      const channel = (JSON.stringify(t.onLongPressCommand || {}).match(/"browseId":"(UC[\w-]{22})"/) || [])[1] || '';
+      out.push({ id: t.contentId, title: text(meta.title), channel: lines[0]?.[0] || '', channel_id: channel,
                  thumb: `https://i.ytimg.com/vi/${t.contentId}/mqdefault.jpg`, url: `https://www.youtube.com/watch?v=${t.contentId}`,
                  seconds: seconds(overlay), live: overlay === 'LIVE', views: count(lines.flat().join(' ')) });
     }
     for (const v of Object.values(n)) walk(v);
   })(data);
-  return out.slice(0, RECOMMENDED_MAX);
+  return out.slice(0, max);
 }
 
 async function getRecommended() {
@@ -135,13 +147,15 @@ async function getRecommended() {
   try {
     const pages = [];
     let r = await yt.actions.execute('/browse', { browseId: 'FEwhat_to_watch', client: 'TV' });
+    let token = null;
     for (let n = 1; ; n++) {
       pages.push(r.data);
-      const token = n < RECOMMENDED_PAGES && nextPage(JSON.stringify(r.data));
-      if (!token) break;
+      token = nextPage(JSON.stringify(r.data));
+      if (!token || n >= RECOMMENDED_PAGES) break;
       r = await yt.actions.execute('/browse', { continuation: token, client: 'TV' });
     }
     recommended = { at: Date.now(), data: recommendedVideos(pages) };
+    feeds.rec = { all: recommendedVideos(pages, Infinity), token };
   } catch (e) {
     console.error('youtube_tv.js: FEwhat_to_watch:', e.message);   // the previous list, retried at the next call
   }
@@ -157,7 +171,7 @@ function age(s) {
 
 // Videos of the subscriptions feed (FEsubscriptions pages): video tiles only (the Shorts shelf has its own type),
 // with the channel (its UC… id, from the tile's menu) and a date worked out from "… ago"; lives ("… watching") first
-export function subscriptionVideos(pages, now = Date.now()) {
+export function subscriptionVideos(pages, now = Date.now(), max = SUBS_MAX) {
   const out = [], seen = new Set();
   (function walk(n) {
     if (Array.isArray(n)) return n.forEach(walk);
@@ -183,7 +197,7 @@ export function subscriptionVideos(pages, now = Date.now()) {
     for (const v of Object.values(n)) walk(v);
   })(pages);
   out.sort((a, b) => a.age - b.age);
-  return out.slice(0, SUBS_MAX).map(({ age: _, ...v }) => v);
+  return out.slice(0, max).map(({ age: _, ...v }) => v);
 }
 
 // Next page of the feed itself (its section list), not of one of its rows
@@ -206,13 +220,14 @@ async function getSubscriptions() {
     // Its first tab ("All"; the others: one per channel)
     const pages = [r.data.contents?.tvBrowseRenderer?.content?.tvSecondaryNavRenderer?.sections?.[0]
       ?.tvSecondaryNavSectionRenderer?.tabs?.[0] || r.data];
-    for (let n = 1; n < SUBS_PAGES; n++) {
-      const token = feedNext(pages[pages.length - 1]);
-      if (!token) break;
+    let token = feedNext(pages[0]);
+    for (let n = 1; n < SUBS_PAGES && token; n++) {
       r = await yt.actions.execute('/browse', { continuation: token, client: 'TV' });
       pages.push(r.data);
+      token = feedNext(r.data);
     }
     subscriptions = { at: Date.now(), data: subscriptionVideos(pages) };
+    feeds.subs = { all: subscriptionVideos(pages, Date.now(), Infinity), token };
   } catch (e) {
     console.error('youtube_tv.js: FEsubscriptions:', e.message);   // the previous list, retried at the next call
   }
@@ -254,6 +269,91 @@ function body(req) {
   });
 }
 
+// "Load more": the feed's videos from offset on (count of them), reading its next pages when the ones already read run
+// out (at most 4 more pages per call); more: there may be others after
+// Rating of the account on a video, and the params of the three like endpoints offered by the TV /next
+async function rating(id) {
+  const raw = JSON.stringify((await yt.actions.execute('/next', { videoId: id, client: 'TV' })).data);
+  const param = (k) => decodeURIComponent((raw.match(new RegExp(`"${k}":"([^"]+)"`)) || [])[1] || '');
+  return { status: (raw.match(/"likeStatus":"(\w+)"/) || [])[1] || 'INDIFFERENT',
+           like: param('likeParams'), dislike: param('dislikeParams'), none: param('removeLikeParams') };
+}
+
+const RATE_PATH = { like: '/like/like', dislike: '/like/dislike', none: '/like/removelike' };
+const RATED = { like: 'LIKE', dislike: 'DISLIKE', none: 'INDIFFERENT' };
+async function rate(id, how) {
+  const r = await rating(id);   // fresh params (they carry a time)
+  await yt.actions.execute(RATE_PATH[how], { target: { videoId: id }, params: r[how] || undefined, client: 'TV' });
+  return { status: RATED[how] };
+}
+
+// Comments: anonymous web sessions (one per language: the dates, "2 days ago", come translated)
+const webs = new Map();
+async function web(hl) {
+  if (!webs.has(hl)) webs.set(hl, Innertube.create({ retrieve_player: false, lang: hl }));
+  return webs.get(hl);
+}
+const continuations = (raw) => [...raw.matchAll(/"continuationCommand":\{"token":"([^"]+)"/g)];
+async function comments(id, hl, token) {
+  const w = await web(hl);
+  if (!token) {   // the first page's token: the continuation of the comments section of the watch page
+    const raw = JSON.stringify((await w.actions.execute('/next', { videoId: id, client: 'WEB' })).data);
+    const sec = raw.indexOf('"comment-item-section"');
+    if (sec < 0) return { items: [], next: null };   // comments turned off
+    const found = continuations(raw).find((m) => Math.abs(m.index - sec) < 4000);
+    if (!found) return { items: [], next: null };
+    token = found[1];
+  }
+  return commentPage((await w.actions.execute('/next', { continuation: token, client: 'WEB' })).data);
+}
+
+// A page of comments, or of a comment's replies (same shape): its items (comment threads, or replies), in order; the
+// texts are in the entities (commentEntityPayload) found by the item's commentKey. replies: the token of a thread's
+// replies; next: the token of the page's last item, "more comments" / "show more replies"
+const tokenIn = (node) => (JSON.stringify(node || {}).match(/"continuationCommand":\{"token":"([^"]+)"/) || [])[1] || null;
+function commentPage(data) {
+  const byKey = new Map();
+  for (const m of data.frameworkUpdates?.entityBatchUpdate?.mutations || []) {
+    const c = m.payload?.commentEntityPayload;
+    if (c) byKey.set(c.key || m.entityKey, c);
+  }
+  const list = (data.onResponseReceivedEndpoints || [])
+    .flatMap((e) => (e.reloadContinuationItemsCommand || e.appendContinuationItemsAction)?.continuationItems || []);
+  const items = [];
+  for (const it of list) {
+    const thread = it.commentThreadRenderer;
+    const c = byKey.get((thread || it).commentViewModel?.commentViewModel?.commentKey
+                        || it.commentViewModel?.commentKey);
+    if (!c) continue;
+    items.push({
+      author: c.author?.displayName || '', avatar: c.author?.avatarThumbnailUrl || '',
+      date: c.properties?.publishedTime || '', likes: c.toolbar?.likeCountNotliked?.trim() || '',
+      replies: c.toolbar?.replyCount || '', text: (c.properties?.content?.content || '').slice(0, 2000),
+      replies_token: thread ? tokenIn(thread.replies) : null,
+    });
+  }
+  const last = list[list.length - 1];
+  return { items, next: items.length && last?.continuationItemRenderer ? tokenIn(last) : null };
+}
+
+async function feedMore(kind, offset, count = 30) {
+  if (!connected) return { items: [], more: false };
+  if (!feeds[kind].all.length) await (kind === 'rec' ? getRecommended() : getSubscriptions());
+  const f = feeds[kind], seen = new Set(f.all.map((v) => v.id));
+  for (let n = 0; n < 4 && f.all.length < offset + count && f.token; n++) {
+    try {
+      const r = await yt.actions.execute('/browse', { continuation: f.token, client: 'TV' });
+      f.token = kind === 'rec' ? nextPage(JSON.stringify(r.data)) : feedNext(r.data);
+      const page = kind === 'rec' ? recommendedVideos(r.data, Infinity) : subscriptionVideos([r.data], Date.now(), Infinity);
+      for (const v of page) if (!seen.has(v.id)) { seen.add(v.id); f.all.push(v); }
+    } catch (e) {
+      console.error(`youtube_tv.js: next page (${kind}):`, e.message);
+      f.token = null;
+    }
+  }
+  return { items: f.all.slice(offset, offset + count), more: f.all.length > offset + count || !!f.token };
+}
+
 export function startYoutubeTv() {
   resume();
   http.createServer(async (req, res) => {
@@ -262,11 +362,30 @@ export function startYoutubeTv() {
       if (req.method === 'GET' && req.url === '/status') return send(200, { connected, pending, error });
       if (req.method === 'GET' && req.url === '/progress') return send(200, await getProgress());
       if (req.method === 'GET' && req.url === '/recommended') return send(200, await getRecommended());
+      const more = req.method === 'GET' && req.url.match(/^\/(recommended|subscriptions)\?offset=(\d+)$/);
+      if (more) return send(200, await feedMore(more[1] === 'recommended' ? 'rec' : 'subs', Number(more[2])));
       if (req.method === 'GET' && req.url.startsWith('/meta?id=')) {
         const id = decodeURIComponent(req.url.slice(9));
         if (!connected || !/^[\w-]{11}$/.test(id)) return send(404, { error: 'unknown' });
         const d = (await yt.actions.execute('/player', { videoId: id, client: 'TV' })).data.videoDetails || {};
         return send(200, { title: d.title || null, seconds: Number(d.lengthSeconds) || null });
+      }
+      if (req.method === 'GET' && req.url.startsWith('/rating?id=')) {
+        const id = decodeURIComponent(req.url.slice(11));
+        if (!connected || !/^[\w-]{11}$/.test(id)) return send(404, { error: 'unknown' });
+        return send(200, { status: (await rating(id)).status });
+      }
+      if (req.method === 'POST' && req.url === '/rate') {
+        const b = await body(req);
+        const id = String(b.id || '');
+        if (!connected || !/^[\w-]{11}$/.test(id) || !RATE_PATH[b.rating]) return send(400, { error: 'bad request' });
+        return send(200, await rate(id, b.rating));
+      }
+      if (req.method === 'GET' && req.url.startsWith('/comments?')) {
+        const q = new URL(req.url, 'http://x').searchParams;
+        const id = q.get('id') || '', hl = /^[a-z]{2}$/.test(q.get('hl') || '') ? q.get('hl') : 'en';
+        if (!/^[\w-]{11}$/.test(id)) return send(400, { error: 'bad request' });
+        return send(200, await comments(id, hl, q.get('token') || null));
       }
       if (req.method === 'GET' && req.url.startsWith('/subscriptions')) {
         if (req.url.endsWith('fresh=1')) subscriptions.at = 0;
@@ -285,6 +404,7 @@ export function startYoutubeTv() {
         Object.assign(progress, { at: 0, data: {} });
         Object.assign(recommended, { at: 0, data: [] });
         Object.assign(subscriptions, { at: 0, data: [] });
+        feeds.rec = { all: [], token: null }; feeds.subs = { all: [], token: null };
         connected = false; pending = null; yt = null;
         return send(200, { connected });
       }

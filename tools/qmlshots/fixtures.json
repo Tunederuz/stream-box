@@ -1,4 +1,8 @@
 {
+ "/api/features": {
+  "system": true,
+  "gamestream": true
+ },
  "/api/state": {
   "streamers": [
    "alpha",
@@ -1864,5 +1868,83 @@
    "url": "https://plex.tv/link",
    "error": null
   }
+ },
+ "/api/gamestream": {
+  "available": true,
+  "searching": false,
+  "streaming": false,
+  "pairing": null,
+  "pcs": [
+   {
+    "host": "192.168.1.30",
+    "name": "gaming-pc",
+    "online": true,
+    "playing": true,
+    "paired": true,
+    "loading": false,
+    "unpaired_on_pc": false,
+    "apps": [
+     {
+      "name": "Desktop",
+      "art": "http://127.0.0.1:8080/img/1db954.png"
+     },
+     {
+      "name": "Steam Big Picture",
+      "art": "http://127.0.0.1:8080/img/f5a623.png"
+     },
+     {
+      "name": "Hollow Knight",
+      "art": "http://127.0.0.1:8080/img/00bcd4.png"
+     },
+     {
+      "name": "Celeste",
+      "art": ""
+     }
+    ]
+   },
+   {
+    "host": "192.168.1.31",
+    "name": "salon",
+    "online": true,
+    "playing": false,
+    "paired": false,
+    "loading": false,
+    "unpaired_on_pc": false,
+    "apps": []
+   },
+   {
+    "host": "192.168.1.32",
+    "name": "bureau",
+    "online": false,
+    "playing": false,
+    "paired": true,
+    "loading": false,
+    "unpaired_on_pc": false,
+    "apps": []
+   }
+  ]
+ },
+ "/api/more": {
+  "more": false,
+  "items": [
+   {
+    "id": "olderv00001",
+    "title": "Older video one",
+    "seconds": 640,
+    "views": 1200,
+    "date": "2026-10-01",
+    "thumb": "http://127.0.0.1:8080/img/7a5cff.png",
+    "url": "https://www.youtube.com/watch?v=olderv00001"
+   },
+   {
+    "id": "olderv00002",
+    "title": "Older video two",
+    "seconds": 1820,
+    "views": 800,
+    "date": "2026-09-28",
+    "thumb": "http://127.0.0.1:8080/img/ff7a5c.png",
+    "url": "https://www.youtube.com/watch?v=olderv00002"
+   }
+  ]
  }
 }

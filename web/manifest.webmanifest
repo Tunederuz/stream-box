@@ -1,7 +1,7 @@
 {
-  "name": "Stream Box",
-  "short_name": "Stream Box",
-  "description": "Stream Box companion app",
+  "name": "Inlet",
+  "short_name": "Inlet",
+  "description": "Inlet companion app",
   "lang": "en",
   "start_url": "/",
   "scope": "/",

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stream Box: installation, or update of an existing installation (the script can be run again).
+# Inlet: installation, or update of an existing installation (the script can be run again).
 #
 #   sudo bash install.sh [options]
 #
@@ -125,7 +125,7 @@ if [ ! -f "$LIST" ] && [ ! -f "$BOX_DIR/streamers.txt" ]; then
   chown "$BOX_USER:$BOX_USER" "$LIST"
 fi
 chown -R "$BOX_USER:$BOX_USER" "$BOX_DIR"
-chmod +x "$BOX_DIR"/scripts/*.sh "$BOX_DIR"/app/*.py
+chmod +x "$BOX_DIR"/scripts/*.sh "$BOX_DIR"/app/*/*.py
 # These permissions are not changes for git (otherwise git pull refuses to update)
 git -c safe.directory='*' -C "$BOX_DIR" config core.fileMode false 2> /dev/null || true
 
@@ -177,7 +177,7 @@ if [ ! -f "$BOX_HOME/.config/jellyfin-mpv-shim/conf.json" ]; then
   # jellyfin-mpv-shim drives the box's mpv instead of opening its own; login to do by hand (see CLAUDE.md)
   as_box 'cat > ~/.config/jellyfin-mpv-shim/conf.json' << 'JSON'
 {
-  "player_name": "Stream Box",
+  "player_name": "Inlet",
   "enable_gui": false,
   "headless": true,
   "fullscreen": true,
@@ -234,7 +234,7 @@ else
   # -s: keeps Ctrl+Alt+F2… to switch to a text console
   cat > /usr/share/wayland-sessions/stream-box.desktop << DESKTOP
 [Desktop Entry]
-Name=Stream Box
+Name=Inlet
 Comment=Full-screen Twitch stream (cage + mpv), without a desktop
 Exec=env XCURSOR_PATH=$BOX_DIR/assets/cursors XCURSOR_THEME=blank cage -s -- $BOX_DIR/scripts/start.sh
 Type=Application
@@ -243,11 +243,11 @@ DESKTOP
 
   # The mode (automatic login or login screen) is decided at boot depending on whether a keyboard is plugged in.
   # Root-owned copy: the service runs as root, the script must not be modifiable by media.
-  install -D -m 755 -o root -g root "$BOX_DIR/app/boot-mode.py" /usr/local/lib/stream-box/boot-mode.py
+  install -D -m 755 -o root -g root "$BOX_DIR/app/system/boot-mode.py" /usr/local/lib/stream-box/boot-mode.py
   install -d "$DM_DIR"
   cat > /etc/systemd/system/stream-box-boot-mode.service << UNIT
 [Unit]
-Description=Stream Box: automatic login only without a keyboard
+Description=Inlet: automatic login only without a keyboard
 Before=$DM.service
 After=systemd-udevd.service
 
@@ -278,7 +278,7 @@ PY
   step "Power off from the companion app (polkit)"
   install -d /etc/polkit-1/rules.d
   cat > /etc/polkit-1/rules.d/50-stream-box.rules << 'RULES'
-// Stream Box: power off and sleep from the companion app and Home Assistant (media user)
+// Inlet: power off and sleep from the companion app and Home Assistant (media user)
 polkit.addRule(function (action, subject) {
     if (subject.user == "media" &&
         (action.id == "org.freedesktop.login1.power-off" ||

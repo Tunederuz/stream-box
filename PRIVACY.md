@@ -1,7 +1,7 @@
-# Stream Box Privacy Policy
+# Inlet Privacy Policy
 
-Stream Box is free software that turns a mini PC plugged into a TV into a Twitch, YouTube and Jellyfin player.
-Each box is installed and used by its owner, at home: there is no Stream Box server.
+Inlet is free software that turns a mini PC plugged into a TV into a Twitch, YouTube and Jellyfin player.
+Each box is installed and used by its owner, at home: there is no Inlet server.
 
 ## YouTube account
 
@@ -17,23 +17,23 @@ and how far they got in each video.
   box's user, readable by that user only, and nothing is transmitted, sold or shared with anyone; there is no Stream
   Box server.
 - Nothing else is changed on the account: the box does not post, comment, like, subscribe or unsubscribe.
-- Removing access: "✕  Disconnect YouTube" in the box menu (Settings → Accounts and libraries → YouTube account) or
+- Removing access: "✕  Disconnect YouTube" in the box menu (Settings → Accounts and links → YouTube account) or
   "Disconnect" in its companion app (Settings → YouTube account) deletes the box's token. Access can also be revoked at
   any time from https://myaccount.google.com/permissions ("YouTube on TV").
 
 See also the [YouTube Terms of Service](https://www.youtube.com/t/terms) and the
 [Google Privacy Policy](https://policies.google.com/privacy).
 
-## Twitch followed channels (Stream Box Twitch app)
+## Twitch followed channels (Inlet Twitch app)
 
 To show the channels the owner follows, the box asks Twitch for **read-only** access (`user:read:follows`), with a
 code typed on twitch.tv/activate: through the Twitch account's sign-in (the box presents itself as the Twitch app for
 TVs, which also lets Twitch recognize the account on the streams, for subscriptions without ads), or through the
-Stream Box Twitch app.
+Inlet Twitch app.
 
 - Data read: the followed channels (name, picture) and which of them are live (title, game, viewers).
 - Where it goes: nowhere other than the box itself. The token is kept on the box, readable by its user only; the
-  Stream Box app is only an identifier, there is no server behind it and its maintainers see nothing.
+  Inlet app is only an identifier, there is no server behind it and its maintainers see nothing.
 - Removing access: "Disconnect" in the companion app (Settings → Followed channels) deletes the box's token. Access
   can also be revoked at any time from Twitch (Settings → Connections).
 

@@ -1,4 +1,4 @@
-# Stream Box: boot screen. Logo and spinner scaled to the screen height (drawn for 1080 lines): same look in 1080p, in
+# Inlet: boot screen. Logo and spinner scaled to the screen height (drawn for 1080 lines): same look in 1080p, in
 # 4K or in 1366 × 768, without forcing a display mode. Home screen background (0b0710).
 Window.SetBackgroundTopColor(0.043, 0.027, 0.063);
 Window.SetBackgroundBottomColor(0.043, 0.027, 0.063);

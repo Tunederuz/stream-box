@@ -1,7 +1,7 @@
-# Stream Box: the boot counts as good only once the box's server answers (see /usr/local/lib/stream-box/boot-check):
+# Inlet: the boot counts as good only once the box's server answers (see /usr/local/lib/stream-box/boot-check):
 # a new system from an A/B update is then kept by systemd-bless-boot, otherwise systemd-boot goes back to the previous.
 [Unit]
-Description=Stream Box: the box answers
+Description=Inlet: the box answers
 After=greetd.service
 Before=boot-complete.target
 

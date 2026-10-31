@@ -1,4 +1,4 @@
-// Stream Box: YouTube Cast receiver. The box shows up as a TV in the YouTube app (Cast button, same network), thanks
+// Inlet: YouTube Cast receiver. The box shows up as a TV in the YouTube app (Cast button, same network), thanks
 // to yt-cast-receiver (unofficial YouTube protocol: may break when YouTube changes it).
 // A cast video goes through remote.py (POST /api/play: loading screen, history, subtitles), the rest (pause, resume,
 // seek, volume) directly through mpv (IPC). End of video: next video of the app's queue.
@@ -115,7 +115,7 @@ class FileStore extends DataStore {
 
 const player = new BoxPlayer();
 const receiver = new YouTubeCastReceiver(player, {
-  device: { name: 'Stream Box', screenName: 'Stream Box', brand: 'Stream Box', model: 'Stream Box' },
+  device: { name: 'Inlet', screenName: 'Inlet', brand: 'Inlet', model: 'Inlet' },
   dataStore: new FileStore(),
   logLevel: Constants.LOG_LEVELS.WARN,
 });
@@ -145,4 +145,4 @@ receiver.on('error', (error) => console.error('cast.js:', error));
 mpvConnect();
 startYoutubeTv();
 await receiver.start();
-console.log('cast.js: YouTube Cast receiver ready ("Stream Box" in the Cast button of the YouTube app)');
+console.log('cast.js: YouTube Cast receiver ready ("Inlet" in the Cast button of the YouTube app)');

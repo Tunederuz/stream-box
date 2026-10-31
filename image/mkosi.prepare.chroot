@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stream Box: media user, box code and everything it installs outside pacman (Python venvs, YouTube token server).
+# Inlet: media user, box code and everything it installs outside pacman (Python venvs, YouTube token server).
 # Run by mkosi in the image, with network, right after the packages ("final"); same steps as install.sh, done once and
 # for all at build time.
 set -euo pipefail

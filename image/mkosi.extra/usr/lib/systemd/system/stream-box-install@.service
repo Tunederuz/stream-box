@@ -1,6 +1,6 @@
-# Stream Box: installation to an internal disk from the USB drive (TV System menu → installer.py)
+# Inlet: installation to an internal disk from the USB drive (TV System menu → installer.py)
 [Unit]
-Description=Stream Box: installation to /dev/%i
+Description=Inlet: installation to /dev/%i
 
 [Service]
 Type=oneshot

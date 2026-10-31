@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 330">
+  <g transform="translate(210 0) scale(2.2)">
+  <path d="M36 22 H74 A14 14 0 0 1 88 36 V64 A14 14 0 0 1 74 78 H36" stroke="#e8eef0" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M10 50 Q19.5 39 29 50 T48 50 T67 50" stroke="#6fc3d9" stroke-width="8" stroke-linecap="round" fill="none"/>
+  </g>
+  <text x="320" y="310" text-anchor="middle" font-family="Jost, sans-serif" font-weight="500" font-size="80" letter-spacing="2.4" fill="#e8eef0">inlet</text>
+</svg>

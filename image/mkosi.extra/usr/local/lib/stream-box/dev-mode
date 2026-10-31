@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stream Box: developer mode, enabled or disabled from the TV System menu (stream-box-dev@enable|disable.service).
+# Inlet: developer mode, enabled or disabled from the TV System menu (stream-box-dev@enable|disable.service).
 # The image has neither a root password nor sudo for media: without this mode, the installed box offers no root access.
 #   enable  : passwordless sudo for media (/etc/sudoers.d/90-stream-box-dev), and SSH enabled (password shown on the
 #             TV, see ssh-access): ssh media@box then sudo

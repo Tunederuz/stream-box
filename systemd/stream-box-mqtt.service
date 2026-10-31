@@ -1,10 +1,10 @@
 [Unit]
-Description=Stream Box: MQTT bridge to Home Assistant
+Description=Inlet: MQTT bridge to Home Assistant
 # No MQTT config (~/.config/stream-box/mqtt.json): the service doesn't start
 ConditionPathExists=%h/.config/stream-box/mqtt.json
 
 [Service]
-ExecStart=%h/.local/share/media-venv/bin/python %h/stream-box/app/mqtt_bridge.py
+ExecStart=%h/.local/share/media-venv/bin/python %h/stream-box/app/system/mqtt_bridge.py
 Restart=always
 RestartSec=10
 

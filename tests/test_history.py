@@ -3,7 +3,7 @@ import os, sys, tempfile, unittest
 
 from tests.helpers import REPO
 
-sys.path.insert(0, os.path.join(REPO, "app"))
+sys.path.insert(0, os.path.join(REPO, "app", "player"))
 import history   # noqa: E402
 
 YT = "dQw4w9WgXcQ"

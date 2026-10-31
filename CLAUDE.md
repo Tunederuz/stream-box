@@ -1,4 +1,9 @@
-# Stream Box
+# Inlet
+
+Formerly Stream Box (renamed after 0.5.0): the name shown to people is Inlet; the internal names stay (folder
+`stream-box`, `~/.config/stream-box`, `stream-box-*` units and scripts, `user-data/streambox`, image files
+`stream-box_<version>`), so installed boxes, their data and their updates keep working. Logo: `assets/brand/` (SVG,
+written by `tools/brand/make.py`; `tools/brand/render.sh` makes the PNGs: companion app icons, boot screen, Plymouth).
 
 > Values in angle brackets (`<box-ip>`…) and the `example.com` domains are specific to each installation. The details
 > of a given installation (network, hardware, accounts) go in `CLAUDE.local.md`, which is not versioned.
@@ -35,7 +40,7 @@ Installation and update: `install.sh` (see the README); settings backup: TV Sett
 - **Mode depending on the keyboard**: `stream-box-boot-mode.service` (root, before the display manager) runs
   `/usr/local/lib/stream-box/boot-mode.py` (root copy of `boot-mode.py`, installed by `install.sh`, which passes it
   `--dropin` depending on the display manager). A device with letter keys (Q, A, Z, space) = keyboard. Without a
-  keyboard, it writes `<.conf.d folder>/50-stream-box.conf` (autologin media + Stream Box session). With a keyboard,
+  keyboard, it writes `<.conf.d folder>/50-stream-box.conf` (autologin media + Inlet session). With a keyboard,
   it deletes it and the login screen is shown. The main config file must not contain an `[Autologin]` section: it
   would take precedence over the `.conf.d` folder (`install.sh` removes it, with a `.bak-stream-box` backup). The
   choice is made at boot only. After changing `boot-mode.py`, run `install.sh` again (or copy it again as root).
@@ -58,12 +63,33 @@ Installation and update: `install.sh` (see the README); settings backup: TV Sett
 - No passwordless sudo for `media`. mpv and cage come from the system packages.
 
 ## Files (`/home/media/stream-box/`)
-Layout (since 0.5.0, phase 1 of the split between the player and the system, see the Stream Player idea):
-`app/` all the Python modules, side by side (they import each other by name; `common.DIR` and `i18n.DIR` are the
-repository, one level up), plus `ui.qml` next to `ui.py` (it imports `../qml`); `lua/` `stream-box.lua` (its `DIR` is
+Layout (since 0.5.0, phase 1 of the split between the player and the system, see the Inlet app idea):
+`app/player/` the portable modules (TV app, companion app server, Twitch, YouTube, Jellyfin, Plex, playback,
+history, chat, i18n) and `ui.qml` next to `ui.py` (it imports `../../qml`); `app/system/` the box's system (system.py,
+display, audio, input, netsetup, btsetup, btagent, installer, localupdate, backup, boot-mode, mqtt_bridge). Both
+folders are on the import path (the scripts started directly add them, tests/__init__.py too): the modules import
+each other by name; `common.DIR` and `i18n.DIR` are the repository, two levels up. The system part is optional
+(Inlet app: the app on an OS that runs itself): the player's modules take it from `sysparts.py` (`SYSTEM`, and
+each module or None; decided by the folder being there, an import error with the folder is a real error); api.py and
+actions.py then declare no system route or action (404, "unknown action"), quickmenu.py leaves those rows out,
+remote.py starts no system loop, ambient.py and images.py do without the setup access point and grim;
+`GET /api/features` → {system}. tests/test_api.py runs its tests twice: from the repository and from a copy without
+app/system; the interface follows `features.system` (false: Inlet app): the QML menu (`features`, `sysOn`, read at each
+opening; the box's until read) drops the Updates and Backup sections, the power options and the power-key window, the
+resolution, audio output, Bluetooth pairing, power button and dependencies rows, reads no system route, and words the
+section hints for what is left; the companion app sets `.no-system` on its root and hides the `[data-system]` blocks
+(power, Picture and sound, Box status and updates, Backup, Wi-Fi) and reads no system route (`featuresReady`).
+Checked by tests/page/check-page.js (a second pass without the system part) and `QMLSHOTS_PLAYER=1
+tools/qmlshots/run.sh shoot` (system routes 404, as in the Inlet app); `lua/` `stream-box.lua` (its `DIR` is
 the repository, its modules next to it); `qml/` the QML; `web/` the companion app page, PWA files, icons (served by
-api.py from `web/`); `scripts/` start.sh, player.sh, update.sh, install.sh, backup.sh, dev-pacman.sh (their `DIR` /
-`SRC` is the repository, one level up); `assets/` boot image, cursors, example list. Relays at the root for the images
+api.py from `web/`); `scripts/` start.sh, player.sh, mpv-args.sh (the player's mpv options,
+sourced by player.sh and stream-player.sh), stream-player.sh (the Inlet app: remote.py, cast.js, token server,
+Jellyfin shim and ui.py, no restart loop, everything stopped with it), update.sh, install.sh, backup.sh,
+dev-pacman.sh (their `DIR` / `SRC` is the repository, one level up); `flatpak/` the Inlet app's Flatpak
+(manifest: libmpv built with LuaJIT, libass, libplacebo, krb5 for the PySide6 wheel; pip and npm at build time, with
+the network; `--persist` keeps the box's paths ~/.config/stream-box… in ~/.var/app/<id>; `build.sh` builds it in
+Docker, cache in ~/.cache/stream-box-flatpak). Tools are found by `common.tool()` (~/.local/bin, otherwise the
+PATH); under X11 (SteamOS Game mode: gamescope) ui.py uses Qt's EGL and gives libmpv the X11 display (VA-API); `assets/` boot image, cursors, example list. Relays at the root for the images
 0.5.0 and older, whose system points there: `start.sh` (session: stream-box-session, stream-box.desktop), `update.sh`
 and `mqtt_bridge.py` (user units copied into those images), `cursors` → `assets/cursors` (session's XCURSOR_PATH); to
 remove once no box runs those images. Tests: `tests/__init__.py` puts `app/` on sys.path.
@@ -104,7 +130,7 @@ Below, file names without a folder are in these folders.
   - `ambient.py`: weather, Twitch schedules, companion app URL and QR code, first setup, `ambient_loop`;
   - `images.py`: TV preview; `settings.py`: player, power button action, backdrop; `system.py`: power, power key
     lock, wake-up, SSH, developer mode, health, update.
-- Twitch account (TV: Settings → Accounts and libraries → Twitch account; section of the page; `POST
+- Twitch account (TV: Settings → Accounts and links → Twitch account; section of the page; `POST
   /api/login_code|login|logout`, `GET /api/account` {login, expired, pending}): signed in with a code on
   twitch.tv/activate as the Twitch app for TVs (`TWITCH_TV_CLIENT_ID`, device code flow, `user:read:follows`, token
   without expiry), or (backup) the website's token pasted from the `auth-token` cookie. Either is written to
@@ -399,6 +425,10 @@ height…). `CardRow` pitfalls: callers bind `view.model`, `view.currentIndex`, 
 directly on its ListView (going through properties of `CardRow`, the index reset when a row changed was never
 re-applied), and its sizes are literal numbers, not bindings to `layout.js` (the caller's current index arrives
 before, `fits` was then -1 and the first scroll was lost).
+While a tab's or a row's videos load, `SkeletonRows` (qml/menu/) shows skeleton cards (`qml/SkeletonCard.qml`: the
+shapes of VideoCard, breathing, the pulse travelling along the row) where the cards will be, not a "Loading…" text:
+YouTube / Jellyfin / Plex before their lists (`!menu.yt`, `!menu.lib.home`), a row still loading or a search under
+way, Replays (`replays[login] === "loading"`), History (`history === null`). `QMLSHOTS_PENDING` shows them.
 YouTube card previews (the focused card playing its video) were tried and dropped on 2026-10-27: resolving links with
 yt-dlp, in advance for the neighboring cards, got the box taken for a robot by YouTube within two hours ("Sign in to
 confirm you're not a bot" for every video, the player's included). Do not add requests to YouTube per card.
@@ -552,7 +582,8 @@ while the tab is shown, and 1.5 s after an update button: `readBox`).
 Channel list in `~/.config/stream-box/youtube.json` (UC… id, name, @, picture), edited by
 `POST /api/youtube_channels` {action: add|remove|move, channel, delta}; adding resolves "@name", a link or an id with
 `yt-dlp --flat-playlist -J --playlist-items 0` (~1 s). `GET /api/youtube`: 15 latest videos per channel from the
-public RSS feed (`feeds/videos.xml?channel_id=`, no key, Shorts excluded, 20 min cache), merged with
+public RSS feed (`feeds/videos.xml?channel_id=`, no key, Shorts excluded, 20 min cache; it often answers 404 for a
+while, for any channel: then the channel's /videos flat list, `channel_listing`, same 15 without dates), merged with
 the history (position, watched). `GET /api/youtube_search?q=`: `yt-dlp --flat-playlist -J ytsearch20:` (~1.6 s, 10 min
 cache, `youtube:lang=fr`, otherwise titles are translated into English): videos, and channels whose name matches (same
 request; UC… id, subscribers, picture, `saved`), playlists excluded. `GET /api/youtube_channel?id=UC…`: latest videos
@@ -569,7 +600,7 @@ reread, "Reload my subscriptions"); `subscriptionVideos(pages)` is the pure pars
 the progress. `GET /api/youtube` → `subs` {authorized, pending, unavailable, videos}; `GET /api/youtube_account` →
 {authorized, pending, unavailable}; `POST /api/youtube_login|youtube_logout|youtube_sync`. TV: "Connect my account"
 card in the Subscriptions row as long as the box is not connected → code popup and QR code (`ytAuth`, reread every
-3 s); "YouTube account" row of Settings → Accounts and libraries (reload subscriptions, disconnect). Page: "YouTube
+3 s); "YouTube account" row of Settings → Accounts and links (reload subscriptions, disconnect). Page: "YouTube
 account" section of Settings (code, status). Video title and duration (`yt_meta`: a video cast from the YouTube app,
 resume at the account's percentage): `GET /meta?id=` of youtube_tv.js (`/player`), oEmbed (title only) otherwise.
 Favorites: RSS feeds read in parallel, failures kept for 10 min (`YT_FEED_RETRY`). The menu keeps `yt` from one
@@ -709,11 +740,14 @@ title over a light image.
   bar never shows empty (purple, 0 s) nor slides from the previous video's position and colors.
 - Focus in a video, top to bottom: title (OK: Info panel), the bar itself (← → scrub; focused whenever the bar shows
   and neither of the others is: InfoBar.qml `barFocus`, track 8 → 12 px, cursor 22 → 28 px and a faint halo), row of
-  buttons. Bar hidden: ↑ or ↓ shows it, focus on the bar; from the bar ↑ the title, ↓ the buttons; from the title ↓,
-  from the buttons ↑ or Back, back to the bar.
-- Row of buttons: ↓ from the bar (focus on Pause/Play), ← → and OK;
-  Subtitles, −10 s, Pause/Play, +10 s, Quality (YouTube), Next chapter (if there are chapters), Next
-  episode (Jellyfin). Row centered on Pause/Play (InfoBar.qml `playIndex`). `ctrl_focus`,
+  buttons. Bar hidden: ↑ shows it with the focus on the bar, ↓ shows it with the focus on the buttons (Pause / Play);
+  from the bar ↑ the title, ↓ the buttons; from the title ↓, from the buttons ↑ or Back, back to the bar; ↓ again from
+  the buttons hides the bar.
+- Row of buttons: ↓ from the bar (focus on Pause/Play, `ctrl_focus = 2`), ← → (in the list's order) and OK;
+  −10 s, Pause/Play, +10 s in the middle of the screen, then on the right, ending with the progress bar: Like and
+  Dislike (YouTube, account connected; filled once given), Comments (YouTube), Subtitles, Quality (YouTube), Chapters (if there are chapters), Next episode (Jellyfin) (InfoBar.qml: `mid` and `side`
+  groups, one shared `button` component). Chapters opens the subtitles panel in `chapters` mode (`tracks_mode`):
+  start time and title of each chapter (`chapter-list`), the current one chosen, OK sets `chapter`. `ctrl_focus`,
   `user-data/streambox/controls` {items, focus}; disappears with the bar. Round centered buttons, drawn icons
   (`qml/PlayerIcon.qml`, QtQuick.Shapes: no Unicode characters, whose rendering depends on the fonts), Play / Pause
   larger, name of the selected button below.
@@ -786,7 +820,7 @@ remote.py dies).
 ### Wi-Fi setup mode (netsetup.py)
 
 Without network (no active Ethernet or Wi-Fi connection) and with a Wi-Fi card, remote.py (`netsetup.setup_loop`,
-25 s after boot) creates the NetworkManager access point `stream-box-setup` ("Stream Box XXXX", password
+25 s after boot) creates the NetworkManager access point `stream-box-setup` ("Inlet XXXX", password
 generated once, `~/.config/stream-box/hotspot.json`, box address 10.42.0.1, dnsmasq for DHCP). The home
 screen (AmbientScreen.qml; text with mpv alone) shows "1. Connect your phone" (WIFI:… QR code) and "2. Open
 the setup" (QR code http://10.42.0.1:8080/). The page, opened on 10.42.0.1, opens on the Wi-Fi section
@@ -857,7 +891,8 @@ BTN_* and ABS_HAT pad of gamepads), translated into actions (DEFAULTS, then keym
 `script-message streambox-input <name> <action>`; it announces `user-data/streambox/input` = "evdev:<time>" every
 5 s, and as long as that is fresh (15 s) stream-box.lua and ui.py ignore keys received by mpv / Qt (otherwise doubled).
 Without permissions on /dev/input, it stops: old path (mpv names and 0x21… keysyms, KEYS of stream-box.lua) as
-fallback. Actions: up down left right ok back home menu homescreen corner power volume_up volume_down mute. The
+fallback. Actions: up down left right ok back home menu corner power volume_up volume_down mute (homescreen: no key by
+default any more, kept for keys learned before). Gamepads: the middle button, Select and the Deck's "…" = TV menu, Start = options. The
 page's virtual remote also sends actions (`streambox-input VIRTUAL <action>`, never learned).
 Held key: repeated by input.py itself (`REPEATABLE`: arrows, volume; 400 ms then every 80 ms, the gamepad d-pad
 too), the kernel's repeats (value 2) are ignored: the Xiaomi remote's "Consumer Control" entry (arrows, OK, volume)
@@ -880,7 +915,7 @@ The popup is shown alone over the video, without the menu behind it (`powerOnly`
 
 ### YouTube Cast
 
-`cast/cast.js` (Node, `yt-cast-receiver` 2.1.0, unofficial protocol): the box appears as "Stream Box" in the
+`cast/cast.js` (Node, `yt-cast-receiver` 2.1.0, unofficial protocol): the box appears as "Inlet" in the
 YouTube app's Cast button (DIAL / SSDP discovery on the local network, TCP port 3000, UDP 1900; firewall to
 open if there is one). Cast video → `POST /api/play` {url, start} (position set by the app, `play(at=)`);
 pause, resume, seek, volume → mpv IPC; state changed from the remote sent back to the app (`notifyExternalStateChange`),
@@ -894,9 +929,11 @@ Tested: discovery, playback, pause, seek, volume, queue, pause from the remote, 
 ### Account YouTube progress (mixed)
 
 The official API gives neither history nor positions: `cast/youtube_tv.js` (same process as `cast.js`) signs in
-as the YouTube TV app (youtubei.js, TV client, code on google.com/device, Google shows "YouTube on TV";
+as the YouTube TV app (youtubei.js, a direct dependency of cast/, pinned: yt-cast-receiver keeps the version it asks
+for, nested under it; TV client, code on google.com/device, Google shows "YouTube on TV"; no stream URL deciphering
+here, `retrieve_player: false`: 18.x would need a JavaScript evaluator of our own for it, `Platform.shim.eval`;
 token `~/.config/stream-box/youtube-tv-token.json`), local server 127.0.0.1:8091 (`/status`, `/login`, `/logout`,
-`/progress`, `/report`, `/recommended`, `/subscriptions`, `/meta`). Mixed operation, tried before choosing:
+`/progress`, `/report`, `/recommended`, `/subscriptions`, `/meta`, `/rating`, `/rate`, `/comments`). Mixed operation, tried before choosing:
 - the box keeps its positions (exact resume on the TV) and reports them to YouTube (`history_loop`: every
   `YT_TV_PUSH` = 30 s, and on stop `final`) like a player: `/player` (tracking URL, cpn), `playback` ping, then
   `watchtime` (segment st→et, real time rt). Checked: the phone resumes to the second;
@@ -990,7 +1027,7 @@ KernelCommandLine): each UKI goes with its own system partition, falling back to
 previous system. `SplitArtifacts=uki,partitions`: `bash image/build.sh release` (after build; `FROM=stream-box-test`
 for the test image) makes mkosi.output/release: stream-box.raw.xz (disk image, to install),
 stream-box_<version>.root-x86-64.raw.xz, stream-box_<version>.efi, SHA256SUMS. The workflow signs SHA256SUMS
-(SHA256SUMS.gpg) with the secret RELEASE_SIGNING_KEY (ed25519 key "Stream Box releases", fingerprint
+(SHA256SUMS.gpg) with the secret RELEASE_SIGNING_KEY (ed25519 key "Inlet releases", fingerprint
 21B56DA5485308DDF1F7E8585167D4557A63D205; public part in image/release-signing-key.asc and, binary, in
 /etc/systemd/import-pubring.pgp of the image, which systemd-sysupdate checks) and stops before building without it.
 On the box: /usr/lib/sysupdate.d/10-root.transfer (latest release's system partition → the root partition not in use,
@@ -1170,7 +1207,7 @@ all of them during a scan or pairing from the menu (btsetup.py touches
 
 ### Boot screen (Plymouth, image)
 `stream-box` theme of script type (repository files, `mkosi.extra/usr/share/plymouth/themes/stream-box/`: logo
-`watermark.png` (rounded icon + "Stream Box"), spinning wheel `spinner.png`, `stream-box.script`): everything is scaled
+`watermark.png` (rounded icon + "Inlet"), spinning wheel `spinner.png`, `stream-box.script`): everything is scaled
 to the screen height (drawn for 1080 lines), same rendering at 1080p, 4K or 1366 × 768 without forcing
 a mode (no `video=`: a screen that does not accept it would stay black). Plymouth starts from the initrd
 (`InitrdProfiles=plymouth`, theme and `/etc/plymouth` copied by `mkosi.initrd.conf/`), i915 in the initrd and loaded
@@ -1188,11 +1225,69 @@ session starts, removed by ui.py at its first frame (player.sh for mpv alone, 30
 run, never published: `/etc/ssh/stream-box-test-keys`). QEMU in the mkosi container (KVM, OVMF), stick as
 `usb-storage` + blank NVMe for the installer, `-vga std`, QEMU monitor for screenshots (`screendump`).
 
+### PC link (games streamed from PCs)
+`gamestream.py`: pairing and streaming through moonlight-qt's command line (in the image; `moonlight pair <pc> --pin`
+with a code the box picks, `moonlight stream <pc> <app>`; pairing runs with Qt's offscreen platform, or moonlight-qt
+opens its own full-screen window over the menu). The games, their box art (`/api/gamestream_art?host=&id=`, cached in
+`~/.cache/stream-box/gamestream/<PC>`) and closing a game go to Sunshine directly (HTTPS 47984, Moonlight's client
+certificate from its settings): `moonlight list` hangs on an assertion once paired (6.2), spinning a CPU core.
+Several PCs: those found on the network (mDNS `_nvstream._tcp.local`, otherwise the box's /24 tried on port 47989, in
+the background every 30 s) and the paired ones (`~/.config/stream-box/gamestream.json` `{"hosts": [...]}`; the first
+form `{"host"}` is still read). `GET /api/gamestream` → `{pcs: [{host, name, online, playing, paired, loading,
+unpaired_on_pc, apps}], pairing: {pin, host, name, page} | {error}, searching, streaming}`; actions (with `host`)
+`gamestream_pair`, `_pair_cancel`, `_search`, `_forget`, `_launch` (+ `app`), `_stop`, `_quit`; `/api/features` has
+`gamestream` (Moonlight installed). TV menu tab "PC link" (`games`, menu/GamesTab.qml): chips of the PCs (green paired,
+amber to pair, grey off; OK pairs, ≡ the PC's choices), the chosen PC's games as 3:4 posters (5 per row, ▲ back to the
+chips); the pairing code in CodeDialog. Settings → Accounts and links → PC (Sunshine): the PCs, each to pair (again)
+or forget, and "Search again". During a stream Moonlight covers the screen; its PID is in
+`/tmp/stream-box-gamestream.pid` and input.py then leaves every key to it, except Home held 1 s (remote or the
+gamepad's middle button) which ends the stream; when it ends the TV menu opens again.
+
 ### Regular keyboard
 By default (input.py `DEFAULTS`, stream-box.lua `KEYS` fallback): arrows, Enter = OK, Esc / Backspace =
-Back, Windows, Home or M = TV menu, O = options (≡), H = home screen, Space = play / pause (action `corner`),
+Back, Tab, Windows, Home or M = TV menu (Tab for the Inlet app: a desktop keeps the Windows key), O = options (≡), Space = play / pause (action `corner`),
 + / − (and numeric keypad) = volume, media keys (next / previous = → / ←, stop = Back). Linux codes are
-positional (QWERTY): the M of an AZERTY keyboard arrives as KEY_SEMICOLON, mapped too.
+positional (QWERTY): the M of an AZERTY keyboard arrives as KEY_SEMICOLON, mapped too. While the search keyboard
+is open, the Qt app types the computer's keys into it (Box.setTyping / keyTyped: characters, Backspace, Enter).
+
+The qmlshots scenario types in the search keyboard (`type` steps).
+
+### Screen shape and start (qml/Fit.qml, qml/Preparing.qml)
+The interface is drawn in 1920x1080 coordinates inside `Fit` (ui.qml, and the qmlshots harness): its drawing area keeps
+1920 wide and 1080 high at least and stretches the other side to the screen's shape (1920x1200 on 16:10), then scales
+to fill the screen exactly; what is pinned to an edge (`menu.height - 85` for the scrolling areas of the tabs, the
+help, the clock, the home screen's QR code) follows it. `QMLSHOTS_SIZE=1280x800 tools/qmlshots/run.sh shoot` renders
+another shape. `Preparing.qml`, on top of everything in ui.qml: "Getting ready…" and the logo until `/api/state`
+answers (asked every 0.7 s, 60 s at most), then a fade: the home screen stayed empty while remote.py started.
+
+### "Load more" (end of rows)
+`GET /api/more?source=&key=&offset=&q=` (api.py `more`) → `{items, more}`: `yt_search` (q; yt-dlp `ytsearch<n>:` with
+`--playlist-items`), `yt_channel` (UC… id; the channel's /videos flat list: older than its RSS feed's 15),
+`twitch_vods` / `twitch_clips` (login; `fetch_replays` with larger counts, the start cut off), `jellyfin_lib` (library
+id; Items by DateCreated with StartIndex: Items/Latest has no paging), `plex_lib` (section; recentlyAdded with
+X-Plex-Container-Start), `yt_recommended` / `yt_subscriptions` (youtube_tv.js `/recommended?offset=` and
+`/subscriptions?offset=`: `feeds` keeps every video read and the next page's token, `feedMore` reads up to 4 more
+pages), `jellyfin_resume` / `_nextup` / `_search` (StartIndex), `plex_resume` / `_nextup` (On Deck read whole, split)
+and `plex_search` (a larger limit, the start cut off). TV menu: `moreSource(row)` says where a row's next items come from, `withMore` (applied to
+ytRows, libRows, replayRows) appends the items already loaded (`moreRows`, by "<source>|<key>|<query>", duplicates
+dropped) and a "Load more" card (`more: true`, glyph "+") while there may be more; OK on it → `loadMore` (focus stays
+on the place, which becomes the first new item); ≡ does nothing there. Every video row has it, except the found
+channels and a series' episodes (all there already). qmlshots: fake `/api/more`, steps at the end of a Replays row.
+
+### Waiting ring and YouTube card options
+`qml/VideoWait.qml` (ui.qml, over the video): a ring and the buffer's percentage while mpv waits for data. ui.py
+observes `paused-for-cache`, `seeking`, `core-idle` (after a seek mpv waits for data without paused-for-cache:
+`cache-pause-initial` is off), `cache-buffering-state` and `pause` into `osd.waiting` ({cache, seeking, idle, pct,
+pause}); shown after 0.4 s of waiting, not while paused (PauseScreen has the center) nor during the loading screen.
+TV menu: ≡ on any YouTube video card → `ytVideoOptions` (play or resume / from the beginning, and when the channel is
+known "See latest videos of {channel}" and the favorite toggle); the channel comes from the row (favorites' rows,
+the found channel's preview) or the card's `channel_id`: youtube_tv.js gives it for Recommended too (the tile's
+long-press menu, as for subscriptions) and the search results carry yt-dlp's.
+
+### Inlet app window
+The TV menu stays driven by keys only (remote, gamepad, keyboard; no mouse navigation, the user's choice). Inlet app
+on a desktop: an ordinary 1280×720 window (`WINDOWED`, F11 or a double click: full screen); full screen in SteamOS's
+Game mode (XDG_CURRENT_DESKTOP=gamescope).
 
 ### pacman (developer mode)
 The official image has neither a pacman mirror nor keyring (mkosi leaves none, and that is intended: no packages
@@ -1238,6 +1333,28 @@ characters, `thumb`). Opened from the title: ↑ from the bar selects it (`title
 "OK · Info" frame around the title in InfoBar.qml), OK opens the panel, ↓ goes back down to the buttons, ↑ closes the
 bar, Back leaves the title without stopping the video; stream-box.lua `info_open` / `info_scroll` → `user-data/streambox/info` {open, scroll}; ↑ ↓ scroll by 4 lines (bounded by the
 length of the text), Back / OK / ≡ close; closed at the end of the file.
+
+### YouTube rating and comments (video)
+Like / Dislike buttons of the playback bar: youtube.py `yt_rating_fetch` at the start of a YouTube video (youtube_tv.js
+`GET /rating?id=`: `likeStatus` of the TV `/next`) → `user-data/streambox/rating` {id, status: LIKE | DISLIKE |
+INDIFFERENT}, empty when not connected (no buttons then). OK: stream-box.lua `rate` lights the button up at once and
+`POST /api/yt_rate` {rating: like | dislike | none} (the same button again: none); youtube_tv.js `POST /rate` calls
+`/like/like`, `/like/dislike` or `/like/removelike` with the params the TV `/next` gives (`likeParams`…, read again each
+time: they carry a time). youtubei.js's `interact.like` is refused (400). The state YouTube confirms is published again.
+Comments: the Comments button opens `qml/CommentsPanel.qml` (right side, like the Info panel); `POST /api/yt_comments`
+({more: true}: next page; {replies: n}: the replies of comment n, with {more: true} their next page) → youtube.py reads
+youtube_tv.js `GET /comments?id=&hl=&token=` and publishes `user-data/streambox/comments` {id, items, more, loading,
+error, thread: {index, items, more, loading}} (kept for the video: reopening reads nothing; the reply tokens stay in
+youtube.py). youtube_tv.js: anonymous web session per language (dates "il y a 6 ans"), raw `/next`: the continuation
+near `comment-item-section`, then its pages (20, by relevance); `commentPage` reads a page of comments or of replies
+(same shape): its items in order (`onResponseReceivedEndpoints` continuation items), texts in
+`frameworkUpdates…commentEntityPayload` by the item's `commentKey`, each thread's `replies_token`, `next` from the last
+item's `continuationItemRenderer` (not "the last token": the last thread's replies token would pass for the next page).
+Replies: 10 per page; YouTube nests some replies of replies (not shown). `getComments` fails on YouTube's current
+format. stream-box.lua `comments_open` / `comments_scroll` (the selected comment, framed; the list scrolls only to keep it in view) and `thread_open`
+/ `thread_scroll` → `user-data/streambox/comments_view` {open, scroll, thread, tscroll}: ↑ ↓ one comment, OK its
+replies (if any: "OK · n replies" on it) in the same panel, the comment opened above them, Back back to the comments on
+that one, Back again or ≡ close; the next page 4 comments (3 replies) before the end; closed at the end of the file.
 
 ### YouTube token server (stream-box-pot)
 `systemd/stream-box-pot.service` runs `node build/main.js` (bgutil-ytdlp-pot-provider, port 4416) with the venv's Node

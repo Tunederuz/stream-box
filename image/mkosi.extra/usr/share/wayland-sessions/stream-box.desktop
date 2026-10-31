@@ -1,5 +1,5 @@
 [Desktop Entry]
-Name=Stream Box
+Name=Inlet
 Comment=Full-screen Twitch stream (cage + mpv), without a desktop
 Exec=cage -s -- /home/media/stream-box/scripts/start.sh
 Type=Application
