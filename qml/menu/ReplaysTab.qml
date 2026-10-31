@@ -39,6 +39,7 @@ Item {
     }
     Item {   // clip: the rows scroll between the chips and the help at the bottom
         x: -40; y: 276; width: parent.width + 80; height: menu.height - 85 - 276; clip: true
+        SkeletonRows { visible: menu.replays[menu.rpLogin] === "loading"; x: 40; y: 24; rows: 2 }   // the streamer's replays not read yet
         Repeater {
             model: Math.max(0, page.rows.length - 1)
             Item {

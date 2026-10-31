@@ -419,6 +419,10 @@ height…). `CardRow` pitfalls: callers bind `view.model`, `view.currentIndex`, 
 directly on its ListView (going through properties of `CardRow`, the index reset when a row changed was never
 re-applied), and its sizes are literal numbers, not bindings to `layout.js` (the caller's current index arrives
 before, `fits` was then -1 and the first scroll was lost).
+While a tab's or a row's videos load, `SkeletonRows` (qml/menu/) shows skeleton cards (`qml/SkeletonCard.qml`: the
+shapes of VideoCard, breathing, the pulse travelling along the row) where the cards will be, not a "Loading…" text:
+YouTube / Jellyfin / Plex before their lists (`!menu.yt`, `!menu.lib.home`), a row still loading or a search under
+way, Replays (`replays[login] === "loading"`), History (`history === null`). `QMLSHOTS_PENDING` shows them.
 YouTube card previews (the focused card playing its video) were tried and dropped on 2026-10-27: resolving links with
 yt-dlp, in advance for the neighboring cards, got the box taken for a robot by YouTube within two hours ("Sign in to
 confirm you're not a bot" for every video, the player's included). Do not add requests to YouTube per card.

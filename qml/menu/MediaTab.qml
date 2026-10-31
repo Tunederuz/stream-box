@@ -38,6 +38,10 @@ Item {
         x: -40; y: 276; width: parent.width + 80; height: menu.height - 85 - 276; clip: true
         Item {   // rows, below the search row
             x: 40; y: 10; width: parent.width - 80; height: menu.height - 286
+            SkeletonRows {   // the tab's lists not read yet
+                visible: page.visible && (menu.libTab ? !menu.lib.home : !menu.yt)
+                y: 10; rows: 2
+            }
             Repeater {
                 model: Math.max(0, page.rows.length - 1)
                 Item {
@@ -55,11 +59,13 @@ Item {
                         RoundImage { visible: !!(row && row.avatar); width: 40; height: 40; circle: true; source: row && row.avatar ? row.avatar : "" }
                         Text { anchors.verticalCenter: parent.verticalCenter; text: row ? row.title : ""; color: "#d0c8e0"; font.pixelSize: 24; font.bold: true }
                     }
+                    readonly property bool waiting: !!row && row.items.length === 0
+                                                    && (row.kind === "results" ? menu.mSearching : !!row.loading)
+                    SkeletonRows { visible: parent.waiting && near; y: 60; titles: false }   // where its cards will be
                     Text {
-                        visible: !!row && row.items.length === 0
-                        y: 70; text: row && row.kind === "results" ? (menu.mSearching ? menu.tr("Searching…") : menu.tr("No results"))
-                                   : row && row.loading ? menu.tr("Loading…") : menu.libTab ? menu.tr("Nothing here")
-                                   : menu.tr("YouTube unreachable for now")
+                        visible: !!row && row.items.length === 0 && !parent.waiting
+                        y: 70; text: row && row.kind === "results" ? menu.tr("No results")
+                                   : menu.libTab ? menu.tr("Nothing here") : menu.tr("YouTube unreachable for now")
                         color: "#8a85a0"; font.pixelSize: 24
                     }
                     CardRow {   // found channels: round picture, name, subscribers, "in your list"

@@ -27,6 +27,8 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - Playback bar: −10 s, pause and +10 s in the middle, the other buttons (subtitles, quality, chapters, next episode)
   on the right. ↓ goes straight to the buttons, ↓ again hides the bar.
 - In the TV menu's rows of videos, moving to another row starts at its first card, instead of where it was left.
+- While videos load in the TV menu (YouTube, Jellyfin, Plex, replays, history, a search), skeleton cards show where
+  they will be, instead of a "Loading…" text.
 - One options menu (≡) for every YouTube video card: play or resume, see the channel's latest videos, add it to the
   favorites or remove it; Recommended for you and search results now have them too.
 - On screens that aren't 16:9 (the Steam Deck's 16:10), the interface now fills the whole screen: no more bands, the

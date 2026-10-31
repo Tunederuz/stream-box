@@ -27,6 +27,8 @@ WAIT = int(os.environ.get("QMLSHOTS_WAIT", "900"))   # ms after each step: anima
 NOSHOTS = bool(os.environ.get("QMLSHOTS_NOSHOTS"))   # the scenario and console.log only (checks: no screenshot)
 # The Inlet app (no system part): /api/features {system: false}, and the system's routes answer 404 as there
 PLAYER = bool(os.environ.get("QMLSHOTS_PLAYER"))
+# routes that never answer (comma-separated, e.g. "/api/youtube,/api/history"): the tabs as they wait for their data
+PENDING = [r for r in os.environ.get("QMLSHOTS_PENDING", "").split(",") if r]
 SYSTEM_ROUTES = ("/api/health", "/api/wifi", "/api/audio", "/api/local_update", "/api/branches", "/api/backup",
                  "/api/bluetooth", "/api/dev", "/api/ssh", "/api/install", "/api/display", "/api/update_prompt")
 
@@ -124,6 +126,9 @@ def serve(fixtures, log):
             if path.startswith("/img/"):
                 log.append("GET " + self.path)
                 return self.reply(png(path[5:11]), "image/png")
+            if path in PENDING:
+                log.append("GET (pending) " + self.path)
+                return time.sleep(600)
             if path in fixtures:
                 log.append("GET " + self.path)
                 return self.reply(json.dumps(fixtures[path], default=str).encode())
