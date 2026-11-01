@@ -1174,6 +1174,30 @@ restart, the whole chain from `POST /api/update`. The service does not wait for 
 systemd-networkd-wait-online, which gives up after 2 min on a NetworkManager box). update.sh lists the changed packages with `comm` (the image has
 no diffutils: `diff` made it log "failed").
 
+### System extensions (image: Moonlight, Node.js)
+The image ships without Moonlight (the PC link) and Node.js (YouTube: its token server, the Cast receiver, yt-dlp's
+JavaScript, npm for update.sh): at the end of its build, `image/split-extensions.py` (mkosi.finalize.chroot, in the
+image: `pacman -Rsp` gives each one's packages with the dependencies nothing else needs; a guard stops on essential
+ones) packs their files into `stream-box-<name>.tar.xz` ($OUTPUTDIR; usr/ and
+usr/lib/extension-release.d/extension-release.stream-box-<name>, ID=arch) and removes them; `build.sh release` publishes
+them as `stream-box-<name>_<version>.tar.xz` in SHA256SUMS (signed with the rest). Moonlight takes the system's Qt with
+it (the interface has PySide6's own). On the box: `/usr/local/lib/stream-box/extensions` — `link` (early,
+stream-box-extensions-link.service, before systemd-sysext.service): those wanted and there for the running version
+linked into /run/extensions; `sync` (stream-box-extensions.service: at boot, and started by remote.py when an add-on is
+turned on or off, polkit rule 59): wanted = the add-ons on (media's addons.json; addon → extension: gamestream →
+moonlight, youtube → node), the missing ones downloaded for the running IMAGE_VERSION from its release (network waited
+for, 15 min), checked (gpgv with the release key, sha256; unsigned only in developer mode), unpacked into
+/var/lib/stream-box/extensions/stream-box-<name>_<version> (data partition: an A/B update brings a new version, its
+extensions are downloaded after the boot onto it), the others removed, `systemd-sysext refresh`; state in
+/run/stream-box-extensions.json, shown in Settings → Add-ons (`extension` of `/api/addons`, app/system/extensions.py).
+A build of your own: its base URL in /var/lib/stream-box/extensions/source. Moonlight is looked up at each use
+(gamestream `moonlight()`), start.sh's Cast receiver waits for node, the token server's restarts find it. Also removed
+from the image: binutils and gettext's tools, Qt's translations other than French and English. Measured on a test image:
+extensions 254 MB (Moonlight) and 101 MB (Node.js) installed, 40 and 21 MB compressed; the system partition's xz 1365 MB
+(1462 MB for 0.7.0). Tested in QEMU: the box runs without them (the interface, its server), the PC link hidden; the sync
+downloads, checks and merges both in 15 s, the Cast receiver and the token server start by themselves; the PC link off
+removes Moonlight; after a reboot Node.js is merged from the start.
+
 ### On a USB drive (flash-mode, image)
 `/usr/local/lib/stream-box/flash-mode` (`stream-box-flash-mode.service`, at each boot before greetd): when `/` is on a
 USB disk (`lsblk -dno TRAN` = usb: the image on a stick, before "Install on this PC" or kept there), fewer writes to

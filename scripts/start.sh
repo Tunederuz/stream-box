@@ -34,9 +34,11 @@ MEDIA_PY="$HOME/.local/share/media-venv/bin/python"
 "$MEDIA_PY" -c "import dbus_fast" 2> /dev/null && "$MEDIA_PY" "$DIR/app/system/btagent.py" &
 # YouTube Cast receiver (cast/cast.js: the box in the Cast button of the YouTube app), if its modules are installed
 # (npm install in cast/)
+# On the box's image, Node.js is YouTube's system extension (/usr/local/lib/stream-box/extensions), downloaded once the
+# network is up, maybe after this: waited for
 if [ -d "$DIR/cast/node_modules" ]; then
   NODE="$HOME/.local/share/media-venv/bin/node"; [ -x "$NODE" ] || NODE=node
-  "$NODE" "$DIR/cast/cast.js" &
+  ( until command -v "$NODE" > /dev/null; do sleep 15; done; exec "$NODE" "$DIR/cast/cast.js" ) &
 fi
 
 # Permanent player (mpv, or the Qt app embedding it): see player.sh

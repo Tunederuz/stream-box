@@ -1026,5 +1026,7 @@
  "YouTube, Jellyfin, Plex, PC link: on or off": "YouTube, Jellyfin, Plex, Lien PC : à activer ou non",
  "What the box brings besides Twitch: an add-on turned off leaves the TV menu and these settings.": "Ce que la box apporte en plus de Twitch : une extension désactivée quitte le menu TV et ces réglages.",
  "Turned on": "Activée",
- "Turned off": "Désactivée"
+ "Turned off": "Désactivée",
+ "Downloading…": "Téléchargement…",
+ "Download failed: {error}": "Échec du téléchargement : {error}"
 }

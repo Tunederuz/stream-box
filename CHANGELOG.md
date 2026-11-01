@@ -6,6 +6,16 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+### Changed
+- A lighter system: Moonlight (the PC link) and Node.js (YouTube) are now downloaded when their add-on is on
+  (Settings → Add-ons), and removed when it is turned off; the system partition is about 100 MB smaller to download.
+- Add-ons: YouTube, Jellyfin, Plex and the PC link can be turned off in Settings → Add-ons (TV and companion app):
+  their tab and settings go away.
+- The playback bar's buttons of a video come from its add-on (YouTube: like, dislike, comments).
+
+### Fixed
+- YouTube: "See latest videos of…" and the favorite are back in the options (≡) of the Recommended videos.
+
 ## [0.7.0]
 
 ### Added

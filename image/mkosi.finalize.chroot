@@ -4,7 +4,8 @@
 set -euo pipefail
 systemctl enable greetd.service NetworkManager.service bluetooth.service systemd-timesyncd.service \
   stream-box-bt-disconnect.service stream-box-flash-mode.service stream-box-persist.service stream-box-restore.service \
-  stream-box-boot-check.service stream-box-update-state.service stream-box-update-check.timer
+  stream-box-boot-check.service stream-box-update-state.service stream-box-update-check.timer \
+  stream-box-extensions-link.service stream-box-extensions.service systemd-sysext.service
 # SSH off by default: it is enabled from the System menu ("SSH access", "Developer mode"), password shown
 if [ -f /etc/ssh/stream-box-test-keys ]; then   # test image: SSH with the test key, for VM tests
   systemctl enable sshd.service
@@ -13,11 +14,25 @@ else
 fi
 systemctl set-default graphical.target   # greetd (display-manager) is only started by graphical.target
 
+# Extensions (systemd-sysext): Moonlight (the PC link) and Node.js (YouTube) leave the system, their files and the
+# dependencies nothing else needs in $OUTPUTDIR/stream-box-<name>.tar.xz (build.sh release publishes them, signed with
+# the rest); the box downloads one when its add-on is on (/usr/local/lib/stream-box/extensions). npm goes with Node.js
+# (mkosi.prepare.chroot uses both while building; update.sh with the extension)
+python3 /work/src/stream-box/image/split-extensions.py "$CHROOT_OUTPUTDIR"
+
 # Slimming down, without affecting compatibility: headers, documentation, translations other than French and English,
-# Qt development tools from the app's venv
+# Qt development tools from the app's venv; build tools pulled in by dependencies and never run on the box (binutils:
+# as, ld, objdump…; gettext's: msgfmt, xgettext…; envsubst and gettext stay, scripts use them), Qt's translations
+# other than French and English
 rm -rf /usr/include /usr/share/doc /usr/share/man /usr/share/info /usr/share/gtk-doc
 find /usr/share/locale -mindepth 1 -maxdepth 1 -type d ! -name 'fr*' ! -name 'en*' -exec rm -rf {} +
 for d in /home/media/.local/share/ui-venv/lib/python3*/site-packages/PySide6; do
   rm -rf "$d"/{assistant,designer,linguist,lrelease,lupdate,qmlformat,qmllint,qmlls,qmlcachegen,qmltyperegistrar,uic,rcc} \
          "$d"/Qt/translations "$d"/include "$d"/typesystems "$d"/glue "$d"/scripts
 done
+rm -f /usr/bin/{addr2line,ar,as,c++filt,dwp,elfedit,gprof,gprofng,ld,ld.bfd,ld.gold,nm,objcopy,objdump,ranlib,readelf} \
+      /usr/bin/{size,strings,strip} /usr/bin/gp-* /usr/lib/lib{bfd,opcodes,ctf,ctf-nobfd,sframe,gprofng}*.so* \
+      /usr/bin/{msgattrib,msgcat,msgcmp,msgcomm,msgconv,msgen,msgexec,msgfilter,msgfmt,msggrep,msginit,msgmerge} \
+      /usr/bin/{msgunfmt,msguniq,xgettext,gettextize,autopoint,recode-sr-latin} /usr/lib/libgettext{lib,src}*.so*
+rm -rf /usr/lib/gprofng /usr/lib/bfd-plugins /usr/lib/ldscripts /usr/share/gettext /usr/lib/gettext
+find /usr/share/qt6/translations -type f ! -name '*_fr*' ! -name '*_en*' -delete 2> /dev/null || true

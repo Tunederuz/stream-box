@@ -607,6 +607,10 @@ Item {
             onTriggered: menu.loadGames() }
     Timer { id: gsSoon; interval: 4000; onTriggered: menu.loadGames() }   // (a search takes a few seconds)
     Timer { id: plexLinkPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadPlexLink() }
+    // Settings → Add-ons open while an extension downloads: its state followed
+    Timer { interval: 3000; repeat: true
+            running: menu.isOpen && menu.section === "addons" && (menu.addons || []).some(function (a) { return a.enabled && a.extension && ["ready", "error", "builtin", "off"].indexOf(a.extension.state) < 0 })
+            onTriggered: menu.loadAddons() }
     Timer { id: jfLinkPoll; interval: 2000; onTriggered: if (menu.isOpen) menu.loadJfLink() }
     Timer { id: followsPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadFollows() }
     Timer { interval: 10000; repeat: true; running: menu.isOpen; triggeredOnStart: true; onTriggered: menu.now = new Date() }
@@ -970,7 +974,8 @@ Item {
         case "addons":   // each add-on on or off (Twitch, the base: always on); the tab and the rows follow at once
             return (addons || []).map(function (a) {
                 return a.base ? { label: a.name, hint: a.description, value: tr("Always on") }
-                    : { label: a.name, hint: a.description, toggle: a.enabled, ok: function () { setAddon(a.id, !a.enabled) } }
+                    : { label: a.name, hint: [a.description, addonStatus(a)].filter(function (t) { return !!t }).join("  ·  "),
+                        toggle: a.enabled, ok: function () { setAddon(a.id, !a.enabled) } }
             })
         case "network":
             var qi = 0
@@ -1242,6 +1247,12 @@ Item {
     }
     // Settings switches: the new value on screen at once, the box's state read again right after (act → refreshSoon)
     function loadAddons() { call("GET", "/api/addons", undefined, function (d) { if (d && d.addons) addons = d.addons }) }
+    // Its system extension, on the box's image (Moonlight, Node.js), while it is on and not ready
+    function addonStatus(a) {
+        var x = a.enabled && a.extension
+        return !x ? "" : x.state === "downloading" || x.state === "pending" ? tr("Downloading…")
+             : x.state === "error" ? tr("Download failed: {error}", { error: x.error || "" }) : ""
+    }
     function setAddon(id, on) {
         addons = addons.map(function (a) { return a.id === id ? Object.assign({}, a, { enabled: on }) : a })   // at once
         st = Object.assign({}, st, { addons: addons.filter(function (a) { return a.enabled }).map(function (a) { return a.id }) })

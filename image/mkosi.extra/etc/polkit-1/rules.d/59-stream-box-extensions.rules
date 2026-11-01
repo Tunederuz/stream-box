@@ -1,0 +1,8 @@
+// Inlet: media brings the system's extensions in line with the add-ons (stream-box-extensions.service, nothing else):
+// an add-on turned on or off in Settings → Add-ons
+polkit.addRule(function (action, subject) {
+    if (subject.user == "media" && action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("verb") == "start" && action.lookup("unit") == "stream-box-extensions.service") {
+        return polkit.Result.YES;
+    }
+});

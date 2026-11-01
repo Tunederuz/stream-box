@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""Inlet: the system's extensions (systemd-sysext), downloaded when their add-on is on: Moonlight for the PC link,
+Node.js for YouTube. Split out of the image at its build (image/split-extensions.py), published with each release as
+stream-box-<name>_<version>.tar.xz, listed in its signed SHA256SUMS.
+    extensions link   early at boot (stream-box-extensions-link.service, before systemd-sysext.service): each one
+                      wanted and already there for the running version, linked into /run/extensions
+    extensions sync   (stream-box-extensions.service: at boot, and when an add-on is turned on or off, started by
+                      remote.py): the missing ones downloaded for the running version (the network waited for, 15 min
+                      at most), checked (gpgv with the release key, then sha256), unpacked; those not wanted any more
+                      and other versions removed; merged again (systemd-sysext refresh)
+Wanted: the add-ons on (media's ~/.config/stream-box/addons.json: {disabled: [...]}, all on by default). Kept in
+/var/lib/stream-box/extensions (on the data partition: it survives the A/B updates, which bring a new version: its
+extensions are downloaded after the boot onto it). State in /run/stream-box-extensions.json: {name: {state:
+ready|downloading|error|off|builtin, error}}. A box version without a release (a build of your own): the base URL in
+/var/lib/stream-box/extensions/source, and developer mode for files without a signature.
+"""
+import hashlib, json, os, shutil, subprocess, sys, tarfile, time, urllib.request
+
+# extension → the add-on that wants it
+EXTENSIONS = {"moonlight": "gamestream", "node": "youtube"}
+STORE = "/var/lib/stream-box/extensions"
+RUN = "/run/extensions"
+STATE = "/run/stream-box-extensions.json"
+ADDONS = "/home/media/.config/stream-box/addons.json"
+KEYRING = "/etc/systemd/import-pubring.pgp"
+DEV_MARK = "/var/lib/stream-box/dev-mode"   # developer mode: unsigned extensions accepted (your own builds)
+RELEASES = "https://github.com/Tunederuz/stream-box/releases/download/v{version}/"
+# Written by image/split-extensions.py: an image without it (built before, its system updated since) still has
+# Moonlight and Node.js in itself: nothing to download
+SPLIT_MARK = "/usr/lib/stream-box-extensions"
+
+
+def version():
+    with open("/usr/lib/os-release") as f:
+        return next((l.split("=", 1)[1].strip().strip('"') for l in f if l.startswith("IMAGE_VERSION=")), "")
+
+
+def wanted():
+    try:
+        with open(ADDONS) as f:
+            off = set(json.load(f).get("disabled") or [])
+    except (OSError, ValueError):
+        off = set()
+    return {name for name, addon in EXTENSIONS.items() if addon not in off}
+
+
+def folder(name, v):
+    return os.path.join(STORE, f"stream-box-{name}_{v}")
+
+
+def state(name, **values):
+    try:
+        with open(STATE) as f:
+            all_ = json.load(f)
+    except (OSError, ValueError):
+        all_ = {}
+    all_[name] = values
+    tmp = STATE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(all_, f)
+    os.replace(tmp, STATE)
+
+
+def link(names, v):
+    """/run/extensions/stream-box-<name> → its folder for this version, for those there; the others unlinked"""
+    os.makedirs(RUN, exist_ok=True)
+    for name in EXTENSIONS:
+        path = os.path.join(RUN, f"stream-box-{name}")
+        target = folder(name, v)
+        if name in names and os.path.isdir(target):
+            if os.path.realpath(path) != target:
+                if os.path.lexists(path):
+                    os.remove(path)
+                os.symlink(target, path)
+        elif os.path.lexists(path):
+            os.remove(path)
+
+
+def fetch(url, dest, tries_until):
+    """Download url to dest; retried while the network is not there yet (until tries_until)"""
+    while True:
+        try:
+            with urllib.request.urlopen(url, timeout=60) as r, open(dest, "wb") as f:
+                shutil.copyfileobj(r, f, 1 << 20)
+            return
+        except OSError as e:
+            if time.time() > tries_until or getattr(e, "code", None) == 404:
+                raise
+            time.sleep(10)
+
+
+def install(name, v, until):
+    try:
+        with open(os.path.join(STORE, "source")) as f:
+            base = f.read().strip().rstrip("/") + "/"
+    except OSError:
+        base = RELEASES.format(version=v)
+    file = f"stream-box-{name}_{v}.tar.xz"
+    work = os.path.join(STORE, ".download")
+    shutil.rmtree(work, ignore_errors=True)
+    os.makedirs(work)
+    for f in ("SHA256SUMS", file):
+        fetch(base + f, os.path.join(work, f), until)
+    try:
+        fetch(base + "SHA256SUMS.gpg", os.path.join(work, "SHA256SUMS.gpg"), until)
+        r = subprocess.run(["gpgv", "--keyring", KEYRING, os.path.join(work, "SHA256SUMS.gpg"), os.path.join(work, "SHA256SUMS")],
+                           capture_output=True, text=True)
+        signed = r.returncode == 0
+    except OSError:   # (no signature)
+        signed = False
+    if not signed and not os.path.exists(DEV_MARK):
+        raise ValueError("signature refused")
+    sums = {f: h for h, f in (line.split() for line in open(os.path.join(work, "SHA256SUMS")) if line.strip())}
+    h = hashlib.sha256()
+    with open(os.path.join(work, file), "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    if sums.get(file) != h.hexdigest():
+        raise ValueError("checksum mismatch")
+    dest = folder(name, v)
+    tmp = dest + ".new"
+    shutil.rmtree(tmp, ignore_errors=True)
+    with tarfile.open(os.path.join(work, file)) as tar:
+        for m in tar.getmembers():   # an extension holds /usr only
+            if not (m.name == "usr" or m.name.startswith("usr/")):
+                raise ValueError(f"unexpected file in the extension: {m.name}")
+        tar.extractall(tmp, filter="fully_trusted")   # (signed: the packages' own links, absolute ones included)
+    if not os.path.exists(os.path.join(tmp, f"usr/lib/extension-release.d/extension-release.stream-box-{name}")):
+        raise ValueError("no extension-release")
+    shutil.rmtree(dest, ignore_errors=True)
+    os.rename(tmp, dest)
+    shutil.rmtree(work, ignore_errors=True)
+
+
+def sync():
+    if not os.path.exists(SPLIT_MARK):
+        for name in EXTENSIONS:
+            state(name, state="builtin")
+        return
+    v, want = version(), wanted()
+    os.makedirs(STORE, exist_ok=True)
+    until = time.time() + 900
+    for name in EXTENSIONS:
+        for d in os.listdir(STORE):   # other versions, and those not wanted any more
+            if d.startswith(f"stream-box-{name}_") and (name not in want or d != os.path.basename(folder(name, v))):
+                shutil.rmtree(os.path.join(STORE, d), ignore_errors=True)
+        if name not in want:
+            state(name, state="off")
+        elif os.path.isdir(folder(name, v)):
+            state(name, state="ready")
+        else:
+            state(name, state="downloading")
+            try:
+                install(name, v, until)
+                state(name, state="ready")
+            except (OSError, ValueError, tarfile.TarError) as e:
+                print(f"extensions: {name}: {e}", file=sys.stderr)
+                state(name, state="error", error=str(e))
+    link(want, v)
+    subprocess.run(["systemd-sysext", "refresh"], check=False)
+
+
+if __name__ == "__main__":
+    if sys.argv[1:] == ["link"] and not os.path.exists(SPLIT_MARK):
+        pass
+    elif sys.argv[1:] == ["link"]:
+        link(wanted(), version())
+    elif sys.argv[1:] == ["sync"]:
+        sync()
+    else:
+        sys.exit("usage: extensions link | sync")

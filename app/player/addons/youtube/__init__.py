@@ -146,7 +146,7 @@ def more_cards(source, key, q, offset):
 
 
 ADDON = Addon(
-    "youtube", "YouTube", order=10,
+    "youtube", "YouTube", order=10, extension="node",
     description="Favorite channels, search, your account's subscriptions and recommendations",
     routes={
         "/api/youtube": Route(lambda q: yt.youtube_home()),

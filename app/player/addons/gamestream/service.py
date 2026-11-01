@@ -17,7 +17,9 @@ from common import COOKIES_DIR, GAMESTREAM_PID, lan_ip, mpv
 from i18n import tr
 
 CONF = os.path.join(COOKIES_DIR, "gamestream.json")
-MOONLIGHT = shutil.which("moonlight") or shutil.which("moonlight-qt")
+def moonlight():
+    """Moonlight's command, looked up each time: on the box's image it comes with its extension, merged while running"""
+    return shutil.which("moonlight") or shutil.which("moonlight-qt")
 APPS_CACHE = 60   # seconds: a PC's list of games, asked again after that
 # Pairing: no window (moonlight-qt would open its own over the TV menu, full screen in cage)
 QUIET = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
@@ -27,7 +29,7 @@ proc = {"stream": None, "pair": None}
 
 
 def available():
-    return bool(MOONLIGHT)
+    return bool(moonlight())
 
 
 def paired_hosts():
@@ -251,7 +253,7 @@ def pair(body):
     info = serverinfo(host)
     pin = f"{random.randint(0, 9999):04d}"
     proc["pair"] = {"pin": pin, "host": host, "name": info["name"] if info else host,
-                    "proc": subprocess.Popen([MOONLIGHT, "pair", host, "--pin", pin], stdin=subprocess.DEVNULL,
+                    "proc": subprocess.Popen([moonlight(), "pair", host, "--pin", pin], stdin=subprocess.DEVNULL,
                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=QUIET)}
 
 
@@ -286,7 +288,7 @@ def launch(body):
     if proc["stream"] and proc["stream"].poll() is None:
         return
     mpv(["stop"])
-    p = subprocess.Popen([MOONLIGHT, "stream", host, app], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+    p = subprocess.Popen([moonlight(), "stream", host, app], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=open("/tmp/stream-box-moonlight.log", "w"), start_new_session=True)
     proc["stream"] = p
     with open(GAMESTREAM_PID, "w") as f:

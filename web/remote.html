@@ -1993,7 +1993,12 @@ async function refreshAddons() {
       sel.value = String(a.enabled);
       sel.onchange = async () => { if (await send("addon", { id: a.id, enabled: sel.value === "true" })) { refresh(); refreshAddons(); } };
       box.append(label, sel);
-      if (a.description) box.append(Object.assign(document.createElement("p"), { textContent: a.description }));
+      // its system extension (the box's image: Moonlight, Node.js) while it is on and not ready
+      const x = a.enabled && a.extension;
+      const status = !x ? "" : ["downloading", "pending"].includes(x.state) ? tr("Downloading…")
+        : x.state === "error" ? tr("Download failed: {error}", { error: x.error || "" }) : "";
+      const text = [a.description, status].filter(Boolean).join(" · ");
+      if (text) box.append(Object.assign(document.createElement("p"), { textContent: text }));
     }
   } catch (e) { bug(e); }
 }

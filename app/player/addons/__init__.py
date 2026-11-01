@@ -25,7 +25,8 @@ class Route:
 
 class Addon:
     """id: its folder and the prefix of its routes, actions, sources and links; order: its place in the lists (TV
-    menu, quick menu); description: what it brings (Settings → Add-ons); base: always on (Twitch); configured():
+    menu, quick menu); description: what it brings (Settings → Add-ons); base: always on (Twitch); extension: the
+    system extension it needs on the box's image (downloaded while it is on: app/system/extensions.py); configured():
     whether it can be used (a server chosen…); kinds: the history kinds of its videos
     (history.media_key; its id by default).
     Videos played from a link (playback.play): prepare(video, entry, from_start, at) → (position, duration) before
@@ -40,13 +41,14 @@ class Addon:
     rows: its TV menu tab (GET /api/rows, addons/cards.py): {"tab": fn() → {rows, …}, "search": fn(q) → {rows},
     "open": fn(target, name) → {rows: [the opened row]}, "more": fn(source, key, q, offset) → {items, more},
     "options": fn(target) → {options} (a card's ≡ options asked when it opens: its more_options)}"""
-    def __init__(self, id, name, order=50, description="", base=False, configured=lambda: True, kinds=None, routes=None,
-                 actions=None, more=None,
+    def __init__(self, id, name, order=50, description="", base=False, extension=None, configured=lambda: True, kinds=None,
+                 routes=None, actions=None, more=None,
                  links=None, prepare=None, started=None, progress=None, progress_every=30, report=None,
                  outside_video=None, state=None, features=None, home=None, library=None, start=None, loops=(),
                  rows=None):
         self.id, self.name, self.order, self.configured, self.kinds = id, name, order, configured, kinds or (id,)
         self.description, self.base = description, base   # (description: English, translated when shown)
+        self.extension = extension
         self.routes, self.actions, self.more, self.links = routes or {}, actions or {}, more or {}, links or {}
         self.prepare, self.started, self.progress, self.progress_every = prepare, started, progress, progress_every
         self.report, self.outside_video, self.state, self.home, self.library = report, outside_video, state, home, library
@@ -158,9 +160,13 @@ def get(addon_id):
 
 def listing():
     """GET /api/addons: each add-on, what it brings and whether it is on"""
+    from sysparts import extensions   # (the box's system part: none in the Inlet app)
     on = {a.id for a in enabled()}
     return {"addons": [{"id": a.id, "name": tr(a.name), "description": tr(a.description) if a.description else "",
-                        "base": a.base, "enabled": a.id in on} for a in ADDONS]}
+                        "base": a.base, "enabled": a.id in on,
+                        # its system extension (the box's image): downloading, ready, error; None: nothing to download
+                        "extension": extensions.state(a.extension) if extensions and a.extension else None}
+                       for a in ADDONS]}
 
 
 def set_enabled(body):
@@ -174,6 +180,9 @@ def set_enabled(body):
     else:
         off.add(a.id)
     write_private_json(CONF, {"disabled": sorted(off)})
+    from sysparts import extensions
+    if extensions:   # its system extension downloaded, or removed (the box's image)
+        extensions.sync()
 
 
 def route(path):
