@@ -28,8 +28,8 @@ Item {
     readonly property real at: live ? (pb.window ? (pb.pos || 0) - pb.window[0] : 0) : scrubbing ? fx.target : (pb.pos || 0)
     readonly property real delay: live && pb.window ? pb.window[1] - (pb.pos || 0) : 0
     // Bar color depending on the source: YouTube red, Jellyfin blue (link to its server: /Videos/…), Plex amber
-    // (/library/parts/…), otherwise Twitch purple
-    readonly property string source: live ? "twitch" : /youtube\.com|youtu\.be|googlevideo/.test(pb.path || "") ? "youtube"
+    // (/library/parts/…), otherwise Twitch purple; Twitch recognized first (a replay, twitch.tv/videos/…, is not Jellyfin's)
+    readonly property string source: live || /twitch\.tv|ttvnw\.net|twitchcdn/.test(pb.path || "") ? "twitch" : /youtube\.com|youtu\.be|googlevideo/.test(pb.path || "") ? "youtube"
         : /\/library\/parts\/\d+\//.test(pb.path || "") ? "plex"
         : /\/Videos\/|\/videos\/[0-9a-f]{32}|api_key=|MediaSourceId=/i.test(pb.path || "") ? "jellyfin" : "other"
     readonly property var colors: source === "youtube" ? ["#ff0033", "#ff4e45"]
