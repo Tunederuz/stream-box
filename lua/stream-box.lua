@@ -483,6 +483,8 @@ end
 -- Bluetooth remote (tested with the Xiaomi TV Stick one): cage forwards its keys to mpv like those of a
 -- keyboard. OK and Menu have no standard name: their codes are those of this remote.
 
+-- Up / Down: the next channel of the list that is live (offline ones skipped); all of them while remote.py's report
+-- of who is live has not come yet
 local function zap(step)
     local list = read_streamers()
     if #list == 0 then return end
@@ -490,7 +492,19 @@ local function zap(step)
     for i, name in ipairs(list) do
         if name == channel then idx = i end
     end
-    local name = list[(idx - 1 + step) % #list + 1]
+    local known = next(live) ~= nil
+    local name
+    for n = 1, #list do
+        local candidate = list[(idx - 1 + step * n) % #list + 1]
+        if candidate ~= channel and (live[candidate] or not known) then
+            name = candidate
+            break
+        end
+    end
+    if not name then
+        mp.osd_message(tr("No other channel live"), 3)
+        return
+    end
     local info = live[name]
     mp.osd_message(("▶ %s%s"):format(name, info and ("   ● " .. info.viewers) or ("   (" .. tr("offline") .. ")")), 3)
     start_channel(name)

@@ -12,6 +12,7 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - Add-ons: YouTube, Jellyfin, Plex and the PC link can be turned off in Settings → Add-ons (TV and companion app):
   their tab and settings go away.
 - The playback bar's buttons of a video come from its add-on (YouTube: like, dislike, comments).
+- Channel zapping (Up / Down on a live) skips the channels that are offline.
 
 ### Fixed
 - YouTube: "See latest videos of…" and the favorite are back in the options (≡) of the Recommended videos.

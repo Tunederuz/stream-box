@@ -1028,5 +1028,6 @@
  "Turned on": "Activée",
  "Turned off": "Désactivée",
  "Downloading…": "Téléchargement…",
- "Download failed: {error}": "Échec du téléchargement : {error}"
+ "Download failed: {error}": "Échec du téléchargement : {error}",
+ "No other channel live": "Aucune autre chaîne en live"
 }
