@@ -17,6 +17,7 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 ### Fixed
 - YouTube: "See latest videos of…" and the favorite are back in the options (≡) of the Recommended videos.
 - Twitch replays: the progress bar is purple again (it was taken for a Jellyfin video and turned blue).
+- PC link: the pairing code's dialog closes as soon as the PC accepts the code (it could stay open).
 
 ## [0.7.0]
 

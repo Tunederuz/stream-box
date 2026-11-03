@@ -7,8 +7,9 @@ pairing.
 The PCs: those found on the network (mDNS, _nvstream._tcp, what Sunshine announces; otherwise the box's /24 tried on
 Sunshine's port 47989) and those already paired (~/.config/stream-box/gamestream.json: {"hosts": ["<address>", …]}).
 Pairing: the box picks a 4-digit code, shows it on the TV, and waits in "moonlight pair" while it is typed in
-Sunshine's PIN page. While a game streams, the moonlight process covers the screen; its PID is in GAMESTREAM_PID, so
-that input.py leaves the keys to it (a long press on Home ends the stream).
+Sunshine's PIN page; its success seen in Sunshine's answer too (moonlight-qt's pair does not always end once paired:
+the TV's dialog would stay). While a game streams, the moonlight process covers the screen; its PID is in
+GAMESTREAM_PID, so that input.py leaves the keys to it (a long press on Home ends the stream).
 """
 import concurrent.futures, html, json, os, random, re, shutil, socket, ssl, struct, subprocess, threading, time
 import urllib.parse, urllib.request
@@ -20,6 +21,7 @@ CONF = os.path.join(COOKIES_DIR, "gamestream.json")
 def moonlight():
     """Moonlight's command, looked up each time: on the box's image it comes with its extension, merged while running"""
     return shutil.which("moonlight") or shutil.which("moonlight-qt")
+PAIR_GRACE = 10   # seconds: moonlight pair left to end by itself once Sunshine says the box is paired
 APPS_CACHE = 60   # seconds: a PC's list of games, asked again after that
 # Pairing: no window (moonlight-qt would open its own over the TV menu, full screen in cage)
 QUIET = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
@@ -210,14 +212,15 @@ def status():
     pairing = None
     p = proc["pair"]
     if p:
-        code = p["proc"].poll()
+        code = 0 if p["paired"] else p["proc"].poll()
         if code is None:
             pairing = {"pin": p["pin"], "host": p["host"], "name": p["name"], "page": f"https://{p['host']}:47990/pin"}
         else:
             proc["pair"] = None
             if code == 0:
                 write_hosts([h for h in paired_hosts() if h != p["host"]] + [p["host"]])
-                state["apps_at"][p["host"]] = 0   # paired: list its games now
+                if not p["paired"]:
+                    state["apps_at"][p["host"]] = 0   # paired: list its games now
             else:
                 pairing = {"error": tr("The pairing failed: try again, and type the code in Sunshine within a minute.")}
     paired = paired_hosts()
@@ -252,9 +255,29 @@ def pair(body):
         proc["pair"]["proc"].terminate()
     info = serverinfo(host)
     pin = f"{random.randint(0, 9999):04d}"
-    proc["pair"] = {"pin": pin, "host": host, "name": info["name"] if info else host,
-                    "proc": subprocess.Popen([moonlight(), "pair", host, "--pin", pin], stdin=subprocess.DEVNULL,
-                                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=QUIET)}
+    p = {"pin": pin, "host": host, "name": info["name"] if info else host, "paired": False,
+         "proc": subprocess.Popen([moonlight(), "pair", host, "--pin", pin], stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=QUIET)}
+    proc["pair"] = p
+    threading.Thread(target=watch_pairing, args=(p,), daemon=True).start()
+
+
+def watch_pairing(p):
+    """While "moonlight pair" waits: Sunshine asked every 2 s whether it lists its games to the box (the code typed:
+    paired). moonlight-qt's pair may not end by itself once paired: then left PAIR_GRACE s to keep the PC in its
+    settings, and stopped."""
+    time.sleep(2)   # (its client certificate made, before the code is typed)
+    while p["proc"].poll() is None and proc["pair"] is p:
+        apps = load_apps(p["host"])
+        if apps is not None:
+            state["apps"][p["host"]], state["apps_at"][p["host"]] = apps, time.time()
+            p["paired"] = True
+            try:
+                p["proc"].wait(PAIR_GRACE)
+            except subprocess.TimeoutExpired:
+                p["proc"].terminate()
+            return
+        time.sleep(2)
 
 
 def pair_cancel(body):
