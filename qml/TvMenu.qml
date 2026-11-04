@@ -1394,17 +1394,29 @@ Item {
             if (d.message) modal = Object.assign({}, modal, { title: d.message })
         })
     }
-    // Search: the dialog fills up for 20 s (remotes and controllers first); OK on a device pairs it
+    // Search: the devices show up as they are seen (remotes and controllers first); the first remote, gamepad or
+    // keyboard seen is paired by itself (auto), OK on another one pairs it
     function btScan() {
         btPhase = "scan"
-        call("POST", "/api/bluetooth", { action: "scan" })
-        openModal(tr("Searching… put the remote in pairing mode"), [{ label: tr("Cancel"), ok: function () { btPhase = "" } }])
+        call("POST", "/api/bluetooth", { action: "scan", auto: true })
+        modal = { title: tr("Searching… put the remote or controller in pairing mode"), help: btHelp(),
+                  items: [{ label: tr("Cancel"), ok: function () { btPhase = "" } }] }
+        modalSel = 0
+    }
+    function btHelp() {
+        return tr("Xbox controller: hold its pairing button (top, next to the cable) until the logo blinks fast. Xiaomi remote: Home + Back.")
     }
     function btRefresh() {
         loadBt(function (d) {
             if (btPhase === "scan") {
+                if (d.busy) {   // a device seen got paired by itself
+                    btPhase = "pair"
+                    modal = { title: d.message || tr("Pairing…"), items: [{ label: tr("Close"), ok: function () { btPhase = "" } }] }
+                    modalSel = 0
+                    return
+                }
                 var items = d.found.map(function (f) {
-                    return { label: f.name, ok: function () {
+                    return { label: f.paired ? tr("{name} (pair again)", { name: f.name }) : f.name, ok: function () {
                         btPhase = "pair"
                         call("POST", "/api/bluetooth", { action: "pair", mac: f.mac })
                         openModal(tr("Pairing {name}…", { name: f.name }), [{ label: tr("Close"), ok: function () { btPhase = "" } }])
@@ -1412,14 +1424,18 @@ Item {
                 })
                 if (!d.scanning) items.push({ label: tr("↻  Search again"), ok: btScan })
                 items.push({ label: tr("Cancel"), ok: function () { btPhase = "" } })
-                var title = d.scanning ? tr("Searching… put the remote in pairing mode")
+                var title = d.scanning ? tr("Searching… put the remote or controller in pairing mode")
                           : d.found.length ? tr("Devices found") : tr("No device found")
                 var sel = modalSel
-                modal = { title: title, items: items }
+                modal = { title: title, items: items, help: d.found.length ? "" : btHelp() }
                 modalSel = Math.min(sel, items.length - 1)
-            } else if (btPhase === "pair" && !d.busy) {
+            } else if (btPhase === "pair" && d.busy) {   // its steps: pairing, second try, connecting
+                if (d.message && modal.title !== d.message) modal = Object.assign({}, modal, { title: d.message })
+            } else if (btPhase === "pair") {
                 btPhase = ""
-                openModal(d.message || tr("Pairing finished"), [{ label: tr("OK"), ok: btMenu }])
+                openModal(d.message || tr("Pairing finished"), d.error
+                    ? [{ label: tr("↻  Search again"), ok: btScan }, { label: tr("Close"), ok: btMenu }]
+                    : [{ label: tr("OK"), ok: btMenu }])
             }
         })
     }

@@ -13,6 +13,9 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   their tab and settings go away.
 - The playback bar's buttons of a video come from its add-on (YouTube: like, dislike, comments).
 - Channel zapping (Up / Down on a live) skips the channels that are offline.
+- Bluetooth pairing: devices show up as soon as they are seen, the first remote or controller found is paired by
+  itself, the dialog says each step and how to put an Xbox controller in pairing mode; a controller paired with a
+  console or a PC in between can be paired again, and a failed pairing is tried a second time.
 
 ### Fixed
 - YouTube: "See latest videos of…" and the favorite are back in the options (≡) of the Recommended videos.

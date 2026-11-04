@@ -560,7 +560,6 @@
  "Search {service}": "Rechercher sur {service}",
  "Search: from the companion app": "Recherche : depuis l'appli compagnon",
  "Searching for \"{query}\"…": "Recherche de « {query} »…",
- "Searching… put the remote in pairing mode": "Recherche… mets la télécommande en mode appairage",
  "Secret (confidential app only)": "Secret (appli confidentielle seulement)",
  "Send and install": "Envoyer et installer",
  "Sending the image… {percent} %": "Envoi de l'image… {percent} %",
@@ -1029,5 +1028,12 @@
  "Turned off": "Désactivée",
  "Downloading…": "Téléchargement…",
  "Download failed: {error}": "Échec du téléchargement : {error}",
- "No other channel live": "Aucune autre chaîne en live"
+ "No other channel live": "Aucune autre chaîne en live",
+ "Searching… put the remote or controller in pairing mode": "Recherche… mets la télécommande ou la manette en mode appairage",
+ "Xbox controller: hold its pairing button (top, next to the cable) until the logo blinks fast. Xiaomi remote: Home + Back.": "Manette Xbox : maintiens son bouton d'appairage (en haut, à côté du câble) jusqu'à ce que le logo clignote vite. Télécommande Xiaomi : Accueil + Retour.",
+ "Pairing…": "Appairage…",
+ "{name} (pair again)": "{name} (appairer à nouveau)",
+ "Pairing {name}: second try…": "Appairage de {name} : deuxième essai…",
+ "{name} is not in pairing mode any more: put it back in pairing mode and try again.": "{name} n'est plus en mode appairage : remets-le en mode appairage et réessaie.",
+ "Connecting {name}…": "Connexion de {name}…"
 }

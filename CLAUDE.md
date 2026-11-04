@@ -949,8 +949,15 @@ stream-box.lua, the actions one by one (8 s each, without a key it keeps its own
 refused), learned keys added to `~/.config/stream-box/keymap.json` ({name: action}, Linux names via input.py or
 mpv names as fallback), state in `user-data/streambox/learn` → `qml/KeyWizard.qml` (on-screen message with mpv alone).
 ui.py also applies keymap.json to the open QML menu. Bluetooth (btsetup.py, `GET/POST /api/bluetooth`): list of
-paired devices, 20 s scan, pairing without a code (NoInputNoOutput agent) + trust + connect, unpairing;
-"Remotes and controllers" popup of the System menu (QML: `btMenu`, `btScan`, reread every 2 s).
+paired devices, 60 s scan read as bluetoothctl's events come (`parse`: the devices show up at once), the first remote,
+gamepad or keyboard seen paired by itself (`scan(auto=True)`, the TV's: an Xbox controller stays in pairing mode
+~20 s), pairing without a code (NoInputNoOutput agent; the scan stopped first, some adapters don't connect while
+scanning) + trust + connect, its steps in `message`; a device already paired here but seen in the scan (its bond lost:
+paired with a console or a PC since) offered "pair again": removed, looked for again, paired; a failed pairing tried
+a second time the same way; unpairing. Image: /etc/bluetooth/main.conf `JustWorksRepairing = always` (such a device
+pairs again by itself). "Remotes and controllers" popup of the System menu (QML: `btMenu`, `btScan`, reread every 2 s,
+how to put an Xbox controller or the Xiaomi remote in pairing mode in the dialog's `help` line).
+tests/test_btsetup.py runs it against a fake bluetoothctl.
 Reboot: `POST /api/reboot` (`systemctl reboot`, polkit login1.reboot* added), "Restart the box" in the System menu
 (second OK within 4 s), button in Settings → Status and updates of the page, "Restart" button in Home Assistant.
 Power held for 1 s → "Box" popup ("☾  Sleep", "↻  Restart", "⏻  Shut down", "Cancel"; QML menu `powerMenu`,

@@ -85,8 +85,8 @@ def key(body):
 def bluetooth(body):
     # TV System menu: {"action": "scan"}, {"action": "pair" | "remove", "mac"}
     what, mac = str(body.get("action", "")), str(body.get("mac", "")).upper()
-    if what == "scan":
-        btsetup.scan()
+    if what == "scan":   # auto: the first remote, gamepad or keyboard seen gets paired
+        btsetup.scan(auto=bool(body.get("auto")))
     elif what == "pair":
         btsetup.pair(mac)
     elif what == "remove":
