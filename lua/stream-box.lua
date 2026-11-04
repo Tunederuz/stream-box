@@ -159,7 +159,27 @@ local function start_server(name)
     server = handle
 end
 
+-- Live preview of the TV menu (Live / Following tabs, nothing playing: home mode): the channel plays muted in the
+-- main player behind the menu (streambox-preview <login>, empty: stopped); chosen (start_channel), it goes on with
+-- its sound and becomes the live: no reload, no loading screen, no cut. Published in user-data/streambox/preview.
+local preview = { login = nil, mute = false, tries = 0, timer = nil }
+function preview.publish() mp.set_property_native("user-data/streambox/preview", preview.login or "") end
+function preview.stop()   -- (its sound as it was)
+    if not preview.login then return end
+    if preview.timer then preview.timer:kill() end
+    preview.login, preview.timer = nil, nil
+    mp.set_property_bool("mute", preview.mute)
+    preview.publish()
+end
+function preview.load()
+    preview.timer = nil
+    if not preview.login then return end
+    preview.tries = preview.tries + 1
+    mp.commandv("loadfile", stream_url())
+end
+
 local function set_mode(m)
+    if m ~= "home" then preview.stop() end   -- (a video or a channel starts: the preview's mute goes)
     mode = m
     mp.set_property_native("user-data/streambox/mode", m)
     if back_timer then
@@ -178,6 +198,20 @@ end
 
 local function start_channel(name)
     if not name then return end
+    if preview.login == name and mode == "home" and mp.get_property_native("video-params") then
+        -- the channel previewed behind the menu: it goes on, with its sound
+        if preview.timer then preview.timer:kill() end
+        preview.login, preview.timer = nil, nil
+        mp.set_property_bool("mute", preview.mute)
+        preview.publish()
+        channel = name
+        write_state("channel", name)
+        mp.set_property_native("user-data/streambox/channel", name)
+        set_mode("twitch")
+        offline, channel_since, attempts = false, mp.get_time(), 0
+        set_status("")
+        return
+    end
     channel = name
     write_state("channel", name)
     mp.set_property_native("user-data/streambox/channel", name)
@@ -238,6 +272,7 @@ end)
 
 -- Home screen on demand: no more stream nor automatic switch, until a streamer or a video is chosen
 local function show_home()
+    preview.stop()
     stop_twitch()
     set_mode("home")
     mp.commandv("stop")
@@ -418,7 +453,12 @@ function ytc.retry(e)
 end
 
 mp.register_event("end-file", function(e)
-    if mode == "home" then return end
+    if mode == "home" then   -- the preview: streamlink still starting (or the live lost), tried a few times
+        if preview.login and (e.reason == "eof" or e.reason == "error") and preview.tries < 6 then
+            preview.timer = mp.add_timeout(1.5, preview.load)
+        end
+        return
+    end
     if mode == "media" then
         if ytc.retry(e) then return end   -- YouTube refused the stream: the next client
         if e.reason == "error" then
@@ -1294,6 +1334,20 @@ keys.setup(on_key, qt_ui)
 mp.register_script_message("streambox-channel", function(name)
     mp.commandv("script-message", "streambox-tvmenu-close")
     start_channel(name)
+end)
+mp.register_script_message("streambox-preview", function(login)
+    login = login or ""
+    if mode ~= "home" or login == (preview.login or "") then return end   -- (only behind the menu as the main page)
+    preview.stop()
+    stop_twitch()
+    mp.commandv("stop")
+    if not login:match("^[%w_]+$") then return end
+    preview.mute = mp.get_property_bool("mute")
+    mp.set_property_bool("mute", true)
+    preview.login, preview.tries = login, 0
+    preview.publish()
+    start_server(login)
+    preview.timer = mp.add_timeout(2, preview.load)
 end)
 mp.register_script_message("streambox-toggle-chat", toggle_chat)
 mp.register_script_message("streambox-cycle-corner", function(target) toggle_corner(target) end)

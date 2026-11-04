@@ -17,11 +17,12 @@ Item {
     property bool isOpen: false
     // Closing with the home screen: it fades in over the menu (600 ms), the menu stays shown under it meanwhile
     property bool underHome: false
-    onIsOpenChanged: if (!isOpen && box.ambientOn) { underHome = true; underHomeEnd.restart() }
+    onIsOpenChanged: if (!isOpen && box.ambientOn && !adopting) { underHome = true; underHomeEnd.restart() }
     Timer { id: underHomeEnd; interval: 650; onTriggered: menu.underHome = false }
     opacity: isOpen || underHome ? 1 : 0
     visible: opacity > 0
-    Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+    // (longer onto the previewed live it leaves playing)
+    Behavior on opacity { NumberAnimation { duration: menu.adopting ? 500 : 220; easing.type: Easing.OutCubic } }
     function tr(s, a) { return I18n.t(i18n.dict, s, a) }
 
     readonly property string api: "http://127.0.0.1:8080"
@@ -631,6 +632,7 @@ Item {
     function open() {
         powerOnly = false
         if (isOpen) return
+        adopting = false
         // Tab of the current media once the state arrives (refresh, startFocus: st may be from the last opening),
         // otherwise the tab it was on; YouTube and Jellyfin keep their row and their card; the data is reloaded
         var t = tabs[tab].id
@@ -742,7 +744,7 @@ Item {
     }
     // ≡ menu on a streamer: watch it, or add it as a second stream next to the current one
     function streamerOptions(name, addToList, isLive) {
-        var watch = function () { act("channel", { name: name }); close() }
+        var watch = function () { watchChannel(name) }
         var items = [{ label: tr("▶  Watch"), ok: watch }]
         // Second stream: only a live channel (otherwise a black frame that waits), next to a live stream
         if (isLive && st.mode === "twitch" && st.channel && name !== st.channel) {
@@ -1346,8 +1348,9 @@ Item {
         loadTab(tabs[tab].id)   // tabs[tab] and not tabId: the tabId binding is not recomputed yet here
     }
     // Live preview in the background: on the Live and Following tabs, after a moment on a live channel, its live plays
-    // muted behind the whole menu, under a dark veil (livePreview of ui.py: streamlink and a third player, drawn by
-    // menu/LivePreview.qml). Only when the menu is the main page: nothing plays behind it
+    // muted behind the whole menu, under a dark veil, in the main player itself (box.preview → stream-box.lua's
+    // streambox-preview). Only when the menu is the main page: nothing plays behind it. Chosen (watchChannel), the same
+    // live goes on with its sound while the menu fades out (adopting): no reload, no cut
     readonly property string bgLive: {
         if (!isOpen || area !== "content" || modal || kbOpen || box.videoActive) return ""
         if (tabId === "live") {
@@ -1364,15 +1367,25 @@ Item {
     }
     Timer { id: bgDwell; interval: 900; onTriggered: if (menu.bgLive) menu.startPreview(menu.bgLive) }
     property string previewFor: ""   // login whose live plays in the background
+    property bool adopting: false    // the previewed live chosen: it plays on, the menu fades out over it
+    // The preview's picture there (or the live it became, while the menu fades out): the menu's background steps aside
+    readonly property bool previewShown: (box.previewActive && !!previewFor) || adopting
+    readonly property bool videoBehind: box.videoActive && !adopting   // (the menu's veil over a video)
     function startPreview(login) {
         stopPreview()
         previewFor = login
-        livePreview.play(login)
+        box.preview(login)
     }
     function stopPreview() {
         if (!previewFor) return
         previewFor = ""
-        livePreview.stop()
+        if (!adopting) box.preview("")
+    }
+    // Watch a streamer: its live previewed behind the menu goes on with its sound (stream-box.lua's start_channel)
+    function watchChannel(name) {
+        if (previewFor === name && box.previewActive) adopting = true
+        act("channel", { name: name })
+        close()
     }
     function loadBt(cb) { call("GET", "/api/bluetooth", undefined, function (d) { if (d) { bt = d; if (cb) cb(d) } }) }
     // "Remotes and controllers" dialog: paired devices (OK: unpair), "Pair a device"
@@ -1693,7 +1706,7 @@ Item {
             else if (k === "ok") sc[shortcut].ok()
             return
         }
-        if (k === "ok") { if (list[liveSel]) { act("channel", { name: list[liveSel] }); close() } return }
+        if (k === "ok") { if (list[liveSel]) watchChannel(list[liveSel]); return }
         if (k === "menu") { if (list[liveSel]) streamerOptions(list[liveSel], false, !!(st.live || {})[list[liveSel]]); return }
         if (k === "up" && liveSel < 4) { if (shortcuts().length) shortcut = 0; return }
         var n = grid(liveSel, list.length, 4, k)
@@ -1715,7 +1728,7 @@ Item {
         var list = followList()
         if ((k === "ok" || k === "menu") && list[followSel]) {
             var name = list[followSel].login
-            if (k === "ok" && inList(name)) { act("channel", { name: name }); close(); return }
+            if (k === "ok" && inList(name)) { watchChannel(name); return }
             streamerOptions(name, !inList(name), list[followSel].viewers !== undefined && list[followSel].viewers !== null)
             return
         }
@@ -1887,19 +1900,20 @@ Item {
     Item {   // the whole menu; hidden when only the "Box" dialog (power held) is shown
         anchors.fill: parent
         visible: !menu.powerOnly
-        Rectangle {   // veil over the video; opaque without video, to hide the ambient screen
+        Rectangle {   // veil over the video; opaque without video, to hide the ambient screen (not over the live preview)
             anchors.fill: parent
             color: menu.pal.veil
-            opacity: box.videoActive ? 0.89 : 1
+            opacity: menu.videoBehind ? 0.89 : menu.previewShown ? 0 : 1
+            Behavior on opacity { NumberAnimation { duration: 400 } }
             Behavior on color { ColorAnimation { duration: 400 } }
         }
         // Without video behind (the menu is then the main page): animated background in the tab's colors, softened
         Backdrop {
             anchors.fill: parent
             visible: opacity > 0
-            opacity: box.videoActive ? 0 : 1
+            opacity: menu.videoBehind || menu.previewShown ? 0 : 1
             Behavior on opacity { NumberAnimation { duration: 500 } }
-            running: menu.isOpen && !box.videoActive
+            running: menu.isOpen && !menu.videoBehind && !menu.previewShown
             base: menu.bd.base
             overlay: menu.bd.overlay
             overlayOpacity: 0.6
@@ -1908,11 +1922,10 @@ Item {
             c2: menu.hueShift(menu.accent, 0.10, 0.8)
             c3: menu.hueShift(menu.accent, -0.12, 0.9)
         }
-        Rectangle { anchors.fill: parent; color: menu.pal.veil; opacity: box.videoActive ? 0 : 0.30 }
-        LivePreview { menu: menu }   // live of the chosen streamer, in the background (bgLive)
-        Rectangle {   // dark veil over it: the cards and texts stay readable
+        Rectangle { anchors.fill: parent; color: menu.pal.veil; opacity: menu.videoBehind || menu.previewShown ? 0 : 0.30 }
+        Rectangle {   // dark veil over the live preview (bgLive, the main player behind): the cards and texts stay readable
             anchors.fill: parent; color: "black"
-            opacity: livePreview.ready && menu.previewFor ? 0.55 : 0
+            opacity: menu.previewShown ? 0.55 : 0
             Behavior on opacity { NumberAnimation { duration: 300 } }
         }
         Rail { menu: menu }   // (menu: the id of this object, looked up before the property of the same name)

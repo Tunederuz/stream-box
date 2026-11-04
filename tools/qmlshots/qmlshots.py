@@ -204,6 +204,7 @@ def shoot(qml_dir, out):
         def __init__(self):
             super().__init__()
             self._video = False
+            self._preview = ""
             self.calls = []
             self._ambient = json.dumps({"weather": {"temp": 14, "text": "Nuageux"},
                                         "qr": {"rows": fixtures["/api/qr"]["rows"], "url": "http://192.168.1.20:8080/"}})
@@ -215,6 +216,14 @@ def shoot(qml_dir, out):
         # a handheld (Steam Deck): the battery shows in the menu header and on the home screen
         battery = Property(str, lambda self: json.dumps({"percent": 72, "charging": False}), notify=batteryChanged)
         videoActive = Property(bool, lambda self: self._video, notify=videoActiveChanged)
+        # the menu's live preview (in the main player): "plays" at once
+        previewActive = Property(bool, lambda self: bool(self._preview), notify=videoActiveChanged)
+
+        @Slot(str)
+        def preview(self, login):
+            self.calls.append("preview " + login)
+            self._preview = login
+            self.videoActiveChanged.emit()
 
         def set_video(self, v):
             self._video = v
@@ -243,27 +252,6 @@ def shoot(qml_dir, out):
 
         def paint(self, painter):
             painter.fillRect(0, 0, int(self.width()), int(self.height()), QColor("#ff2fa8"))
-
-    class LivePreview(QObject):   # livePreview of ui.py: "plays" at once
-        changed = Signal()
-
-        def __init__(self):
-            super().__init__()
-            self._ready = False
-
-        ready = Property(bool, lambda self: self._ready, notify=changed)
-
-        @Slot(str)
-        def play(self, login):
-            box.calls.append("livePreview.play " + login)
-            self._ready = True
-            self.changed.emit()
-
-        @Slot()
-        def stop(self):
-            box.calls.append("livePreview.stop")
-            self._ready = False
-            self.changed.emit()
 
     class Pip(QObject):   # second stream running: shortcuts in Live
         changed = Signal()
@@ -323,13 +311,11 @@ def shoot(qml_dir, out):
     app = QGuiApplication(sys.argv[:1])   # noqa: F841  (kept referenced: Qt needs the application object alive)
     box = Box()
     pip = Pip()
-    live_preview = LivePreview()
     qmlRegisterType(FakeVideo, "StreamBox", 1, 0, "MpvVideo")
     i18n = I18n(json.load(open(os.path.join(REPO, "locales", "fr.json"), encoding="utf-8")))
     view = QQuickView()
     view.rootContext().setContextProperty("box", box)
     view.rootContext().setContextProperty("pip", pip)
-    view.rootContext().setContextProperty("livePreview", live_preview)
     view.rootContext().setContextProperty("i18n", i18n)
     view.setResizeMode(QQuickView.SizeRootObjectToView)
     # QMLSHOTS_SIZE=1280x800: another screen shape (Steam Deck), drawn through qml/Fit.qml as by ui.qml
