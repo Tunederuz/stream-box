@@ -155,6 +155,13 @@ Below, file names without a folder are in these folders.
     `POST /api/addon {id, enabled}`, `/api/state` → `addons` (ids on). TV: Settings → Add-ons (toggles, `setAddon`
     changes `addons` and `st.addons` at once), tabs (`addonOn`) and the accounts rows of an addon off hide; companion
     app: Add-ons group, `[data-addon]` sections hidden (`.addon-off`); quick menu: its YouTube and libraries follow.
+    Identity (step 1 of the cleanup, 2026-11-04): an addon declares `colors` {accent, bar}, `kind_names` (labels of
+    its history kinds) and `urls` [{re, kind, key, ident}] (its links: with a group, the history key, `addons.media_key`
+    used by `history.media_key`; the regexes are also read by the interface, JavaScript: common syntax only);
+    `addons.identity()` is published in `user-data/streambox/addons` (`identity_loop`, every 10 s) and relayed as
+    `osd.addons` (InfoBar, LoadingOverlay); `addons.kind_name` labels `/api/history` (`kind_name`) and the quick menu;
+    `addons.play_video(addon_id, …)` starts a video with its add-on; `playback.find_url` finds the add-ons' own links
+    (`addons.link_prefixes`).
     Step 4: the playback bar's buttons of an addon, for the video it plays (`addons.publish_actions(url, items)` →
     `user-data/streambox/actions` {url, items}; stream-box.lua shows them only while that url plays, after −10 s /
     Pause / +10 s, as `addon:<n>`; InfoBar draws `icon`): items [{label, label_on, icon, on, group, post, body,
@@ -601,8 +608,9 @@ YouTube preview: at each YouTube playback, remote.py reads the `yt-dlp -J` resul
 "not a bot" check) and publishes the thumbnail sheet
 (`storyboard`: image fragments in a rows × columns grid, each covering `duration` s); the cell shown is
 chosen from the position. QML pitfall again: `left` (FINAL) cannot be used as a property name.
-Bar color depending on the source (`InfoBar.source`, from `path` relayed by ui.py): red for YouTube, blue
-for Jellyfin (server link: `/Videos/…`, `api_key=`, `MediaSourceId=`), purple otherwise and for live.
+Bar color depending on the source (`InfoBar.source`, from `path` relayed by ui.py): the add-on whose `urls`
+(`osd.addons`, their identity) match it, its `colors.bar` (red YouTube, blue Jellyfin, amber Plex); purple otherwise
+and for live.
 
 ### Box status (page, Settings → Status and updates)
 
@@ -772,7 +780,8 @@ Menu background: two blurred glows (RectangularShadow, no sharp shape) in the ta
 stream-box.lua (`set_loading`) publishes `user-data/streambox/loading` {title, thumb} when a video starts
 (`play_media url start forced_title image shown_title`) or a channel starts (`start_channel`), and clears it at the first
 frame (`playback-restart`), on error, on the home screen or after 45 s. `qml/LoadingOverlay.qml` (relay
-`osd.loading`, `kind`: twitch, youtube, jellyfin, video): blurred thumbnail, box logo that breathes, glow in the
+`osd.loading`, `kind`: the add-on of what loads, given by remote.py (`addons.play_video` → streambox-play's 6th
+argument; "twitch" for a channel, "video" for a link of none), its accent and name from `osd.addons`): blurred thumbnail, box logo that breathes, glow in the
 source's color running along the triangle's outline (dashed ShapePath, animated `dashOffset`), ripples;
 drop shadow under the texts; fade in and out. With mpv alone
 (`vo` ≠ libmpv): "Loading {title}…" as the centered status message (the only one, also for a Twitch channel). Title and image come from remote.py (history, Jellyfin)

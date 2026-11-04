@@ -49,8 +49,6 @@ Item {
     onTabsChanged: tab = Math.max(0, tabs.findIndex(function (t) { return t.id === tabKept }))
     readonly property var corners: ({ tl: "↖ top left", tr: "↗ top right", br: "↘ bottom right", bl: "↙ bottom left" })
     readonly property var qrModes: [["always", "Always"], ["timed", "30 seconds"], ["never", "Never"]]
-    readonly property var kinds: ({ youtube: "YouTube", "twitch-vod": "Twitch replay", "twitch-clip": "Twitch clip", link: "Link", jellyfin: "Jellyfin",
-                                    plex: "Plex" })
 
     // Data (reloaded on open; reassigned as a whole so bindings follow)
     property var st: ({})

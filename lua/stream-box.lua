@@ -232,14 +232,13 @@ end
 -- title: title to display (Jellyfin: the stream link does not give one), passed as a file option (%n%: length
 -- in bytes, so commas and equal signs in the title go through as is)
 -- thumb, label: loading screen picture and title (label: known title, without forcing it on mpv)
-local function play_media(url, start, title, thumb, label)
+local function play_media(url, start, title, thumb, label, kind)
     -- Started from elsewhere (phone, Cast, Home Assistant…) while the menu is open: it closes over the video
     mp.commandv("script-message", "streambox-tvmenu-close")
     stop_twitch()
     set_mode("media")
-    local kind = (url:find("youtube%.com/") or url:find("youtu%.be/")) and "youtube"
-        or url:find("/Videos/%x+/stream") and "jellyfin" or url:find("/library/parts/%d+/") and "plex"
-        or url:find("twitch%.tv/") and "twitch" or "video"
+    -- kind: its add-on (remote.py's addons.play_video: the loading screen's color and name), a link of none: video
+    kind = (kind and kind ~= "") and kind or "video"
     set_loading((label and label ~= "" and label) or (title and title ~= "" and title) or tr("the video"), thumb, kind)
     mp.set_property_bool("pause", false)   -- mpv keeps pause from one file to the next
     local at = tonumber(start) or 0

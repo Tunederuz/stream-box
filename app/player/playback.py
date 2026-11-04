@@ -11,10 +11,11 @@ from i18n import tr
 
 
 def find_url(*texts):
-    """First http(s) link found: apps often share "title + link" in the text field. Also
-    "jellyfin:ID" and "plex:ID", the links of Jellyfin and Plex videos in the history."""
+    """First http(s) link found: apps often share "title + link" in the text field. Also an add-on's own links,
+    "<id>:<item>" (Jellyfin and Plex videos in the history)."""
+    own = "".join(rf"|\b{re.escape(p)}:[\w-]+\b" for p in addons.link_prefixes())
     for text in texts:
-        match = re.search(r"https?://\S+|\bjellyfin:[0-9a-f]{32}\b|\bplex:\d{1,10}\b", text or "")
+        match = re.search(r"https?://\S+" + own, text or "")
         if match:
             return match.group(0)
     return None
@@ -42,7 +43,7 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
         start = max(0, int(at))
     history.now_playing.clear()
     history.now_playing.update(video, pushed=0.0, position=start)
-    mpv(["script-message", "streambox-play", url, str(start), "", video.get("thumb") or "", video.get("title") or ""])
+    addons.play_video(addon.id if addon else "", url, start, "", video.get("thumb") or "", video.get("title") or "")
     history.record(video, start, duration)
     mpv(["set_property", "user-data/streambox/storyboard", {}])
     mpv(["set_property", "user-data/streambox/meta", {}])

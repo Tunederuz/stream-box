@@ -6,7 +6,7 @@ for the quick menu (mpv alone). Twitch is the base (always there, its live strea
 the core's modules may use its service directly; YouTube, Jellyfin, Plex and the PC link.
 Standard library only.
 """
-import importlib, os
+import importlib, os, re
 
 from common import COOKIES_DIR, mpv, read_json_file, write_private_json
 from i18n import tr
@@ -40,12 +40,18 @@ class Addon:
     media library, for the quick menu; start() at the server's start, loops: functions run each in its thread.
     rows: its TV menu tab (GET /api/rows, addons/cards.py): {"tab": fn() → {rows, …}, "search": fn(q) → {rows},
     "open": fn(target, name) → {rows: [the opened row]}, "more": fn(source, key, q, offset) → {items, more},
-    "options": fn(target) → {options} (a card's ≡ options asked when it opens: its more_options)}"""
+    "options": fn(target) → {options} (a card's ≡ options asked when it opens: its more_options)}.
+    Its identity, for the interface (identity(), published in user-data/streambox/addons: the playback bar, the
+    loading screen, the history's labels) and the history (media_key): colors {accent, bar: [from, to]}; kind_names
+    {kind: English label} (its name by default); urls, the links that are its videos: [{re, kind, key, ident}] (re: a
+    regex, also used by the interface, JavaScript, to recognize what plays: keep to the common syntax; with a group,
+    the video's identifier: history key "<key or kind>:<group>", ident False when the group is not the id its add-on
+    plays: Plex's files; without a group: recognized only)"""
     def __init__(self, id, name, order=50, description="", base=False, extension=None, configured=lambda: True, kinds=None,
                  routes=None, actions=None, more=None,
                  links=None, prepare=None, started=None, progress=None, progress_every=30, report=None,
                  outside_video=None, state=None, features=None, home=None, library=None, start=None, loops=(),
-                 rows=None):
+                 rows=None, colors=None, kind_names=None, urls=()):
         self.id, self.name, self.order, self.configured, self.kinds = id, name, order, configured, kinds or (id,)
         self.description, self.base = description, base   # (description: English, translated when shown)
         self.extension = extension
@@ -53,6 +59,9 @@ class Addon:
         self.prepare, self.started, self.progress, self.progress_every = prepare, started, progress, progress_every
         self.report, self.outside_video, self.state, self.home, self.library = report, outside_video, state, home, library
         self.features, self.start, self.loops, self.rows = features, start, loops, rows
+        self.colors = colors or {}
+        self.kind_names = kind_names or {k: name for k in self.kinds}
+        self.urls = list(urls)
 
 
 def library(id, home, search, series, play, more_lib, more_home, more_search, unreachable):
@@ -252,6 +261,53 @@ def rows(query):
 
 
 CORE_ROUTES = {"/api/rows": Route(rows), "/api/addons": Route(lambda q: listing())}
+
+
+def media_key(url):
+    """(stable history key, kind, identifier) of a link an add-on recognizes (its urls), or None. All add-ons, those
+    turned off too: the history keeps their keys"""
+    for a in ADDONS:
+        for u in a.urls:
+            m = re.search(u["re"], url or "")
+            if m and m.groups():
+                return f"{u.get('key') or u['kind']}:{m.group(1)}", u["kind"], m.group(1) if u.get("ident", True) else None
+    return None
+
+
+def kind_name(kind):
+    """The label of a history kind (translated): its add-on's, "Link" otherwise"""
+    for a in ADDONS:
+        if kind in a.kind_names:
+            return tr(a.kind_names[kind])
+    return tr("Link") if kind == "link" else ""
+
+
+def link_prefixes():
+    """The ids of the add-ons that have their own links, "<id>:<item>" (playback.find_url finds them in a text)"""
+    return [a.id for a in ADDONS if a.links]
+
+
+def identity():
+    """{id: {name, colors, kinds, urls}} of every add-on, for the interface (English names: it translates them)"""
+    return {a.id: {"name": a.name, "colors": a.colors, "kinds": a.kind_names, "urls": [u["re"] for u in a.urls]}
+            for a in ADDONS}
+
+
+def identity_loop():
+    """The add-ons' identity in user-data/streambox/addons, again every 10 s (mpv restarted: lost)"""
+    import time
+    while True:
+        try:
+            mpv(["set_property", "user-data/streambox/addons", identity()])
+        except OSError:
+            pass
+        time.sleep(10)
+
+
+def play_video(addon_id, url, start=0, title="", thumb="", label=""):
+    """A video in the player (stream-box.lua's streambox-play): title forced on mpv, thumb and label for the loading
+    screen, the add-on it belongs to (its colors and name there; "" a link)"""
+    mpv(["script-message", "streambox-play", url, str(start), title or "", thumb or "", label or "", addon_id or ""])
 
 
 def publish_actions(url, items):

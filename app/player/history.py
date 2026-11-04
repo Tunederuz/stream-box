@@ -1,7 +1,7 @@
 """Inlet: history and resume of the videos started from the companion app (history.json), and the video being
 played (now_playing, shared with playback.py and the addons). Standard library only.
 """
-import json, os, re, threading, time
+import json, os, threading, time
 
 from i18n import tr
 
@@ -25,26 +25,10 @@ now_playing = {}        # video started by play(), tracked by history_loop
 
 
 def media_key(url):
-    """(stable key, kind, identifier): the same video keeps the same key whatever the link's form."""
-    m = re.fullmatch(r"jellyfin:([0-9a-f]{32})", url) or re.search(r"/Videos/([0-9a-f]{32})/", url)
-    if m:
-        return f"jellyfin:{m.group(1)}", "jellyfin", m.group(1)
-    m = re.fullmatch(r"plex:(\d{1,10})", url)
-    if m:
-        return f"plex:{m.group(1)}", "plex", m.group(1)
-    m = re.search(r"/library/parts/(\d+)/", url)   # file of a Plex server (the item id is not in the link)
-    if m:
-        return f"plex-part:{m.group(1)}", "plex", None
-    m = re.search(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|live/)|youtu\.be/)([\w-]{11})", url)
-    if m:
-        return f"youtube:{m.group(1)}", "youtube", m.group(1)
-    m = re.search(r"twitch\.tv/videos/(\d+)", url)
-    if m:
-        return f"twitch-vod:{m.group(1)}", "twitch-vod", m.group(1)
-    m = re.search(r"(?:clips\.twitch\.tv/|twitch\.tv/\w+/clip/)([\w-]+)", url)
-    if m:
-        return f"twitch-clip:{m.group(1)}", "twitch-clip", m.group(1)
-    return url, "link", None
+    """(stable key, kind, identifier): the same video keeps the same key whatever the link's form (the add-ons say
+    which links are theirs: addons.media_key); any other link is its own key"""
+    import addons   # (here: addons import this module)
+    return addons.media_key(url) or (url, "link", None)
 
 
 def finished(position, duration):

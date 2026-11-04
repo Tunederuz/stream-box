@@ -531,7 +531,8 @@ class Osd(QObject):
                      # mpv waiting for data (VideoWait.qml): buffering, seeking, not playing (core-idle: also after a
                      # seek, waiting for data without paused-for-cache), the buffer's percentage, paused
                      "waiting": {"cache": False, "seeking": False, "idle": False, "pct": 0, "pause": False},
-                     "mode": "", "channel": "", "events": True}
+                     "mode": "", "channel": "", "events": True,
+                     "addons": {}}   # the add-ons' identity (remote.py, addons.identity: name, colors, links)
         self._in.connect(self._set, Qt.QueuedConnection)
         self.wait_state = dict(self.data["waiting"])   # (mpv's event thread only: waiting_prop)
         self.wake = threading.Event()   # bar just shown: read the position at once (InfoBar waits for it to appear)
@@ -598,6 +599,7 @@ class Osd(QObject):
     comments = Property(str, lambda self: json.dumps(self.data["comments"] or {}), notify=changed)
     commentsView = Property(str, lambda self: json.dumps(self.data["comments_view"] or {}), notify=changed)
     eventsOn = Property(bool, lambda self: self.data["events"] is not False, notify=changed)
+    addons = Property(str, lambda self: json.dumps(self.data["addons"] or {}), notify=changed)   # InfoBar, LoadingOverlay
 
 
 osd = Osd()
@@ -756,7 +758,7 @@ def main():
     player.observe_property("user-data/streambox/input", input_beat)
 
     for key in ("bar", "toast", "polls", "storyboard", "live", "mode", "channel", "events", "tracks", "loading", "learn", "meta", "controls", "seekfx",
-                "next_card", "notice", "info", "comments", "comments_view"):
+                "next_card", "notice", "info", "comments", "comments_view", "addons"):
         player.observe_property(f"user-data/streambox/{key}", osd.receive(key))
     player.observe_property("path", osd.new_file)
     for prop, name in (("paused-for-cache", "cache"), ("seeking", "seeking"), ("core-idle", "idle"),
