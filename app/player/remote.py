@@ -41,6 +41,7 @@ for addon in addons.ADDONS:   # (Twitch: cookies aligned with the saved token; i
         addon.start()
     for loop in addon.loops:
         threading.Thread(target=loop, daemon=True).start()
+threading.Thread(target=addons.identity_loop, daemon=True).start()   # (their names and colors, for the interface)
 threading.Thread(target=ambient.ambient_loop, daemon=True).start()
 threading.Thread(target=playback.history_loop, daemon=True).start()
 threading.Thread(target=quickmenu.listen_loop, daemon=True).start()

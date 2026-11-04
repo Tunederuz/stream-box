@@ -1261,7 +1261,8 @@
    "url": "https://example.com/h/0",
    "position": 0,
    "duration": 0,
-   "finished": false
+   "finished": false,
+   "kind_name": "YouTube"
   },
   {
    "key": "h1",
@@ -1271,7 +1272,8 @@
    "url": "https://example.com/h/1",
    "position": 400,
    "duration": 1800,
-   "finished": false
+   "finished": false,
+   "kind_name": "Rediffusion Twitch"
   },
   {
    "key": "h2",
@@ -1281,7 +1283,8 @@
    "url": "https://example.com/h/2",
    "position": 0,
    "duration": 300,
-   "finished": false
+   "finished": false,
+   "kind_name": "Clip Twitch"
   },
   {
    "key": "h3",
@@ -1291,7 +1294,8 @@
    "url": "https://example.com/h/3",
    "position": 90,
    "duration": 3600,
-   "finished": false
+   "finished": false,
+   "kind_name": "Lien"
   },
   {
    "key": "h4",
@@ -1301,7 +1305,8 @@
    "url": "https://example.com/h/4",
    "position": 1000,
    "duration": 1000,
-   "finished": true
+   "finished": true,
+   "kind_name": "Jellyfin"
   },
   {
    "key": "h5",
@@ -1311,7 +1316,8 @@
    "url": "https://example.com/h/5",
    "position": 0,
    "duration": 0,
-   "finished": false
+   "finished": false,
+   "kind_name": "YouTube"
   },
   {
    "key": "h6",
@@ -1321,7 +1327,8 @@
    "url": "https://example.com/h/6",
    "position": 50,
    "duration": 700,
-   "finished": false
+   "finished": false,
+   "kind_name": "Rediffusion Twitch"
   },
   {
    "key": "h7",
@@ -1331,7 +1338,8 @@
    "url": "https://example.com/h/7",
    "position": 0,
    "duration": 1200,
-   "finished": true
+   "finished": true,
+   "kind_name": "Clip Twitch"
   }
  ],
  "/api/display": {

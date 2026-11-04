@@ -47,5 +47,9 @@ lib["routes"]["/api/jellyfin_link"] = Route(lambda q: jf.link_state(find=q.get("
 lib["actions"]["jellyfin_link"] = jf.link_action
 
 ADDON = Addon("jellyfin", "Jellyfin", order=20, description="Your Jellyfin server's movies and series", configured=lambda: jf.jf_server() is not None, report=report,
+              colors={"accent": "#1565c0", "bar": ["#1565c0", "#4a90e2"]},
+              # its links in the history, its server's streams (/Videos/<id>/stream?…&api_key=)
+              urls=[{"re": r"^jellyfin:([0-9a-f]{32})$", "kind": "jellyfin"}, {"re": r"/Videos/([0-9a-f]{32})/", "kind": "jellyfin"},
+                    {"re": r"/Videos/|api_key=|MediaSourceId=", "kind": "jellyfin"}],
               outside_video=shim_video, state=lambda: {"jellyfin_server": (jf.jf_server() or {}).get("address", "")},
               **lib)

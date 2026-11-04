@@ -56,6 +56,11 @@ def unreachable(e):
 
 ADDON = Addon(
     "twitch", "Twitch", order=0, base=True, kinds=("twitch-vod", "twitch-clip"),
+    colors={"accent": "#9146ff", "bar": ["#8a3ffc", "#b062ff"]},
+    kind_names={"twitch-vod": "Twitch replay", "twitch-clip": "Twitch clip"},
+    urls=[{"re": r"twitch\.tv/videos/(\d+)", "kind": "twitch-vod"},
+          {"re": r"(?:clips\.twitch\.tv/|twitch\.tv/\w+/clip/)([\w-]+)", "kind": "twitch-clip"},
+          {"re": r"twitch\.tv|ttvnw\.net|twitchcdn", "kind": "twitch-vod"}],   # (the streams themselves: recognized only)
     description="Live streams, followed channels, replays, polls and predictions",
     routes={
         "/api/replays": Route(lambda q: twitch.replays(q.get("login", ""))),

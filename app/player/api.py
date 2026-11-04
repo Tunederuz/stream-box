@@ -96,7 +96,8 @@ def more(query):
 # GET routes answered with JSON as is (exact path); the others, with parameters or their own errors, are in do_GET
 JSON_ROUTES = {
     "/api/state": state,
-    "/api/history": history.read_history,
+    # (kind_name: its kind's label, from its add-on: the TV menu's history)
+    "/api/history": lambda: [dict(e, kind_name=addons.kind_name(e.get("kind"))) for e in history.read_history()],
     # what this installation has: system part or not, Moonlight for games streamed from a PC
     "/api/features": lambda: {**sysparts.features(), **addons.features()},   # (system, gamestream…)
 }

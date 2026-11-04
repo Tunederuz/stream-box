@@ -216,8 +216,7 @@ def lib_screen(service, title):
 
 def history_screen():
     def build():
-        return video_items(history.read_history()[:100], lambda v: "Twitch" if (v.get("kind") or "").startswith("twitch")
-                           else {"youtube": "YouTube", "jellyfin": "Jellyfin", "plex": "Plex"}.get(v.get("kind"), ""))
+        return video_items(history.read_history()[:100], lambda v: addons.kind_name(v.get("kind")))
     return screen(tr("History"), build)
 
 
