@@ -477,10 +477,15 @@ confirm you're not a bot" for every video, the player's included). Do not add re
 Live and Following tabs, live in the background: after 0.9 s on a live channel (`menu.bgLive`: Live or Following
 tab, content, no dialog nor keyboard, and nothing playing behind the menu, `box.videoActive` false), its live plays muted behind the whole menu,
 above the backdrop and under a black veil (0.55) that keeps the cards readable; moving to another streamer stops it
-and restarts the 0.9 s. The video is `qml/menu/LivePreview.qml` (third libmpv player `preview_player` of ui.py,
-"livePreview"; never fully invisible, opacity 0.001: libmpv needs its render context before a video starts):
-`startPreview(login)`; ui.py starts its own streamlink (`PREVIEW_PORT` 34591,
-720p) and loads it once served (retries every 1.5 s while the player is idle, 6 at most). (Tried before: a banner
+and restarts the 0.9 s. The live plays in the main player itself (`box.preview(login)` → script-message
+`streambox-preview <login>` of stream-box.lua, `""` stops it: only in home mode, the menu being the main page; its own
+streamlink as for a channel, mute on and given back after, a few tries while streamlink starts; published in
+`user-data/streambox/preview`): `box.videoActive` leaves it out, `box.previewActive` says its picture is there (the
+menu's opaque veil and background then step aside). Chosen (`watchChannel`: OK, ▶ Watch), the menu is `adopting`:
+start_channel sees the channel previewed and goes on with it (sound back, twitch mode, no reload nor loading screen)
+while the menu fades out over it (500 ms) and the home screen stays aside: no cut. (Until 2026-11-04 a third libmpv
+player played it, then handed over to the main player: the swap always showed, two connections never at the same
+point of the live.) (Tried before: a banner
 above the grid took too much room; a card growing over its neighbors hid them; a full-screen peek on ▶.)
 Video cards (`VideoCard`: 456 px wide, 16:9 thumbnail, height from the width): 3 per row in Replays, YouTube,
 Jellyfin (step 482) and History (3 columns, 2 rows); the Replays and YouTube/Jellyfin rows scroll vertically (one full
