@@ -14,7 +14,7 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 - The playback bar's buttons of a video come from its add-on (YouTube: like, dislike, comments).
 - Channel zapping (Up / Down on a live) skips the channels that are offline.
 - Twitch: with your account connected, you count among the viewers of the live you watch (and earn its watch
-  points), as on the website.
+  points) and show among its chatters, as on the website; the box still never writes in the chat.
 - Bluetooth pairing: devices show up as soon as they are seen, the first remote or controller found is paired by
   itself, the dialog says each step and how to put an Xbox controller in pairing mode; a controller paired with a
   console or a PC in between can be paired again, and a failed pairing is tried a second time.
