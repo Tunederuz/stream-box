@@ -314,7 +314,6 @@
  "Japanese": "Japonais",
  "Jellyfin is not paired with the box.": "Jellyfin n'est pas associé à la box.",
  "Jellyfin isn't connected to the box: Settings → Accounts and links → Jellyfin.": "Jellyfin n'est pas connecté à la box : Réglages → Comptes et liens → Jellyfin.",
- "Jellyfin unreachable": "Jellyfin injoignable",
  "Jellyfin unreachable: {error}": "Jellyfin injoignable : {error}",
  "Jul": "juil.",
  "July": "juillet",
@@ -753,7 +752,6 @@
  "YouTube is refusing this video for now (it asks to prove you are not a robot): try again later": "YouTube refuse cette vidéo pour l'instant (il demande de prouver que tu n'es pas un robot) : réessaie plus tard",
  "YouTube search unavailable for now.": "Recherche YouTube impossible pour l'instant.",
  "YouTube tokens {ok}": "jetons YouTube {ok}",
- "YouTube unreachable": "YouTube injoignable",
  "YouTube unreachable for now": "YouTube injoignable pour l'instant",
  "YouTube unreachable for now.": "YouTube injoignable pour l'instant.",
  "YouTube, Twitch clip… On Android, the easiest way:": "YouTube, clip Twitch… Sur Android, le plus simple :",
@@ -814,7 +812,6 @@
  "or scan the QR code. The TV updates by itself.": "ou scanne le QR code. La TV se met à jour toute seule.",
  "partitions not found after partitioning": "partitions introuvables après le partitionnement",
  "password: {password}": "mot de passe : {password}",
- "plex.tv unreachable": "plex.tv injoignable",
  "plex.tv unreachable: {error}": "plex.tv injoignable : {error}",
  "rain {n}%": "pluie {n} %",
  "refused by Twitch ({code})": "refus de Twitch ({code})",
@@ -1035,5 +1032,9 @@
  "{name} (pair again)": "{name} (appairer à nouveau)",
  "Pairing {name}: second try…": "Appairage de {name} : deuxième essai…",
  "{name} is not in pairing mode any more: put it back in pairing mode and try again.": "{name} n'est plus en mode appairage : remets-le en mode appairage et réessaie.",
- "Connecting {name}…": "Connexion de {name}…"
+ "Connecting {name}…": "Connexion de {name}…",
+ "Forget {name}? Its games leave the box": "Oublier {name} ? Ses jeux quittent la box",
+ "Pair with the PC": "Appairer avec le PC",
+ "Unavailable for now": "Indisponible pour le moment",
+ "Done": "C'est fait"
 }

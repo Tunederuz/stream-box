@@ -162,6 +162,14 @@ Below, file names without a folder are in these folders.
     `osd.addons` (InfoBar, LoadingOverlay); `addons.kind_name` labels `/api/history` (`kind_name`) and the quick menu;
     `addons.play_video(addon_id, …)` starts a video with its add-on; `playback.find_url` finds the add-ons' own links
     (`addons.link_prefixes`).
+    Accounts (step 2 of the cleanup): an addon's `account` (addons/<id>/account.py: YouTube, Jellyfin, Plex, PC link)
+    gives its row of Settings → Accounts and links and builds its dialogs: `GET /api/accounts` (rows: label, value,
+    hint, opening), `/api/account_menu?addon=&target=` ({title, items}: an item opens another target, or runs one of
+    the addon's actions, with confirm, then "code" / "menu", wait / done / fail texts), `/api/account_code?addon=` (the
+    code dialog: title, where, code, error, help, qr (a link), done), `POST /api/account_code_cancel {addon}`. TV menu:
+    `accountMenu`, `accountItem`, `accountConnect` (a card's `connect`: its sign-in by code at once), `openCode` /
+    `loadCode` / `closeCode` (`code`, CodeDialog), `accountUpdated` (rows, its tab, the state reloaded). Twitch, the
+    base, keeps its own (`twitchAccountMenu`). qmlshots builds them with the add-ons' code (`accounts_answer`).
     Step 4: the playback bar's buttons of an addon, for the video it plays (`addons.publish_actions(url, items)` →
     `user-data/streambox/actions` {url, items}; stream-box.lua shows them only while that url plays, after −10 s /
     Pause / +10 s, as `addon:<n>`; InfoBar draws `icon`): items [{label, label_on, icon, on, group, post, body,
@@ -663,7 +671,7 @@ from the overlay and the lines, lives ("… watching") first, then newest first,
 reread, "Reload my subscriptions"); `subscriptionVideos(pages)` is the pure parsing. `yt_subscriptions()` (addons/youtube/service.py) with
 the progress. `GET /api/youtube` → `subs` {authorized, pending, unavailable, videos}; `GET /api/youtube_account` →
 {authorized, pending, unavailable}; `POST /api/youtube_login|youtube_logout|youtube_sync`. TV: "Connect my account"
-card in the Subscriptions row as long as the box is not connected → code popup and QR code (`ytAuth`, reread every
+card in the Subscriptions row as long as the box is not connected → code popup and QR code (the add-on's account dialogs, reread every
 3 s); "YouTube account" row of Settings → Accounts and links (reload subscriptions, disconnect). Page: "YouTube
 account" section of Settings (code, status). Video title and duration (`yt_meta`: a video cast from the YouTube app,
 resume at the account's percentage): `GET /meta?id=` of youtube_tv.js (`/player`), oEmbed (title only) otherwise.
@@ -705,8 +713,8 @@ Sign-in with a Plex account by code: `POST /api/plex_link` (`plex.link_start`: p
 `GET /api/plex_link` (`link_state`: configured, name, account, pending {code, error}); a thread polls the PIN every
 3 s, then reads the account's servers (`/resources`), owned ones first, and keeps the first the box reaches (local
 connections first, plain `http://<LAN address>:<port>` before the plex.direct https one) through `set_plex`, with the
-server's access token and the account name. TV: "Plex" row of the System menu (`plexMenu`: sign in, disconnect), code
-dialog `CodeDialog` (shared with the YouTube account: `menu.codeDialog` gives its texts, QR code of plex.tv/link);
+server's access token and the account name. TV: "Plex" row of Settings → Accounts and links (addons/plex/account.py: sign in, disconnect), code
+dialog `CodeDialog` (every add-on's code dialog: `menu.codeDialog` gives its texts, QR code of plex.tv/link);
 companion app: "Sign in with a Plex account" button in the Plex section (polls while a code is shown).
 TV menu: YouTube, Jellyfin and Plex share the code of the rows tabs (`libs[id]`: home, search, preview, row, sel;
 `loadRows`, `mediaSearch`, `openTarget`, `mediaRows`, `cardChoose`, `playCard`, `cardOption`; the rows from
@@ -752,8 +760,8 @@ signing in, or on `{action: "cancel"}` (`qc_cancel`: terminate, kill after 3 s),
 and the usual shim restarted (`qc_restore`); given up after 5 min. `{action: "forget"}` removes `users.json` and stops
 the shim. `GET /api/jellyfin_link[?find=1]` (`link_state`: configured, address, name, pending {server, name, code,
 error}, `servers` found by UDP broadcast "who is JellyfinServer?" on 7359, address = the IP that answered: the one
-announced can be a Docker one). TV: "Jellyfin" row of the System menu (`jellyfinMenu`: servers found, disconnect;
-none found: the companion app), code in `CodeDialog` (`jfLink`, polled every 2 s, Back cancels); companion app:
+announced can be a Docker one). TV: "Jellyfin" row of Settings → Accounts and links (addons/jellyfin/account.py: servers found,
+disconnect; none found: the companion app), code in `CodeDialog` (polled every 2 s, Back cancels); companion app:
 Jellyfin section of Settings (address, Connect, code, Cancel, Disconnect). Test server: Docker `jellyfin/jellyfin`,
 `-p 8096:8096 -p 7359:7359/udp` (broadcasts do not reach it through Docker's NAT: give the address).
 
