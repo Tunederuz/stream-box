@@ -953,7 +953,8 @@ BTN_* and ABS_HAT pad of gamepads), translated into actions (DEFAULTS, then keym
 5 s, and as long as that is fresh (15 s) stream-box.lua and ui.py ignore keys received by mpv / Qt (otherwise doubled).
 Without permissions on /dev/input, it stops: old path (mpv names and 0x21… keysyms, KEYS of stream-box.lua) as
 fallback. Actions: up down left right ok back home menu corner power volume_up volume_down mute (homescreen: no key by
-default any more, kept for keys learned before). Gamepads: the middle button, Select and the Deck's "…" = TV menu, Start = options. The
+default any more, kept for keys learned before). Gamepads: the middle button, Select and the Deck's "…" = TV menu (sent on release, as on a console:
+`pad_home`; pressed during a game stream, its release does nothing), Start = options. The
 page's virtual remote also sends actions (`streambox-input VIRTUAL <action>`, never learned).
 Held key: repeated by input.py itself (`REPEATABLE`: arrows, volume; 400 ms then every 80 ms, the gamepad d-pad
 too), the kernel's repeats (value 2) are ignored: the Xiaomi remote's "Consumer Control" entry (arrows, OK, volume)

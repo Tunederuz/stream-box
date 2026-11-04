@@ -13,6 +13,7 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
   their tab and settings go away.
 - The playback bar's buttons of a video come from its add-on (YouTube: like, dislike, comments).
 - Channel zapping (Up / Down on a live) skips the channels that are offline.
+- Gamepads: the Home button opens the TV menu when it is released, as on a console.
 - A live previewed in the menu's background goes on with its sound when it is chosen: the menu fades out over it,
   no loading screen, no cut (the preview now plays in the main player).
 - Twitch: with your account connected, you count among the viewers of the live you watch (and earn its watch
