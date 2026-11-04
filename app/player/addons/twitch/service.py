@@ -5,7 +5,7 @@ Twitch account: signed in with a code on twitch.tv/activate as the Twitch app fo
 pasted from the auth-token cookie; stored in streamlink's Twitch config, which streamlink reads by itself. Twitch
 only removes ads for subscriptions with an account token.
 """
-import datetime, json, os, re, threading, time, urllib.error, urllib.parse, urllib.request, uuid
+import base64, datetime, json, os, re, threading, time, urllib.error, urllib.parse, urllib.request, uuid
 
 import history   # history.py: positions of the replays and clips already watched on the box
 from common import COOKIES_DIR, DIR, PUBLISH_EVERY, mpv, read_json_file, write_private_json
@@ -247,6 +247,64 @@ def events_loop():
         except (OSError, ValueError, KeyError, TypeError):
             pass   # mpv or Twitch unreachable: retry on the next round
         time.sleep(EVENTS_EVERY)
+
+
+# Counted as a viewer: the twitch.tv player tells Twitch every minute that its account watches the live
+# ("minute-watched" events, to the "spade" address of the site's settings); streamlink only reads the video. Sent
+# while the box plays a live with an account connected (the video read with that account's playback token already);
+# this also earns the channel's points for watching.
+
+PRESENCE_EVERY = 60
+SPADE_EVERY = 86400   # seconds the spade address is kept
+BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
+presence = {"spade": None, "spade_at": 0, "user": None}
+
+
+def spade_url():
+    """The address of the site's events, read from its settings script (the page of a channel names it)"""
+    if presence["spade"] and time.time() - presence["spade_at"] < SPADE_EVERY:
+        return presence["spade"]
+    get = lambda url: urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": BROWSER_UA}),
+                                             timeout=15).read().decode("utf-8", "replace")
+    page = get("https://www.twitch.tv/twitch")
+    m = re.search(r"https://(?:static\.twitchcdn\.net|assets\.twitch\.tv)/config/settings[^\"']*?\.js", page)
+    spade = m and re.search(r'"spade_url":"([^"]+)"', get(m.group(0)))
+    if not spade:
+        raise ValueError("no spade address")
+    presence.update(spade=spade.group(1), spade_at=time.time())
+    return presence["spade"]
+
+
+def minute_watched(login):
+    """One "minute-watched" of the connected account on login's live; False when it is not live"""
+    if not presence["user"]:
+        presence["user"] = current_user_id()
+    u = twitch_gql("query($l:String!){user(login:$l){id stream{id}}}", {"l": login}).get("user") or {}
+    if not u.get("stream"):
+        return False
+    event = [{"event": "minute-watched", "properties": {
+        "channel_id": u["id"], "broadcast_id": u["stream"]["id"], "player": "site", "user_id": presence["user"],
+        "live": True, "channel": login}}]
+    data = base64.b64encode(json.dumps(event, separators=(",", ":")).encode()).decode()
+    req = urllib.request.Request(spade_url(), data=urllib.parse.urlencode({"data": data}).encode(),
+                                 headers={"User-Agent": BROWSER_UA, "Content-Type": "application/x-www-form-urlencoded"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return r.status in (200, 204)
+
+
+def presence_loop():
+    while True:
+        time.sleep(PRESENCE_EVERY)
+        try:
+            if not read_token():
+                presence["user"] = None   # (signed out, or another account next time)
+                continue
+            user, playing = mpv(["get_property", "user-data/streambox"], ["get_property", "video-params"])
+            user = user or {}
+            if user.get("mode") == "twitch" and playing and user.get("channel"):
+                minute_watched(user["channel"])
+        except (OSError, ValueError, KeyError, TypeError):
+            pass   # mpv or Twitch unreachable: the next minute
 
 
 # A streamer's replays and clips of the week, for the page (5 min cache per streamer)

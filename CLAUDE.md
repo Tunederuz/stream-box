@@ -245,6 +245,15 @@ Below, file names without a folder are in these folders.
   away); back to live → 750 KiB. Bluetooth remote: ←/→ ±10 s. Page: −30 s / +30 s / Live
   (`POST /api/live_seek {delta|"live"}` → script-message `streambox-live-seek`), delay in `/api/state` (`delay`).
   The playback bar shows "−0:42" or "● LIVE".
+- **Counted as a viewer** (addons/twitch `presence_loop`): with a Twitch account connected and a live playing, the box
+  sends every minute the "minute-watched" event the twitch.tv player sends (`minute_watched`: channel_id,
+  broadcast_id, user_id, player "site", live, base64 JSON posted as `data` to the site's spade address, read from
+  the settings script a channel page names, kept a day); streamlink reads the video with the account's playback
+  token already. Without it the account was not in the viewer count (it also earns the channel's watch points).
+  The chat readers (chat_qt.py, chat_overlay.py) log in with the same account (`chat_login.py`: its token from
+  streamlink's config, its login from `oauth2/validate`; the TV app's token is taken by the chat although its only
+  scope is user:read:follows), so it shows among the channel's chatters; still read-only (only PONG is sent).
+  Without an account, or the chat's NOTICE "Login authentication failed": anonymous (justinfanNNNN).
 - **Live notification**: `remote.py` spots the streamers who have just gone live (not at the first poll)
   → script-message `streambox-went-live <login>` → banner at the top right for 12 s; OK goes there, Back closes it.
 - **Replays and clips**: `GET /api/replays?login=` (GQL, 8 VODs + 6 clips of the week, 5 min cache), collapsed

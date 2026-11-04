@@ -86,5 +86,5 @@ ADDON = Addon(
     prepare=prepare, progress=progress, progress_every=30,
     state=lambda: {"streamers": twitch.read_streamers(), "avatars": twitch.avatars, "live": twitch.live_now},
     start=lambda: twitch.write_cookies(twitch.read_token()),   # cookies aligned with the saved token
-    loops=(twitch.account_loop, twitch.live_loop, twitch.events_loop),
+    loops=(twitch.account_loop, twitch.live_loop, twitch.events_loop, twitch.presence_loop),
 )
