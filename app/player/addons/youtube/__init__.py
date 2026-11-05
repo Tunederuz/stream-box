@@ -100,7 +100,15 @@ def tab_rows():
                                                             for v in c.get("videos") or []],
                           avatar=c.get("avatar"), more={"source": "yt_channel", "key": c["id"]},
                           error=c.get("videos") is None or None))
-    return {"rows": rows, "channels": len(d.get("channels") or []), "authorized": bool(subs.get("authorized"))}
+    nc, authorized = len(d.get("channels") or []), bool(subs.get("authorized"))
+    if authorized:   # (the tab's line, in the menu's header)
+        hint = (tr("Your subscriptions and 1 channel · latest videos") if nc == 1 else
+                tr("Your subscriptions and {n} channels · latest videos", n=nc) if nc else tr("Your subscriptions · latest videos"))
+    else:
+        hint = (tr("1 channel · latest videos") if nc == 1 else tr("{n} channels · latest videos", n=nc) if nc
+                else tr("Search for a video, or add channels from the companion app"))
+    return {"rows": rows, "channels": nc, "authorized": authorized, "hint": hint,
+            "empty": "" if nc or authorized else tr("Add favorite channels: Options on a video, or search.")}
 
 
 def channel_card(c, fav):
@@ -148,7 +156,10 @@ def more_cards(source, key, q, offset):
 
 ADDON = Addon(
     "youtube", "YouTube", order=10, extension="node",
-    colors={"accent": "#ff0033", "bar": ["#ff0033", "#ff4e45"]},
+    colors={"accent": "#ff0033", "bar": ["#ff0033", "#ff4e45"],
+            "palette": {"veil": "#180407", "rail": "#1a0709", "sheet": "#261216", "key": "#3a1f24", "surface": "#33171c",
+                        "surfaceFocus": "#4a2027", "label": "#c9a3aa"}},
+    tabs=[{"id": "youtube", "label": "YouTube", "kind": "rows"}],
     account=ACCOUNT,
     urls=[{"re": r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|live/)|youtu\.be/)([\w-]{11})", "kind": "youtube"},
           {"re": r"youtube\.com|youtu\.be|googlevideo", "kind": "youtube"}],

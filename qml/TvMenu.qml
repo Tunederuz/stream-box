@@ -26,25 +26,45 @@ Item {
     function tr(s, a) { return I18n.t(i18n.dict, s, a) }
 
     readonly property string api: "http://127.0.0.1:8080"
-    readonly property var allTabs: [
-        { id: "live", label: "Live" }, { id: "follows", label: "Following" },
-        { id: "replays", label: "Replays" }, { id: "youtube", label: "YouTube" },
-        { id: "jellyfin", label: "Jellyfin", library: true }, { id: "plex", label: "Plex", library: true },
-        { id: "libraries", label: "Libraries" },
-        { id: "games", label: "PC link" },
-        { id: "history", label: "History" },
-        { id: "settings", label: "Settings" }]
+    // The tabs: the add-ons' (/api/features tabs, their order: Twitch's first, the base; until it is read, those of
+    // Twitch), the "Libraries" tab after the library ones, then History and Settings. kind: how the menu draws it
+    // (rows, library: menu/MediaTab.qml; custom: its add-on's own component, customTabs; the base's and the core's)
+    readonly property var addonTabs: features.tabs || [
+        { id: "live", label: "Live", kind: "live", addon: "twitch" },
+        { id: "follows", label: "Following", kind: "follows", addon: "twitch" },
+        { id: "replays", label: "Replays", kind: "replays", addon: "twitch", kinds: ["twitch-vod", "twitch-clip"] }]
+    readonly property var libraryTabs: addonTabs.filter(function (t) { return t.kind === "library" && addonOn(t.addon) })
+    readonly property var allTabs: {
+        var out = [], last = libraryTabs[libraryTabs.length - 1]
+        addonTabs.forEach(function (t) {
+            out.push(t)
+            if (last && t.id === last.id) out.push({ id: "libraries", label: "Libraries", kind: "libraries" })
+        })
+        return out.concat([{ id: "history", label: "History", kind: "history" }, { id: "settings", label: "Settings", kind: "settings" }])
+    }
     // Video libraries only when connected to the box (/api/state libraries), otherwise one "Libraries" tab that tells how
     // to connect them; the chosen tab stays the same one
-    readonly property bool anyLibrary: !!((st.libraries || {}).jellyfin || (st.libraries || {}).plex)
+    readonly property bool anyLibrary: libraryTabs.some(function (t) { return !!(st.libraries || {})[t.id] })
     // An add-on turned off (Settings → Add-ons; /api/state addons: those on, everything until the state is read): its
     // tab and its rows hide
     function addonOn(id) { return !st.addons || st.addons.indexOf(id) >= 0 }
     readonly property var tabs: allTabs.filter(function (t) {
-        if (t.id === "games") return !!features.gamestream && addonOn("gamestream")   // (Moonlight installed: the box's image)
-        if (t.id === "youtube") return addonOn("youtube")
-        if (t.id === "libraries") return !anyLibrary && (addonOn("jellyfin") || addonOn("plex"))
-        return t.library ? !!(st.libraries || {})[t.id] : true })
+        if (t.addon && (!addonOn(t.addon) || t.available === false)) return false   // (the PC link: Moonlight there)
+        if (t.kind === "library") return !!(st.libraries || {})[t.id]
+        if (t.kind === "libraries") return !anyLibrary && libraryTabs.length > 0
+        return true })
+    readonly property var tabInfo: tabs[tab] || ({})
+    readonly property string tabKind: tabInfo.kind || ""
+    function tabById(id) { return allTabs.find(function (t) { return t.id === id }) || ({}) }
+    // Tabs an add-on draws itself (kind custom: its qml, from app/player), each loaded once (customTabs below)
+    readonly property var customTabs: addonTabs.filter(function (t) { return t.kind === "custom" })
+    function customItem(id) {
+        for (var i = 0; i < customRepeater.count; i++) {
+            var l = customRepeater.itemAt(i)
+            if (l && l.tabId === id) return l.item
+        }
+        return null
+    }
     property string tabKept: "live"
     onTabsChanged: tab = Math.max(0, tabs.findIndex(function (t) { return t.id === tabKept }))
     readonly property var corners: ({ tl: "↖ top left", tr: "↗ top right", br: "↘ bottom right", bl: "↙ bottom left" })
@@ -58,11 +78,6 @@ Item {
     property var history: null
     // "Load more" at the end of rows (/api/more): id "<source>|<key>|<query>" → {items, loading, done}
     property var moreRows: ({})
-    property var gs: null      // games streamed from PCs (/api/gamestream: the PCs, pairing, their games)
-    property int gsPc: 0       // PC link tab: the chosen PC (chips above), focus on the chips (gsRow 0) or its games
-    property int gsRow: 0
-    property int gsSel: 0
-    readonly property var gsCur: gs && gs.pcs && gs.pcs.length ? gs.pcs[Math.min(gsPc, gs.pcs.length - 1)] : null
     property var display: null
     property var account: null
     property var followsQr: null
@@ -103,20 +118,8 @@ Item {
     }
     // Colors per tab: purple for Twitch (live, following, replays), red for YouTube, neutral (charcoal, white glow)
     // for what belongs to no service (history, settings, system), blue for Jellyfin, amber for Plex
-    readonly property string theme: ["youtube", "jellyfin", "plex"].indexOf(tabId) >= 0 ? tabId
-        : ["live", "follows", "replays"].indexOf(tabId) >= 0 ? "twitch" : "neutral"
-    readonly property var pal: theme === "youtube"
-        ? { accent: "#ff0033", veil: "#180407", rail: "#1a0709", sheet: "#261216", key: "#3a1f24",
-            surface: "#33171c", surfaceFocus: "#4a2027", label: "#c9a3aa" }
-        : theme === "jellyfin"
-        ? { accent: "#1565c0", veil: "#030f17", rail: "#06131c", sheet: "#0f202c", key: "#173244",
-            surface: "#12293a", surfaceFocus: "#1b3c54", label: "#9cc3d8" }
-        : theme === "plex"
-        ? { accent: "#e5a00d", veil: "#120d03", rail: "#181105", sheet: "#2a200d", key: "#3e3015",
-            surface: "#2d2310", surfaceFocus: "#46361a", label: "#d6bf8f" }
-        : theme === "twitch"
-        ? { accent: "#9146ff", veil: "#0a0612", rail: "#100b17", sheet: "#21182c", key: "#33283f",
-            surface: "#2a2034", surfaceFocus: "#3a2c4e", label: "#a99fc0" }
+    // Colors of the tab: its add-on's palette (colors.palette and accent), neutral otherwise (History, Settings…)
+    readonly property var pal: tabInfo.palette && tabInfo.palette.veil ? Object.assign({ accent: tabInfo.accent }, tabInfo.palette)
         : { accent: "#e8e8ee", veil: "#0b0b0d", rail: "#121214", sheet: "#1e1e22", key: "#2f2f35",
             surface: "#232327", surfaceFocus: "#35353c", label: "#a3a3ad" }
     readonly property color accent: pal.accent
@@ -124,10 +127,10 @@ Item {
     // home ({rows, …}, null until read), search ({query, searching, rows}), preview (something opened, a channel or a
     // series: {target, name, row}), the row chosen and the card chosen in each row
     property var libs: ({})                  // id → { home, search, preview, row, sel }
-    readonly property bool libTab: tabId === "jellyfin" || tabId === "plex"
-    readonly property bool rowsTab: tabId === "youtube" || libTab   // (mediaTab() is the tab of the current media)
+    readonly property bool libTab: tabKind === "library"
+    readonly property bool rowsTab: tabKind === "rows" || libTab   // (mediaTab() is the tab of the current media)
     readonly property var lib: libs[tabId] || ({})
-    readonly property string serviceName: tabId === "plex" ? "Plex" : tabId === "jellyfin" ? "Jellyfin" : "YouTube"
+    readonly property string serviceName: tr(tabInfo.label || "")
     // Changing tab from the rail: every tab's rows and grids start again from their first card (within a tab, a row
     // keeps its place). Not when the menu opens on the current media's tab: that one keeps the card being played
     function resetRows() {
@@ -135,7 +138,8 @@ Item {
         for (var id in all) all[id] = Object.assign({}, all[id], { sel: {}, row: 0 })
         libs = all
         rpRow = 0; rpSel = [rpSel[0], 0, 0]
-        liveSel = 0; followSel = 0; histSel = 0; gsSel = 0; gsRow = 0
+        liveSel = 0; followSel = 0; histSel = 0
+        customTabs.forEach(function (t) { var it = customItem(t.id); if (it && it.reset) it.reset() })
     }
     function setLib(id, changes) {
         var all = Object.assign({}, libs)
@@ -374,7 +378,7 @@ Item {
     function accountUpdated(addon) {   // signed in or out: the rows, its tab, the state
         refresh(); loadAccounts()
         if (libs[addon]) loadRows(addon)
-        if (addon === "gamestream") loadGames()
+        customTabs.forEach(function (t) { var c = customItem(t.id); if (t.addon === addon && c && c.load) c.load() })
     }
     // Its code dialog (menu/CodeDialog.qml): the action that asks for the code, then /api/account_code every 2 s
     // until done (closes) or closed (Back: its account_code_cancel)
@@ -499,7 +503,6 @@ Item {
             : r ? tr("New search  (\"{query}\")", { query: r.query })
             : tr("Search {service}", { service: serviceName })
     }
-    function loadGames() { call("GET", "/api/gamestream", undefined, function (d) { if (d) gs = d; checkArea() }) }
     function loadHistory() { call("GET", "/api/history", undefined, function (d) { history = d || []; checkArea() }) }
     function play(url, fromStart, item) {   // item: title and image for the loading screen and the history
         call("POST", "/api/play", { url: url, from_start: !!fromStart, title: item ? item.title : undefined,
@@ -517,8 +520,6 @@ Item {
     Timer { id: codePoll; interval: 2000; onTriggered: if (menu.isOpen) menu.loadCode() }
     Timer { id: twAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadTwAuth() }
     // PC link tab open, or a pairing under way (from Settings too): the PC's state followed
-    Timer { interval: 3000; repeat: true; running: menu.isOpen && menu.tabId === "games"
-            onTriggered: menu.loadGames() }
     // Settings → Add-ons open while an extension downloads: its state followed
     Timer { interval: 3000; repeat: true
             running: menu.isOpen && menu.section === "addons" && (menu.addons || []).some(function (a) { return a.enabled && a.extension && ["ready", "error", "builtin", "off"].indexOf(a.extension.state) < 0 })
@@ -537,7 +538,8 @@ Item {
     function mediaTab(d) {
         if (d.mode === "twitch") return "live"
         if (d.mode !== "media") return ""
-        return { youtube: "youtube", jellyfin: "jellyfin", plex: "plex", "twitch-vod": "replays", "twitch-clip": "replays" }[d.media_kind] || "history"
+        var t = allTabs.find(function (t) { return (t.kinds || []).indexOf(d.media_kind) >= 0 })   // (the add-ons' tabs say theirs)
+        return t ? t.id : "history"
     }
     function open() {
         powerOnly = false
@@ -552,7 +554,7 @@ Item {
         // libraries reloaded; search results stay from one opening to the next; YouTube's rows too (reloaded in the
         // background)
         var all = {}
-        for (var id in libs) all[id] = id === "youtube" ? libs[id] : Object.assign({}, libs[id], { home: null })
+        for (var id in libs) all[id] = tabById(id).kind !== "library" ? libs[id] : Object.assign({}, libs[id], { home: null })
         libs = all
         kbOpen = false
         var list = st.streamers || []
@@ -1186,6 +1188,9 @@ Item {
     }
     function subtitle() {
         var live = st.live || {}
+        // an add-on's rows say their line (GET /api/rows: hint); its own tab, its component (hint())
+        if (rowsTab) return !lib.home ? tr("Loading…") : lib.home.hint || ""
+        if (tabKind === "custom") { var c = customItem(tabId); return c && c.hint ? c.hint() : "" }
         switch (tabId) {
         case "live":
             var n = (st.streamers || []).filter(function (s) { return !!live[s] }).length
@@ -1201,33 +1206,10 @@ Item {
             return d === "loading" ? tr("{login} · loading…", { login: rpLogin }) : d === false ? tr("Twitch unreachable for now")
                 : (d && replayRows().length === 1) ? tr("{login}: nothing this week", { login: rpLogin })
                 : tr("{login} · replays and clips of the week", { login: rpLogin })
-        case "games":
-            if (!gs) return tr("Loading…")
-            var pc = gsCur
-            if (!pc) return gs.searching ? tr("Looking for PCs on the network…") : tr("No PC with Sunshine found on the network")
-            if (!pc.online) return tr("{name} is off or unreachable", { name: pc.name })
-            if (!pc.paired) return tr("OK on {name} to pair the box", { name: pc.name })
-            if (pc.loading) return tr("Loading…")
-            if (pc.unpaired_on_pc) return tr("{name} no longer knows the box: pair it again (≡)", { name: pc.name })
-            return tr("{name} · {n} games", { name: pc.name, n: pc.apps.length }) + (pc.playing ? "  ·  " + tr("a game is running") : "")
         case "history":
             return history === null ? tr("Loading…") : history.length === 0 ? tr("Videos played on the TV will show up here")
                 : (history.length === 1 ? tr("1 video") : tr("{n} videos", { n: history.length })) + " · " + tr("OK to resume or remove")
-        case "youtube":
-            if (!lib.home) return tr("Loading…")
-            var nc = lib.home.channels || 0
-            if (lib.home.authorized)
-                return !nc ? tr("Your subscriptions · latest videos")
-                    : tr(nc === 1 ? "Your subscriptions and 1 channel · latest videos" : "Your subscriptions and {n} channels · latest videos", { n: nc })
-            return nc ? tr(nc === 1 ? "1 channel · latest videos" : "{n} channels · latest videos", { n: nc })
-                : tr("Search for a video, or add channels from the companion app")
-        case "jellyfin": case "plex":
-            var home = lib.home
-            if (!home) return tr("Loading…")
-            if (home.error) return tr("{service} unreachable for now", { service: serviceName })
-            if (!home.configured) return tr("Your {service} library", { service: serviceName })
-            return tr("{server} · progress follows on all your devices", { server: home.server })
-        case "libraries": return tr("Your movies and series from Jellyfin or Plex")
+        case "libraries": return tr("Your movies and series, once one of your media servers is connected")
         case "settings": return section ? tr("◀ ▶ to change a value  ·  Back: the sections") : tr("The box and its settings")
         }
         return ""
@@ -1484,7 +1466,6 @@ Item {
     function loadTab(id) {
         if (id === "settings") {
             loadAccounts()
-            if (features.gamestream) loadGames()
             if (sysOn) {   // (sound outputs, Bluetooth, SSH, developer mode, installation, local update: the system part)
                 loadAudio(); loadBt(); loadSsh()
                 call("GET", "/api/install", undefined, function (d) { if (d) install = d })
@@ -1493,9 +1474,10 @@ Item {
         }
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
-        if (id === "games") loadGames()
-        if (id === "youtube") loadRows(id)   // previous rows shown in the meantime
-        if ((id === "jellyfin" || id === "plex") && !(libs[id] || {}).home) loadRows(id)
+        var kind = tabById(id).kind
+        if (kind === "custom") { var c = customItem(id); if (c && c.load) c.load() }
+        if (kind === "rows") loadRows(id)   // previous rows shown in the meantime
+        if (kind === "library" && !(libs[id] || {}).home) loadRows(id)
         if (id === "replays") {
             if (!rpLogin) rpLogin = st.channel || (st.streamers || [])[0] || ""
             loadReplays(rpLogin)
@@ -1547,13 +1529,13 @@ Item {
         }
         if (k === "back" && tabId === "settings" && section) return leaveSection()   // a section: back to the list
         if (k === "back") return toRail()   // Back: to the tabs, then (from the rail) closes the menu
+        if (rowsTab) return keyMedia(k)
+        if (tabKind === "custom") { var c = customItem(tabId); if (c && c.key) c.key(k); return }
         switch (tabId) {
         case "live": return keyLive(k)
         case "follows": return keyFollows(k)
         case "replays": return keyReplays(k)
-        case "youtube": case "jellyfin": case "plex": return keyMedia(k)
         case "history": return keyHistory(k)
-        case "games": return keyGames(k)
         case "settings": return keyRows(k, settingsRows())
         }
     }
@@ -1565,7 +1547,7 @@ Item {
         if (id === "replays") return !list || list.length > 0
         if (id === "follows") return true
         if (id === "history") return !history || history.length > 0
-        if (id === "games") return !!(gs && gs.pcs && gs.pcs.length)
+        if (tabById(id).kind === "custom") { var c = customItem(id); return !c || !c.canEnter || c.canEnter() }
         if (id === "libraries") return false   // explanations only
         return true
     }
@@ -1580,11 +1562,12 @@ Item {
         var id = tabs[tab].id   // and not tabId: right after a tab change, its binding may not be recomputed yet
         if (!canEnter(id)) return
         // YouTube, Jellyfin, Plex: on the first row of videos (the search above it, ▲), the search when there is none yet
-        if (id === "youtube" || id === "jellyfin" || id === "plex") { area = "content"; setRow(mediaRows().length > 1 ? 1 : 0); return }
+        var kind = tabById(id).kind
+        if (kind === "rows" || kind === "library") { area = "content"; setRow(mediaRows().length > 1 ? 1 : 0); return }
         area = "content"
         checkArea()
         if (id === "replays") { rpRow = 0; rpSel = [Math.max(0, (st.streamers || []).indexOf(rpLogin)), rpSel[1], rpSel[2]] }
-        if (id === "games") gsRow = gsCur && gsCur.paired && gsCur.apps.length ? 1 : 0   // the games, or the PCs to pair
+        if (kind === "custom") { var c = customItem(id); if (c && c.enter) c.enter() }
     }
     function keyLive(k) {
         var list = st.streamers || []
@@ -1692,35 +1675,6 @@ Item {
             else if (kbText.length < 80) kbText += key
         }
     }
-    function gsPair(pc) { openCode("gamestream", "gamestream_pair", { host: pc.host }) }   // (its code in CodeDialog)
-    function keyGames(k) {
-        var pcs = gs && gs.pcs || []
-        if (!pcs.length) { if (k === "left") area = "rail"; return }
-        gsPc = Math.min(gsPc, pcs.length - 1)
-        var pc = pcs[gsPc]
-        if (k === "menu" && gsRow === 0) return accountMenu("gamestream", "pc:" + pc.host)
-        if (gsRow === 0) {   // the PCs' chips
-            if (k === "left") { if (gsPc === 0) area = "rail"; else { gsPc--; gsSel = 0 } }
-            else if (k === "right") { gsPc = Math.min(pcs.length - 1, gsPc + 1); gsSel = 0 }
-            else if ((k === "down" || k === "ok") && pc.paired && pc.apps.length) gsRow = 1
-            else if (k === "ok" && !pc.paired && pc.online) gsPair(pc)
-            else if (k === "ok" && pc.paired && pc.unpaired_on_pc) gsPair(pc)
-            return
-        }
-        var list = pc.apps, a = list[gsSel]
-        if (k === "ok" && a) { call("POST", "/api/gamestream_launch", { host: pc.host, app: a.name }); close(); return }
-        if (k === "menu" && a) {
-            var items = [{ label: tr("▶  Play"), ok: function () { call("POST", "/api/gamestream_launch", { host: pc.host, app: a.name }); close() } }]
-            if (pc.playing) items.push({ label: tr("✕  Close the game on the PC"), danger: true,
-                                         ok: function () { call("POST", "/api/gamestream_quit", { host: pc.host }, function () { loadGames() }) } })
-            items.push({ label: tr("Cancel"), ok: function () {} })
-            openModal(a.name, items)
-            return
-        }
-        if (k === "up" && gsSel < 5) { gsRow = 0; return }   // (5 posters per row: menu/GamesTab.qml)
-        var n = grid(gsSel, list.length, 5, k)
-        if (n < 0) area = "rail"; else gsSel = n
-    }
     function keyHistory(k) {
         var list = history || []
         if ((k === "ok" || k === "menu") && list[histSel]) {   // (several choices: always the dialog)
@@ -1807,7 +1761,15 @@ Item {
             MediaTab { menu: menu }   // YouTube, Jellyfin and Plex
             LibrariesTab { menu: menu }
             HistoryTab { menu: menu }
-            GamesTab { menu: menu }
+            Repeater {   // the add-ons' own tabs (kind custom): their component, from app/player (the PC link's games)
+                id: customRepeater
+                model: menu.customTabs
+                Loader {
+                    readonly property string tabId: modelData.id
+                    anchors.fill: parent
+                    Component.onCompleted: setSource(Qt.resolvedUrl("../app/player/" + modelData.qml), { menu: menu, tabId: modelData.id })
+                }
+            }
             RowsTab { menu: menu }
             SystemStatus { menu: menu }
         }

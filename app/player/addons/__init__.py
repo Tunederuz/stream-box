@@ -53,12 +53,20 @@ class Addon:
     target), action (one of its actions, POST /api/<action> with body), confirm (asked first), then ("code": the code
     dialog follows, "menu": its first dialog again), wait, done, fail (texts while it runs, then)}), "code": fn() →
     {title, where, code, error, help, qr (a link, shown as a QR code), done (signed in: the dialog closes)},
-    "cancel": fn() (the code dialog closed before)}"""
+    "cancel": fn() (the code dialog closed before)}.
+    tabs: its TV menu tabs, in the rail (GET /api/features → tabs, addons.tabs()): [{id, label (English), kind, kinds,
+    hint, qml, setup}]: kind "rows" (its rows: GET /api/rows, menu/MediaTab.qml), "library" (the same, shown once
+    configured: /api/state libraries; while none is, the core's "Libraries" tab shows each one's setup steps), "custom"
+    (qml: its own component, a path from app/player, loaded by the menu with its menu and tabId; it
+    may have load(), key(k), hint(), canEnter(), enter(), reset(): addons/gamestream/GamesTab.qml), or the base's own
+    (Twitch: "live", "follows", "replays"); kinds: the history kinds it shows (the menu opens on it while one plays; rows
+    and library: the add-on's). Its tab's colors: colors.palette {veil, rail, sheet, key, surface, surfaceFocus, label},
+    with colors.accent. available(): whether its tabs can show on this installation (the PC link: Moonlight there)"""
     def __init__(self, id, name, order=50, description="", base=False, extension=None, configured=lambda: True, kinds=None,
                  routes=None, actions=None, more=None,
                  links=None, prepare=None, started=None, progress=None, progress_every=30, report=None,
                  outside_video=None, state=None, features=None, home=None, library=None, start=None, loops=(),
-                 rows=None, colors=None, kind_names=None, urls=(), account=None):
+                 rows=None, colors=None, kind_names=None, urls=(), account=None, tabs=(), available=None):
         self.id, self.name, self.order, self.configured, self.kinds = id, name, order, configured, kinds or (id,)
         self.description, self.base = description, base   # (description: English, translated when shown)
         self.extension = extension
@@ -70,12 +78,16 @@ class Addon:
         self.kind_names = kind_names or {k: name for k in self.kinds}
         self.urls = list(urls)
         self.account = account
+        self.tabs = [dict(t, kinds=t.get("kinds") or (list(self.kinds) if t.get("kind") in ("rows", "library") else []))
+                     for t in tabs]
+        self.available = available or (lambda: True)
 
 
-def library(id, home, search, series, play, more_lib, more_home, more_search, unreachable):
+def library(id, home, search, series, play, more_lib, more_home, more_search, unreachable, name=None):
     """Routes, actions, "Load more" sources, link and TV menu rows of a media library (Jellyfin, Plex: the same cards):
     GET /api/<id>, /api/<id>_search?q=, /api/<id>_series?id=; POST /api/<id>_play {id, from_start}; sources <id>_lib,
-    <id>_resume, <id>_nextup, <id>_search; links <id>:<item>"""
+    <id>_resume, <id>_nextup, <id>_search; links <id>:<item>. name: shown in its tab's line (its id, capitalized)"""
+    name = name or id.capitalize()
     from addons import cards as R
     from i18n import tr
 
@@ -103,9 +115,10 @@ def library(id, home, search, series, play, more_lib, more_home, more_search, un
         try:
             d = home()
         except (OSError, ValueError, KeyError):
-            return {"configured": True, "error": True, "rows": []}
+            return {"configured": True, "error": True, "rows": [], "hint": tr("{service} unreachable for now", service=name)}
         if not d.get("configured"):
-            return {"configured": False, "rows": []}
+            return {"configured": False, "rows": [], "hint": tr("Your {service} library", service=name),
+                    "empty": tr("{service} isn't connected to the box: Settings → Accounts and links → {service}.", service=name)}
         rows = []
         if d.get("resume"):
             rows.append(R.row("resume", tr("Resume"), [lib_card(i) for i in d["resume"]],
@@ -116,7 +129,8 @@ def library(id, home, search, series, play, more_lib, more_home, more_search, un
         for lib in d.get("libraries") or []:
             rows.append(R.row("lib:" + str(lib["id"]), tr("{name} · recently added", name=lib["name"]),
                               [lib_card(i) for i in lib.get("items") or []], more={"source": f"{id}_lib", "key": str(lib["id"])}))
-        return {"configured": True, "server": d.get("server") or "", "rows": rows}
+        return {"configured": True, "server": d.get("server") or "", "rows": rows,
+                "hint": tr("{server} · progress follows on all your devices", server=d.get("server") or "")}
 
     def search_rows(q):
         return {"rows": [R.row("search", tr("Results for \"{query}\"", query=q), [lib_card(i) for i in search(q)],
@@ -331,6 +345,21 @@ def identity():
     """{id: {name, colors, kinds, urls}} of every add-on, for the interface (English names: it translates them)"""
     return {a.id: {"name": a.name, "colors": a.colors, "kinds": a.kind_names, "urls": [u["re"] for u in a.urls]}
             for a in ADDONS}
+
+
+def tabs():
+    """The add-ons' tabs, in their order (all of them: the menu hides those turned off, /api/state addons), with their
+    add-on, colors and whether they can show here"""
+    out = []
+    for a in ADDONS:
+        try:
+            available = bool(a.available())
+        except (OSError, ValueError):
+            available = False
+        for t in a.tabs:
+            out.append({**t, "addon": a.id, "accent": a.colors.get("accent", ""), "palette": a.colors.get("palette") or {},
+                        "available": available})
+    return out
 
 
 def identity_loop():

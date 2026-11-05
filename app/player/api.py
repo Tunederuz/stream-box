@@ -99,7 +99,8 @@ JSON_ROUTES = {
     # (kind_name: its kind's label, from its add-on: the TV menu's history)
     "/api/history": lambda: [dict(e, kind_name=addons.kind_name(e.get("kind"))) for e in history.read_history()],
     # what this installation has: system part or not, Moonlight for games streamed from a PC
-    "/api/features": lambda: {**sysparts.features(), **addons.features()},   # (system, gamestream…)
+    # (system, gamestream…; the add-ons' tabs of the TV menu)
+    "/api/features": lambda: {**sysparts.features(), **addons.features(), "tabs": addons.tabs()},
 }
 if SYSTEM:   # the box's system (the Inlet app leaves it to its OS: these routes answer 404 there)
     JSON_ROUTES.update({

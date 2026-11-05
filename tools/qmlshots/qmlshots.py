@@ -146,6 +146,7 @@ def rows_answer(query, fixtures):
         px.link_state = lambda: fixtures["/api/plex_link"]
         px.px_config = lambda: None
         gs.status, gs.available = lambda: fixtures["/api/gamestream"], lambda: True
+        addons.get("gamestream").available = lambda: True   # (Moonlight: its tab shows)
         rows_answer.addons, rows_answer.ready = addons, True
     return rows_answer.addons.rows(query)
 
@@ -180,6 +181,10 @@ def serve(fixtures, log):
                 log.append("GET " + self.path)
                 q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
                 return self.reply(json.dumps(rows_answer(q, fixtures), default=str).encode())
+            if path == "/api/features" and path in fixtures:   # (the add-ons' tabs: their own declarations)
+                log.append("GET " + self.path)
+                rows_answer({"addon": "youtube"}, fixtures)
+                return self.reply(json.dumps({**fixtures[path], "tabs": rows_answer.addons.tabs()}).encode())
             if path in ("/api/accounts", "/api/account_menu", "/api/account_code"):
                 log.append("GET " + self.path)
                 q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
@@ -241,10 +246,13 @@ def shoot(qml_dir, out):
         previewActive = Property(bool, lambda self: bool(self._preview), notify=videoActiveChanged)
 
         @Slot(str)
-        def preview(self, login):
+        def preview(self, login):   # (later, as the real one: through the player)
             self.calls.append("preview " + login)
-            self._preview = login
-            self.videoActiveChanged.emit()
+
+            def done():
+                self._preview = login
+                self.videoActiveChanged.emit()
+            QTimer.singleShot(0, done)
 
         def set_video(self, v):
             self._video = v
@@ -320,6 +328,13 @@ def shoot(qml_dir, out):
     os.makedirs(out, exist_ok=True)
     root = tempfile.mkdtemp()
     shutil.copytree(qml_dir, os.path.join(root, "qml"))
+    # the add-ons' own QML (their custom tabs: app/player/addons/<id>/*.qml, loaded by the menu from ../app/player)
+    for d, _, files in os.walk(os.path.join(REPO, "app", "player", "addons")):
+        for f in files:
+            if f.endswith(".qml"):
+                dest = os.path.join(root, os.path.relpath(d, REPO))
+                os.makedirs(dest, exist_ok=True)
+                shutil.copy(os.path.join(d, f), dest)
     # the logo (qml/Logo.qml reads ../assets/brand): the working tree's
     brand = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "brand")
     if os.path.isdir(brand):

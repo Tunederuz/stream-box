@@ -170,6 +170,15 @@ Below, file names without a folder are in these folders.
     `accountMenu`, `accountItem`, `accountConnect` (a card's `connect`: its sign-in by code at once), `openCode` /
     `loadCode` / `closeCode` (`code`, CodeDialog), `accountUpdated` (rows, its tab, the state reloaded). Twitch, the
     base, keeps its own (`twitchAccountMenu`). qmlshots builds them with the add-ons' code (`accounts_answer`).
+    Tabs (step 3 of the cleanup): an addon declares its `tabs` [{id, label, kind, kinds, hint, qml, setup}] and its
+    `colors.palette` (the tab's colors), `available()` (the PC link: Moonlight there); `GET /api/features` → `tabs`
+    (`addons.tabs()`). TV menu: `addonTabs` (Twitch's until read), `allTabs` (+ "Libraries" after the library ones,
+    History, Settings), `tabs` (on, available, libraries configured), `tabInfo` / `tabKind`, `pal` from the tab's
+    palette (neutral otherwise); kind rows / library → MediaTab (keyMedia), its line and empty text from the rows
+    (`hint`, `empty` of GET /api/rows); custom → its add-on's component (`customTabs`, a Loader each from
+    `../app/player/<qml>`, given menu and tabId; the menu calls its load, key, hint, canEnter, enter, reset:
+    addons/gamestream/GamesTab.qml, the PC link); `mediaTab` from the tabs' `kinds`; LibrariesTab from the library
+    tabs' `setup`. qmlshots copies the add-ons' QML and serves their tabs from their code.
     Step 4: the playback bar's buttons of an addon, for the video it plays (`addons.publish_actions(url, items)` →
     `user-data/streambox/actions` {url, items}; stream-box.lua shows them only while that url plays, after −10 s /
     Pause / +10 s, as `addon:<n>`; InfoBar draws `icon`): items [{label, label_on, icon, on, group, post, body,
@@ -1346,7 +1355,7 @@ the background every 30 s) and the paired ones (`~/.config/stream-box/gamestream
 form `{"host"}` is still read). `GET /api/gamestream` → `{pcs: [{host, name, online, playing, paired, loading,
 unpaired_on_pc, apps}], pairing: {pin, host, name, page} | {error}, searching, streaming}`; actions (with `host`)
 `gamestream_pair`, `_pair_cancel`, `_search`, `_forget`, `_launch` (+ `app`), `_stop`, `_quit`; `/api/features` has
-`gamestream` (Moonlight installed). TV menu tab "PC link" (`games`, menu/GamesTab.qml): chips of the PCs (green paired,
+`gamestream` (Moonlight installed). TV menu tab "PC link" (`games`, the add-on's own addons/gamestream/GamesTab.qml): chips of the PCs (green paired,
 amber to pair, grey off; OK pairs, ≡ the PC's choices), the chosen PC's games as 3:4 posters (5 per row, ▲ back to the
 chips); the pairing code in CodeDialog. Settings → Accounts and links → PC (Sunshine): the PCs, each to pair (again)
 or forget, and "Search again". During a stream Moonlight covers the screen; its PID is in

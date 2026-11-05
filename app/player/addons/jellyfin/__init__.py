@@ -48,7 +48,13 @@ lib["routes"]["/api/jellyfin_link"] = Route(lambda q: jf.link_state(find=q.get("
 lib["actions"]["jellyfin_link"] = jf.link_action
 
 ADDON = Addon("jellyfin", "Jellyfin", order=20, description="Your Jellyfin server's movies and series", configured=lambda: jf.jf_server() is not None, report=report,
-              colors={"accent": "#1565c0", "bar": ["#1565c0", "#4a90e2"]},
+              colors={"accent": "#1565c0", "bar": ["#1565c0", "#4a90e2"],
+                      "palette": {"veil": "#030f17", "rail": "#06131c", "sheet": "#0f202c", "key": "#173244",
+                                  "surface": "#12293a", "surfaceFocus": "#1b3c54", "label": "#9cc3d8"}},
+              tabs=[{"id": "jellyfin", "label": "Jellyfin", "kind": "library", "setup": [
+                  "Settings → Accounts and links → Jellyfin: choose your server, then approve the code in Jellyfin (user menu, Quick Connect).",
+                  "Or in the companion app (QR code below): Settings → Jellyfin, the server's address.",
+                  "The Jellyfin tab then shows here, with your library."]}],
               account=ACCOUNT,
               # its links in the history, its server's streams (/Videos/<id>/stream?…&api_key=)
               urls=[{"re": r"^jellyfin:([0-9a-f]{32})$", "kind": "jellyfin"}, {"re": r"/Videos/([0-9a-f]{32})/", "kind": "jellyfin"},
