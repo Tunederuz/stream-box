@@ -77,17 +77,12 @@ Item {
     property var localUpd: null              // /api/local_update: A/B box?, images on USB sticks, copy and progress
     property string btPhase: ""              // Bluetooth dialog: "" (list), "scan", "pair" (its 2 s refresh runs while not "")
     // YouTube: channels of the list (/api/youtube), search results, row and choice per row
-    // YouTube account: dialog with the code to enter on google.com/device (/api/youtube_account), and its QR code
-    property var ytAuth: null
     property var twAuth: null                // Twitch account: sign-in by code on twitch.tv/activate (/api/account pending)
     property var twAuthQr: null
-    property var ytAuthQr: null
-    property var ytAccount: null             // same state, for the "YouTube account" row (Settings → Accounts and links)
-    // Plex account: code to enter on plex.tv/link (/api/plex_link: { pending: { code, error }, configured, name }), QR
-    property var plexLink: null
-    property var plexLinkQr: null
-    // Jellyfin by Quick Connect: code to approve in Jellyfin (/api/jellyfin_link: { pending: { name, code, error } })
-    property var jfLink: null
+    // The add-ons' accounts (Settings → Accounts and links, /api/accounts: their rows), and the code dialog of one
+    // (/api/account_code: { addon, d: { title, where, code, error, help, qr }, qr: its QR code })
+    property var accounts: []
+    property var code: null
     // Dialog of the sign-ins by code (menu/CodeDialog.qml): title, where to go, code, error, help, QR code of the page
     readonly property var codeDialog: {
         if (twAuth) {
@@ -99,35 +94,10 @@ Item {
                      help: tr("The box presents itself as the Twitch app for TVs: your subscriptions without ads, and your followed channels."),
                      qr: twAuthQr }
         }
-        if (ytAuth) {
-            var p = ytAuth.pending
-            return { title: tr("Connect my YouTube account"),
-                     where: tr("On your phone, open google.com/device and enter:"),
-                     code: p && p.user_code && !p.error ? p.user_code : "",
-                     error: p && p.error ? tr("Authorization denied: {error}", { error: p.error }) : "",
-                     help: tr("Google shows \"YouTube on TV\": the box presents itself as the YouTube app for TVs (subscriptions, recommendations, progress)."),
-                     qr: ytAuthQr }
-        }
-        if (jfLink) {
-            var j = jfLink.pending
-            return { title: tr("Connect Jellyfin"), where: tr("In Jellyfin (app or website): your user menu, Quick Connect, then enter:"),
-                     code: j && j.code && !j.error ? j.code : "",
-                     error: j && j.error ? tr("Failed: {error}", { error: j.error }) : "",
-                     help: j && j.name ? tr("Server: {server}.", { server: j.name }) : "", qr: null }
-        }
-        if (gs && gs.pairing) {   // pairing with the PC: the code to type in Sunshine
-            return { title: tr("Pair with {name}", { name: gs.pairing.name || "" }),
-                     where: tr("On the PC, open Sunshine (https://localhost:47990), PIN tab, and enter:"),
-                     code: gs.pairing.pin || "", error: gs.pairing.error || "",
-                     help: gs.pairing.page ? tr("From a phone: {page}", { page: gs.pairing.page }) : "", qr: null }
-        }
-        if (plexLink) {
-            var q = plexLink.pending
-            return { title: tr("Sign in with a Plex account"), where: tr("On your phone, open plex.tv/link and enter:"),
-                     code: q && q.code && !q.error ? q.code : "",
-                     error: q && q.error ? tr("Failed: {error}", { error: q.error }) : "",
-                     help: tr("The box then takes the first server of the account it reaches, local ones first."),
-                     qr: plexLinkQr }
+        if (code) {
+            var c = code.d || {}
+            return { title: c.title || "", where: c.where || "", code: c.code || "", error: c.error || "", help: c.help || "",
+                     qr: c.qr ? code.qr : null }
         }
         return null
     }
@@ -336,33 +306,6 @@ Item {
             else set({ loading: false, items: have.concat(d.items), done: !d.more || !d.items.length })
         })
     }
-    // YouTube account ("YouTube TV app" access, cast/youtube_tv.js): code to enter on google.com/device; the dialog
-    // reloads every 3 s until authorized
-    function ytConnect() {
-        ytAuth = { pending: null }
-        call("POST", "/api/youtube_login", {}, function (d) {
-            if (!d) ytAuth = { pending: { error: tr("YouTube unreachable") } }
-            else loadYtAuth()
-        })
-    }
-    function loadYtAccount() { call("GET", "/api/youtube_account", undefined, function (d) { if (d) ytAccount = d }) }
-    function loadYtAuth() {
-        if (!ytAuth) return
-        call("GET", "/api/youtube_account", undefined, function (d) {
-            if (!ytAuth || !d) return
-            ytAccount = d
-            if (d.authorized) { ytAuth = null; loadRows("youtube"); return }
-            var p = d.pending
-            ytAuth = { pending: p }
-            if (p && p.verification_uri && !p.error) {
-                if (!ytAuthQr || ytAuthQr.text !== p.verification_uri)
-                    call("GET", "/api/qr?text=" + encodeURIComponent(p.verification_uri), undefined, function (q) {
-                        ytAuthQr = q ? { text: p.verification_uri, rows: q.rows } : null
-                    })
-                ytAuthPoll.restart()
-            }
-        })
-    }
     // Twitch account: code to enter on twitch.tv/activate; the dialog reloads every 3 s until signed in
     function twConnect() {
         twAuth = { pending: null }
@@ -388,82 +331,80 @@ Item {
             }
         })
     }
-    function plexConnect() {
-        plexLink = { pending: null }
-        call("POST", "/api/plex_link", {}, function (d) {
-            if (!d) plexLink = { pending: { error: tr("plex.tv unreachable") } }
-            else loadPlexLink()
-        })
-        if (!plexLinkQr)
-            call("GET", "/api/qr?text=" + encodeURIComponent("https://plex.tv/link"), undefined, function (q) {
-                plexLinkQr = q ? { rows: q.rows } : null
+    // An add-on's account (Settings → Accounts and links): its dialogs, built by the add-on (/api/account_menu: title,
+    // items); an item opens another of its dialogs, or runs one of its actions (asked first if it says so), then its
+    // code dialog, its first dialog again, or a result
+    function accountMenu(addon, target, opening) {
+        loadingModal("account", opening || tr("Loading…"))
+        var opened = modal
+        call("GET", "/api/account_menu?addon=" + addon + "&target=" + encodeURIComponent(target || ""), undefined, function (d) {
+            if (modal !== opened) return   // closed in the meantime
+            if (!d) { openModal(tr("Unavailable for now"), [{ label: tr("Close"), ok: function () {} }]); return }
+            var items = (d.items || []).map(function (it) {
+                return { label: it.label, danger: !!it.danger, ok: function () { accountItem(addon, it) } }
             })
-    }
-    function loadPlexLink() {
-        if (!plexLink) return
-        call("GET", "/api/plex_link", undefined, function (d) {
-            if (!plexLink || !d) return
-            if (!d.pending && d.configured) { plexLink = null; refresh(); return }   // done: the Plex tab shows
-            plexLink = d
-            if (d.pending && !d.pending.error) plexLinkPoll.restart()
-        })
-    }
-    function closePlexLink() {
-        if (plexLink && plexLink.pending && !plexLink.pending.error) call("POST", "/api/plex_link", { action: "cancel" })
-        plexLink = null
-    }
-    // "Jellyfin" row (Settings → Accounts and links): the servers that answer on the network (Quick Connect), or forget the server
-    function jellyfinMenu() {
-        var on = !!(st.libraries || {}).jellyfin
-        openModal(tr("Looking for Jellyfin servers on the network…"), [{ label: tr("Cancel"), ok: function () {} }])
-        var searching = modal
-        call("GET", "/api/jellyfin_link?find=1", undefined, function (d) {
-            if (modal !== searching || !d) return   // closed in the meantime
-            var items = (d.servers || []).map(function (srv) {
-                return { label: "+  " + srv.name + "  ·  " + srv.address.replace(/^https?:\/\//, ""), ok: function () { jfConnect(srv.address) } }
-            })
-            var found = items.length
-            if (on) items.push({ label: tr("✕  Disconnect Jellyfin"), danger: true, ok: function () {
-                confirmModal(tr("Disconnect Jellyfin? Its tab goes away"), tr("✕  Disconnect Jellyfin"), function () {
-                    st = Object.assign({}, st, { libraries: Object.assign({}, st.libraries, { jellyfin: false }) })   // at once
-                    call("POST", "/api/jellyfin_link", { action: "forget" }, function () { refresh() }) }) } })
             items.push({ label: tr("Close"), ok: function () {} })
-            openModal(found ? tr("Connect to which Jellyfin server?")
-                      : tr("No Jellyfin server found on the network: give its address in the companion app (Settings → Jellyfin)."), items)
+            openModal(d.title, items)
         })
     }
-    function jfConnect(address) {
-        jfLink = { pending: null }
-        call("POST", "/api/jellyfin_link", { address: address }, function (d) {
-            if (!d) jfLink = { pending: { error: tr("Jellyfin unreachable") } }
-            else loadJfLink()
+    function accountItem(addon, it) {
+        if (it.open !== undefined) return accountMenu(addon, it.open)
+        var run = function () {
+            if (it.then === "code") return openCode(addon, it.action, it.body)
+            if (it.wait) loadingModal("", it.wait)
+            call("POST", "/api/" + it.action, it.body || {}, function (d) {
+                accountUpdated(addon)
+                if (it.then === "menu") accountMenu(addon, "")
+                else if (it.wait || it.done)
+                    openModal(d ? (it.done || tr("Done")) : (it.fail || tr("Unavailable for now")), [{ label: tr("OK"), ok: function () {} }])
+            })
+        }
+        if (it.confirm) confirmModal(it.confirm, it.label, run); else run()
+    }
+    // A card that asks to connect (YouTube's subscriptions): the add-on's first choice when it is a sign-in by code,
+    // otherwise its dialog
+    function accountConnect(addon) {
+        call("GET", "/api/account_menu?addon=" + addon, undefined, function (d) {
+            var first = d && d.items && d.items[0]
+            if (first && first.then === "code" && !first.confirm) accountItem(addon, first)
+            else accountMenu(addon, "")
         })
     }
-    function loadJfLink() {
-        if (!jfLink) return
-        call("GET", "/api/jellyfin_link", undefined, function (d) {
-            if (!jfLink || !d) return
-            if (!d.pending && d.configured) { jfLink = null; refresh(); return }   // signed in: the Jellyfin tab shows
-            jfLink = d
-            if (d.pending && !d.pending.error) jfLinkPoll.restart()
+    function loadAccounts() { call("GET", "/api/accounts", undefined, function (d) { if (d) accounts = d.accounts || [] }) }
+    function accountUpdated(addon) {   // signed in or out: the rows, its tab, the state
+        refresh(); loadAccounts()
+        if (libs[addon]) loadRows(addon)
+        if (addon === "gamestream") loadGames()
+    }
+    // Its code dialog (menu/CodeDialog.qml): the action that asks for the code, then /api/account_code every 2 s
+    // until done (closes) or closed (Back: its account_code_cancel)
+    function openCode(addon, action, body) {
+        code = { addon: addon, d: {}, qr: null }
+        if (!action) return loadCode()
+        call("POST", "/api/" + action, body || {}, function (d) {
+            if (!code || code.addon !== addon) return
+            if (!d) code = Object.assign({}, code, { d: { error: tr("Unavailable for now") } })
+            else loadCode()
         })
     }
-    function closeJfLink() {
-        if (jfLink && jfLink.pending && !jfLink.pending.error) call("POST", "/api/jellyfin_link", { action: "cancel" })
-        jfLink = null
+    function loadCode() {
+        if (!code) return
+        var addon = code.addon
+        call("GET", "/api/account_code?addon=" + addon, undefined, function (d) {
+            if (!code || code.addon !== addon || !d) return
+            if (d.done) { code = null; accountUpdated(addon); return }
+            var qr = code.qr && code.qr.text === d.qr ? code.qr : null
+            code = { addon: addon, d: d, qr: qr }
+            if (d.qr && !qr)
+                call("GET", "/api/qr?text=" + encodeURIComponent(d.qr), undefined, function (q) {
+                    if (code && code.addon === addon && q) code = Object.assign({}, code, { qr: { text: d.qr, rows: q.rows } })
+                })
+            if (!d.error) codePoll.restart()
+        })
     }
-    // "Plex" row (Settings → Accounts and links): sign in by code, or forget the server
-    function plexMenu() {
-        var on = !!(st.libraries || {}).plex
-        var items = [{ label: tr(on ? "+  Sign in with another Plex account" : "+  Sign in with a Plex account"),
-                       ok: function () { plexConnect() } }]
-        if (on)
-            items.push({ label: tr("✕  Disconnect Plex"), danger: true, ok: function () {
-                confirmModal(tr("Disconnect Plex? Its tab goes away"), tr("✕  Disconnect Plex"), function () {
-                    st = Object.assign({}, st, { libraries: Object.assign({}, st.libraries, { plex: false }) })   // at once
-                    call("POST", "/api/plex", { address: "" }, function () { refresh() }) }) } })
-        items.push({ label: tr("Close"), ok: function () {} })
-        openModal(on ? tr("Plex: {server}", { server: st.plex_server }) : "Plex", items)
+    function closeCode() {
+        if (code) call("POST", "/api/account_code_cancel", { addon: code.addon })
+        code = null
     }
     function twitchAccountMenu() {
         var login = account && account.login
@@ -478,28 +419,6 @@ Item {
                         follows = null; loadFollows() }) }) } })
         items.push({ label: tr("Close"), ok: function () {} })
         openModal(login ? tr("Twitch account: {login}", { login: login }) : tr("Twitch account"), items)
-    }
-    function ytAccountMenu() {
-        var a = ytAccount
-        if (!a || a.unavailable) return
-        var items = []
-        if (!a.authorized)
-            items.push({ label: tr("+  Connect my YouTube account"), ok: function () { ytConnect() } })
-        else {
-            items.push({ label: tr("↻  Reload my subscriptions"), ok: function () {
-                loadingModal("", tr("Reloading your subscriptions…"))
-                call("POST", "/api/youtube_sync", {}, function (d) {
-                    loadRows("youtube"); loadYtAccount()
-                    openModal(d ? tr("Subscriptions reloaded") : tr("YouTube unreachable for now"), [{ label: tr("OK"), ok: function () {} }])
-                }) } })
-            items.push({ label: tr("✕  Disconnect YouTube"), danger: true, ok: function () {
-                confirmModal(tr("Disconnect your YouTube account? Subscriptions, recommendations and progress sync stop"),
-                             tr("✕  Disconnect YouTube"), function () {
-                    ytAccount = Object.assign({}, ytAccount, { authorized: false })   // at once
-                    call("POST", "/api/youtube_logout", {}, function () { loadRows("youtube"); loadYtAccount() }) }) } })
-        }
-        items.push({ label: tr("Close"), ok: function () {} })
-        openModal(tr("YouTube account"), items)
     }
     // Rows of a tab, top to bottom: the search, the channels found, what is opened, the other rows of the search (its
     // results), the home rows; each with its next cards ("Load more") when it says where they come from
@@ -548,7 +467,7 @@ Item {
     // OK on a card: what it declares (connect, open, play); plays at once when there is a single choice, otherwise a
     // dialog (resume or from the beginning, then its options); ≡ (always): the dialog
     function cardChoose(it, always) {
-        if (it.connect === "youtube") return ytConnect()
+        if (it.connect) return accountConnect(it.connect)
         var options = (it.options || []).map(cardOption)
         if (!it.play) {
             if (it.open) return openTarget(it.open)
@@ -581,10 +500,6 @@ Item {
             : tr("Search {service}", { service: serviceName })
     }
     function loadGames() { call("GET", "/api/gamestream", undefined, function (d) { if (d) gs = d; checkArea() }) }
-    function gsPairClose() {
-        if (gs && gs.pairing && gs.pairing.pin) call("POST", "/api/gamestream_pair_cancel", {})
-        gs = Object.assign({}, gs, { pairing: null })
-    }
     function loadHistory() { call("GET", "/api/history", undefined, function (d) { history = d || []; checkArea() }) }
     function play(url, fromStart, item) {   // item: title and image for the loading screen and the history
         call("POST", "/api/play", { url: url, from_start: !!fromStart, title: item ? item.title : undefined,
@@ -599,18 +514,15 @@ Item {
         onTriggered: menu.readBox()
     }
     Timer { interval: 4000; repeat: true; running: menu.isOpen; onTriggered: menu.refresh() }
-    Timer { id: ytAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadYtAuth() }
+    Timer { id: codePoll; interval: 2000; onTriggered: if (menu.isOpen) menu.loadCode() }
     Timer { id: twAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadTwAuth() }
     // PC link tab open, or a pairing under way (from Settings too): the PC's state followed
-    Timer { interval: 3000; repeat: true; running: menu.isOpen && (menu.tabId === "games" || !!(menu.gs && menu.gs.pairing && menu.gs.pairing.pin))
+    Timer { interval: 3000; repeat: true; running: menu.isOpen && menu.tabId === "games"
             onTriggered: menu.loadGames() }
-    Timer { id: gsSoon; interval: 4000; onTriggered: menu.loadGames() }   // (a search takes a few seconds)
-    Timer { id: plexLinkPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadPlexLink() }
     // Settings → Add-ons open while an extension downloads: its state followed
     Timer { interval: 3000; repeat: true
             running: menu.isOpen && menu.section === "addons" && (menu.addons || []).some(function (a) { return a.enabled && a.extension && ["ready", "error", "builtin", "off"].indexOf(a.extension.state) < 0 })
             onTriggered: menu.loadAddons() }
-    Timer { id: jfLinkPoll; interval: 2000; onTriggered: if (menu.isOpen) menu.loadJfLink() }
     Timer { id: followsPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadFollows() }
     Timer { interval: 10000; repeat: true; running: menu.isOpen; triggeredOnStart: true; onTriggered: menu.now = new Date() }
     Timer { id: idleClose; interval: 90000; onTriggered: menu.close() }   // TV screen: no still image
@@ -690,9 +602,7 @@ Item {
     function close() {
         if (!isOpen) return
         stopPreview()
-        closePlexLink()
-        closeJfLink()
-        ytAuth = null   // (Google's code expires by itself; reopening the menu must not show a stale one)
+        closeCode()   // (a code expires by itself; reopening the menu must not show a stale one)
         twAuth = null
         isOpen = false
         modal = null
@@ -953,24 +863,10 @@ Item {
                 { open: true, label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
                   hint: login ? tr("No ads on the channels you're subscribed to") : tr("Subscriptions without ads, and your followed channels"),
                   ok: function () { twitchAccountMenu() } },
-                { open: true, label: tr("YouTube account"), visible: !!(ytAccount && !ytAccount.unavailable) && addonOn("youtube"),
-                  value: ytAccount && ytAccount.authorized ? tr("Connected") : tr("Not connected"),
-                  hint: tr("Subscriptions, recommendations, and progress synced with your account"),
-                  ok: function () { ytAccountMenu() } },
-                { open: true, label: "Jellyfin", visible: addonOn("jellyfin"),
-                  value: (s.libraries || {}).jellyfin ? tr("Connected") : tr("Not connected"),
-                  hint: (s.libraries || {}).jellyfin ? String(s.jellyfin_server || "").replace(/^https?:\/\//, "")
-                                                     : tr("Your movies and series of a Jellyfin server"),
-                  ok: function () { jellyfinMenu() } },
-                { open: true, label: "Plex", visible: addonOn("plex"), value: (s.libraries || {}).plex ? tr("Connected") : tr("Not connected"),
-                  hint: (s.libraries || {}).plex ? String(s.plex_server || "").replace(/^https?:\/\//, "")
-                                                 : tr("Your movies and series of a Plex server"),
-                  ok: function () { plexMenu() } },
-                { open: true, label: tr("PC (Sunshine)"), visible: !!features.gamestream && addonOn("gamestream"),   // (Moonlight: the box's image)
-                  value: gsSummary(),
-                  hint: gsPaired().length ? tr("Their games in the PC link tab") : tr("Play the games of a PC running Sunshine"),
-                  ok: function () { gamestreamMenu() } },
-            ]
+            ].concat(accounts.map(function (a) {   // the add-ons' (their rows and dialogs: built by each add-on)
+                return { open: true, label: a.label, value: a.value || "", hint: a.hint || "",
+                         ok: function () { accountMenu(a.addon, "", a.opening) } }
+            }))
         case "addons":   // each add-on on or off (Twitch, the base: always on); the tab and the rows follow at once
             return (addons || []).map(function (a) {
                 return a.base ? { label: a.name, hint: a.description, value: tr("Always on") }
@@ -1587,7 +1483,7 @@ Item {
     function loadAudio() { call("GET", "/api/audio", undefined, function (d) { if (d && d.outputs) audioOut = d }) }
     function loadTab(id) {
         if (id === "settings") {
-            loadYtAccount()
+            loadAccounts()
             if (features.gamestream) loadGames()
             if (sysOn) {   // (sound outputs, Bluetooth, SSH, developer mode, installation, local update: the system part)
                 loadAudio(); loadBt(); loadSsh()
@@ -1630,11 +1526,8 @@ Item {
             else if (k === "back" || k === "left") { modal = null; btPhase = ""; if (powerOnly) close() }
             return
         }
-        if (ytAuth) { if (k === "back" || k === "left" || k === "ok") ytAuth = null; return }
         if (twAuth) { if (k === "back" || k === "left" || k === "ok") twAuth = null; return }
-        if (plexLink) { if (k === "back" || k === "left" || k === "ok") closePlexLink(); return }
-        if (gs && gs.pairing) { if (k === "back" || k === "left" || k === "ok") gsPairClose(); return }
-        if (jfLink) { if (k === "back" || k === "left" || k === "ok") closeJfLink(); return }
+        if (code) { if (k === "back" || k === "left" || k === "ok") closeCode(); return }
         if (area === "rail") {
             if (railHome) {   // "Home screen": global, above the tabs
                 if (k === "down") railHome = false
@@ -1799,43 +1692,13 @@ Item {
             else if (kbText.length < 80) kbText += key
         }
     }
-    function gsPaired() { return gs && gs.pcs ? gs.pcs.filter(function (p) { return p.paired }) : [] }
-    function gsSummary() {
-        if (!gs) return ""
-        var paired = gsPaired()
-        return paired.length === 1 ? tr("Paired: {name}", { name: paired[0].name })
-             : paired.length ? tr("{n} PCs paired", { n: paired.length })
-             : gs.pcs && gs.pcs.length ? tr("Not paired") : tr("No PC found")
-    }
-    function gsPair(pc) { call("POST", "/api/gamestream_pair", { host: pc.host }, function () { loadGames() }) }
-    // Settings → Accounts and links → PC: the PCs found or paired, each with its own choices; search again
-    function gamestreamMenu() {
-        if (!gs) return
-        var items = (gs.pcs || []).map(function (pc) {
-            return { label: pc.name + "  ·  " + (pc.paired ? tr("paired") : pc.online ? tr("not paired") : tr("off")),
-                     ok: function () { gsPcMenu(pc) } }
-        })
-        items.push({ label: tr("↻  Search again"), ok: function () {
-            call("POST", "/api/gamestream_search", {}, function () { gsSoon.restart() }) } })
-        items.push({ label: tr("Close"), ok: function () {} })
-        openModal((gs.pcs || []).length ? tr("PCs with Sunshine") : tr("No PC with Sunshine found on the network"), items)
-    }
-    function gsPcMenu(pc) {   // one PC: pair (again), forget
-        var items = []
-        if (pc.online) items.push({ label: pc.paired ? tr("↻  Pair again") : tr("+  Pair with {name}", { name: pc.name }),
-                                    ok: function () { gsPair(pc) } })
-        if (pc.paired) items.push({ label: tr("✕  Forget this PC"), danger: true, ok: function () {
-            call("POST", "/api/gamestream_forget", { host: pc.host }, function () { loadGames() }) } })
-        items.push({ label: tr("Close"), ok: function () {} })
-        openModal(!pc.online ? tr("{name} is off or unreachable", { name: pc.name })
-                  : pc.paired ? tr("Paired with {name}", { name: pc.name }) : tr("{name} found on the network", { name: pc.name }), items)
-    }
+    function gsPair(pc) { openCode("gamestream", "gamestream_pair", { host: pc.host }) }   // (its code in CodeDialog)
     function keyGames(k) {
         var pcs = gs && gs.pcs || []
         if (!pcs.length) { if (k === "left") area = "rail"; return }
         gsPc = Math.min(gsPc, pcs.length - 1)
         var pc = pcs[gsPc]
-        if (k === "menu" && gsRow === 0) return gsPcMenu(pc)
+        if (k === "menu" && gsRow === 0) return accountMenu("gamestream", "pc:" + pc.host)
         if (gsRow === 0) {   // the PCs' chips
             if (k === "left") { if (gsPc === 0) area = "rail"; else { gsPc--; gsSel = 0 } }
             else if (k === "right") { gsPc = Math.min(pcs.length - 1, gsPc + 1); gsSel = 0 }

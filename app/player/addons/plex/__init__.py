@@ -3,6 +3,7 @@ code or by its address, its videos (direct play) and their progress on the serve
 from addons import Addon, Route, library
 from i18n import tr
 from . import service as px
+from .account import ACCOUNT
 
 
 def report(video, position, duration, paused, stopped):
@@ -24,6 +25,7 @@ lib["actions"].update({
 
 ADDON = Addon("plex", "Plex", order=30, description="Your Plex server's movies and series", configured=lambda: px.px_config() is not None, report=report,
               colors={"accent": "#e5a00d", "bar": ["#e5a00d", "#f5c04a"]},
+              account=ACCOUNT,
               # its links in the history; its server's files (the item's id is not in their link)
               urls=[{"re": r"^plex:(\d{1,10})$", "kind": "plex"},
                     {"re": r"/library/parts/(\d+)/", "kind": "plex", "key": "plex-part", "ident": False}],

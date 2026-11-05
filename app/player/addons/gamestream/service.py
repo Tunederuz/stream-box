@@ -288,8 +288,11 @@ def pair_cancel(body):
 
 
 def search(body):
-    """Looks for PCs on the network again (Settings: "Search again")"""
+    """Looks for PCs on the network again (Settings: "Search again"); {wait: true}: answers once it is done (the TV
+    dialog shows the PCs found then)"""
     look_for_pcs()
+    if body.get("wait"):
+        time.sleep(4)
 
 
 def forget(body):

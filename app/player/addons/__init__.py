@@ -46,12 +46,19 @@ class Addon:
     {kind: English label} (its name by default); urls, the links that are its videos: [{re, kind, key, ident}] (re: a
     regex, also used by the interface, JavaScript, to recognize what plays: keep to the common syntax; with a group,
     the video's identifier: history key "<key or kind>:<group>", ident False when the group is not the id its add-on
-    plays: Plex's files; without a group: recognized only)"""
+    plays: Plex's files; without a group: recognized only).
+    account: its row in Settings → Accounts and links and the dialogs behind it, built here, drawn by the TV menu
+    (GET /api/accounts, /api/account_menu, /api/account_code): {"row": fn() → {label, value, hint, opening} or None
+    (hidden), "menu": fn(target) → {title, items} (target "": its first dialog; an item: {label, danger, open (another
+    target), action (one of its actions, POST /api/<action> with body), confirm (asked first), then ("code": the code
+    dialog follows, "menu": its first dialog again), wait, done, fail (texts while it runs, then)}), "code": fn() →
+    {title, where, code, error, help, qr (a link, shown as a QR code), done (signed in: the dialog closes)},
+    "cancel": fn() (the code dialog closed before)}"""
     def __init__(self, id, name, order=50, description="", base=False, extension=None, configured=lambda: True, kinds=None,
                  routes=None, actions=None, more=None,
                  links=None, prepare=None, started=None, progress=None, progress_every=30, report=None,
                  outside_video=None, state=None, features=None, home=None, library=None, start=None, loops=(),
-                 rows=None, colors=None, kind_names=None, urls=()):
+                 rows=None, colors=None, kind_names=None, urls=(), account=None):
         self.id, self.name, self.order, self.configured, self.kinds = id, name, order, configured, kinds or (id,)
         self.description, self.base = description, base   # (description: English, translated when shown)
         self.extension = extension
@@ -62,6 +69,7 @@ class Addon:
         self.colors = colors or {}
         self.kind_names = kind_names or {k: name for k in self.kinds}
         self.urls = list(urls)
+        self.account = account
 
 
 def library(id, home, search, series, play, more_lib, more_home, more_search, unreachable):
@@ -209,7 +217,7 @@ def actions():
                 raise ValueError(tr("{name} is turned off (Settings → Add-ons).", name=tr(a.name)))
             return fn(body)
         return run
-    return {name: guarded(a, fn) for a in ADDONS for name, fn in a.actions.items()}
+    return {**CORE_ACTIONS, **{name: guarded(a, fn) for a in ADDONS for name, fn in a.actions.items()}}
 
 
 def more_source(source):
@@ -260,7 +268,39 @@ def rows(query):
     return a.rows["tab"]()
 
 
-CORE_ROUTES = {"/api/rows": Route(rows), "/api/addons": Route(lambda q: listing())}
+def account_of(addon_id):
+    a = get(addon_id)
+    if not a or a not in enabled() or not a.account:
+        raise ValueError(tr("unknown add-on"))
+    return a.account
+
+
+def accounts():
+    """GET /api/accounts: the rows of Settings → Accounts and links, one per add-on that has an account (on)"""
+    out = []
+    for a in enabled():
+        if a.account:
+            try:
+                row = a.account["row"]()
+            except (OSError, ValueError, KeyError):
+                row = None
+            if row:
+                out.append({"addon": a.id, **row})
+    return {"accounts": out}
+
+
+def account_cancel(body):
+    """POST /api/account_code_cancel {addon}: its code dialog closed before signing in"""
+    acc = account_of(str(body.get("addon", "")))
+    if acc.get("cancel"):
+        acc["cancel"]()
+
+
+CORE_ROUTES = {"/api/rows": Route(rows), "/api/addons": Route(lambda q: listing()),
+               "/api/accounts": Route(lambda q: accounts()),
+               "/api/account_menu": Route(lambda q: account_of(q.get("addon", ""))["menu"](q.get("target", ""))),
+               "/api/account_code": Route(lambda q: account_of(q.get("addon", ""))["code"]())}
+CORE_ACTIONS = {"account_code_cancel": account_cancel}
 
 
 def media_key(url):

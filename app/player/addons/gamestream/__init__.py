@@ -2,9 +2,10 @@
 box's image): finding the PCs, pairing with a code typed in Sunshine, their games and box art, the stream."""
 from addons import Addon, Route
 from . import service as gs
+from .account import ACCOUNT
 
 ADDON = Addon(
-    "gamestream", "PC link", order=40, extension="moonlight",
+    "gamestream", "PC link", order=40, extension="moonlight", account=ACCOUNT,
     description="Games of your PCs, streamed with Moonlight",
     routes={
         "/api/gamestream": Route(lambda q: gs.status()),   # the PCs (Sunshine), pairing, their games, a stream running

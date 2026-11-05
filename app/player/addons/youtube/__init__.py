@@ -7,6 +7,7 @@ from addons import Addon, Route
 from addons import cards as R
 from i18n import tr
 from . import service as yt
+from .account import ACCOUNT
 
 
 def prepare(video, entry, from_start, at):
@@ -148,6 +149,7 @@ def more_cards(source, key, q, offset):
 ADDON = Addon(
     "youtube", "YouTube", order=10, extension="node",
     colors={"accent": "#ff0033", "bar": ["#ff0033", "#ff4e45"]},
+    account=ACCOUNT,
     urls=[{"re": r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|live/)|youtu\.be/)([\w-]{11})", "kind": "youtube"},
           {"re": r"youtube\.com|youtu\.be|googlevideo", "kind": "youtube"}],
     description="Favorite channels, search, your account's subscriptions and recommendations",

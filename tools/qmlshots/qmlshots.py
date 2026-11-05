@@ -135,8 +135,25 @@ def rows_answer(query, fixtures):
         for i, lib in libs.items():
             a = addons.get(i)
             a.rows, a.more = lib["rows"], lib["more"]
+        # the accounts' rows and dialogs (Settings → Accounts and links): their states from the fixtures
+        from addons.jellyfin import service as jf
+        from addons.plex import service as px
+        from addons.gamestream import service as gs
+        yt.yt_account_status = lambda: fixtures["/api/youtube_account"]
+        jf.link_state = lambda find=False: fixtures["/api/jellyfin_link"]
+        jf.jf_server = lambda: {"address": "http://192.168.1.10:8096", "name": "Jellyfin"} \
+            if fixtures["/api/jellyfin_link"]["configured"] else None
+        px.link_state = lambda: fixtures["/api/plex_link"]
+        px.px_config = lambda: None
+        gs.status, gs.available = lambda: fixtures["/api/gamestream"], lambda: True
         rows_answer.addons, rows_answer.ready = addons, True
     return rows_answer.addons.rows(query)
+
+
+def accounts_answer(path, query, fixtures):
+    """GET /api/accounts, /api/account_menu, /api/account_code: built by the add-ons' own code too (rows_answer)"""
+    rows_answer({"addon": "youtube"}, fixtures)   # (sets the add-ons up)
+    return rows_answer.addons.CORE_ROUTES[path].fn(query)
 
 
 def serve(fixtures, log):
@@ -163,6 +180,10 @@ def serve(fixtures, log):
                 log.append("GET " + self.path)
                 q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
                 return self.reply(json.dumps(rows_answer(q, fixtures), default=str).encode())
+            if path in ("/api/accounts", "/api/account_menu", "/api/account_code"):
+                log.append("GET " + self.path)
+                q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+                return self.reply(json.dumps(accounts_answer(path, q, fixtures), default=str).encode())
             if path in fixtures:
                 log.append("GET " + self.path)
                 return self.reply(json.dumps(fixtures[path], default=str).encode())
@@ -353,6 +374,8 @@ def shoot(qml_dir, out):
         wait(WAIT)
         t1 = time.monotonic()
         # clock of the header: always 12:00 (the timer of the menu writes the real time every 10 s)
+        if view.rootObject() is None:   # (the QML did not load: say why)
+            sys.exit("\n".join([e.toString() for e in view.errors()] + console[-20:]))
         menu = view.rootObject().findChild(QObject, "tvMenu")
         menu.setProperty("now", QDateTime(QDate(2026, 10, 26), QTime(12, 0)))
         label = "-".join(str(s) for s in step).replace(" ", "_")
