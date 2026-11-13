@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO=$PWD
-OUT=$(readlink -f "${1:-$HOME/.cache/stream-box-flatpak/out}")
+OUT=$(realpath -m "${1:-$HOME/.cache/stream-box-flatpak/out}")
 CACHE=$HOME/.cache/stream-box-flatpak
 mkdir -p "$OUT" "$CACHE/system" "$CACHE/build"
 docker build -q -t stream-box-flatpak flatpak > /dev/null
