@@ -504,9 +504,12 @@ Item {
             : tr("Search {service}", { service: serviceName })
     }
     function loadHistory() { call("GET", "/api/history", undefined, function (d) { history = d || []; checkArea() }) }
-    function play(url, fromStart, item) {   // item: title and image for the loading screen and the history
+    // item: title and image for the loading screen and the history; resumed, at the position its card shows (the
+    // server would compute it again: the account's progress, read again with a timeout, could start it from 0)
+    function play(url, fromStart, item) {
+        var at = !fromStart && item && item.position > 0 ? Math.floor(item.position) : undefined
         call("POST", "/api/play", { url: url, from_start: !!fromStart, title: item ? item.title : undefined,
-                                    thumb: item ? item.thumb : undefined }, function () { refreshSoon.restart() })
+                                    thumb: item ? item.thumb : undefined, start: at }, function () { refreshSoon.restart() })
         close()
     }
 
