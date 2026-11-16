@@ -66,18 +66,59 @@ function mpvSend(command) {
 }
 const mpvGet = (prop) => mpvSend(['get_property', prop]).catch(() => null);
 
+// What mpv plays (observed): the cast video is recognized by its id in it
+let mpvPath = '';
+listeners.push((m) => { if (m.event === 'property-change' && m.name === 'path') mpvPath = String(m.data || ''); });
+
+// Resolves once mpv shows the picture of the video `id` (playback-restart: its first frame, or after a seek): true;
+// false when it fails (an error not followed by another try within 5 s: stream-box.lua may reload it with another
+// YouTube client) or when something else is played; true after `ms` all the same (slow, the app is not left loading)
+function shown(id, ms) {
+  return new Promise((resolve) => {
+    let failing = null;
+    const finish = (ok) => {
+      clearTimeout(timer);
+      clearTimeout(failing);
+      const i = listeners.indexOf(watch);
+      if (i >= 0) listeners.splice(i, 1);
+      resolve(ok);
+    };
+    const watch = (m) => {
+      const ours = mpvPath.includes(id);
+      if (m.event === 'playback-restart' && ours) finish(true);
+      else if (m.event === 'start-file') { clearTimeout(failing); failing = null; }
+      else if (m.event === 'end-file' && m.reason === 'error' && ours) failing = setTimeout(() => finish(false), 5000);
+      else if (m.event === 'property-change' && m.name === 'path' && m.data && !ours) finish(false);
+    };
+    const timer = setTimeout(() => finish(true), ms);
+    listeners.push(watch);
+  });
+}
+
 async function api(name, body = {}) {
   const r = await fetch(API + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   return r.ok;
 }
 
-// --- Player: the video being cast (id), to recognize what mpv is playing
+// --- Player: the video being cast (id), to recognize what mpv is playing. The app shows "loading" until doPlay /
+// doSeek resolve, then counts the time itself: they resolve once the picture is there (the box loads a video in a few
+// seconds; resolved at once, the app's time ran ahead of the TV's), its position meanwhile the one asked for
 class BoxPlayer extends Player {
   current = null;
+  loadingAt = null;
 
   async doPlay(video, position) {
     this.current = video.id;
-    return api('play', { url: `https://www.youtube.com/watch?v=${video.id}`, start: Math.floor(position || 0) });
+    this.loadingAt = Math.floor(position || 0);
+    const done = shown(video.id, 45000);
+    try {
+      if (!await api('play', { url: `https://www.youtube.com/watch?v=${video.id}`, start: this.loadingAt })) return false;
+      return await done;
+    } catch {
+      return false;
+    } finally {
+      this.loadingAt = null;
+    }
   }
   async doPause() { return mpvSend(['set_property', 'pause', true]).then(() => true, () => false); }
   async doResume() { return mpvSend(['set_property', 'pause', false]).then(() => true, () => false); }
@@ -88,7 +129,11 @@ class BoxPlayer extends Player {
     if (was && String(await mpvGet('path') || '').includes(was)) await api('twitch').catch(() => {});
     return true;
   }
-  async doSeek(position) { return mpvSend(['seek', position, 'absolute']).then(() => true, () => false); }
+  async doSeek(position) {
+    const done = this.current ? shown(this.current, 15000) : Promise.resolve(true);
+    try { await mpvSend(['seek', position, 'absolute']); } catch { return false; }
+    return done;
+  }
   async doSetVolume(volume) {
     try {
       await mpvSend(['set_property', 'volume', volume.level]);
@@ -97,8 +142,11 @@ class BoxPlayer extends Player {
     } catch { return false; }
   }
   async doGetVolume() { return { level: Math.round(await mpvGet('volume') ?? 100), muted: !!(await mpvGet('mute')) }; }
-  async doGetPosition() { return (await mpvGet('time-pos')) || 0; }
-  async doGetDuration() { return (await mpvGet('duration')) || 0; }
+  async doGetPosition() {
+    if (this.loadingAt !== null) return this.loadingAt;   // (mpv may still be on the previous video)
+    return (await mpvGet('time-pos')) || 0;
+  }
+  async doGetDuration() { return this.loadingAt !== null ? 0 : (await mpvGet('duration')) || 0; }
 }
 
 // --- Pairings kept from one boot to the next (the app finds the box again without redoing everything)
