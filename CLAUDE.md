@@ -1024,7 +1024,11 @@ The popup is shown alone over the video, without the menu behind it (`powerOnly`
 YouTube app's Cast button (DIAL / SSDP discovery on the local network, TCP port 3000, UDP 1900; firewall to
 open if there is one). Cast video → `POST /api/play` {url, start} (position set by the app, `play(at=)`);
 pause, resume, seek, volume → mpv IPC; state changed from the remote sent back to the app (`notifyExternalStateChange`),
-end of video → next in the queue; "Stop casting" → back to the stream (`/api/twitch`). The app shows "loading"
+end of video → next in the queue; "Stop casting" → the video left, back to the menu (`/api/home`, 1.5 s later and
+only if no other video was asked for meanwhile: the app stops a video before playing the next one; the phone asleep or
+the app closed leave it playing, `ALL_EXPLICITLY_DISCONNECTED`). A YouTube video started on the box (TV menu, history)
+is adopted at its first frame (`adopt`: the receiver's current video, playing or paused): a phone that connects sees it
+and drives it; it ending with no phone connected leaves the receiver stopped. The app shows "loading"
 until the player's `doPlay` / `doSeek` resolve, then counts the time itself: they resolve once mpv shows the video's
 picture (`shown`: `playback-restart` with its id in `path`; an error not followed by another try within 5 s fails it),
 the position meanwhile the one asked for. Pairings in
