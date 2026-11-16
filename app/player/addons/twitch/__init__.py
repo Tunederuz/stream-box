@@ -56,7 +56,12 @@ def unreachable(e):
 
 ADDON = Addon(
     "twitch", "Twitch", order=0, base=True, kinds=("twitch-vod", "twitch-clip"),
-    colors={"accent": "#9146ff", "bar": ["#8a3ffc", "#b062ff"]},
+    colors={"accent": "#9146ff", "bar": ["#8a3ffc", "#b062ff"],
+            "palette": {"veil": "#0a0612", "rail": "#100b17", "sheet": "#21182c", "key": "#33283f", "surface": "#2a2034",
+                        "surfaceFocus": "#3a2c4e", "label": "#a99fc0"}},
+    # (its tabs are the menu's own: the base)
+    tabs=[{"id": "live", "label": "Live", "kind": "live"}, {"id": "follows", "label": "Following", "kind": "follows"},
+          {"id": "replays", "label": "Replays", "kind": "replays", "kinds": ["twitch-vod", "twitch-clip"]}],
     kind_names={"twitch-vod": "Twitch replay", "twitch-clip": "Twitch clip"},
     urls=[{"re": r"twitch\.tv/videos/(\d+)", "kind": "twitch-vod"},
           {"re": r"(?:clips\.twitch\.tv/|twitch\.tv/\w+/clip/)([\w-]+)", "kind": "twitch-clip"},

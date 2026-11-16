@@ -5,7 +5,9 @@ from . import service as gs
 from .account import ACCOUNT
 
 ADDON = Addon(
-    "gamestream", "PC link", order=40, extension="moonlight", account=ACCOUNT,
+    "gamestream", "PC link", order=40, extension="moonlight", account=ACCOUNT, available=gs.available,
+    # its tab: the PCs and their games (Moonlight installed: the box's image)
+    tabs=[{"id": "games", "label": "PC link", "kind": "custom", "qml": "addons/gamestream/GamesTab.qml"}],
     description="Games of your PCs, streamed with Moonlight",
     routes={
         "/api/gamestream": Route(lambda q: gs.status()),   # the PCs (Sunshine), pairing, their games, a stream running

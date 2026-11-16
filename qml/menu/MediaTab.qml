@@ -27,11 +27,9 @@ Item {
         }
     }
     Text {
-        visible: menu.libTab ? !!menu.lib.home && !menu.lib.home.configured && !menu.lib.home.error
-                            : !!menu.lib.home && !menu.lib.home.channels && !menu.lib.search && !menu.lib.home.authorized
-        y: 320; text: menu.tabId === "plex" ? menu.tr("Plex isn't connected to the box: Settings → Accounts and links → Plex.")
-                    : menu.libTab ? menu.tr("Jellyfin isn't connected to the box: Settings → Accounts and links → Jellyfin.")
-                                 : menu.tr("Add favorite channels: Options on a video, or search.")
+        // (an empty tab: what its add-on says to do, GET /api/rows empty)
+        visible: !!menu.lib.home && !!menu.lib.home.empty && !menu.lib.search
+        y: 320; text: menu.lib.home ? menu.lib.home.empty || "" : ""
         color: "#b4afc2"; font.pixelSize: 27
     }
     Item {   // clip: what scrolls stops at the edge of the area (neither over the title nor over the help at the bottom)

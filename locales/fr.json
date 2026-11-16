@@ -313,7 +313,6 @@
  "January": "janvier",
  "Japanese": "Japonais",
  "Jellyfin is not paired with the box.": "Jellyfin n'est pas associé à la box.",
- "Jellyfin isn't connected to the box: Settings → Accounts and links → Jellyfin.": "Jellyfin n'est pas connecté à la box : Réglages → Comptes et liens → Jellyfin.",
  "Jellyfin unreachable: {error}": "Jellyfin injoignable : {error}",
  "Jul": "juil.",
  "July": "juillet",
@@ -472,7 +471,6 @@
  "Playback failed: {error}": "Échec de la lecture : {error}",
  "Playing": "Lecture",
  "Plex is not connected to the box.": "Plex n'est pas connecté à la box.",
- "Plex isn't connected to the box: Settings → Accounts and links → Plex.": "Plex n'est pas connecté à la box : Réglages → Comptes et liens → Plex.",
  "Plex refuses the box ({code}): give a token, or allow the network in Plex's settings": "Plex refuse la box ({code}) : donne un jeton, ou autorise le réseau dans les réglages de Plex",
  "Plex token": "Jeton Plex",
  "Plex unreachable: {error}": "Plex injoignable : {error}",
@@ -759,7 +757,6 @@
  "Your Plex server in the TV menu (a Plex tab): resume, next episodes, recent additions,\n      search. Progress follows on your other Plex apps.": "Ton serveur Plex dans le menu TV (un onglet Plex) : reprise, épisodes suivants, ajouts récents,\n      recherche. La progression suit sur tes autres apps Plex.",
  "Your YouTube subscriptions": "Tes abonnements YouTube",
  "Your bet: {points} points": "Ton pari : {points} points",
- "Your movies and series from Jellyfin or Plex": "Tes films et séries de Jellyfin ou Plex",
  "Your movies and series of a Jellyfin server": "Tes films et séries d'un serveur Jellyfin",
  "Your movies and series of a Plex server": "Tes films et séries d'un serveur Plex",
  "Your subscriptions and 1 channel · latest videos": "Tes abonnements et 1 chaîne · dernières vidéos",
@@ -1036,5 +1033,7 @@
  "Forget {name}? Its games leave the box": "Oublier {name} ? Ses jeux quittent la box",
  "Pair with the PC": "Appairer avec le PC",
  "Unavailable for now": "Indisponible pour le moment",
- "Done": "C'est fait"
+ "Done": "C'est fait",
+ "Your movies and series, once one of your media servers is connected": "Tes films et séries, une fois un de tes serveurs multimédia connecté",
+ "{service} isn't connected to the box: Settings → Accounts and links → {service}.": "{service} n'est pas connecté à la box : Réglages → Comptes et liens → {service}."
 }
