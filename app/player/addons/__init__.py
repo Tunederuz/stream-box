@@ -373,10 +373,13 @@ def identity_loop():
         time.sleep(10)
 
 
-def play_video(addon_id, url, start=0, title="", thumb="", label=""):
+def play_video(addon_id, url, start=0, title="", thumb="", label="", key=""):
     """A video in the player (stream-box.lua's streambox-play): title forced on mpv, thumb and label for the loading
-    screen, the add-on it belongs to (its colors and name there; "" a link)"""
-    mpv(["script-message", "streambox-play", url, str(start), title or "", thumb or "", label or "", addon_id or ""])
+    screen, the add-on it belongs to (its colors and name there, its player part: addons/<id>/player.lua; "" a link),
+    key: its stable key (history: remembered subtitles), its link's (media_key) by default"""
+    key = key or (media_key(url) or ("",))[0]
+    mpv(["script-message", "streambox-play", url, str(start), title or "", thumb or "", label or "", addon_id or "",
+         key or ""])
 
 
 def publish_actions(url, items):
