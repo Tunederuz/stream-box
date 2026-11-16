@@ -51,9 +51,7 @@ Item {
         var c = chapters[pb.chapter]
         return c && chapters.length > 1 ? tr("Chapter {n}", { n: pb.chapter + 1 }) + (c.title && !/^Chapter \d+$/i.test(c.title) ? " · " + c.title : "") : ""
     }
-    readonly property string details: (meta.source === "youtube" ? [meta.channel, meta.date, meta.views ? tr("{n} views", { n: Fmt.big(meta.views, tr) }) : ""]
-        : meta.source === "jellyfin" || meta.source === "plex" ? [meta.year, meta.rating ? "★ " + Fmt.decimal(meta.rating, tr) : ""]   // series and episode: already in the title
-        : []).concat([chapterTitle]).filter(function (t) { return !!t }).join("  ·  ")
+    readonly property string details: Fmt.details(meta, tr, false).concat([chapterTitle]).filter(function (t) { return !!t }).join("  ·  ")
     // Preview and "+30 s" bubble: only while seeking forward or back (not when the bar is just shown). Scrubbing (← →
     // in a video, stream-box.lua): the video is paused, the cursor, preview and offset stay on the target until OK / Back
     // Progress animated only once the bar shows a video it already showed: on appearing or on another video (another

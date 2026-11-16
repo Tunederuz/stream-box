@@ -14,9 +14,7 @@ Item {
     readonly property var b: { try { return JSON.parse(osd.bar || "{}") } catch (e) { return {} } }
     readonly property bool shown: !!st.open
     readonly property string title: (b.playback || {}).title || ""
-    readonly property string details: (meta.source === "youtube" ? [meta.channel, meta.date, meta.views ? tr("{n} views", { n: Fmt.big(meta.views, tr) }) : ""]
-        : meta.source === "jellyfin" || meta.source === "plex" ? [meta.series, meta.episode, meta.year, meta.rating ? "★ " + Fmt.decimal(meta.rating, tr) : ""]
-        : []).filter(function (t) { return !!t }).join("  ·  ")
+    readonly property string details: Fmt.details(meta, tr, true).join("  ·  ")
 
     Rectangle {   // veil over the video
         anchors.fill: parent; color: "black"
@@ -35,7 +33,7 @@ Item {
             id: head
             x: 56; y: 64; width: parent.width - 112
             spacing: 18
-            Item {   // thumbnail (YouTube) or episode picture (Jellyfin), 16:9
+            Item {   // the video's picture, 16:9
                 width: parent.width; height: width * 9 / 16
                 visible: !!root.meta.thumb
                 Rectangle { anchors.fill: parent; radius: 14; color: "#2a2430" }

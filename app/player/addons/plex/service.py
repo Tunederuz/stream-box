@@ -289,12 +289,12 @@ def plex_play(item_id, from_start=False):
     history.now_playing.clear()
     history.now_playing.update(key=f"plex:{item_id}", url=url, link=f"plex:{item_id}", kind="plex", ident=item_id,
                                title=title, thumb=i["thumb"], position=start)
-    addons.play_video("plex", url, start, title, i["thumb"] or "")
+    addons.play_video("plex", url, start, title, i["thumb"] or "", key=f"plex:{item_id}")
     mpv(["set_property", "user-data/streambox/storyboard", {}])
     # Seek bar and pause screen: series, episode, year, overview; next episode for the end card
     mpv(["set_property", "user-data/streambox/meta",
-         {"source": "plex", "series": raw.get("grandparentTitle") or "", "episode": i.get("episode") or "",
-          "year": raw.get("year") or "", "rating": raw.get("audienceRating") or raw.get("rating") or 0,
+         {"details": [{"text": raw.get("grandparentTitle") or "", "info": True}, {"text": i.get("episode") or "", "info": True},
+                      str(raw.get("year") or ""), {"rating": raw.get("audienceRating") or raw.get("rating") or 0}],
           "overview": (raw.get("summary") or "")[:3000], "thumb": i.get("thumb") or ""}])
     nxt = {}
     if i["type"] == "Episode" and i.get("series"):
@@ -304,7 +304,7 @@ def plex_play(item_id, from_start=False):
             if item_id in ids and ids.index(item_id) + 1 < len(eps):
                 n = eps[ids.index(item_id) + 1]
                 nxt = {"id": n["id"], "of": item_id, "title": n["title"], "episode": n.get("episode") or "",
-                       "thumb": n["thumb"], "service": "plex", "path": url}
+                       "thumb": n["thumb"], "post": "plex_play", "path": url}
         except (OSError, ValueError, KeyError):
             pass
     mpv(["set_property", "user-data/streambox/next_up", nxt])

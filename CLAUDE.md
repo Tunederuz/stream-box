@@ -179,6 +179,15 @@ Below, file names without a folder are in these folders.
     `../app/player/<qml>`, given menu and tabId; the menu calls its load, key, hint, canEnter, enter, reset:
     addons/gamestream/GamesTab.qml, the PC link); `mediaTab` from the tabs' `kinds`; LibrariesTab from the library
     tabs' `setup`. qmlshots copies the add-ons' QML and serves their tabs from their code.
+    Player (step 4 of the cleanup): an addon's part of stream-box.lua is `addons/<id>/player.lua` (a function given
+    `api.mine(path)`: the video was started for this addon; it registers its own mpv events and returns
+    `{failed()}`: "retry" when it reloaded a video that failed, or the message to show), loaded by stream-box.lua from
+    the add-ons' folder (YouTube: automatic subtitles, yt-dlp client rotation, "not a robot" message).
+    `addons.play_video(…, key)` gives the video's stable key (`media_key`, "<kind>:<id>") with streambox-play's 7th
+    argument: the remembered subtitles' key. `user-data/streambox/meta` {details, overview, thumb}: `details` a list
+    of texts or {views}, {rating}, {text, info} (info: the Info panel only), formatted by `Fmt.details` (InfoBar,
+    InfoPanel). `next_up` {id, of, title, episode, thumb, post, path}: shown while `path` plays, `POST /api/<post>`
+    {id, from_start} starts it.
     Step 4: the playback bar's buttons of an addon, for the video it plays (`addons.publish_actions(url, items)` →
     `user-data/streambox/actions` {url, items}; stream-box.lua shows them only while that url plays, after −10 s /
     Pause / +10 s, as `addon:<n>`; InfoBar draws `icon`): items [{label, label_on, icon, on, group, post, body,
@@ -230,7 +239,8 @@ Below, file names without a folder are in these folders.
   **Automatic** subtitles (`kind=asr`) have overlapping lines (two always on screen):
   at `file-loaded` in media mode, stream-box.lua replaces them with `http://127.0.0.1:8080/subs?u=<url>` (remote.py cuts
   each line at the start of the next one), as EDL `delay_open` so that only the chosen track is downloaded: YouTube
-  answers 429 to bursts, especially for automatic translations (`tlang`). yt-dlp and jellyfin-mpv-shim are in `~media/.local/share/media-venv` (links in
+  answers 429 to bursts, especially for automatic translations (`tlang`); this lives in addons/youtube/player.lua,
+  with the yt-dlp client changed when YouTube refuses a stream (403). yt-dlp and jellyfin-mpv-shim are in `~media/.local/share/media-venv` (links in
   `~/.local/bin`, update: `…/media-venv/bin/pip install -U yt-dlp jellyfin-mpv-shim`).
 - Page: collapsed "Play a link on the TV" block (`POST /api/play {url}`, `/api/twitch`) and Android share target
   (`share_target` of the manifest → `GET /share?title&text&url`, first http(s) link found, then redirect to `/`).
@@ -716,7 +726,7 @@ as Jellyfin (`px_item`), same API shape: `/api/plex` (On Deck split into resume 
 library), `/api/plex_search` (`/hubs/search`), `/api/plex_series` (`allLeaves`), `POST /api/plex_play` (direct play
 of the file, `/library/parts/…`, no transcoding). Progress: `/:/timeline` and `/:/progress` every 10 s
 (`playback.history_loop`), `/:/scrobble` at the end (`px_report`); links `plex:<ratingKey>` in the history. Next
-episode: `next_up` with `service: "plex"` and the `path` being played (Plex files hold no item id). Colors: amber
+episode: `next_up` with `post: "plex_play"` and the `path` being played. Colors: amber
 (`#e5a00d`), bar and loading screen too.
 Sign-in with a Plex account by code: `POST /api/plex_link` (`plex.link_start`: plex.tv PIN, 4 characters, 15 min),
 `GET /api/plex_link` (`link_state`: configured, name, account, pending {code, error}); a thread polls the PIN every
@@ -843,10 +853,10 @@ title over a light image.
   read by ui.py with the position: marks on the bar, current chapter in the info line. Time left
   and end time ("−21:26 · ends at 02:30").
 - Pause screen (`qml/PauseScreen.qml`): dimmed image, pause icon in the center of the screen (no more overview here).
-- Next episode (Jellyfin): remote.py publishes `user-data/streambox/next_up` {id, of, title, episode, thumb}
-  (`Shows/{series}/Episodes?AdjacentTo=`); in the last 20 seconds, stream-box.lua publishes `next_card`
-  {seconds, …} → `qml/NextUp.qml` (OK: play, Back: stay); at the end of the file, the next episode starts
-  (POST /api/jellyfin_play). `of`: only during the episode it follows (not for a playback from the shim).
+- Next episode (Jellyfin, Plex): the add-on publishes `user-data/streambox/next_up` {id, of, title, episode, thumb,
+  post, path} (Jellyfin: `Shows/{series}/Episodes?AdjacentTo=`); in the last 20 seconds, stream-box.lua publishes
+  `next_card` {seconds, …} → `qml/NextUp.qml` (OK: play, Back: stay); at the end of the file, the next episode starts
+  (POST /api/<post>). Only while `path` (the episode it follows) plays, not for a playback from the shim.
 
 ### Home Assistant: "Powered on" state
 
@@ -1438,8 +1448,8 @@ boot on the Dell: 13.6 s. To try a boot option without rebuilding the kernel: sy
 
 ### Remembered subtitles (per video)
 The choice made in the Subtitles / audio panel (Qt app) is kept for the current video in
-`~/.local/state/stream-box/sub_prefs.json` (key: YouTube id `v=`, Jellyfin id from `/Videos/<id>/`,
-otherwise the link; {lang, t}, 300 videos at most, the oldest go; `no` for off) and restored when it is
+`~/.local/state/stream-box/sub_prefs.json` (key: the one its add-on gave, `youtube:<id>`, `jellyfin:<id>`…,
+otherwise the link; the bare ids written until 0.7 are still read; {lang, t}, 300 videos at most, the oldest go; `no` for off) and restored when it is
 resumed (stream-box.lua `apply_sub_pref`, on `file-loaded` in media mode, then on each `track-list` change
 for 20 s: Jellyfin's external subtitles arrive after opening; same language on the first two
 letters, "forced" tracks last). A video without a choice keeps mpv's.

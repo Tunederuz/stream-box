@@ -472,9 +472,9 @@ def fetch_storyboard(ident):
         if history.now_playing.get("ident") == ident:   # info for the seek bar and the pause screen
             d = info.get("upload_date") or ""
             mpv(["set_property", "user-data/streambox/meta",
-                 {"source": "youtube", "channel": info.get("channel") or info.get("uploader") or "",
-                  "date": f"{d[6:8]}/{d[4:6]}/{d[:4]}" if len(d) == 8 else "",
-                  "views": info.get("view_count") or 0, "overview": (info.get("description") or "")[:3000],
+                 {"details": [info.get("channel") or info.get("uploader") or "",
+                              f"{d[6:8]}/{d[4:6]}/{d[:4]}" if len(d) == 8 else "", {"views": info.get("view_count") or 0}],
+                  "overview": (info.get("description") or "")[:3000],
                   "thumb": info.get("thumbnail") or ""}])
         boards = [f for f in info.get("formats") or [] if f.get("format_note") == "storyboard" and f.get("fragments")]
         if not boards:

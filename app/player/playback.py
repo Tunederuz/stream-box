@@ -43,7 +43,8 @@ def play(url, from_start=False, title=None, thumb=None, at=None):
         start = max(0, int(at))
     history.now_playing.clear()
     history.now_playing.update(video, pushed=0.0, position=start)
-    addons.play_video(addon.id if addon else "", url, start, "", video.get("thumb") or "", video.get("title") or "")
+    addons.play_video(addon.id if addon else "", url, start, "", video.get("thumb") or "", video.get("title") or "",
+                       key)
     history.record(video, start, duration)
     mpv(["set_property", "user-data/streambox/storyboard", {}])
     mpv(["set_property", "user-data/streambox/meta", {}])
