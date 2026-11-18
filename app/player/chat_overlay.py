@@ -5,7 +5,7 @@ The channel and the display corner come from mpv (user-data/streambox/* properti
 by stream-box.lua): switching streamer in the menu switches the chat too. Read-only, with the connected Twitch account
 (it shows among the chatters) or anonymously (chat_login.py).
 """
-import json, select, socket, ssl, threading, time
+import json, select, socket, ssl, textwrap, threading, time
 from collections import deque
 
 import chat_login   # (next to this script: on the import path when it is run)
@@ -13,7 +13,7 @@ import chat_login   # (next to this script: on the import path when it is run)
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
 MAX_MESSAGES = 10
 LIFETIME = 45      # seconds before a message disappears
-MAX_CHARS = 90     # truncates walls of text
+WRAP_CHARS = 60    # long messages shown whole, on several lines of this width (the block stays in its corner)
 BG_PADDING = 14    # background margin around the text, in 1920x1080 pixels
 BOUNDS_REQUEST = 42   # request_id of the text measurement, to recognize its reply
 # ASS anchoring and position of each corner, in 1920x1080 coordinates
@@ -67,8 +67,6 @@ def handle(line):
             text = trailing
             if text.startswith("\x01ACTION ") and text.endswith("\x01"):
                 text = text[8:-1]
-            if len(text) > MAX_CHARS:
-                text = text[:MAX_CHARS] + "…"
             messages.append({
                 "t": time.time(), "id": tags.get("id"), "user": tags.get("user-id"),
                 "name": tags.get("display-name") or prefix.split("!")[0],
@@ -90,7 +88,9 @@ def render():
         while messages and now - messages[0]["t"] > LIFETIME:
             messages.popleft()
         lines = [
-            f"{{\\c{m['color']}\\b1}}{ass_escape(m['name'])}{{\\b0\\c&HFFFFFF&}}  {ass_escape(m['text'])}"
+            f"{{\\c{m['color']}\\b1}}{ass_escape(m['name'])}{{\\b0\\c&HFFFFFF&}}  " + "\\N".join(
+                ass_escape(l) for l in textwrap.wrap(m["text"], WRAP_CHARS, initial_indent=" " * (len(m["name"]) + 2))
+            ).lstrip()
             for m in messages
         ]
     if not state["chat_visible"] or state["mode"] != "twitch" or state["tvmenu"] or state["chat_ui"] == "qml":

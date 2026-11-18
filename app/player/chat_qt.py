@@ -15,7 +15,6 @@ import chat_login
 
 MAX_MESSAGES = 10
 LIFETIME = 45      # seconds before a message disappears (like chat_overlay.py)
-MAX_CHARS = 90     # truncates walls of text
 TWITCH_EMOTE = "https://static-cdn.jtvnw.net/emoticons/v2/{}/default/dark/2.0"   # "default": animated if it is
 
 
@@ -175,10 +174,7 @@ class Chat:
                 text = trailing
                 if text.startswith("\x01ACTION ") and text.endswith("\x01"):
                     text = text[8:-1]
-                cut = len(text) > MAX_CHARS
-                parts = self._parts(text[:MAX_CHARS] if cut else text, tags.get("emotes"))
-                if cut:
-                    parts.append({"t": "x", "v": "…"})
+                parts = self._parts(text, tags.get("emotes"))   # (whole: ChatOverlay.qml wraps it)
                 self.messages.append({"t": time.time(), "id": tags.get("id"), "user": tags.get("user-id"),
                                       "name": tags.get("display-name") or prefix.split("!")[0],
                                       "color": color(tags.get("color")), "parts": parts})

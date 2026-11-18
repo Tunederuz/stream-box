@@ -6,6 +6,9 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+### Changed
+- Twitch chat on the TV: messages are shown whole, on several lines, instead of being cut after 90 characters.
+
 ## [0.8.0]
 
 ### Changed
