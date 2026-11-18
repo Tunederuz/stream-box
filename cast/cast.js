@@ -110,11 +110,24 @@ class BoxPlayer extends Player {
   current = null;
   loadingAt = null;
   leaving = null;
+  // Its last position and duration while mpv plays it (read every second): what the app is told once the video is
+  // left on the box (Back, another video), mpv then on something else: read there, 0 of 0 or a live stream's
+  // position, the app took it as watched to the end
+  last = { position: 0, duration: 0 };
+  tracking = setInterval(() => this.track(), 1000);
+
+  ours() { return !!this.current && mpvPath.includes(this.current); }
+  async track() {
+    if (!this.ours() || this.loadingAt !== null) return;
+    const [position, duration] = [await mpvGet('time-pos'), await mpvGet('duration')];
+    if (this.ours() && position !== null) this.last = { position, duration: duration || this.last.duration };
+  }
 
   async doPlay(video, position) {
     clearTimeout(this.leaving);   // (the app stops the previous video before playing the next one)
     this.current = video.id;
     this.loadingAt = Math.floor(position || 0);
+    this.last = { position: this.loadingAt, duration: 0 };
     const done = shown(video.id, 45000);
     try {
       if (!await api('play', { url: `https://www.youtube.com/watch?v=${video.id}`, start: this.loadingAt })) return false;
@@ -141,6 +154,7 @@ class BoxPlayer extends Player {
   // A YouTube video started on the box itself: taken as the one playing, for a phone that connects (or is connected)
   async adopt(id) {
     this.current = id;
+    this.last = { position: (await mpvGet('time-pos')) || 0, duration: (await mpvGet('duration')) || 0 };
     try {
       this.queue.setAsCurrent({ id, client: CLIENTS.YT });
       await this.notifyExternalStateChange(await mpvGet('pause') ? PLAYER_STATUSES.PAUSED : PLAYER_STATUSES.PLAYING);
@@ -159,11 +173,17 @@ class BoxPlayer extends Player {
     } catch { return false; }
   }
   async doGetVolume() { return { level: Math.round(await mpvGet('volume') ?? 100), muted: !!(await mpvGet('mute')) }; }
+  // Loading: the position asked for (mpv may still be on the previous video); left: where it was
   async doGetPosition() {
-    if (this.loadingAt !== null) return this.loadingAt;   // (mpv may still be on the previous video)
-    return (await mpvGet('time-pos')) || 0;
+    if (this.loadingAt !== null) return this.loadingAt;
+    if (!this.ours()) return this.last.position;
+    return (await mpvGet('time-pos')) ?? this.last.position;
   }
-  async doGetDuration() { return this.loadingAt !== null ? 0 : (await mpvGet('duration')) || 0; }
+  async doGetDuration() {
+    if (this.loadingAt !== null) return 0;
+    if (!this.ours()) return this.last.duration;
+    return (await mpvGet('duration')) || this.last.duration;
+  }
 }
 
 // --- Pairings kept from one boot to the next (the app finds the box again without redoing everything)
@@ -200,6 +220,10 @@ listeners.push(async (m) => {
     await player.notifyExternalStateChange(m.data ? PLAYER_STATUSES.PAUSED : PLAYER_STATUSES.PLAYING);
   } else if (m.event === 'property-change' && m.name === 'path' && m.data && !String(m.data).includes(player.current)) {
     player.current = null;   // something else started on the TV (stream, other video): casting stops there
+    await player.notifyExternalStateChange(PLAYER_STATUSES.STOPPED);
+  } else if (m.event === 'end-file' && m.reason === 'stop' && (playing || paused)) {
+    // left on the box (Back, the menu, another file): the app keeps where it was
+    player.current = null;
     await player.notifyExternalStateChange(PLAYER_STATUSES.STOPPED);
   } else if (m.event === 'end-file' && m.reason === 'eof' && playing) {
     if (!receiver.getConnectedSenders().length) {   // (a video of the box's own, no phone: nothing comes next here)
