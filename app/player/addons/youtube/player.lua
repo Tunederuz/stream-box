@@ -35,10 +35,11 @@ return { contract = 1, load = function(api)
     end)
 
     -- yt-dlp's client (player_client): which one's streams YouTube serves changes from one day to the next (mweb
-    -- refused with HTTP 403 on 2026-10-29 while tv_simply played to the end; the other way round the day before). A
-    -- video refused with a 403 is reloaded at the same second with the next client; the one that plays stays for the
-    -- following videos.
-    local clients = { "mweb,tv_simply", "tv_simply", "mweb", "web_safari" }
+    -- refused with HTTP 403 on 2026-10-29 while tv_simply played to the end; the other way round the day before; on
+    -- 2026-11-18 both cut after 10 MB, yt-dlp's default clients whole). A video refused with a 403 is reloaded at the
+    -- same second with the next client; the one that plays stays for the following videos. The first one is
+    -- scripts/mpv-args.sh's.
+    local clients = { "default", "mweb,tv_simply", "tv_simply", "mweb", "web_safari" }
     local ci, tries, path, pos = 1, 0, nil, 0
     -- Before ytdl_hook (priority 10): this video's yt-dlp options with the chosen client, the others unchanged
     mp.add_hook("on_load", 9, function()

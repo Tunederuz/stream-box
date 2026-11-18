@@ -279,10 +279,12 @@ Below, file names without a folder are in these folders.
   valid token changes nothing while the block lasts (a few hours). Tokens: pip plugin
   `bgutil-ytdlp-pot-provider` + its server (same version, `~/.local/share/bgutil-pot-provider`, built with Node
   from the pip package `nodejs-wheel`), user service `stream-box-pot` (127.0.0.1:4416). mpv passes
-  `extractor-args=youtube:player_client=mweb,tv_simply;fetch_pot=always`: the TV client chosen by default
-  received rejected streams (HTTP 403 on googlevideo, even with IPv4 end to end); tv_simply (2026-10-28) served only
-  the first megabytes (403 further on: a video resumed from the history failed at once, "Can't play this video"),
-  mweb the whole file; android_vr's https formats are skipped (no GVS token). If YouTube breaks again, compare the
+  `extractor-args=youtube:player_client=default;fetch_pot=always` (yt-dlp's own choice: tv_samsung and visionos on
+  2026-11-18, when mweb and tv_simply were cut after the first 10 MB, the audio's first request refused at once:
+  "Can't play this video"); before, the TV client chosen by default received rejected streams (HTTP 403 on
+  googlevideo, even with IPv4 end to end); tv_simply (2026-10-28) served only the first megabytes, mweb the whole
+  file; android_vr's https formats are skipped (no GVS token). The rotation of addons/youtube/player.lua then tries
+  mweb,tv_simply, tv_simply, mweb, web_safari. An unknown client name is skipped by yt-dlp (its default ones used). If YouTube breaks again, compare the
   clients with `yt-dlp --extractor-args "youtube:player_client=<client>;fetch_pot=always" -g <url>` then `curl -r`
   on the URL **both at the start and far into the file** (`-r 0-1000`, `-r 20000000-20001000`): a 206 at the start
   alone proves nothing. Check: `yt-dlp -v --simulate <url>` → `PO Token Providers: bgutil:http`.

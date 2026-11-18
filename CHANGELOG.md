@@ -9,6 +9,10 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 ### Changed
 - Twitch chat on the TV: messages are shown whole, on several lines, instead of being cut after 90 characters.
 
+### Fixed
+- YouTube: videos could not play ("Can't play this video") since YouTube cut the streams the box asked for after
+  their first megabytes; the box now lets yt-dlp choose its client first.
+
 ## [0.8.0]
 
 ### Changed

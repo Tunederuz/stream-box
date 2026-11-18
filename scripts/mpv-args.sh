@@ -8,9 +8,10 @@ YTDL_FORMAT='bestvideo[height<=?1440][vcodec!^=av01]+bestaudio/best'
 
 # hwdec: hardware decoding when it is safe (VA-API, NVDEC…). French and English subtitles, manual and automatic,
 # without the automatic translations ("French from Arabic"… over 100 tracks).
-# player_client: mweb first, tv_simply as a fallback; which client's streams YouTube serves changes from day to day
-# (tv_simply cut after the first megabytes on 2026-10-28, mweb refused on 2026-10-29): stream-box.lua reloads a video
-# refused with HTTP 403 with the next client
+# player_client: yt-dlp's own choice first ("default": tv_samsung and visionos on 2026-11-18, when mweb and tv_simply
+# were cut after the first 10 MB); which client's streams YouTube serves changes from day to day (tv_simply cut on
+# 2026-10-28, mweb refused on 2026-10-29): the YouTube add-on's player part reloads a video refused with HTTP 403 with
+# the next client
 # fetch_pot: anti-bot token (stream-box-pot service) for every request, otherwise YouTube blocks the subtitles
 # shellcheck disable=SC2054  # (commas inside mpv option values, not array separators)
 MPV_ARGS=(
@@ -21,7 +22,7 @@ MPV_ARGS=(
   --ytdl-raw-options-append=sub-langs=fr,fr-FR,fr-orig,en,en-US,en-GB,en-orig
   --ytdl-raw-options-append=write-subs= --ytdl-raw-options-append=write-auto-subs=
   --ytdl-raw-options-append=cookies="$HOME/.config/stream-box/twitch-cookies.txt"
-  --ytdl-raw-options-append='extractor-args=youtube:player_client=mweb,tv_simply;fetch_pot=always'
+  --ytdl-raw-options-append='extractor-args=youtube:player_client=default;fetch_pot=always'
 )
 # YouTube JavaScript challenges: deno if installed (install.sh), otherwise the system Node (image)
 [ -x "$HOME/.local/bin/deno" ] || MPV_ARGS+=(--ytdl-raw-options-append=js-runtimes=node)
