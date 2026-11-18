@@ -65,11 +65,13 @@ Item {
     }
     Component {
         id: word
-        Text {
+        Text {   // a word longer than the chat's width (a link): wrapped inside it
             text: part.v
             color: "white"
             font.pixelSize: root.fontSize
-            height: root.fontSize * 1.45
+            width: Math.min(implicitWidth, root.maxWidth)
+            wrapMode: Text.WrapAnywhere
+            height: lineCount > 1 ? implicitHeight : root.fontSize * 1.45
             verticalAlignment: Text.AlignVCenter
             style: Text.Outline
             styleColor: "#cc000000"
