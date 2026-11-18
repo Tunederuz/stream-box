@@ -9,12 +9,12 @@ Sunshine's port 47989) and those already paired (~/.config/stream-box/gamestream
 Pairing: the box picks a 4-digit code, shows it on the TV, and waits in "moonlight pair" while it is typed in
 Sunshine's PIN page; its success seen in Sunshine's answer too (moonlight-qt's pair does not always end once paired:
 the TV's dialog would stay). While a game streams, the moonlight process covers the screen; its PID is in
-GAMESTREAM_PID, so that input.py leaves the keys to it (a long press on Home ends the stream).
+EXTERNAL_APP_PID, so that input.py leaves the keys to it (a long press on Home ends the stream).
 """
 import concurrent.futures, html, json, os, random, re, shutil, socket, ssl, struct, subprocess, threading, time
 import urllib.parse, urllib.request
 
-from common import COOKIES_DIR, GAMESTREAM_PID, lan_ip, mpv
+from common import COOKIES_DIR, EXTERNAL_APP_PID, lan_ip, mpv
 from i18n import tr
 
 CONF = os.path.join(COOKIES_DIR, "gamestream.json")
@@ -317,13 +317,13 @@ def launch(body):
     p = subprocess.Popen([moonlight(), "stream", host, app], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=open("/tmp/stream-box-moonlight.log", "w"), start_new_session=True)
     proc["stream"] = p
-    with open(GAMESTREAM_PID, "w") as f:
+    with open(EXTERNAL_APP_PID, "w") as f:
         f.write(str(p.pid))
 
     def wait():   # stream over: the keys go back to the menu
         p.wait()
         try:
-            os.remove(GAMESTREAM_PID)
+            os.remove(EXTERNAL_APP_PID)
         except OSError:
             pass
         mpv(["script-message", "streambox-tvmenu-open"])

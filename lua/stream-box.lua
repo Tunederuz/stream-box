@@ -1,13 +1,13 @@
 -- Inlet: small menu of the simplified version (streamer choice, chat corner, opened by the remote),
 -- and management of streamlink, which serves the chosen channel's stream over local HTTP to this mpv.
 -- The channel, corner and chat visibility are published in user-data/streambox/* for chat_overlay.py.
--- Two modes: "twitch" (stream of the chosen channel) and "media" (video sent from the companion app or
--- Jellyfin). Any file that is not the streamlink stream switches to "media"; when it ends and
+-- Two modes: "twitch" (stream of the chosen channel) and "media" (video sent from the companion app or a
+-- media server's own player). Any file that is not the streamlink stream switches to "media"; when it ends and
 -- mpv stays empty, we go back to the stream.
 local mp = require "mp"
 
 -- This script is in the repository's lua/ (mp.get_script_file is too recent), its modules next to it in
--- lua/streambox/*.lua (require "streambox.…"); DIR: the repository (locales/)
+-- lua/streambox/*.lua (require "streambox.…"); DIR: the repository (locales/, app/player/addons/)
 local LUA_DIR = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$") or "."
 local DIR = LUA_DIR .. "/.."
 package.path = LUA_DIR .. "/?.lua;" .. package.path
@@ -28,7 +28,7 @@ local CORNERS = { "tl", "tr", "br", "bl" }   -- toggle order (clockwise)
 local CORNER_LABELS = { tl = "↖ top left", tr = "↗ top right", br = "↘ bottom right", bl = "↙ bottom left" }
 local MENU_TIMEOUT = 120  -- seconds without a key before closing the quick menu
 local RETRY = 15          -- seconds between two attempts when the channel is not live
-local BACK_TO_MENU = 3    -- seconds idle after a video before going back to the menu (lets Jellyfin chain the next one)
+local BACK_TO_MENU = 3    -- seconds idle after a video before going back to the menu (lets a media server's player chain the next one)
 local AUTO_SWITCH = 60    -- seconds offline (after a channel change) before switching to a live streamer
 local FROZEN = 20         -- seconds of frozen picture, not paused, before restarting the live stream
 local LIVE_BACK = "400MiB" -- live stream kept in memory to go back in time (≈ 7-8 min in 1080p60)
@@ -229,7 +229,7 @@ end
 
 -- start: resume position in seconds (remote.py history), given to mpv as a file option so no jump is
 -- seen after loading
--- title: title to display (Jellyfin: the stream link does not give one), passed as a file option (%n%: length
+-- title: title to display (a media server's stream link does not give one), passed as a file option (%n%: length
 -- in bytes, so commas and equal signs in the title go through as is)
 -- thumb, label: loading screen picture and title (label: known title, without forcing it on mpv)
 -- kind: its add-on (remote.py's addons.play_video), key: its stable key (remembered subtitles)
@@ -262,8 +262,8 @@ local function play_media(url, start, title, thumb, label, kind, key)
     end
 end
 
--- Right before each file opens, including those loaded by Jellyfin: small buffer for the live stream
--- (latency), normal buffer for videos. And decoding on the iGPU, which the Jellyfin shim may have disabled.
+-- Right before each file opens, including those loaded by a media server's own player: small buffer for the live
+-- stream (latency), normal buffer for videos. And decoding on the iGPU, which such a player may have disabled.
 mp.add_hook("on_load", 50, function()
     local is_live = mp.get_property("stream-open-filename") == stream_url()
     mp.set_property("demuxer-max-bytes", is_live and "750KiB" or "150MiB")
@@ -313,10 +313,12 @@ mp.register_event("start-file", function()
     end
 end)
 
--- Add-ons' player parts: app/player/addons/<id>/player.lua, a function given an api ({mine(path): whether the video
--- at path, the current one by default, was started for this add-on}) that registers its own mpv events and returns
+-- Add-ons' player parts: app/player/addons/<id>/player.lua returns {contract, load}: contract, the ADDON_CONTRACT it was
+-- written for (one written for another is left out, logged); load(api), given an api ({mine(path): whether the video
+-- at path, the current one by default, was started for this add-on}), registers its own mpv events and returns
 -- {failed()}: asked when a video ends with an error, "retry" when it reloaded it, or the message to show (and its
 -- seconds). Loaded in the add-ons' folder order; one that fails to load is left out (logged)
+local ADDON_CONTRACT = 1   -- the same number as CONTRACT in app/player/addons/__init__.py
 do
     local utils = require "mp.utils"
     local root = DIR .. "/app/player/addons"
@@ -329,7 +331,11 @@ do
                 return media.addon == id and (path or mp.get_property("path")) == media.url
             end }
             local ok, part = pcall(dofile, file)
-            if ok then ok, part = pcall(part, api) end
+            if ok and (type(part) ~= "table" or part.contract ~= ADDON_CONTRACT) then
+                ok, part = false, ("written for contract %s, this core offers %d"):format(
+                    tostring(type(part) == "table" and part.contract), ADDON_CONTRACT)
+            end
+            if ok then ok, part = pcall(part.load, api) end
             if ok and type(part) == "table" then media.parts[#media.parts + 1] = part
             else mp.msg.error(("add-on %s: player.lua not loaded: %s"):format(id, tostring(part))) end
         end
@@ -1262,7 +1268,7 @@ local function on_key(key)
             toggle_chat()
             mp.osd_message(chat_visible and tr("Chat shown") or tr("Chat hidden"), 2)
         end
-    else   -- video (link, Jellyfin)
+    else   -- video (link, an add-on's)
         if key == "ok" then
             mp.commandv("cycle", "pause")
             show_bar()

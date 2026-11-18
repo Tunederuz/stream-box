@@ -27,10 +27,6 @@ STATIC = {
     "/icon-512.png": ("web/icon-512.png", "image/png"),
     "/apple-touch-icon.png": ("web/icon-180.png", "image/png"),
 }
-# Translations (companion app, TV menu): /locales/<lang>.json
-for _code in i18n.LANGUAGES:
-    if _code != "en":
-        STATIC[f"/locales/{_code}.json"] = (f"locales/{_code}.json", "application/json; charset=utf-8")
 
 
 def state():
@@ -95,6 +91,8 @@ def more(query):
 
 # GET routes answered with JSON as is (exact path); the others, with parameters or their own errors, are in do_GET
 JSON_ROUTES = {
+    # Translations (companion app): /locales/<lang>.json, the core's and the add-ons' merged
+    **{f"/locales/{code}.json": (lambda code=code: i18n.catalog(code)) for code in i18n.LANGUAGES if code != "en"},
     "/api/state": state,
     # (kind_name: its kind's label, from its add-on: the TV menu's history)
     "/api/history": lambda: [dict(e, kind_name=addons.kind_name(e.get("kind"))) for e in history.read_history()],

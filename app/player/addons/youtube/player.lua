@@ -4,7 +4,7 @@
 local mp = require "mp"
 local I18N = require "streambox.i18n"
 
-return function(api)
+return { contract = 1, load = function(api)
     local M = {}
 
     -- Automatic subtitles (kind=asr): their lines overlap, two always stay on screen. Reloaded through remote.py,
@@ -74,4 +74,4 @@ return function(api)
     end
 
     return M
-end
+end }

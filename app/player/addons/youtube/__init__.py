@@ -26,6 +26,19 @@ def prepare(video, entry, from_start, at):
     return position, duration
 
 
+def quick_home():
+    """Its lists in the quick menu (mpv alone): recommended, subscriptions, then one per favorite channel"""
+    d = yt.youtube_home()
+    by = lambda videos: [dict(v, by=v.get("channel") or "") for v in videos]
+    out = []
+    if d.get("recommended"):
+        out.append({"title": tr("Recommended for you"), "videos": by(d["recommended"])})
+    if (d.get("subs") or {}).get("videos"):
+        out.append({"title": tr("Subscriptions"), "videos": by(d["subs"]["videos"])})
+    out += [{"title": c["name"], "videos": c.get("videos") or []} for c in d.get("channels") or []]
+    return out + [{"note": tr("Search: from the companion app")}]
+
+
 def started(video):   # seek bar preview and the video's info, the account's rating
     threading.Thread(target=yt.fetch_storyboard, args=(video["ident"],), daemon=True).start()
     threading.Thread(target=yt.yt_rating_fetch, args=(video["ident"],), daemon=True).start()
@@ -155,7 +168,8 @@ def more_cards(source, key, q, offset):
 
 
 ADDON = Addon(
-    "youtube", "YouTube", order=10, extension="node",
+    "youtube", "YouTube", contract=1, order=10, extension="node",
+    services={"youtube_tokens": ("stream-box-pot.service", "YouTube tokens")},   # (anti-bot tokens for yt-dlp)
     colors={"accent": "#ff0033", "bar": ["#ff0033", "#ff4e45"],
             "palette": {"veil": "#180407", "rail": "#1a0709", "sheet": "#261216", "key": "#3a1f24", "surface": "#33171c",
                         "surfaceFocus": "#4a2027", "label": "#c9a3aa"}},
@@ -191,6 +205,6 @@ ADDON = Addon(
     prepare=prepare, started=started,
     progress=lambda video, position, final: yt.yt_tv_report(video["ident"], position, final=final),
     progress_every=yt.YT_TV_PUSH,
-    home=yt.youtube_home,
+    home=quick_home,
     rows={"tab": tab_rows, "search": search_rows, "open": open_row, "more": more_cards, "options": card_options},
 )

@@ -280,12 +280,14 @@ def health():
             ["get_property", "video-params/h"], ["get_property", "current-vo"])
     except OSError:
         hwdec = drops = fps = width = height = vo = None
-    services = {}
-    for unit, label in (("stream-box-mqtt.service", "mqtt"), ("stream-box-pot.service", "youtube_tokens")):
+    services, names = {}, {}
+    import addons   # (the add-ons' services: those on)
+    for key, unit, label in [("mqtt", "stream-box-mqtt.service", "MQTT"), *addons.services()]:
+        names[key] = tr(label)
         try:
-            services[label] = user_systemctl("is-active", unit) or tr("unknown")
+            services[key] = user_systemctl("is-active", unit) or tr("unknown")
         except (OSError, subprocess.SubprocessError):
-            services[label] = tr("unknown")
+            services[key] = tr("unknown")
     try:   # dependencies (update.sh, every day without a word)
         props = dict(l.split("=", 1) for l in user_systemctl(
             "show", "stream-box-update.service", "-p", "ActiveState").splitlines() if "=" in l)
@@ -302,7 +304,7 @@ def health():
                     "rx": health_rates["rx"], "tx": health_rates["tx"]},
         "player": {"choice": settings.player_choice(), "running": "qt" if vo == "libmpv" else "mpv", "hwdec": hwdec,
                    "dropped": drops, "fps": fps, "size": f"{width}x{height}" if width else None},
-        "services": services,
+        "services": services, "service_names": names,   # key → state ("active"…), key → its name
         # running, last: the dependencies (update.sh); system: the box's system (releases)
         "update": {"running": props.get("ActiveState") == "activating", "last": last_update(),
                    "system": system_update(), "dev": dev_status()["enabled"]},

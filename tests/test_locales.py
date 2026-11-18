@@ -1,4 +1,5 @@
-"""Translations (locales/<lang>.json, keyed by the English text): same placeholders, nothing missing, nothing stale."""
+"""Translations (locales/<lang>.json, and each add-on's app/player/addons/<id>/locales/<lang>.json, keyed by the English
+text): same placeholders, nothing missing, nothing stale, an add-on's own texts in its folder."""
 import ast, json, os, re, unittest
 from html.parser import HTMLParser
 
@@ -58,48 +59,85 @@ def read(path):
 
 
 def code_strings():
-    consts, calls = set(), set()
+    """{file (from the repository): (every string constant, strings passed literally to tr())}"""
+    out = {}
     for path in tracked_files(CODE):
+        rel = os.path.relpath(path, REPO)
         if path.endswith(".py"):
-            c, t = python_strings(path)
-            consts |= c
-            calls |= t
+            out[rel] = python_strings(path)
             continue
         src = read(path)
+        consts = {unescape(a or b) for a, b in LITERAL.findall(src)}
         if path.endswith(".html"):
             page = StaticTexts()
             page.feed(src)
             consts |= page.texts
-        consts |= {unescape(a or b) for a, b in LITERAL.findall(src)}
-        calls |= {unescape(a or b) for a, b in TR_CALL.findall(src)}
-    return consts, calls
+        out[rel] = (consts, {unescape(a or b) for a, b in TR_CALL.findall(src)})
+    return out
+
+
+def addon_of(rel):
+    """The add-on whose folder holds this file, None for the core"""
+    m = re.match(r"app/player/addons/([^/]+)/", rel)
+    return m and m.group(1)
 
 
 class Locales(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.locales = {}
-        for name in os.listdir(os.path.join(REPO, "locales")):
-            with open(os.path.join(REPO, "locales", name), encoding="utf-8") as f:
-                cls.locales[name] = json.load(f)
-        cls.consts, cls.calls = code_strings()
+        # (add-on or None, language file) → its table
+        cls.tables = {}
+        addons = os.path.join(REPO, "app", "player", "addons")
+        dirs = [(None, os.path.join(REPO, "locales"))] + [(a, os.path.join(addons, a, "locales")) for a in sorted(os.listdir(addons))]
+        for addon, d in dirs:
+            for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+                with open(os.path.join(d, name), encoding="utf-8") as f:
+                    cls.tables[(addon, name)] = json.load(f)
+        cls.files = code_strings()
+        cls.consts = set().union(*(c for c, _ in cls.files.values()))
+        cls.calls = set().union(*(t for _, t in cls.files.values()))
+
+    def merged(self, name):
+        out = {}
+        for (addon, n), table in self.tables.items():
+            if n == name:
+                out.update(table)
+        return out
 
     def test_placeholders(self):
-        for name, table in self.locales.items():
+        for (addon, name), table in self.tables.items():
             for key, value in table.items():
-                with self.subTest(locale=name, key=key):
+                with self.subTest(addon=addon, locale=name, key=key):
                     self.assertEqual(sorted(re.findall(r"\{(\w+)\}", key)), sorted(re.findall(r"\{(\w+)\}", value)))
 
     def test_every_literal_translated(self):
-        for name, table in self.locales.items():
+        for name in {n for _, n in self.tables}:
+            table = self.merged(name)
             missing = sorted(s for s in self.calls if s not in table)
             self.assertEqual(missing, [], f"{name}: tr() strings without translation")
 
     def test_no_stale_key(self):
-        # A key must still exist somewhere in the code (as a string, tr() or a table of labels)
-        for name, table in self.locales.items():
-            stale = sorted(k for k in table if k not in self.consts and k not in USED_ELSEWHERE)
-            self.assertEqual(stale, [], f"{name}: keys no longer in the code")
+        # A key must still exist in the code (as a string, tr() or a table of labels): the core's anywhere, an add-on's
+        # in its folder
+        for (addon, name), table in self.tables.items():
+            consts = self.consts if addon is None else set().union(
+                *(c for rel, (c, _) in self.files.items() if addon_of(rel) == addon))
+            stale = sorted(k for k in table if k not in consts and k not in USED_ELSEWHERE)
+            self.assertEqual(stale, [], f"{addon or 'core'} {name}: keys no longer in the code")
+
+    def test_addon_texts_in_addon(self):
+        # A text only one add-on uses is in its locales, not the core's; none in both
+        users = {}
+        for rel, (consts, _) in self.files.items():
+            for s in consts:
+                users.setdefault(s, set()).add(addon_of(rel))
+        for (addon, name), table in self.tables.items():
+            if addon is None:
+                own = sorted(k for k in table if len(users.get(k, ())) == 1 and None not in users[k])
+                self.assertEqual(own, [], f"core {name}: texts of a single add-on (move them to its locales/)")
+            else:
+                both = sorted(k for k in table if k in self.tables.get((None, name), {}))
+                self.assertEqual(both, [], f"{addon} {name}: also in the core's locales")
 
 
 if __name__ == "__main__":

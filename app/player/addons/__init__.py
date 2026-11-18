@@ -11,6 +11,12 @@ import importlib, os, re
 from common import COOKIES_DIR, mpv, read_json_file, write_private_json
 from i18n import tr
 
+# Version of what the core offers the add-ons (this module's Addon and helpers, the player parts' api of
+# lua/stream-box.lua: ADDON_CONTRACT, the same number): raised when a change breaks an add-on written for the previous
+# one. Each add-on says which one it was written for (Addon(contract=…), its player part's contract); one written for
+# another is left out (logged)
+CONTRACT = 1
+
 # Add-ons turned off by the user (Settings → Add-ons): {"disabled": [id, …]}; Twitch, the base, never is
 CONF = os.path.join(COOKIES_DIR, "addons.json")
 
@@ -24,7 +30,7 @@ class Route:
 
 
 class Addon:
-    """id: its folder and the prefix of its routes, actions, sources and links; order: its place in the lists (TV
+    """contract: the CONTRACT it was written for. id: its folder and the prefix of its routes, actions, sources and links; order: its place in the lists (TV
     menu, quick menu); description: what it brings (Settings → Add-ons); base: always on (Twitch); extension: the
     system extension it needs on the box's image (downloaded while it is on: app/system/extensions.py); configured():
     whether it can be used (a server chosen…); kinds: the history kinds of its videos
@@ -36,8 +42,11 @@ class Addon:
     Videos it plays itself (its links): report(video, position, duration, paused, stopped) instead, the history kept by
     playback's loop. outside_video() returns the video being played when it was started outside the box, None
     otherwise; state() adds keys to /api/state, features() to /api/features (what this installation has: the TV menu
-    and the companion app hide the rest); home() its lists, for the quick menu; library: the (home, series, play) of a
-    media library, for the quick menu; start() at the server's start, loops: functions run each in its thread.
+    and the companion app hide the rest); home() its lists, for the quick menu ([{title, videos}, or {note}: a
+    dim line]; a video's "by" shown beside it); library: the (home, series, play) of a media library, for the quick
+    menu; start() at the server's start, loops: functions run each in its thread;
+    services: its user services, shown in the box status while it is on ({key: (unit, English label)}); files: its
+    settings outside ~/.config/stream-box (paths from the home directory), kept in the backups.
     rows: its TV menu tab (GET /api/rows, addons/cards.py): {"tab": fn() → {rows, …}, "search": fn(q) → {rows},
     "open": fn(target, name) → {rows: [the opened row]}, "more": fn(source, key, q, offset) → {items, more},
     "options": fn(target) → {options} (a card's ≡ options asked when it opens: its more_options)}.
@@ -62,12 +71,14 @@ class Addon:
     (Twitch: "live", "follows", "replays"); kinds: the history kinds it shows (the menu opens on it while one plays; rows
     and library: the add-on's). Its tab's colors: colors.palette {veil, rail, sheet, key, surface, surfaceFocus, label},
     with colors.accent. available(): whether its tabs can show on this installation (the PC link: Moonlight there)"""
-    def __init__(self, id, name, order=50, description="", base=False, extension=None, configured=lambda: True, kinds=None,
+    def __init__(self, id, name, contract=None, order=50, description="", base=False, extension=None, configured=lambda: True, kinds=None,
                  routes=None, actions=None, more=None,
                  links=None, prepare=None, started=None, progress=None, progress_every=30, report=None,
                  outside_video=None, state=None, features=None, home=None, library=None, start=None, loops=(),
-                 rows=None, colors=None, kind_names=None, urls=(), account=None, tabs=(), available=None):
+                 rows=None, colors=None, kind_names=None, urls=(), account=None, tabs=(), available=None,
+                 services=None, files=()):
         self.id, self.name, self.order, self.configured, self.kinds = id, name, order, configured, kinds or (id,)
+        self.contract = contract
         self.description, self.base = description, base   # (description: English, translated when shown)
         self.extension = extension
         self.routes, self.actions, self.more, self.links = routes or {}, actions or {}, more or {}, links or {}
@@ -81,6 +92,7 @@ class Addon:
         self.tabs = [dict(t, kinds=t.get("kinds") or (list(self.kinds) if t.get("kind") in ("rows", "library") else []))
                      for t in tabs]
         self.available = available or (lambda: True)
+        self.services, self.files = services or {}, tuple(files)
 
 
 def library(id, home, search, series, play, more_lib, more_home, more_search, unreachable, name=None):
@@ -160,7 +172,6 @@ def library(id, home, search, series, play, more_lib, more_home, more_search, un
         "actions": {f"{id}_play": lambda body: play(str(body.get("id", "")), bool(body.get("from_start")))},
         "more": sources,
         "links": {id: play},
-        "home": home,
         "library": (home, series, play),
         "rows": {"tab": tab_rows, "search": search_rows, "open": open_row, "more": more_cards},
     }
@@ -173,7 +184,11 @@ def load():
     here = os.path.dirname(os.path.abspath(__file__))
     for name in sorted(os.listdir(here)):
         if os.path.isfile(os.path.join(here, name, "__init__.py")):
-            ADDONS.append(importlib.import_module(f"addons.{name}").ADDON)
+            a = importlib.import_module(f"addons.{name}").ADDON
+            if a.contract != CONTRACT:
+                print(f"add-on {a.id}: written for contract {a.contract}, this core offers {CONTRACT}: left out", flush=True)
+                continue
+            ADDONS.append(a)
     ADDONS.sort(key=lambda a: a.order)
 
 
@@ -182,6 +197,16 @@ def enabled():
     actions unknown, no rows, state, features nor hooks), its tabs and sections hide"""
     off = set(read_json_file(CONF).get("disabled") or [])
     return [a for a in ADDONS if a.base or a.id not in off]
+
+
+def services():
+    """The user services of the add-ons on, for the box status: [(key, unit, English label)]"""
+    return [(key, unit, label) for a in enabled() for key, (unit, label) in a.services.items()]
+
+
+def backup_files():
+    """The add-ons' settings kept in the backups (all of them: one turned off keeps its settings)"""
+    return tuple(f for a in ADDONS for f in a.files)
 
 
 def get(addon_id):

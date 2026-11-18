@@ -18,7 +18,7 @@ import json, os, re, select, signal, socket, struct, sys, time
 # is not part of the Inlet app)
 sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), d) for d in ("player", "system")]
 
-from common import GAMESTREAM_PID
+from common import EXTERNAL_APP_PID
 from i18n import tr
 
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
@@ -135,7 +135,7 @@ class Mpv:
 def streaming():
     """PID of Moonlight while a game streams from a PC (addons/gamestream), otherwise None: the keys are then its own"""
     try:
-        with open(GAMESTREAM_PID) as f:
+        with open(EXTERNAL_APP_PID) as f:
             pid = int(f.read())
         os.kill(pid, 0)
         return pid

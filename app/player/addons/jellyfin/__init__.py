@@ -47,7 +47,8 @@ lib = library("jellyfin", jf.jellyfin_home, jf.jellyfin_search, jf.jellyfin_seri
 lib["routes"]["/api/jellyfin_link"] = Route(lambda q: jf.link_state(find=q.get("find") == "1"))
 lib["actions"]["jellyfin_link"] = jf.link_action
 
-ADDON = Addon("jellyfin", "Jellyfin", order=20, description="Your Jellyfin server's movies and series", configured=lambda: jf.jf_server() is not None, report=report,
+ADDON = Addon("jellyfin", "Jellyfin", contract=1, order=20, description="Your Jellyfin server's movies and series", configured=lambda: jf.jf_server() is not None, report=report,
+              files=(".config/jellyfin-mpv-shim",),   # (its pairing with the server: users.json)
               colors={"accent": "#1565c0", "bar": ["#1565c0", "#4a90e2"],
                       "palette": {"veil": "#030f17", "rail": "#06131c", "sheet": "#0f202c", "key": "#173244",
                                   "surface": "#12293a", "surfaceFocus": "#1b3c54", "label": "#9cc3d8"}},

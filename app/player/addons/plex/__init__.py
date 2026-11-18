@@ -23,7 +23,7 @@ lib["actions"].update({
     "plex_link": lambda body: px.link_cancel() if body.get("action") == "cancel" else px.link_start(),
 })
 
-ADDON = Addon("plex", "Plex", order=30, description="Your Plex server's movies and series", configured=lambda: px.px_config() is not None, report=report,
+ADDON = Addon("plex", "Plex", contract=1, order=30, description="Your Plex server's movies and series", configured=lambda: px.px_config() is not None, report=report,
               colors={"accent": "#e5a00d", "bar": ["#e5a00d", "#f5c04a"],
                       "palette": {"veil": "#120d03", "rail": "#181105", "sheet": "#2a200d", "key": "#3e3015",
                                   "surface": "#2d2310", "surfaceFocus": "#46361a", "label": "#d6bf8f"}},

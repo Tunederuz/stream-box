@@ -100,6 +100,7 @@ class Api(unittest.TestCase):
         self.assertIn(b"<html", page)
         status, fr = self.request("GET", "/locales/fr.json")
         self.assertEqual((status, fr.get("Language")), (200, "Langue"))
+        self.assertEqual(fr.get("YouTube tokens"), "jetons YouTube")   # an add-on's own (addons/youtube/locales)
 
     def test_state(self):
         status, st = self.request("GET", "/api/state")
@@ -160,8 +161,9 @@ class PlayerOnly(Api):
     @classmethod
     def root(cls):
         cls.copy = tempfile.mkdtemp()
+        # (not image/ either: its builds, gigabytes, outside CI)
         skip = lambda d, names: [n for n in names if n in (".git", "node_modules", "__pycache__")
-                                 or (os.path.basename(d) == "app" and n == "system")]
+                                 or (os.path.basename(d) == "app" and n == "system") or (d == REPO and n == "image")]
         shutil.copytree(REPO, os.path.join(cls.copy, "repo"), ignore=skip, symlinks=True)
         return os.path.join(cls.copy, "repo")
 

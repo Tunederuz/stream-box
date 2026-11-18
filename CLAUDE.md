@@ -17,14 +17,17 @@ Installation and update: `install.sh` (see the README); settings backup: TV Sett
 - Code, comments and docs are in English. User-facing texts are written in English in the code and wrapped with
   `tr()`: Python `i18n.py`; QML `qml/i18n.js` + the `i18n.dict` context property set by `ui.py`; Lua `tr()` of
   `lua/streambox/i18n.lua` (used by `stream-box.lua` and its modules); companion app `tr()` and translation of static texts in `remote.html`.
-- Translations: `locales/<lang>.json`, keyed by the English text (placeholders `{name}`).
+- Translations: `locales/<lang>.json`, keyed by the English text (placeholders `{name}`); an add-on's own texts (used
+  only in its folder) in `app/player/addons/<id>/locales/<lang>.json`, merged in by `i18n.catalog` (Python, QML, the
+  companion app through `GET /locales/<lang>.json`), `lua/streambox/i18n.lua` and qmlshots (the core's win).
+  `tests/test_locales.py` checks each file, and that a text of a single add-on is in its locales, not the core's.
 - Language stored in `~/.config/stream-box/language` (default `en`), changed by `POST /api/language`, which sends the
   script-message `streambox-language` to the TV.
 - `GET /api/state` carries `lang` (current code) and `languages` (`{code: name in its own language}`, from
   `i18n.LANGUAGES`). Pickers: companion app section `#language-section` of Settings (moved to the top of the
   `#setup` screen in setup mode, so the language is chosen first); TV: "Interface language" row (Settings → Appearance,
   `sectionRows("look")`, QML).
-- Adding a language: add its code to `LANGUAGES` in `i18n.py` and create `locales/<code>.json`. Decimal separator:
+- Adding a language: add its code to `LANGUAGES` in `i18n.py` and create `locales/<code>.json` (and each add-on's `locales/<code>.json`). Decimal separator:
   `qml/fmt.js` (translatable `{int}.{dec}` keys), `I18N.dec` in `lua/streambox/i18n.lua`, and the
   `LANG === "fr"` checks in `remote.html` (currently only `fr` uses a comma); QML dates pick the Qt locale from
   `i18n.lang` in `qml/TvMenu.qml` (`fr_FR` or `en_US`).
@@ -179,10 +182,20 @@ Below, file names without a folder are in these folders.
     `../app/player/<qml>`, given menu and tabId; the menu calls its load, key, hint, canEnter, enter, reset:
     addons/gamestream/GamesTab.qml, the PC link); `mediaTab` from the tabs' `kinds`; LibrariesTab from the library
     tabs' `setup`. qmlshots copies the add-ons' QML and serves their tabs from their code.
-    Player (step 4 of the cleanup): an addon's part of stream-box.lua is `addons/<id>/player.lua` (a function given
-    `api.mine(path)`: the video was started for this addon; it registers its own mpv events and returns
-    `{failed()}`: "retry" when it reloaded a video that failed, or the message to show), loaded by stream-box.lua from
-    the add-ons' folder (YouTube: automatic subtitles, yt-dlp client rotation, "not a robot" message).
+    Player (step 4 of the cleanup): an addon's part of stream-box.lua is `addons/<id>/player.lua` (`{contract, load}`:
+    `load` is given `api.mine(path)`, the video was started for this addon; it registers its own mpv events and
+    returns `{failed()}`: "retry" when it reloaded a video that failed, or the message to show), loaded by
+    stream-box.lua from the add-ons' folder (YouTube: automatic subtitles, yt-dlp client rotation, "not a robot"
+    message).
+    Step 5: the contract's version, `addons.CONTRACT` (= `ADDON_CONTRACT` of stream-box.lua, a test checks): each
+    add-on gives the one it was written for (`Addon(contract=…)`, its player part's `contract`), one written for
+    another is left out (logged); raise it when a change breaks the add-ons written for the previous one. An add-on's
+    `home()` gives its lists to the quick menu ([{title, videos}, {note}], a video's `by` beside it; the libraries use
+    `library`), `services` its user services for the box status (`health` → `services`, `service_names`; YouTube:
+    stream-box-pot), `files` its settings kept in the backups (`backup.paths()`; Jellyfin: jellyfin-mpv-shim's).
+    `EXTERNAL_APP_PID` (common.py): a program that takes the screen and the keys (the PC link's Moonlight).
+    `tests/test_addons.py` `CoreNamesNoAddon`: the core's code (app/player/*.py, app/system, lua/, qml/; not
+    comments) names no add-on but Twitch: the companion app (web/), cast/ and the packaging are not checked yet.
     `addons.play_video(…, key)` gives the video's stable key (`media_key`, "<kind>:<id>") with streambox-play's 7th
     argument: the remembered subtitles' key. `user-data/streambox/meta` {details, overview, thumb}: `details` a list
     of texts or {views}, {rating}, {text, info} (info: the Info panel only), formatted by `Fmt.details` (InfoBar,
@@ -1376,7 +1389,7 @@ unpaired_on_pc, apps}], pairing: {pin, host, name, page} | {error}, searching, s
 amber to pair, grey off; OK pairs, ≡ the PC's choices), the chosen PC's games as 3:4 posters (5 per row, ▲ back to the
 chips); the pairing code in CodeDialog. Settings → Accounts and links → PC (Sunshine): the PCs, each to pair (again)
 or forget, and "Search again". During a stream Moonlight covers the screen; its PID is in
-`/tmp/stream-box-gamestream.pid` and input.py then leaves every key to it, except Home held 1 s (remote or the
+`/tmp/stream-box-external-app.pid` and input.py then leaves every key to it, except Home held 1 s (remote or the
 gamepad's middle button) which ends the stream; when it ends the TV menu opens again.
 
 ### Regular keyboard
