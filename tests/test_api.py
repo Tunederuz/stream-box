@@ -134,7 +134,10 @@ class Api(unittest.TestCase):
         self.assertIn("error", body)
 
     def test_features(self):
-        self.assertEqual(self.request("GET", "/api/features"), (200, {"system": self.SYSTEM, "gamestream": False}))   # (no Moonlight here)
+        status, f = self.request("GET", "/api/features")
+        tabs = f.pop("tabs")   # (the add-ons' tabs of the TV menu: Twitch's first, the base)
+        self.assertEqual((status, f), (200, {"system": self.SYSTEM, "gamestream": False}))   # (no Moonlight here)
+        self.assertEqual([t["id"] for t in tabs[:3]], ["live", "follows", "replays"])
 
     def test_unknown_action(self):
         self.assertGreaterEqual(self.request("POST", "/api/no_such_action", {})[0], 400)
