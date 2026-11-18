@@ -50,6 +50,7 @@ class Addon:
     rows: its TV menu tab (GET /api/rows, addons/cards.py): {"tab": fn() → {rows, …}, "search": fn(q) → {rows},
     "open": fn(target, name) → {rows: [the opened row]}, "more": fn(source, key, q, offset) → {items, more},
     "options": fn(target) → {options} (a card's ≡ options asked when it opens: its more_options)}.
+    Its part of the companion app: addons/<id>/remote.html (companion_page), all optional.
     Its identity, for the interface (identity(), published in user-data/streambox/addons: the playback bar, the
     loading screen, the history's labels) and the history (media_key): colors {accent, bar: [from, to]}; kind_names
     {kind: English label} (its name by default); urls, the links that are its videos: [{re, kind, key, ident}] (re: a
@@ -207,6 +208,24 @@ def services():
 def backup_files():
     """The add-ons' settings kept in the backups (all of them: one turned off keeps its settings)"""
     return tuple(f for a in ADDONS for f in a.files)
+
+
+def companion_page(html):
+    """The companion app's page (web/remote.html) with the add-ons' parts (addons/<id>/remote.html, in their order):
+    each <section data-group="g"> at the page's "<!-- add-ons: g" mark, each <script> at "<!-- add-ons: scripts". All
+    of them, on or off: the page hides the sections of those off (data-addon). tests/page/check-page.js does the same"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for a in ADDONS:
+        try:
+            with open(os.path.join(here, a.id, "remote.html"), encoding="utf-8") as f:
+                part = f.read()
+        except OSError:
+            continue
+        for m in re.finditer(r'<section\b[^>]*\bdata-group="(\w+)"[^>]*>.*?</section>', part, re.S):
+            html = html.replace(f"<!-- add-ons: {m.group(1)}", m.group(0) + "\n\n<!-- add-ons: " + m.group(1), 1)
+        for m in re.finditer(r"<script>.*?</script>", part, re.S):
+            html = html.replace("<!-- add-ons: scripts", m.group(0) + "\n<!-- add-ons: scripts", 1)
+    return html
 
 
 def get(addon_id):

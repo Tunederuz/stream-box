@@ -1,0 +1,137 @@
+<!-- Inlet, YouTube add-on: its part of the companion app (web/remote.html), put in by api.py
+     (addons.companion_page): each <section> in its Settings group (data-group, at the page's "add-ons: <group>"
+     mark), the script after the page's own. Favorite channels (Channels and favorites), the YouTube account (Accounts and links). -->
+  <section data-group="channels" data-addon="youtube">
+    <h2>YouTube favorites</h2>
+    <p>Their latest videos show up in the YouTube block of the companion app and in the TV menu.</p>
+    <div class="field">
+      <input id="new-yt" autocomplete="off" autocapitalize="none" placeholder="@channel name or link"
+             aria-label="YouTube channel to add">
+      <button id="add-yt" class="current">Add</button>
+    </div>
+    <div class="status" id="yt-manage-status"></div>
+    <div id="yt-manage-list"></div>
+  </section>
+
+  <section data-group="accounts" data-addon="youtube">
+    <h2>YouTube account</h2>
+    <!-- The "YouTube TV app" access: sign-in by code on google.com/device, nothing to create -->
+    <div id="ytacc-auth" hidden>
+      <p>Your subscriptions and recommendations in the TV menu, and the progress synced with your other screens.</p>
+      <button id="ytacc-login" class="current" style="width: 100%">Authorize the box</button>
+      <div id="ytacc-code" hidden style="margin-top: 12px; text-align: center">
+        <p style="margin-bottom: 6px">On <b>google.com/device</b>, enter this code:</p>
+        <div id="ytacc-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
+        <a id="ytacc-link" target="_blank" rel="noopener" style="color: var(--accent-2)">Open the activation page</a>
+        <p>Google shows "YouTube on TV": the box presents itself as the YouTube app for TVs.</p>
+      </div>
+    </div>
+    <div id="ytacc-ok" hidden>
+      <p id="ytacc-summary"></p>
+      <div class="row">
+        <button id="ytacc-sync">Reload my subscriptions</button>
+        <button id="ytacc-logout">Disconnect</button>
+      </div>
+    </div>
+    <div class="status" id="ytacc-status"></div>
+  </section>
+
+<script>
+// YouTube account ("YouTube TV app" access): authorization by code, status
+let ytaccTimer = null;
+async function refreshYtAccount() {
+  clearTimeout(ytaccTimer);
+  try {
+    const r = await fetch("/api/youtube_account");
+    const a = await r.json();
+    if (!r.ok) throw new Error(a.error);
+    const pending = a.pending && !a.authorized;
+    $("ytacc-auth").hidden = a.unavailable || a.authorized;
+    $("ytacc-ok").hidden = !a.authorized;
+    $("ytacc-code").hidden = !pending || !!a.pending.error;
+    if (pending) {
+      $("ytacc-user-code").textContent = a.pending.user_code;
+      $("ytacc-link").href = a.pending.verification_uri;
+    }
+    $("ytacc-status").className = a.pending?.error || a.unavailable ? "status error" : "status";
+    $("ytacc-status").textContent = a.unavailable ? tr("The box's YouTube service is not running (cast service stopped).")
+      : a.pending?.error ? tr("Authorization denied: {error}", { error: a.pending.error }) : "";
+    if (a.authorized) $("ytacc-summary").textContent = tr("Connected: subscriptions, recommendations and progress.");
+    if (pending && !a.pending.error) ytaccTimer = setTimeout(refreshYtAccount, 3000);   // waiting for the code
+  } catch (e) {
+    $("ytacc-status").className = "status error";
+    $("ytacc-status").textContent = e.message || tr("Box unreachable");
+  }
+}
+async function ytaccAction(action, body = {}, done = "") {   // done: line shown once it worked
+  $("ytacc-status").className = "status";
+  $("ytacc-status").textContent = tr("Please wait…");
+  await pressing(async () => {
+    try {
+      const r = await fetch(`/api/${action}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json()).error);
+      $("ytacc-status").textContent = done;
+    } catch (e) {
+      $("ytacc-status").className = "status error";
+      $("ytacc-status").textContent = e.message || tr("Box unreachable");
+    }
+  });
+  refreshYtAccount();
+}
+$("ytacc-login").onclick = () => ytaccAction("youtube_login");
+$("ytacc-sync").onclick = () => ytaccAction("youtube_sync", {}, tr("Subscriptions reloaded."));
+$("ytacc-logout").onclick = () => { if (confirm(tr("Disconnect the YouTube account?"))) ytaccAction("youtube_logout"); };
+settingsLoaders.push(refreshYtAccount);
+if (!$("tab-settings").hidden) refreshYtAccount();
+
+// YouTube: search (videos and channels), management of the channel list (Settings). The channels' latest videos
+// are browsed on the TV
+let ytHome = null;
+async function loadYoutube() {   // channel list, for Settings
+  try {
+    ytHome = await (await fetch("/api/youtube_channels")).json();   // the list only, without the videos
+  } catch (e) { bug(e); return; }
+  renderYoutubeManage();
+}
+function renderYoutubeManage() {
+  const chans = ytHome?.channels ?? [];
+  const btn = (text, label, onclick, disabled = false) => {
+    const b = Object.assign(document.createElement("button"), { textContent: text, title: label, onclick, disabled });
+    b.setAttribute("aria-label", label);
+    return b;
+  };
+  $("yt-manage-list").replaceChildren(...chans.map((c, i) => {
+    const row = Object.assign(document.createElement("div"), { className: "manage-row" });
+    const pic = Object.assign(document.createElement(c.avatar ? "img" : "span"), { className: "avatar" });
+    if (c.avatar) Object.assign(pic, { src: c.avatar, alt: "", loading: "lazy" }); else pic.textContent = c.name.charAt(0).toUpperCase();
+    row.append(Object.assign(document.createElement("span"), { className: "rank", textContent: i + 1 }), pic,
+      Object.assign(document.createElement("span"), { className: "name", textContent: c.name }),
+      btn("▲", tr("Move {name} up", { name: c.name }), () => editYoutube("move", c.id, -1), i === 0),
+      btn("▼", tr("Move {name} down", { name: c.name }), () => editYoutube("move", c.id, 1), i === chans.length - 1),
+      btn("✕", tr("Remove {name}", { name: c.name }),
+          () => { if (confirm(tr("Remove {name} from the list?", { name: c.name }))) editYoutube("remove", c.id); }));
+    return row;
+  }));
+}
+async function editYoutube(action, channel, delta = 0) {
+  const status = $("yt-manage-status");
+  status.className = "status";
+  status.textContent = action === "add" ? tr("Looking up the channel…") : "";
+  await pressing(async () => { try {
+    const r = await fetch("/api/youtube_channels", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                     body: JSON.stringify({ action, channel, delta }) });
+    if (!r.ok) throw new Error((await r.json()).error);
+    if (action === "add") { status.textContent = tr("Channel added."); $("new-yt").value = ""; }
+  } catch (e) {
+    status.className = "status error";
+    status.textContent = e.message || tr("Box unreachable");
+  } });
+  loadYoutube();
+}
+$("add-yt").onclick = () => { if ($("new-yt").value.trim()) editYoutube("add", $("new-yt").value); };
+$("new-yt").onkeydown = (e) => { if (e.key === "Enter") $("add-yt").click(); };
+settingsLoaders.push(loadYoutube);
+if (!$("tab-settings").hidden) loadYoutube();
+</script>

@@ -1,0 +1,76 @@
+<!-- Inlet, Jellyfin add-on: its part of the companion app (web/remote.html), put in by api.py
+     (addons.companion_page): each <section> in its Settings group (data-group, at the page's "add-ons: <group>"
+     mark), the script after the page's own. The server, signing in by Quick Connect (Accounts and links). -->
+  <section data-group="accounts" data-addon="jellyfin">
+    <h2>Jellyfin</h2>
+    <p style="margin-top: 0">Your Jellyfin server in the TV menu (a Jellyfin tab), and the box in "Play on…" of your
+      Jellyfin apps. Signing in by Quick Connect: no password to type.</p>
+    <p id="jf-connected" hidden></p>
+    <label class="setting" for="jf-address">Address of the server</label>
+    <div class="field">
+      <input id="jf-address" type="url" autocomplete="off" placeholder="http://192.168.1.10:8096">
+    </div>
+    <button id="jf-connect" class="current" style="width: 100%; margin-top: 8px">Connect</button>
+    <div id="jf-code" hidden style="margin-top: 12px; text-align: center">
+      <p style="margin-bottom: 6px">In Jellyfin (app or website): your user menu, <b>Quick Connect</b>, then enter:</p>
+      <div id="jf-user-code" style="font-size: 34px; font-weight: 800; letter-spacing: .12em"></div>
+    </div>
+    <button id="jf-cancel" style="width: 100%; margin-top: 8px" hidden>Cancel</button>
+    <button id="jf-forget" style="width: 100%; margin-top: 8px" hidden>Disconnect</button>
+    <div class="status" id="jf-status"></div>
+  </section>
+
+<script>
+// Jellyfin server (jellyfin.py): signing in by Quick Connect (also started from the TV): the box shows a code, to
+// approve in a Jellyfin app already signed in; the previous server stays if it fails
+let jfTimer = null;
+async function refreshJfLink() {
+  clearTimeout(jfTimer);
+  try {
+    const d = await (await fetch("/api/jellyfin_link")).json();
+    const p = d.pending;
+    const waiting = !!(p && !p.error);
+    $("jf-code").hidden = !(waiting && p.code);
+    if (waiting && p.code) $("jf-user-code").textContent = p.code;
+    $("jf-cancel").hidden = !waiting;
+    $("jf-connect").hidden = waiting;
+    $("jf-forget").hidden = waiting || !d.configured;
+    $("jf-connected").hidden = !d.configured || waiting;
+    $("jf-connected").textContent = d.configured ? tr("Connected to {server}.", { server: d.name || d.address }) : "";
+    $("jf-connect").textContent = d.configured ? tr("Change") : tr("Connect");
+    if (document.activeElement !== $("jf-address") && !$("jf-address").value) $("jf-address").value = d.address;
+    if (p && p.error) $("jf-status").textContent = p.error;
+    else if (waiting) $("jf-status").textContent = p.code ? "" : tr("Checking with the server…");
+    if (waiting) jfTimer = setTimeout(refreshJfLink, 2000);   // waiting for the approval
+    else if (!p) refresh();
+  } catch (e) {
+    $("jf-status").textContent = e.message || tr("Box unreachable");
+  }
+}
+$("jf-connect").onclick = async () => {
+  $("jf-status").textContent = tr("Checking with the server…");
+  try {
+    const r = await fetch("/api/jellyfin_link", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: $("jf-address").value.trim() }) });
+    if (!r.ok) throw new Error((await r.json()).error);
+  } catch (e) {
+    $("jf-status").textContent = e.message || tr("Box unreachable");
+    return;
+  }
+  refreshJfLink();
+};
+$("jf-cancel").onclick = async () => {
+  $("jf-status").textContent = "";
+  await send("jellyfin_link", { action: "cancel" });
+  refreshJfLink();
+};
+$("jf-forget").onclick = async () => {
+  if (!confirm(tr("Disconnect Jellyfin? Its tab goes away"))) return;
+  $("jf-status").textContent = "";
+  $("jf-address").value = "";
+  await send("jellyfin_link", { action: "forget" });
+  refreshJfLink();
+};
+refreshJfLink();
+settingsLoaders.push(refreshJfLink);
+</script>

@@ -195,7 +195,14 @@ Below, file names without a folder are in these folders.
     stream-box-pot), `files` its settings kept in the backups (`backup.paths()`; Jellyfin: jellyfin-mpv-shim's).
     `EXTERNAL_APP_PID` (common.py): a program that takes the screen and the keys (the PC link's Moonlight).
     `tests/test_addons.py` `CoreNamesNoAddon`: the core's code (app/player/*.py, app/system, lua/, qml/; not
-    comments) names no add-on but Twitch: the companion app (web/), cast/ and the packaging are not checked yet.
+    comments) names no add-on but Twitch (web/ too since step 6): cast/ and the packaging are not checked.
+    Step 6: an add-on's part of the companion app is `addons/<id>/remote.html`: its `<section data-addon data-group>`
+    (a Settings group: channels, accounts…) and its `<script>`, put in by `addons.companion_page` when api.py serves
+    `/` (at the page's `<!-- add-ons: <group>` and `<!-- add-ons: scripts` marks, in the add-ons' order; the same in
+    tests/page/check-page.js). Its script runs after the page's and uses its helpers ($, tr, send, pressing…),
+    registers its loaders in `settingsLoaders` (Settings shown) and `stateListeners` (each /api/state). YouTube:
+    favorites and account; Jellyfin; Plex. The services tile and the TV keyboard's title are generic
+    (`service_names`, `Search in {name}`).
     `addons.play_video(…, key)` gives the video's stable key (`media_key`, "<kind>:<id>") with streambox-play's 7th
     argument: the remembered subtitles' key. `user-data/streambox/meta` {details, overview, thumb}: `details` a list
     of texts or {views}, {rating}, {text, info} (info: the Info panel only), formatted by `Fmt.details` (InfoBar,

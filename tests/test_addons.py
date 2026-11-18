@@ -45,10 +45,10 @@ if __name__ == "__main__":
 
 
 class CoreNamesNoAddon(unittest.TestCase):
-    """The core's code (app/player/*.py, app/system, lua/, qml/) names no add-on but Twitch, the base: what an add-on
-    brings goes through addons/ (its Addon, its player part). Comments may give them as examples; the companion app
-    (web/), the YouTube receiver (cast/) and the packaging (scripts/, image/) are not checked yet."""
-    CORE = re.compile(r"^(app/player/[^/]+\.py|app/system/[^/]+\.py|lua/.+\.lua|qml/.+\.(qml|js))$")
+    """The core's code (app/player/*.py, app/system, lua/, qml/, web/) names no add-on but Twitch, the base: what an
+    add-on brings goes through addons/ (its Addon, its player part, its part of the companion app). Comments may give
+    them as examples; the YouTube receiver (cast/) and the packaging (scripts/, image/) are not checked."""
+    CORE = re.compile(r"^(app/player/[^/]+\.py|app/system/[^/]+\.py|lua/.+\.lua|qml/.+\.(qml|js)|web/.+\.(html|js))$")
     NAMES = re.compile(r"youtube|jellyfin|(?<![a-z])plex|gamestream|moonlight|sunshine|\byt_", re.I)
 
     @staticmethod
@@ -69,8 +69,8 @@ class CoreNamesNoAddon(unittest.TestCase):
     @staticmethod
     def other_code(src, comment):
         """(line, text) of Lua, QML or JavaScript without its comments (comment: "--" or "//"; /* */ too)"""
-        if comment == "//":
-            src = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group().count("\n"), src, flags=re.S)
+        if comment == "//":   # (and /* */, <!-- -->)
+            src = re.sub(r"/\*.*?\*/|<!--.*?-->", lambda m: "\n" * m.group().count("\n"), src, flags=re.S)
         out = []
         for n, line in enumerate(src.split("\n"), 1):
             code, quote, i = "", None, 0

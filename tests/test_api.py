@@ -98,6 +98,7 @@ class Api(unittest.TestCase):
         status, page = self.request("GET", "/")
         self.assertEqual(status, 200)
         self.assertIn(b"<html", page)
+        self.assertIn(b'id="jf-address"', page)   # an add-on's part (addons/jellyfin/remote.html), put in
         status, fr = self.request("GET", "/locales/fr.json")
         self.assertEqual((status, fr.get("Language")), (200, "Langue"))
         self.assertEqual(fr.get("YouTube tokens"), "jetons YouTube")   # an add-on's own (addons/youtube/locales)

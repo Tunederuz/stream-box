@@ -142,7 +142,10 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path.split("?")[0] in STATIC:
                 name, content_type = STATIC[self.path.split("?")[0]]
                 with open(os.path.join(DIR, name), "rb") as f:
-                    self.send(200, f.read(), content_type)
+                    body = f.read()
+                if name == "web/remote.html":   # with the add-ons' parts (addons/<id>/remote.html)
+                    body = addons.companion_page(body.decode("utf-8")).encode("utf-8")
+                self.send(200, body, content_type)
             elif self.path in JSON_ROUTES:
                 self.send(200, JSON_ROUTES[self.path]())
             elif addons.route(self.path.split("?")[0]):   # routes of the addons (addons/)

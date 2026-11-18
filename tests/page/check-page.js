@@ -8,7 +8,18 @@ const path = require("path");
 const { JSDOM, VirtualConsole } = require("jsdom");
 
 const repo = path.resolve(process.argv[2] || "../..");
-const html = fs.readFileSync(path.join(repo, "web", "remote.html"), "utf8");
+// The page as api.py serves it: with the add-ons' parts (addons.companion_page; here in their folders' order)
+let html = fs.readFileSync(path.join(repo, "web", "remote.html"), "utf8");
+const addonsDir = path.join(repo, "app", "player", "addons");
+for (const id of fs.readdirSync(addonsDir).sort()) {
+  const file = path.join(addonsDir, id, "remote.html");
+  if (!fs.existsSync(file)) continue;
+  const part = fs.readFileSync(file, "utf8");
+  for (const m of part.matchAll(/<section\b[^>]*\bdata-group="(\w+)"[^>]*>[\s\S]*?<\/section>/g))
+    html = html.replace(`<!-- add-ons: ${m[1]}`, () => m[0] + `\n\n<!-- add-ons: ${m[1]}`);
+  for (const m of part.matchAll(/<script>[\s\S]*?<\/script>/g))
+    html = html.replace("<!-- add-ons: scripts", () => m[0] + "\n<!-- add-ons: scripts");
+}
 const api = Object.assign({}, JSON.parse(fs.readFileSync(path.join(repo, "tools/qmlshots/fixtures.json"), "utf8")),
                           JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures.json"), "utf8")));
 const problems = [];

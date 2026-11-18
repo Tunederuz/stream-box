@@ -1,6 +1,10 @@
 {
+ ", then enter:": ", puis saisis :",
+ "Address of the server": "Adresse du serveur",
  "Connect Jellyfin": "Connecter Jellyfin",
  "Connect to which Jellyfin server?": "Se connecter à quel serveur Jellyfin ?",
+ "Disconnect Jellyfin? Its tab goes away": "Déconnecter Jellyfin ? Son onglet disparaît",
+ "In Jellyfin (app or website): your user menu,": "Dans Jellyfin (appli ou site) : menu de ton utilisateur,",
  "In Jellyfin (app or website): your user menu, Quick Connect, then enter:": "Dans Jellyfin (appli ou site) : menu de ton utilisateur, Quick Connect, puis saisis :",
  "Jellyfin is not paired with the box.": "Jellyfin n'est pas associé à la box.",
  "Jellyfin unreachable: {error}": "Jellyfin injoignable : {error}",
@@ -11,6 +15,7 @@
  "Server: {server}.": "Serveur : {server}.",
  "Settings → Accounts and links → Jellyfin: choose your server, then approve the code in Jellyfin (user menu, Quick Connect).": "Réglages → Comptes et liens → Jellyfin : choisis ton serveur, puis valide le code dans Jellyfin (menu utilisateur, Quick Connect).",
  "The Jellyfin tab then shows here, with your library.": "L'onglet Jellyfin apparaît alors ici, avec ta bibliothèque.",
+ "Your Jellyfin server in the TV menu (a Jellyfin tab), and the box in \"Play on…\" of your\n      Jellyfin apps. Signing in by Quick Connect: no password to type.": "Ton serveur Jellyfin dans le menu TV (un onglet Jellyfin), et la box dans « Lire sur… » de tes\n      applis Jellyfin. Connexion par Quick Connect : aucun mot de passe à taper.",
  "Your Jellyfin server's movies and series": "Les films et séries de ton serveur Jellyfin",
  "Your movies and series of a Jellyfin server": "Tes films et séries d'un serveur Jellyfin",
  "✕  Disconnect Jellyfin": "✕  Déconnecter Jellyfin"
