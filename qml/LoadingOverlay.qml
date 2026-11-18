@@ -16,12 +16,12 @@ Item {
     readonly property bool shown: !!l.title
     property var last: ({})
     onLChanged: if (l.title) last = l
-    readonly property color accent: last.kind === "youtube" ? "#ff0033" : last.kind === "jellyfin" ? "#1565c0"
-                                  : last.kind === "plex" ? "#e5a00d"
-                                  : last.kind === "twitch" ? "#9146ff" : "#e8e8ee"
-    readonly property string source: last.kind === "youtube" ? "YouTube" : last.kind === "jellyfin" ? "Jellyfin"
-                                   : last.kind === "plex" ? "Plex"
-                                   : last.kind === "twitch" ? "Twitch" : tr("Video")
+    // kind: the add-on of what loads (stream-box.lua: given by remote.py, addons.play_video; "twitch" for a channel),
+    // its color and name (osd.addons); a link of none: "Video"
+    readonly property var addons: { try { return JSON.parse(osd.addons || "{}") } catch (e) { return {} } }
+    readonly property var addon: addons[last.kind] || null
+    readonly property color accent: addon && addon.colors && addon.colors.accent ? addon.colors.accent : "#e8e8ee"
+    readonly property string source: addon ? tr(addon.name) : tr("Video")
     opacity: shown ? 1 : 0
     visible: opacity > 0
     Behavior on opacity { NumberAnimation { duration: root.shown ? 200 : 500; easing.type: Easing.InOutQuad } }

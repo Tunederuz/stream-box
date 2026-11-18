@@ -5,7 +5,7 @@
 #   bash image/build.sh vm         boots it in a virtual machine (QEMU, UEFI) to try it
 #   bash image/build.sh xz         stream-box.raw.xz, the downloadable version
 #   bash image/build.sh test       test image (stream-box-test.raw): simulated Wi-Fi, test SSH key
-#   bash image/build.sh release    release files (mkosi.output/release), after build
+#   bash image/build.sh release    release files (mkosi.output/release, the extensions included), after build
 #   VERSION=0.2.0 bash image/build.sh …   version of the image (default: from git describe)
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -32,6 +32,8 @@ case "${1:-build}" in
         xz -T0 -6 -c "$FROM.root-x86-64.raw" > "release/stream-box_$VERSION.root-x86-64.raw.xz"
         cp "$FROM.efi" "release/stream-box_$VERSION.efi"
         if [ -f "$FROM.manifest" ]; then cp "$FROM.manifest" "release/stream-box_$VERSION.manifest.json"; fi
+        # the extensions split out of the image (split-extensions.py: Moonlight, Node.js), downloaded by the boxes
+        for e in stream-box-*.tar.xz; do if [ -e "$e" ]; then cp "$e" "release/${e%.tar.xz}_$VERSION.tar.xz"; fi; done
         cd release && sha256sum -- * > SHA256SUMS && cat SHA256SUMS' ;;
   # Downloadable version: compressed (Etcher and Rufus decompress it themselves)
   xz) docker run --rm -v "$HERE/..":/src -w /src/image stream-box-mkosi \

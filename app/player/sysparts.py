@@ -9,9 +9,9 @@ import os
 
 SYSTEM = os.path.isdir(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "system"))
 if SYSTEM:
-    import audio, backup, btsetup, display, installer, localupdate, netsetup, system
+    import audio, backup, btsetup, display, extensions, installer, localupdate, netsetup, system
 else:
-    audio = backup = btsetup = display = installer = localupdate = netsetup = system = None
+    audio = backup = btsetup = display = extensions = installer = localupdate = netsetup = system = None
 
 
 def features():

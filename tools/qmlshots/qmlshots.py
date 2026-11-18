@@ -1,6 +1,6 @@
 """Inlet: screenshots of the QML TV menu (qml/TvMenu.qml), without a box, mpv or GPU (Xvfb, Mesa).
 
-Mocks the context properties of ui.py (box, pip, i18n with locales/fr.json), serves fixed JSON fixtures on
+Mocks the context properties of ui.py (box, pip, i18n with the French locales), serves fixed JSON fixtures on
 127.0.0.1:8080 (the remote.py API the menu calls), opens the menu in a 1920x1080 window and plays a scripted key
 sequence through box.keyPressed, grabbing the window after each step. Also writes to console.log the Qt console
 (warnings), the state of the menu after each step and the requests made. Meant to run in Docker (see run.sh):
@@ -8,6 +8,7 @@ sequence through box.keyPressed, grabbing the window after each step. Also write
     qmlshots.py diff <dir A> <dir B>           pixel comparison of two sets of screenshots
 """
 import datetime
+import glob
 import json
 import re
 import os
@@ -19,7 +20,7 @@ import time
 import zlib
 import struct
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -109,6 +110,54 @@ def dates(v):
     return v
 
 
+def rows_answer(query, fixtures):
+    """GET /api/rows, built by the box's own code (app/player/addons) from the fixtures of the routes it reads: the menu
+    gets the rows the box would send, and building them is checked too (in French, as the menu)"""
+    if not getattr(rows_answer, "ready", False):
+        os.makedirs("/tmp/.config/stream-box", exist_ok=True)
+        with open("/tmp/.config/stream-box/language", "w") as f:
+            f.write("fr")
+        sys.path[:0] = [os.path.join(REPO, "app", "player"), os.path.join(REPO, "app", "system")]
+        import addons
+        from addons.youtube import service as yt
+        yt.youtube_home = lambda: fixtures["/api/youtube"]
+        yt.yt_search = lambda q: fixtures["/api/youtube_search"]
+        yt.yt_channel_videos = lambda i: fixtures["/api/youtube_channel"]
+        # the favorites: the list's channels, and the found ones the search fixture marks saved
+        yt.yt_channels = lambda: fixtures["/api/youtube"]["channels"] + [
+            c for c in fixtures["/api/youtube_search"]["channels"] if c.get("saved")]
+        more = lambda key, offset, q: fixtures["/api/more"]   # noqa: E731
+        youtube = addons.get("youtube")
+        youtube.more = {k: more for k in youtube.more}
+        libs = {i: addons.library(i, lambda i=i: fixtures[f"/api/{i}"], lambda q, i=i: fixtures[f"/api/{i}_search"]["results"],
+                                  lambda s, i=i: fixtures[f"/api/{i}_series"], None, lambda *a: fixtures["/api/more"],
+                                  lambda *a: fixtures["/api/more"], lambda *a: fixtures["/api/more"], None)
+                for i in ("jellyfin", "plex")}
+        for i, lib in libs.items():
+            a = addons.get(i)
+            a.rows, a.more = lib["rows"], lib["more"]
+        # the accounts' rows and dialogs (Settings → Accounts and links): their states from the fixtures
+        from addons.jellyfin import service as jf
+        from addons.plex import service as px
+        from addons.gamestream import service as gs
+        yt.yt_account_status = lambda: fixtures["/api/youtube_account"]
+        jf.link_state = lambda find=False: fixtures["/api/jellyfin_link"]
+        jf.jf_server = lambda: {"address": "http://192.168.1.10:8096", "name": "Jellyfin"} \
+            if fixtures["/api/jellyfin_link"]["configured"] else None
+        px.link_state = lambda: fixtures["/api/plex_link"]
+        px.px_config = lambda: None
+        gs.status, gs.available = lambda: fixtures["/api/gamestream"], lambda: True
+        addons.get("gamestream").available = lambda: True   # (Moonlight: its tab shows)
+        rows_answer.addons, rows_answer.ready = addons, True
+    return rows_answer.addons.rows(query)
+
+
+def accounts_answer(path, query, fixtures):
+    """GET /api/accounts, /api/account_menu, /api/account_code: built by the add-ons' own code too (rows_answer)"""
+    rows_answer({"addon": "youtube"}, fixtures)   # (sets the add-ons up)
+    return rows_answer.addons.CORE_ROUTES[path].fn(query)
+
+
 def serve(fixtures, log):
     class Handler(BaseHTTPRequestHandler):
         def reply(self, body, ctype="application/json"):
@@ -129,6 +178,18 @@ def serve(fixtures, log):
             if path in PENDING:
                 log.append("GET (pending) " + self.path)
                 return time.sleep(600)
+            if path == "/api/rows":
+                log.append("GET " + self.path)
+                q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+                return self.reply(json.dumps(rows_answer(q, fixtures), default=str).encode())
+            if path == "/api/features" and path in fixtures:   # (the add-ons' tabs: their own declarations)
+                log.append("GET " + self.path)
+                rows_answer({"addon": "youtube"}, fixtures)
+                return self.reply(json.dumps({**fixtures[path], "tabs": rows_answer.addons.tabs()}).encode())
+            if path in ("/api/accounts", "/api/account_menu", "/api/account_code"):
+                log.append("GET " + self.path)
+                q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+                return self.reply(json.dumps(accounts_answer(path, q, fixtures), default=str).encode())
             if path in fixtures:
                 log.append("GET " + self.path)
                 return self.reply(json.dumps(fixtures[path], default=str).encode())
@@ -170,6 +231,7 @@ def shoot(qml_dir, out):
         def __init__(self):
             super().__init__()
             self._video = False
+            self._preview = ""
             self.calls = []
             self._ambient = json.dumps({"weather": {"temp": 14, "text": "Nuageux"},
                                         "qr": {"rows": fixtures["/api/qr"]["rows"], "url": "http://192.168.1.20:8080/"}})
@@ -181,6 +243,17 @@ def shoot(qml_dir, out):
         # a handheld (Steam Deck): the battery shows in the menu header and on the home screen
         battery = Property(str, lambda self: json.dumps({"percent": 72, "charging": False}), notify=batteryChanged)
         videoActive = Property(bool, lambda self: self._video, notify=videoActiveChanged)
+        # the menu's live preview (in the main player): "plays" at once
+        previewActive = Property(bool, lambda self: bool(self._preview), notify=videoActiveChanged)
+
+        @Slot(str)
+        def preview(self, login):   # (later, as the real one: through the player)
+            self.calls.append("preview " + login)
+
+            def done():
+                self._preview = login
+                self.videoActiveChanged.emit()
+            QTimer.singleShot(0, done)
 
         def set_video(self, v):
             self._video = v
@@ -209,27 +282,6 @@ def shoot(qml_dir, out):
 
         def paint(self, painter):
             painter.fillRect(0, 0, int(self.width()), int(self.height()), QColor("#ff2fa8"))
-
-    class LivePreview(QObject):   # livePreview of ui.py: "plays" at once
-        changed = Signal()
-
-        def __init__(self):
-            super().__init__()
-            self._ready = False
-
-        ready = Property(bool, lambda self: self._ready, notify=changed)
-
-        @Slot(str)
-        def play(self, login):
-            box.calls.append("livePreview.play " + login)
-            self._ready = True
-            self.changed.emit()
-
-        @Slot()
-        def stop(self):
-            box.calls.append("livePreview.stop")
-            self._ready = False
-            self.changed.emit()
 
     class Pip(QObject):   # second stream running: shortcuts in Live
         changed = Signal()
@@ -277,6 +329,13 @@ def shoot(qml_dir, out):
     os.makedirs(out, exist_ok=True)
     root = tempfile.mkdtemp()
     shutil.copytree(qml_dir, os.path.join(root, "qml"))
+    # the add-ons' own QML (their custom tabs: app/player/addons/<id>/*.qml, loaded by the menu from ../app/player)
+    for d, _, files in os.walk(os.path.join(REPO, "app", "player", "addons")):
+        for f in files:
+            if f.endswith(".qml"):
+                dest = os.path.join(root, os.path.relpath(d, REPO))
+                os.makedirs(dest, exist_ok=True)
+                shutil.copy(os.path.join(d, f), dest)
     # the logo (qml/Logo.qml reads ../assets/brand): the working tree's
     brand = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "brand")
     if os.path.isdir(brand):
@@ -289,13 +348,15 @@ def shoot(qml_dir, out):
     app = QGuiApplication(sys.argv[:1])   # noqa: F841  (kept referenced: Qt needs the application object alive)
     box = Box()
     pip = Pip()
-    live_preview = LivePreview()
     qmlRegisterType(FakeVideo, "StreamBox", 1, 0, "MpvVideo")
-    i18n = I18n(json.load(open(os.path.join(REPO, "locales", "fr.json"), encoding="utf-8")))
+    fr = {}   # the add-ons' translations, then the core's (app/player/i18n.py)
+    for path in sorted(glob.glob(os.path.join(REPO, "app/player/addons/*/locales/fr.json"))) + [os.path.join(REPO, "locales", "fr.json")]:
+        with open(path, encoding="utf-8") as f:
+            fr.update(json.load(f))
+    i18n = I18n(fr)
     view = QQuickView()
     view.rootContext().setContextProperty("box", box)
     view.rootContext().setContextProperty("pip", pip)
-    view.rootContext().setContextProperty("livePreview", live_preview)
     view.rootContext().setContextProperty("i18n", i18n)
     view.setResizeMode(QQuickView.SizeRootObjectToView)
     # QMLSHOTS_SIZE=1280x800: another screen shape (Steam Deck), drawn through qml/Fit.qml as by ui.qml
@@ -333,6 +394,8 @@ def shoot(qml_dir, out):
         wait(WAIT)
         t1 = time.monotonic()
         # clock of the header: always 12:00 (the timer of the menu writes the real time every 10 s)
+        if view.rootObject() is None:   # (the QML did not load: say why)
+            sys.exit("\n".join([e.toString() for e in view.errors()] + console[-20:]))
         menu = view.rootObject().findChild(QObject, "tvMenu")
         menu.setProperty("now", QDateTime(QDate(2026, 10, 26), QTime(12, 0)))
         label = "-".join(str(s) for s in step).replace(" ", "_")

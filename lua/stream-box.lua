@@ -1,13 +1,13 @@
 -- Inlet: small menu of the simplified version (streamer choice, chat corner, opened by the remote),
 -- and management of streamlink, which serves the chosen channel's stream over local HTTP to this mpv.
 -- The channel, corner and chat visibility are published in user-data/streambox/* for chat_overlay.py.
--- Two modes: "twitch" (stream of the chosen channel) and "media" (video sent from the companion app or
--- Jellyfin). Any file that is not the streamlink stream switches to "media"; when it ends and
+-- Two modes: "twitch" (stream of the chosen channel) and "media" (video sent from the companion app or a
+-- media server's own player). Any file that is not the streamlink stream switches to "media"; when it ends and
 -- mpv stays empty, we go back to the stream.
 local mp = require "mp"
 
 -- This script is in the repository's lua/ (mp.get_script_file is too recent), its modules next to it in
--- lua/streambox/*.lua (require "streambox.…"); DIR: the repository (locales/)
+-- lua/streambox/*.lua (require "streambox.…"); DIR: the repository (locales/, app/player/addons/)
 local LUA_DIR = debug.getinfo(1, "S").source:match("^@(.*)/[^/]*$") or "."
 local DIR = LUA_DIR .. "/.."
 package.path = LUA_DIR .. "/?.lua;" .. package.path
@@ -28,7 +28,7 @@ local CORNERS = { "tl", "tr", "br", "bl" }   -- toggle order (clockwise)
 local CORNER_LABELS = { tl = "↖ top left", tr = "↗ top right", br = "↘ bottom right", bl = "↙ bottom left" }
 local MENU_TIMEOUT = 120  -- seconds without a key before closing the quick menu
 local RETRY = 15          -- seconds between two attempts when the channel is not live
-local BACK_TO_MENU = 3    -- seconds idle after a video before going back to the menu (lets Jellyfin chain the next one)
+local BACK_TO_MENU = 3    -- seconds idle after a video before going back to the menu (lets a media server's player chain the next one)
 local AUTO_SWITCH = 60    -- seconds offline (after a channel change) before switching to a live streamer
 local FROZEN = 20         -- seconds of frozen picture, not paused, before restarting the live stream
 local LIVE_BACK = "400MiB" -- live stream kept in memory to go back in time (≈ 7-8 min in 1080p60)
@@ -108,7 +108,7 @@ end
 -- user-data/streambox/loading { title, thumb } until the first frame (playback-restart), an error or 45 s at most;
 -- drawn by qml/LoadingOverlay.qml, or the centered status message with mpv alone
 local loading_timer, loading_osd = nil, false
-local function set_loading(title, thumb, kind)   -- kind: twitch, youtube, jellyfin, plex or video (animation color)
+local function set_loading(title, thumb, kind)   -- kind: an add-on, or video (a link of none): its color and name
     if loading_timer then loading_timer:kill() loading_timer = nil end
     if title then
         mp.set_property_native("user-data/streambox/loading", { title = title, thumb = thumb or "", kind = kind or "video" })
@@ -159,7 +159,27 @@ local function start_server(name)
     server = handle
 end
 
+-- Live preview of the TV menu (Live / Following tabs, nothing playing: home mode): the channel plays muted in the
+-- main player behind the menu (streambox-preview <login>, empty: stopped); chosen (start_channel), it goes on with
+-- its sound and becomes the live: no reload, no loading screen, no cut. Published in user-data/streambox/preview.
+local preview = { login = nil, mute = false, tries = 0, timer = nil }
+function preview.publish() mp.set_property_native("user-data/streambox/preview", preview.login or "") end
+function preview.stop()   -- (its sound as it was)
+    if not preview.login then return end
+    if preview.timer then preview.timer:kill() end
+    preview.login, preview.timer = nil, nil
+    mp.set_property_bool("mute", preview.mute)
+    preview.publish()
+end
+function preview.load()
+    preview.timer = nil
+    if not preview.login then return end
+    preview.tries = preview.tries + 1
+    mp.commandv("loadfile", stream_url())
+end
+
 local function set_mode(m)
+    if m ~= "home" then preview.stop() end   -- (a video or a channel starts: the preview's mute goes)
     mode = m
     mp.set_property_native("user-data/streambox/mode", m)
     if back_timer then
@@ -178,6 +198,20 @@ end
 
 local function start_channel(name)
     if not name then return end
+    if preview.login == name and mode == "home" and mp.get_property_native("video-params") then
+        -- the channel previewed behind the menu: it goes on, with its sound
+        if preview.timer then preview.timer:kill() end
+        preview.login, preview.timer = nil, nil
+        mp.set_property_bool("mute", preview.mute)
+        preview.publish()
+        channel = name
+        write_state("channel", name)
+        mp.set_property_native("user-data/streambox/channel", name)
+        set_mode("twitch")
+        offline, channel_since, attempts = false, mp.get_time(), 0
+        set_status("")
+        return
+    end
     channel = name
     write_state("channel", name)
     mp.set_property_native("user-data/streambox/channel", name)
@@ -195,17 +229,20 @@ end
 
 -- start: resume position in seconds (remote.py history), given to mpv as a file option so no jump is
 -- seen after loading
--- title: title to display (Jellyfin: the stream link does not give one), passed as a file option (%n%: length
+-- title: title to display (a media server's stream link does not give one), passed as a file option (%n%: length
 -- in bytes, so commas and equal signs in the title go through as is)
 -- thumb, label: loading screen picture and title (label: known title, without forcing it on mpv)
-local function play_media(url, start, title, thumb, label)
+-- kind: its add-on (remote.py's addons.play_video), key: its stable key (remembered subtitles)
+-- media: the video last started that way, and the add-ons' player parts (below, "Add-ons' player parts")
+local media = { url = nil, addon = nil, key = nil, parts = {} }
+local function play_media(url, start, title, thumb, label, kind, key)
     -- Started from elsewhere (phone, Cast, Home Assistant…) while the menu is open: it closes over the video
     mp.commandv("script-message", "streambox-tvmenu-close")
     stop_twitch()
     set_mode("media")
-    local kind = (url:find("youtube%.com/") or url:find("youtu%.be/")) and "youtube"
-        or url:find("/Videos/%x+/stream") and "jellyfin" or url:find("/library/parts/%d+/") and "plex"
-        or url:find("twitch%.tv/") and "twitch" or "video"
+    -- kind: its add-on (remote.py's addons.play_video: the loading screen's color and name), a link of none: video
+    kind = (kind and kind ~= "") and kind or "video"
+    media.url, media.addon, media.key = url, kind ~= "video" and kind or nil, (key and key ~= "") and key or nil
     set_loading((label and label ~= "" and label) or (title and title ~= "" and title) or tr("the video"), thumb, kind)
     mp.set_property_bool("pause", false)   -- mpv keeps pause from one file to the next
     local at = tonumber(start) or 0
@@ -225,8 +262,8 @@ local function play_media(url, start, title, thumb, label)
     end
 end
 
--- Right before each file opens, including those loaded by Jellyfin: small buffer for the live stream
--- (latency), normal buffer for videos. And decoding on the iGPU, which the Jellyfin shim may have disabled.
+-- Right before each file opens, including those loaded by a media server's own player: small buffer for the live
+-- stream (latency), normal buffer for videos. And decoding on the iGPU, which such a player may have disabled.
 mp.add_hook("on_load", 50, function()
     local is_live = mp.get_property("stream-open-filename") == stream_url()
     mp.set_property("demuxer-max-bytes", is_live and "750KiB" or "150MiB")
@@ -238,6 +275,7 @@ end)
 
 -- Home screen on demand: no more stream nor automatic switch, until a streamer or a video is chosen
 local function show_home()
+    preview.stop()
     stop_twitch()
     set_mode("home")
     mp.commandv("stop")
@@ -265,7 +303,7 @@ end
 mp.register_event("start-file", function()
     if mp.get_property("path") == stream_url() then return end
     if mode == "twitch" or mode == "home" then
-        -- File loaded by someone else (Jellyfin): make way for it, menu closed
+        -- File loaded by someone else (a media server's own player): make way for it, menu closed
         mp.commandv("script-message", "streambox-tvmenu-close")
         stop_twitch()
         set_mode("media")
@@ -275,33 +313,45 @@ mp.register_event("start-file", function()
     end
 end)
 
--- YouTube automatic subtitles (kind=asr): their lines overlap, two always stay on screen.
--- We reload them through remote.py, which cuts each line at the start of the next one. As EDL "delay_open", like
--- ytdl_hook: a track is only downloaded if it is chosen (YouTube quickly answers "429" to bursts).
-local function fix_auto_subs()
-    for _, t in ipairs(mp.get_property_native("track-list") or {}) do
-        local edl = t.type == "sub" and t["external-filename"] or ""
-        local len, rest = edl:match("%%(%d+)%%(.*)$")   -- ytdl_hook adds them as EDL: %length%url
-        local url = len and rest:sub(1, tonumber(len)) or ""
-        if url:match("^https://www%.youtube%.com/api/timedtext") and url:match("[?&]kind=asr") then
-            mp.commandv("sub-remove", tostring(t.id))
-            local fixed = "http://127.0.0.1:8080/subs?u=" .. url:gsub("[^%w%-_%.~]", function(c) return ("%%%02X"):format(c:byte()) end)
-            mp.commandv("sub-add", ("edl://!no_clip;!delay_open,media_type=sub;%%%d%%%s"):format(#fixed, fixed),
-                        t.selected and "select" or "auto", t.title or "", t.lang or "")
+-- Add-ons' player parts: app/player/addons/<id>/player.lua returns {contract, load}: contract, the ADDON_CONTRACT it was
+-- written for (one written for another is left out, logged); load(api), given an api ({mine(path): whether the video
+-- at path, the current one by default, was started for this add-on}), registers its own mpv events and returns
+-- {failed()}: asked when a video ends with an error, "retry" when it reloaded it, or the message to show (and its
+-- seconds). Loaded in the add-ons' folder order; one that fails to load is left out (logged)
+local ADDON_CONTRACT = 1   -- the same number as CONTRACT in app/player/addons/__init__.py
+do
+    local utils = require "mp.utils"
+    local root = DIR .. "/app/player/addons"
+    local ids = utils.readdir(root, "dirs") or {}
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+        local file = root .. "/" .. id .. "/player.lua"
+        if utils.file_info(file) then
+            local api = { mine = function(path)
+                return media.addon == id and (path or mp.get_property("path")) == media.url
+            end }
+            local ok, part = pcall(dofile, file)
+            if ok and (type(part) ~= "table" or part.contract ~= ADDON_CONTRACT) then
+                ok, part = false, ("written for contract %s, this core offers %d"):format(
+                    tostring(type(part) == "table" and part.contract), ADDON_CONTRACT)
+            end
+            if ok then ok, part = pcall(part.load, api) end
+            if ok and type(part) == "table" then media.parts[#media.parts + 1] = part
+            else mp.msg.error(("add-on %s: player.lua not loaded: %s"):format(id, tostring(part))) end
         end
     end
 end
 
 -- Subtitles remembered per video: the choice made in the Subtitles / audio panel (language, or "no" for off)
--- is kept for this video (~/.local/state/stream-box/sub_prefs.json, key: YouTube or Jellyfin id, otherwise
--- the link; 300 videos at most) and restored when it is resumed. A video without a choice keeps mpv's
+-- is kept for this video (~/.local/state/stream-box/sub_prefs.json, key: the one its add-on gave, "<kind>:<id>",
+-- otherwise the link; 300 videos at most) and restored when it is resumed. A video without a choice keeps mpv's
 -- choice
 local SUB_PREFS = STATE_DIR .. "/sub_prefs.json"
 local json = require "mp.utils"
 local function video_key()
     local path = mp.get_property("path") or ""
-    return path:match("[?&]v=([%w_-]+)") or path:match("youtu%.be/([%w_-]+)") or path:match("/[Vv]ideos/(%x+)/")
-        or (path ~= "" and path or nil)
+    if media.key and path == media.url then return media.key end
+    return path ~= "" and path or nil
 end
 local function read_sub_prefs()
     local f = io.open(SUB_PREFS)
@@ -326,7 +376,9 @@ local function save_sub_pref(lang)
 end
 local function apply_sub_pref()
     local key = video_key()
-    local pref = key and (read_sub_prefs()[key] or {}).lang
+    local prefs = read_sub_prefs()
+    -- (until 0.7: the bare id of the video, "<kind>:" left out)
+    local pref = key and ((prefs[key] or prefs[key:match("^[%w-]+:(.+)$") or ""]) or {}).lang
     if not pref or pref == "" then return end
     local current = mp.get_property("sid")
     local function same_lang(a, b)
@@ -343,8 +395,8 @@ local function apply_sub_pref()
     end
     if best and current ~= tostring(best.id) then mp.set_property("sid", tostring(best.id)) end
 end
--- Tracks added after opening (Jellyfin external subtitles: remote.py jf_add_subtitles, up to 15 s
--- later; YouTube auto subtitles): the remembered choice is reapplied during the first seconds of the video
+-- Tracks added after opening (a media server's external subtitles, up to 15 s later; automatic subtitles
+-- replaced by an add-on): the remembered choice is reapplied during the first seconds of the video
 local sub_pref_until = 0
 mp.observe_property("track-list", "native", function()
     if mode == "media" and mp.get_time() < sub_pref_until then apply_sub_pref() end
@@ -355,7 +407,6 @@ mp.register_event("file-loaded", function()
     offline = false
     set_status("")
     if mode == "media" then
-        fix_auto_subs()
         sub_pref_until = mp.get_time() + 20
         apply_sub_pref()
     end
@@ -374,56 +425,22 @@ local function auto_switch()
     end
 end
 
--- Why a video could not play: YouTube asking to prove it is not a bot (ytdl_hook's error, same for every client;
--- only an account's cookies get past it) gets its own message
-local ytdl_error = nil
-mp.enable_messages("warn")   -- (ffmpeg's "HTTP error 403" is a warning)
-mp.register_event("log-message", function(m)
-    if m.prefix == "ytdl_hook" and m.text:find("not a bot", 1, true) then ytdl_error = "bot"
-    elseif m.text:find("HTTP error 403", 1, true) then ytdl_error = ytdl_error or "403" end
-end)
-mp.register_event("start-file", function() ytdl_error = nil end)
-
--- YouTube client (player_client of yt-dlp): which one's streams YouTube serves changes from one day to the next (mweb
--- refused with HTTP 403 on 2026-10-29 while tv_simply played to the end; the other way round the day before). A
--- video refused with a 403 is reloaded at the same second with the next client; the one that plays stays for the
--- following videos. One table (the script's 200 locals limit): clients, current one, tries for this video
-local ytc = { list = { "mweb,tv_simply", "tv_simply", "mweb", "web_safari" }, i = 1, tries = 0, path = nil, pos = 0 }
--- Before ytdl_hook (priority 10): this video's yt-dlp options with the chosen client, the others unchanged
-mp.add_hook("on_load", 9, function()
-    local path = mp.get_property("path") or ""
-    if path ~= ytc.path then ytc.path, ytc.tries = path, 0 end
-    if ytc.i == 1 or not path:find("youtu", 1, true) then return end
-    local raw = mp.get_property_native("ytdl-raw-options") or {}
-    raw["extractor-args"] = (raw["extractor-args"] or "youtube:fetch_pot=always")
-        :gsub("player_client=[^;]*", "player_client=" .. ytc.list[ytc.i])
-    mp.set_property_native("file-local-options/ytdl-raw-options", raw)
-end)
-mp.observe_property("time-pos", "number", function(_, v) if v and v > 0 then ytc.pos = v end end)
--- A new video starts where it is asked to (start=…, resume from the history), a reload where the refused one was
-mp.register_event("start-file", function()
-    ytc.pos = tonumber((mp.get_property("file-local-options/start") or ""):match("^%+?([%d.]+)$")) or 0
-end)
--- Refused (403): the next client, at most once each for this video; true when it is reloaded
-function ytc.retry(e)
-    local path = ytc.path or ""
-    if e.reason ~= "error" or ytdl_error ~= "403" or not path:find("youtu", 1, true) or ytc.tries >= #ytc.list - 1 then
-        return false
-    end
-    ytc.tries = ytc.tries + 1
-    ytc.i = ytc.i % #ytc.list + 1
-    mp.msg.info(("YouTube refused the stream (403): retrying with player_client=%s"):format(ytc.list[ytc.i]))
-    mp.commandv("loadfile", path, "replace", "-1", ("start=%d"):format(math.floor(ytc.pos or 0)))
-    return true
-end
-
 mp.register_event("end-file", function(e)
-    if mode == "home" then return end
+    if mode == "home" then   -- the preview: streamlink still starting (or the live lost), tried a few times
+        if preview.login and (e.reason == "eof" or e.reason == "error") and preview.tries < 6 then
+            preview.timer = mp.add_timeout(1.5, preview.load)
+        end
+        return
+    end
     if mode == "media" then
-        if ytc.retry(e) then return end   -- YouTube refused the stream: the next client
-        if e.reason == "error" then
-            mp.osd_message(ytdl_error == "bot" and tr("YouTube is refusing this video for now (it asks to prove you are not a robot): try again later")
-                           or tr("Can't play this video"), ytdl_error == "bot" and 8 or 5)
+        if e.reason == "error" then   -- its add-on may reload it, or say why
+            local text, seconds
+            for _, part in ipairs(media.parts) do
+                if part.failed then text, seconds = part.failed() end
+                if text then break end
+            end
+            if text == "retry" then return end
+            mp.osd_message(text or tr("Can't play this video"), seconds or 5)
         end
         if back_timer then back_timer:kill() end
         back_timer = mp.add_timeout(BACK_TO_MENU, function()
@@ -483,6 +500,8 @@ end
 -- Bluetooth remote (tested with the Xiaomi TV Stick one): cage forwards its keys to mpv like those of a
 -- keyboard. OK and Menu have no standard name: their codes are those of this remote.
 
+-- Up / Down: the next channel of the list that is live (offline ones skipped); all of them while remote.py's report
+-- of who is live has not come yet
 local function zap(step)
     local list = read_streamers()
     if #list == 0 then return end
@@ -490,7 +509,19 @@ local function zap(step)
     for i, name in ipairs(list) do
         if name == channel then idx = i end
     end
-    local name = list[(idx - 1 + step) % #list + 1]
+    local known = next(live) ~= nil
+    local name
+    for n = 1, #list do
+        local candidate = list[(idx - 1 + step * n) % #list + 1]
+        if candidate ~= channel and (live[candidate] or not known) then
+            name = candidate
+            break
+        end
+    end
+    if not name then
+        mp.osd_message(tr("No other channel live"), 3)
+        return
+    end
     local info = live[name]
     mp.osd_message(("▶ %s%s"):format(name, info and ("   ● " .. info.viewers) or ("   (" .. tr("offline") .. ")")), 3)
     start_channel(name)
@@ -695,7 +726,7 @@ local function track_label(t)
     return label
 end
 
--- Quality of a YouTube video (Subtitles / audio panel): the heights offered by YouTube, read from the
+-- Quality of a video read by yt-dlp (Subtitles / audio panel): the heights offered, read from the
 -- yt-dlp response kept by ytdl_hook (user-data/mpv/ytdl/json-subprocess-result, no new request). A choice reloads
 -- the video at the same second with a capped ytdl-format; it applies to this video, the next one starts on Auto
 local quality = { default = mp.get_property("ytdl-format"), max = nil, path = nil }   -- a single local (200 limit)
@@ -845,28 +876,24 @@ local function info_key(key)
 end
 mp.register_event("end-file", close_info)
 
--- YouTube rating and comments of the video being played (remote.py, youtube.py): 👍 👎 in the row of buttons (account
--- connected: user-data/streambox/rating { id, status }), Comments panel (qml/CommentsPanel.qml: the comments in
--- user-data/streambox/comments { items, more, loading, thread }, its state in user-data/streambox/comments_view
--- { open, scroll, thread, tscroll }: ↑ ↓ one comment, OK its replies, Back back to the comments or closes)
+-- Buttons of the video's add-on in the row of buttons (remote.py, addons.publish_actions: user-data/streambox/actions
+-- {url, items}, for the video at url only): items [{label, label_on, icon, on, group, post, body, off_body, panel}].
+-- post: an action of the add-on (POST /api/<post> with body, or off_body when the button was on), the button lit at
+-- once (the others of its group off: 👍 👎), the add-on publishing the state it confirms afterwards; panel "comments":
+-- the comments panel, its pages read by post (qml/CommentsPanel.qml: the comments in user-data/streambox/comments
+-- { items, more, loading, thread }, its state in user-data/streambox/comments_view { open, scroll, thread, tscroll }:
+-- ↑ ↓ one comment, OK its replies, Back back to the comments or closes)
 local function api_post(name, body)
     mp.command_native_async({ name = "subprocess", playback_only = false, capture_stdout = true,
         args = { "curl", "-s", "-m", "40", "-X", "POST", "-H", "Content-Type: application/json", "-d", body,
                  "http://127.0.0.1:8080/api/" .. name } }, function() end)
 end
-local function playing_youtube()
-    return mode == "media" and (mp.get_property("path") or ""):match("^https://[%w.]*youtu") ~= nil
-end
-local yt_rating = {}
-mp.observe_property("user-data/streambox/rating", "native", function(_, v)
-    yt_rating = type(v) == "table" and v or {}
+local addon_actions = {}
+mp.observe_property("user-data/streambox/actions", "native", function(_, v)
+    addon_actions = type(v) == "table" and v or {}
     if publish_controls then publish_controls() end
 end)
-local function rate(how)   -- the button lights up at once; youtube.py publishes what YouTube says afterwards
-    local now = yt_rating.status == how:upper() and "none" or how
-    yt_rating = { id = yt_rating.id, status = now == "none" and "INDIFFERENT" or now:upper() }
-    api_post("yt_rate", ('{"rating":"%s"}'):format(now))
-end
+local comments_action = nil   -- the add-on action reading the comments panel's pages
 
 local comments_open, comments_scroll, comments = false, 0, {}
 local thread_open, thread_scroll = false, 0   -- the replies of the selected comment (comments_scroll), opened with OK
@@ -880,11 +907,11 @@ local function comments_more()   -- the next page, a few comments (or replies) b
     if thread_open then
         if t and t.index == comments_scroll and t.more and not t.loading and thread_scroll >= #(t.items or {}) - 3 then
             t.loading = true
-            api_post("yt_comments", ('{"replies":%d,"more":true}'):format(comments_scroll))
+            api_post(comments_action, ('{"replies":%d,"more":true}'):format(comments_scroll))
         end
     elseif comments.more and not comments.loading and comments_scroll >= #(comments.items or {}) - 4 then
         comments.loading = true
-        api_post("yt_comments", '{"more":true}')
+        api_post(comments_action, '{"more":true}')
     end
 end
 mp.observe_property("user-data/streambox/comments", "native", function(_, v)
@@ -895,7 +922,7 @@ local function open_comments()
     comments_open, comments_scroll, thread_open = true, 0, false
     hide_bar()
     publish_comments_view()
-    api_post("yt_comments", "{}")   -- the first page (read once per video)
+    api_post(comments_action, "{}")   -- the first page (read once per video)
 end
 local function close_comments()
     if not comments_open then return end
@@ -914,15 +941,30 @@ local function comments_key(key)
     elseif key == "ok" then   -- its replies, if it has some
         if (((comments.items or {})[comments_scroll + 1] or {}).replies or "") == "" then return end
         thread_open, thread_scroll = true, 0
-        api_post("yt_comments", ('{"replies":%d}'):format(comments_scroll))
+        api_post(comments_action, ('{"replies":%d}'):format(comments_scroll))
     else return close_comments() end
     publish_comments_view()
     comments_more()
 end
 mp.register_event("end-file", close_comments)
+-- The add-on's buttons of the video playing (published for another one: none); OK on one: true when it opened a panel
+local function video_actions()
+    return addon_actions.url and addon_actions.url == mp.get_property("path") and addon_actions.items or {}
+end
+local function press_action(b)
+    if b.panel == "comments" then
+        comments_action = b.post
+        open_comments()
+        return true
+    end
+    if not b.post then return end
+    local was_on = b.on
+    for _, o in ipairs(video_actions()) do if b.group and o.group == b.group then o.on = false end end
+    b.on = not was_on
+    api_post(b.post, json.format_json((was_on and b.off_body) or b.body or {}))
+end
 
--- Video playback: accelerating fast forward, row of buttons under the bar (Qt app), next episode
--- (Jellyfin). States published for InfoBar.qml and NextUp.qml: seekfx, controls, next_card; remote.py publishes next_up.
+-- Video playback: accelerating fast forward, row of buttons under the bar (Qt app), next episode. States published for InfoBar.qml and NextUp.qml: seekfx, controls, next_card; remote.py publishes next_up.
 
 -- Fast forward: a press jumps 10 s, however fast the presses come; only a held key speeds up, the longer it is held
 -- (10 s for the first second, then 30 s, then 1 min). A held key is told from presses by its pace: input.py repeats it
@@ -974,18 +1016,16 @@ local function scrub_end(go)
 end
 mp.register_event("end-file", function() scrub = nil end)
 
--- Next episode (Jellyfin, Plex): remote.py publishes user-data/streambox/next_up { id, title, episode, thumb, service, path }; in the
--- last 20 seconds, a "Next episode in N s" card (OK: right away, Back: no); at the end, it starts
+-- Next episode (a media library add-on): remote.py publishes user-data/streambox/next_up { id, of, title, episode,
+-- thumb, post, path }; in the last 20 seconds, a "Next episode in N s" card (OK: right away, Back: no); at the end,
+-- it starts (POST /api/<post> {id, from_start})
 local NEXT_BEFORE = 20
 local next_dismissed, next_shown = false, false
--- only during the episode it follows (of): not for a video started afterwards by the Jellyfin shim
+-- only during the episode it follows (path, the link being played): not for a video started afterwards elsewhere
 local function next_up()
     local n = mp.get_property_native("user-data/streambox/next_up")
-    if not (n and n.id and n.of) then return nil end
-    local path = mp.get_property("path") or ""
-    -- Plex gives the link of the episode (its file has no item id), Jellyfin's link holds the id
-    local current = n.path and path == n.path or not n.path and path:find("/Videos/" .. n.of .. "/", 1, true)
-    return current and n or nil
+    if not (n and n.id and n.post and n.path) then return nil end
+    return mp.get_property("path") == n.path and n or nil
 end
 local next_cache = nil   -- last valid next_up: at the end of the file, path can no longer be read
 local function play_next()
@@ -996,7 +1036,7 @@ local function play_next()
     mp.command_native_async({ name = "subprocess", playback_only = false, capture_stdout = true,
         args = { "curl", "-s", "-m", "10", "-X", "POST", "-H", "Content-Type: application/json",
                  "-d", ('{"id":"%s","from_start":true}'):format(n.id),
-                 ("http://127.0.0.1:8080/api/%s_play"):format(n.service or "jellyfin") } }, function() end)
+                 "http://127.0.0.1:8080/api/" .. n.post } }, function() end)
 end
 local function hide_next(dismiss)
     if dismiss then next_dismissed = true end
@@ -1029,19 +1069,14 @@ end)
 local function controls_list()
     local paused = mp.get_property_native("pause")
     -- −10 s, Play / Pause, +10 s first (InfoBar.qml puts them in the middle of the screen), then the others (on the
-    -- right): 👍 👎 and comments (YouTube), subtitles, quality, chapters, next episode
+    -- right): the add-on's, subtitles, quality, chapters, next episode
     local list = { { id = "back", label = "−10 s" }, { id = "play", label = paused and tr("Play") or tr("Pause") },
                    { id = "fwd", label = "+10 s" } }
-    if playing_youtube() then
-        if yt_rating.status then   -- account connected
-            local liked, disliked = yt_rating.status == "LIKE", yt_rating.status == "DISLIKE"
-            list[#list + 1] = { id = "like", label = liked and tr("Liked") or tr("Like"), on = liked }
-            list[#list + 1] = { id = "dislike", label = disliked and tr("Disliked") or tr("Dislike"), on = disliked }
-        end
-        list[#list + 1] = { id = "comments", label = tr("Comments") }
+    for i, b in ipairs(video_actions()) do   -- the add-on's
+        list[#list + 1] = { id = "addon:" .. i, icon = b.icon, label = b.on and b.label_on or b.label, on = b.on or nil }
     end
     list[#list + 1] = { id = "tracks", label = tr("Subtitles") }
-    -- Quality: YouTube only, when several resolutions are offered (Jellyfin: original file)
+    -- Quality: a video read by yt-dlp, when several resolutions are offered (a media server's: the original file)
     if #quality.list() > 1 then list[#list + 1] = { id = "quality", label = tr("Quality") } end
     if #(mp.get_property_native("chapter-list") or {}) > 1 then list[#list + 1] = { id = "chapters", label = tr("Chapters") } end
     if next_up() then list[#list + 1] = { id = "next", label = tr("Next episode") } end
@@ -1074,8 +1109,9 @@ local function controls_key(key)
         elseif id == "quality" then open_tracks("quality")
         elseif id == "chapters" then open_tracks("chapters")
         elseif id == "next" then play_next()
-        elseif id == "like" or id == "dislike" then rate(id)
-        elseif id == "comments" then return open_comments() end
+        elseif id and id:sub(1, 6) == "addon:" then
+            if press_action(video_actions()[tonumber(id:sub(7))] or {}) then return end
+        end
     end
     show_bar()
     publish_controls()
@@ -1232,7 +1268,7 @@ local function on_key(key)
             toggle_chat()
             mp.osd_message(chat_visible and tr("Chat shown") or tr("Chat hidden"), 2)
         end
-    else   -- video (link, Jellyfin)
+    else   -- video (link, an add-on's)
         if key == "ok" then
             mp.commandv("cycle", "pause")
             show_bar()
@@ -1272,6 +1308,20 @@ keys.setup(on_key, qt_ui)
 mp.register_script_message("streambox-channel", function(name)
     mp.commandv("script-message", "streambox-tvmenu-close")
     start_channel(name)
+end)
+mp.register_script_message("streambox-preview", function(login)
+    login = login or ""
+    if mode ~= "home" or login == (preview.login or "") then return end   -- (only behind the menu as the main page)
+    preview.stop()
+    stop_twitch()
+    mp.commandv("stop")
+    if not login:match("^[%w_]+$") then return end
+    preview.mute = mp.get_property_bool("mute")
+    mp.set_property_bool("mute", true)
+    preview.login, preview.tries = login, 0
+    preview.publish()
+    start_server(login)
+    preview.timer = mp.add_timeout(2, preview.load)
 end)
 mp.register_script_message("streambox-toggle-chat", toggle_chat)
 mp.register_script_message("streambox-cycle-corner", function(target) toggle_corner(target) end)

@@ -4,7 +4,7 @@ by ambient_loop in user-data/streambox/ambient. Standard library only.
 import datetime, json, os, re, subprocess, sys, time, urllib.parse, urllib.request, zoneinfo
 
 import history   # history.py: a box that has a history counts as set up
-import twitch    # twitch.py: streamer list, Twitch schedules
+from addons.twitch import service as twitch   # Twitch, the base: streamer list, its web client id
 from common import COOKIES_DIR, PORT, PUBLISH_EVERY, lan_ip, mpv
 from i18n import tr
 from sysparts import netsetup   # setup Wi-Fi access point (None in the Inlet app)

@@ -1,0 +1,16 @@
+# Inlet: the extensions already downloaded for the running version linked into /run/extensions, before
+# systemd-sysext.service merges them (see /usr/local/lib/stream-box/extensions)
+[Unit]
+Description=Inlet: system extensions to merge
+DefaultDependencies=no
+After=local-fs.target stream-box-persist.service
+Before=systemd-sysext.service sysinit.target shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/stream-box/extensions link
+
+[Install]
+WantedBy=sysinit.target

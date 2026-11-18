@@ -1,4 +1,5 @@
-// TV menu: action dialog (menu.modal: { title, items: [{ label, danger, ok }] }, focus menu.modalSel)
+// TV menu: action dialog (menu.modal: { title, help (a grey line under the title), items: [{ label, danger, ok }] },
+// focus menu.modalSel)
 import QtQuick
 import ".."
 
@@ -12,17 +13,25 @@ Item {
     Rectangle {
         id: sheet
         readonly property var items: menu.modal ? menu.modal.items : []
-        width: 820; height: 150 + items.length * 92; radius: 28
+        readonly property real helpH: help.visible ? help.height + 18 : 0
+        width: 820; height: 150 + helpH + items.length * 92; radius: 28
         anchors.centerIn: parent
         color: menu.pal.sheet
         scale: menu.modal ? 1 : 0.92
         Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutBack } }
         Marquee { x: 44; y: 46; width: parent.width - 88; text: menu.modal ? menu.modal.title || "" : ""; pixelSize: 27; bold: true; running: !!menu.modal }
+        Text {
+            id: help
+            x: 44; y: 98; width: parent.width - 88
+            visible: !!(menu.modal && menu.modal.help)
+            text: menu.modal ? menu.modal.help || "" : ""
+            color: "#b8b0c8"; font.pixelSize: 21; wrapMode: Text.WordWrap; lineHeight: 1.2
+        }
         Repeater {
             model: sheet.items.length
             Rectangle {
                 readonly property bool foc: index === menu.modalSel
-                x: 30; y: 112 + index * 92; width: sheet.width - 60; height: 76; radius: 38
+                x: 30; y: 112 + sheet.helpH + index * 92; width: sheet.width - 60; height: 76; radius: 38
                 color: foc ? "white" : menu.pal.key
                 Behavior on color { ColorAnimation { duration: 140 } }
                 Text {

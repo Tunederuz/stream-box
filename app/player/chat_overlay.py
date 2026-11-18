@@ -2,10 +2,13 @@
 """Inlet: shows the Twitch chat as an overlay in mpv, through its IPC socket.
 
 The channel and the display corner come from mpv (user-data/streambox/* properties, set
-by stream-box.lua): switching streamer in the menu switches the chat too.
+by stream-box.lua): switching streamer in the menu switches the chat too. Read-only, with the connected Twitch account
+(it shows among the chatters) or anonymously (chat_login.py).
 """
-import json, random, select, socket, ssl, threading, time
+import json, select, socket, ssl, threading, time
 from collections import deque
+
+import chat_login   # (next to this script: on the import path when it is run)
 
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
 MAX_MESSAGES = 10
@@ -107,8 +110,8 @@ def irc_loop():
         try:
             raw = socket.create_connection(("irc.chat.twitch.tv", 6697), timeout=10)
             with ctx.wrap_socket(raw, server_hostname="irc.chat.twitch.tv") as s:
-                nick = f"justinfan{random.randint(1000, 80000)}"  # anonymous connection, read-only
-                s.sendall(f"CAP REQ :twitch.tv/tags twitch.tv/commands\r\nNICK {nick}\r\nJOIN #{channel}\r\n".encode())
+                hello, token = chat_login.login()   # the account (among the chatters), or anonymous
+                s.sendall(f"CAP REQ :twitch.tv/tags twitch.tv/commands\r\n{hello}JOIN #{channel}\r\n".encode())
                 s.settimeout(1)   # to notice a channel change quickly
                 buf, last_data = b"", time.time()
                 while state["channel"] == channel:
@@ -126,6 +129,8 @@ def irc_loop():
                         line = line.decode("utf-8", "replace")
                         if line.startswith("PING"):
                             s.sendall(line.replace("PING", "PONG", 1).encode() + b"\r\n")
+                        elif chat_login.refused(token, line):
+                            raise OSError("token refused by the chat")   # (anonymous at once)
                         elif line:
                             handle(line)
         except OSError:

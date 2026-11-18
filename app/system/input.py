@@ -18,7 +18,7 @@ import json, os, re, select, signal, socket, struct, sys, time
 # is not part of the Inlet app)
 sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), d) for d in ("player", "system")]
 
-from common import GAMESTREAM_PID
+from common import EXTERNAL_APP_PID
 from i18n import tr
 
 MPV_SOCKET = "/tmp/stream-box-mpv.sock"
@@ -133,9 +133,9 @@ class Mpv:
 
 
 def streaming():
-    """PID of Moonlight while a game streams from a PC (gamestream.py), otherwise None: the keys are then its own"""
+    """PID of Moonlight while a game streams from a PC (addons/gamestream), otherwise None: the keys are then its own"""
     try:
-        with open(GAMESTREAM_PID) as f:
+        with open(EXTERNAL_APP_PID) as f:
             pid = int(f.read())
         os.kill(pid, 0)
         return pid
@@ -149,6 +149,9 @@ def main():
     hat = {}                # (path, axis) -> last value of the gamepad d-pad
     held = {}               # (path, code) -> [press time, name, window already open] for power keys
     stream_home = {}        # (path, code) -> press time of Home during a game stream (held LONG_PRESS: stream ends)
+    # A gamepad's Home (its middle button, Select, the Deck's "…"): on release, as on a console; pressed during a game
+    # stream (held to end it), its release does nothing
+    pad_home = {}           # (path, code) -> name, pressed and not released yet
     repeating = {}          # (path, code or axis) -> [next repeat, name, action, press time] for held keys
     last_scan = last_beat = 0
     allowed = None
@@ -255,11 +258,17 @@ def main():
                 elif etype == EV_KEY and value == 1:   # press (the kernel's repeats, value 2, are ignored)
                     name = key_name(code)
                     action = keymap.get(name)
+                    if action == "home" and name.startswith("BTN_"):
+                        pad_home[(path, code)] = name
+                        continue
                     mpv.send("script-message", "streambox-input", name, action)
                     if action in REPEATABLE:
                         repeating[(path, code)] = [time.time() + REPEAT_DELAY, name, action, time.time()]
                 elif etype == EV_KEY and value == 0:   # release
                     repeating.pop((path, code), None)
+                    name = pad_home.pop((path, code), None)
+                    if name:
+                        mpv.send("script-message", "streambox-input", name, "home")
                 elif etype == EV_ABS and code in (ABS_HAT0X, ABS_HAT0Y):   # gamepad d-pad
                     if value and hat.get((path, code)) != value:
                         names = {(ABS_HAT0X, -1): "HAT_LEFT", (ABS_HAT0X, 1): "HAT_RIGHT",

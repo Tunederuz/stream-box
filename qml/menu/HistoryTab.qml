@@ -9,7 +9,7 @@ Item {   // clip: what scrolls stops at the edge of the area (neither over the t
     x: -53; y: 161; width: Layout.contentW + 80; height: menu.height - 85 - 161; clip: true
     SkeletonRows {   // the history not read yet: the grid's first two rows
         visible: menu.tabId === "history" && menu.history === null
-        x: 53; y: 55; rows: 2; titles: false; spacing: 400 - Layout.cardH
+        x: 53; y: 55; rows: 2; titles: false; spacing: 400 - Layout.cardH; shade: menu.pal.surface
     }
     GridView {
         visible: menu.tabId === "history"
@@ -30,7 +30,7 @@ Item {   // clip: what scrolls stops at the edge of the area (neither over the t
                 x: 13; y: 13
                 title: e.title || ""
                 thumb: e.thumb || ""
-                meta: menu.tr(menu.kinds[e.kind] || "") + (e.finished ? " · " + menu.tr("watched")
+                meta: (e.kind_name || "") + (e.finished ? " · " + menu.tr("watched")
                       : e.duration > 0 ? " · " + Fmt.clock(e.position) + " / " + Fmt.clock(e.duration) : "")
                 progress: e.finished ? 1 : (Fmt.resumable(e.position, e.duration, e.finished) && e.duration > 0 ? e.position / e.duration : 0)
                 accent: menu.accent

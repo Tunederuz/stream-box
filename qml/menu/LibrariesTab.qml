@@ -1,4 +1,4 @@
-// TV menu, Libraries tab (only while neither Jellyfin nor Plex is connected): how to connect one or the other, and the
+// TV menu, Libraries tab (only while no library add-on (Jellyfin, Plex…) is connected): how to connect each, and the
 // QR code of the companion app. Nothing to focus: the rail keeps the focus. Once connected, its own tab replaces this one.
 import QtQuick
 import ".."
@@ -12,20 +12,13 @@ Item {
     Row {
         y: 210; spacing: 40
         Repeater {
-            model: [
-                { name: "Jellyfin", color: "#1565c0", steps: [
-                    "Settings → Accounts and links → Jellyfin: choose your server, then approve the code in Jellyfin (user menu, Quick Connect).",
-                    "Or in the companion app (QR code below): Settings → Jellyfin, the server's address.",
-                    "The Jellyfin tab then shows here, with your library." ] },
-                { name: "Plex", color: "#e5a00d", steps: [
-                    "Settings → Accounts and links → Plex: sign in with your Plex account, with a code to type on plex.tv/link.",
-                    "Or in the companion app (QR code below): Settings → Plex, a server's address.",
-                    "The Plex tab then shows here, with your library." ] }]
+            // the library add-ons on: their name, color and steps (their tab's setup)
+            model: root.menu.libraryTabs.map(function (t) { return { name: t.label, color: t.accent, steps: t.setup || [] } })
             Rectangle {
                 width: 560; height: 350; radius: 24
                 color: "#1affffff"; border.color: "#22ffffff"; border.width: 1
                 Rectangle { x: 34; y: 36; width: 14; height: 14; radius: 7; color: modelData.color }
-                Text { x: 62; y: 43 - height / 2; text: modelData.name; color: "white"; font.pixelSize: 32; font.bold: true }
+                Text { x: 62; y: 43 - height / 2; text: root.menu.tr(modelData.name); color: "white"; font.pixelSize: 32; font.bold: true }
                 Column {
                     x: 34; y: 90; width: parent.width - 68; spacing: 16
                     Repeater {

@@ -7,7 +7,8 @@ from tests.helpers import temp_home
 HOME = os.environ.get("HOME", "")
 os.environ["HOME"] = temp_home()   # while importing: the modules read their paths from it
 import quickmenu as qm   # noqa: E402
-import twitch            # noqa: E402
+from addons.twitch import service as twitch   # noqa: E402
+import addons            # noqa: E402
 os.environ["HOME"] = HOME
 
 
@@ -30,8 +31,8 @@ class QuickMenu(unittest.TestCase):
         qm.mpv, qm.threading = self.fake_mpv, Now
         self.patch(twitch, read_streamers=lambda: ["a", "b"], follows_logins=lambda: [],
                    live_now={"b": {"viewers": 1500, "game": "Chess"}})
-        self.patch(qm.jellyfin, jf_server=lambda: {"address": "http://jf"})
-        self.patch(qm.plex, px_config=lambda: None)
+        self.patch(addons.get("jellyfin"), configured=lambda: True)   # a Jellyfin server, no Plex
+        self.patch(addons.get("plex"), configured=lambda: False)
         qm.close()
 
     def patch(self, module, **values):
@@ -73,6 +74,17 @@ class QuickMenu(unittest.TestCase):
         qm.on_message(["streambox-qm", "key", "back"])
         self.assertEqual(self.shown, {})   # root: Back closes
 
+    def test_addon_lists(self):   # an add-on's home(): its lists, a dim note, the videos' "by" beside them
+        self.patch(addons.get("youtube"), home=lambda: [
+            {"title": "Picks", "videos": [{"title": "V", "url": "https://example.com/v", "seconds": 90, "by": "Chan"}]},
+            {"note": "Search elsewhere"}])
+        qm.on_message(["streambox-qm", "open"])
+        self.go("YouTube")
+        self.assertEqual(self.labels(), ["Picks", "Search elsewhere"])
+        self.assertTrue(self.shown["items"][1]["dim"])
+        self.go("Picks")
+        self.assertEqual((self.labels(), self.shown["items"][0]["info"]), (["V"], "Chan · 1:30"))
+
     def test_live_plays_channel(self):
         qm.on_message(["streambox-qm", "open"])
         self.go("Live")
@@ -87,8 +99,8 @@ class QuickMenu(unittest.TestCase):
     def test_library_resume_choice(self):
         card = {"id": "m1", "title": "Movie", "type": "Movie", "year": 2001, "seconds": 5400, "position": 1200}
         played = []
-        self.patch(qm, LIBS={"jellyfin": (lambda: {"resume": [card], "libraries": [{"name": "Movies", "items": []}]},
-                                          None, lambda i, from_start: played.append((i, from_start)))})
+        self.patch(addons.get("jellyfin"), library=(lambda: {"resume": [card], "libraries": [{"name": "Movies", "items": []}]},
+                                                    None, lambda i, from_start: played.append((i, from_start))))
         qm.on_message(["streambox-qm", "open"])
         self.go("Jellyfin")
         self.assertEqual(self.labels(), ["Continue watching"])   # empty library row left out
@@ -102,7 +114,7 @@ class QuickMenu(unittest.TestCase):
     def test_service_error_stays_usable(self):
         def broken():
             raise OSError("down")
-        self.patch(qm, LIBS={"jellyfin": (broken, None, None)})
+        self.patch(addons.get("jellyfin"), library=(broken, None, None))
         qm.on_message(["streambox-qm", "open"])
         self.go("Jellyfin")
         self.assertEqual(self.labels(), ["Unavailable: down"])

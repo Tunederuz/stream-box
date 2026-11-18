@@ -91,6 +91,50 @@ class Script(unittest.TestCase):
         self.assertEqual(self.ipc("get_property", "user-data/streambox/night").get("data"), True)
         self.assertEqual(self.lua_errors(), [])
 
+    def test_addon_buttons(self):
+        # The buttons an add-on publishes for the video playing (user-data/streambox/actions) join the row of buttons;
+        # OK lights one at once and the others of its group go off; published for another video: none
+        def get(name):
+            return self.ipc("get_property", name).get("data")
+        for _ in range(50):   # the startup's home screen (after 3 s) would stop the video
+            if get("user-data/streambox/mode") == "home":
+                break
+            time.sleep(0.2)
+        video = os.path.join(self.dir, "buttons.mkv")
+        subprocess.run(["mpv", "--no-config", "av://lavfi:testsrc=duration=120:size=64x36:rate=2", "--o=" + video],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        self.ipc("set_property", "user-data/streambox/chat_ui", "qml")   # the Qt app's row of buttons
+        self.ipc("loadfile", video)
+        for _ in range(50):
+            if get("time-pos") is not None and get("user-data/streambox/mode") == "media":
+                break
+            time.sleep(0.1)
+        rating = [{"label": "Like", "label_on": "Liked", "icon": "like", "group": "rating", "post": "x", "body": {}},
+                  {"label": "Dislike", "icon": "dislike", "group": "rating", "post": "x", "body": {}}]
+        self.ipc("set_property", "user-data/streambox/actions", {"url": video, "items": rating})
+        time.sleep(0.3)
+        self.ipc("script-message", "streambox-input", "TEST", "down")   # the row, on Pause
+        for _ in range(2):
+            self.ipc("script-message", "streambox-input", "TEST", "right")   # +10 s, then the add-on's first
+        time.sleep(0.3)
+        items = get("user-data/streambox/controls")["items"]
+        self.assertEqual([i["id"] for i in items[3:5]], ["addon:1", "addon:2"])
+        self.assertEqual(items[3]["icon"], "like")
+        self.ipc("script-message", "streambox-input", "TEST", "ok")
+        time.sleep(0.3)
+        items = get("user-data/streambox/controls")["items"]
+        self.assertEqual((items[3]["label"], items[3].get("on")), ("Liked", True))
+        self.ipc("script-message", "streambox-input", "TEST", "right")
+        self.ipc("script-message", "streambox-input", "TEST", "ok")
+        time.sleep(0.3)
+        items = get("user-data/streambox/controls")["items"]
+        self.assertEqual((items[3].get("on"), items[4].get("on")), (None, True))   # one of the group at a time
+        self.ipc("set_property", "user-data/streambox/actions", {"url": "https://example.com/other", "items": rating})
+        time.sleep(0.3)
+        self.assertFalse(any(i["id"].startswith("addon:") for i in get("user-data/streambox/controls")["items"]))
+        self.ipc("set_property", "user-data/streambox/chat_ui", "")
+        self.assertEqual(self.lua_errors(), [])
+
     def test_scrub(self):
         # ← → in a video pause it and move a target; OK goes there and plays, Back gives up
         def get(name):

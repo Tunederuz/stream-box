@@ -17,14 +17,17 @@ Installation and update: `install.sh` (see the README); settings backup: TV Sett
 - Code, comments and docs are in English. User-facing texts are written in English in the code and wrapped with
   `tr()`: Python `i18n.py`; QML `qml/i18n.js` + the `i18n.dict` context property set by `ui.py`; Lua `tr()` of
   `lua/streambox/i18n.lua` (used by `stream-box.lua` and its modules); companion app `tr()` and translation of static texts in `remote.html`.
-- Translations: `locales/<lang>.json`, keyed by the English text (placeholders `{name}`).
+- Translations: `locales/<lang>.json`, keyed by the English text (placeholders `{name}`); an add-on's own texts (used
+  only in its folder) in `app/player/addons/<id>/locales/<lang>.json`, merged in by `i18n.catalog` (Python, QML, the
+  companion app through `GET /locales/<lang>.json`), `lua/streambox/i18n.lua` and qmlshots (the core's win).
+  `tests/test_locales.py` checks each file, and that a text of a single add-on is in its locales, not the core's.
 - Language stored in `~/.config/stream-box/language` (default `en`), changed by `POST /api/language`, which sends the
   script-message `streambox-language` to the TV.
 - `GET /api/state` carries `lang` (current code) and `languages` (`{code: name in its own language}`, from
   `i18n.LANGUAGES`). Pickers: companion app section `#language-section` of Settings (moved to the top of the
   `#setup` screen in setup mode, so the language is chosen first); TV: "Interface language" row (Settings → Appearance,
   `sectionRows("look")`, QML).
-- Adding a language: add its code to `LANGUAGES` in `i18n.py` and create `locales/<code>.json`. Decimal separator:
+- Adding a language: add its code to `LANGUAGES` in `i18n.py` and create `locales/<code>.json` (and each add-on's `locales/<code>.json`). Decimal separator:
   `qml/fmt.js` (translatable `{int}.{dec}` keys), `I18N.dec` in `lua/streambox/i18n.lua`, and the
   `LANG === "fr"` checks in `remote.html` (currently only `fr` uses a comma); QML dates pick the Qt locale from
   `i18n.lang` in `qml/TvMenu.qml` (`fr_FR` or `en_US`).
@@ -121,11 +124,93 @@ Below, file names without a folder are in these folders.
   the system's. Its modules (no import cycle; shared mutable state has one owner module and is always reached as
   `module.attr`, never copied by `from … import`):
   - `common.py`: port, mpv socket and `mpv()`, paths, `lan_ip`, JSON file helpers;
-  - `api.py`: static files, `state()`, GET routes (`JSON_ROUTES` for exact paths, then the others), POST dispatch;
-  - `actions.py`: `POST /api/<name>` handlers (`ACTIONS` dict), the TV menu `keyboard`;
-  - `twitch.py`: streamers.txt, who is live (`live_now`), polls and predictions, replays, GQL, followed channels,
-    Twitch account; `youtube.py`: channels, feeds, search, auto subtitles (`/subs`), storyboard, TV app progress,
-    Google account and subscriptions; `jellyfin.py`: server, home, search, series, play, subtitles, progress;
+  - `api.py`: static files, `state()`, GET routes (`JSON_ROUTES` for exact paths, then the addons', then the others),
+    POST dispatch;
+  - `actions.py`: `POST /api/<name>` handlers (`ACTIONS` dict, the addons' added), the TV menu `keyboard`;
+  - `addons/`: the integrations, one folder each (`addons/<id>/__init__.py` declares `ADDON`, its code next to it in
+    `service.py`); `addons/__init__.py` loads them (in their `order`) and holds the contract (`Addon`, `Route`): GET
+    routes (path → `Route(fn(query), unreachable)`: errors 400, or 503 with `unreachable(error)`), POST actions,
+    "Load more" sources (`api.more`), links `<id>:<item>` played from the history (`play_link`), progress reports of
+    a video it started (`report(video, position, duration, paused, stopped)`, `history_loop`), a video started
+    outside the box (`outside_video`: Jellyfin's "Play on…"), keys of `/api/state` (`state()`), its quick menu
+    screens (`home`, `library`: home, series, play). `addons.library(...)` builds the routes, actions, sources and
+    link of a media library (`/api/<id>`, `_search`, `_series`, `<id>_play`, sources `<id>_lib|_resume|_nextup|_search`).
+    Videos played from a link (`playback.play`) belong to the addon of their history `kinds` (`for_kind`): its
+    `prepare(video, position, duration, from_start, at)` before (YouTube: a cast video's title, the account's
+    progress), `started(video)` after (storyboard, rating), `progress(video, position, final)` every `progress_every`
+    seconds (the position to the account). A `Route` with `content_type` answers text (`/subs`) or bytes (the PC
+    link's box art; None: 404); `features()` adds to `/api/features` (`gamestream`: Moonlight there).
+    `start()` runs at the server's start and each of `loops` in its thread (remote.py). Twitch is the base: always
+    there, its live streams played by stream-box.lua itself (streamlink); the core's modules (ambient.py, quickmenu.py)
+    import its service directly (`from addons.twitch import service as twitch`); its addon declares the rest (routes,
+    actions, replays and clips through prepare / progress, state: streamers, avatars, live; its three loops).
+    Step 1 of the addons (2026-10-31): Twitch, YouTube, Jellyfin, Plex and the PC link (`gamestream`) moved there, the
+    API unchanged (cast/youtube_tv.js, Node, stays in cast/). Step 2: the TV menu's rows built by the addons (`rows`
+    of an addon: tab, search, open, more; `GET /api/rows?addon=<id>[&q=|&open=<target>&name=|&more=<source>&key=&q=
+    &offset=]`, `addons.rows`), in one shape (`addons/cards.py`): a row {key, title, items, avatar, style ("channels"),
+    more {source, key, q}, sel, loading, error}, a card {key, title, thumb, meta (translated info line), progress,
+    glyph, play ({url} or {action, id}), open ({target, name}), connect, position, seconds, finished, label (dialog
+    title), options ([{label, open} or {label, action, body, danger}])}; `addons.library` builds a media library's
+    (Jellyfin, Plex), the YouTube addon its own. The companion app keeps its routes. Step 3: an addon on or off
+    (`~/.config/stream-box/addons.json` {disabled: [id…]}; `base` = Twitch, always on; each has a `description`):
+    `addons.enabled()` is what the registry serves (an addon off: routes 404, actions refused, no rows, state,
+    features nor hooks; `addons.get` still finds it), `GET /api/addons` (listing: name, description, base, enabled),
+    `POST /api/addon {id, enabled}`, `/api/state` → `addons` (ids on). TV: Settings → Add-ons (toggles, `setAddon`
+    changes `addons` and `st.addons` at once), tabs (`addonOn`) and the accounts rows of an addon off hide; companion
+    app: Add-ons group, `[data-addon]` sections hidden (`.addon-off`); quick menu: its YouTube and libraries follow.
+    Identity (step 1 of the cleanup, 2026-11-04): an addon declares `colors` {accent, bar}, `kind_names` (labels of
+    its history kinds) and `urls` [{re, kind, key, ident}] (its links: with a group, the history key, `addons.media_key`
+    used by `history.media_key`; the regexes are also read by the interface, JavaScript: common syntax only);
+    `addons.identity()` is published in `user-data/streambox/addons` (`identity_loop`, every 10 s) and relayed as
+    `osd.addons` (InfoBar, LoadingOverlay); `addons.kind_name` labels `/api/history` (`kind_name`) and the quick menu;
+    `addons.play_video(addon_id, …)` starts a video with its add-on; `playback.find_url` finds the add-ons' own links
+    (`addons.link_prefixes`).
+    Accounts (step 2 of the cleanup): an addon's `account` (addons/<id>/account.py: YouTube, Jellyfin, Plex, PC link)
+    gives its row of Settings → Accounts and links and builds its dialogs: `GET /api/accounts` (rows: label, value,
+    hint, opening), `/api/account_menu?addon=&target=` ({title, items}: an item opens another target, or runs one of
+    the addon's actions, with confirm, then "code" / "menu", wait / done / fail texts), `/api/account_code?addon=` (the
+    code dialog: title, where, code, error, help, qr (a link), done), `POST /api/account_code_cancel {addon}`. TV menu:
+    `accountMenu`, `accountItem`, `accountConnect` (a card's `connect`: its sign-in by code at once), `openCode` /
+    `loadCode` / `closeCode` (`code`, CodeDialog), `accountUpdated` (rows, its tab, the state reloaded). Twitch, the
+    base, keeps its own (`twitchAccountMenu`). qmlshots builds them with the add-ons' code (`accounts_answer`).
+    Tabs (step 3 of the cleanup): an addon declares its `tabs` [{id, label, kind, kinds, hint, qml, setup}] and its
+    `colors.palette` (the tab's colors), `available()` (the PC link: Moonlight there); `GET /api/features` → `tabs`
+    (`addons.tabs()`). TV menu: `addonTabs` (Twitch's until read), `allTabs` (+ "Libraries" after the library ones,
+    History, Settings), `tabs` (on, available, libraries configured), `tabInfo` / `tabKind`, `pal` from the tab's
+    palette (neutral otherwise); kind rows / library → MediaTab (keyMedia), its line and empty text from the rows
+    (`hint`, `empty` of GET /api/rows); custom → its add-on's component (`customTabs`, a Loader each from
+    `../app/player/<qml>`, given menu and tabId; the menu calls its load, key, hint, canEnter, enter, reset:
+    addons/gamestream/GamesTab.qml, the PC link); `mediaTab` from the tabs' `kinds`; LibrariesTab from the library
+    tabs' `setup`. qmlshots copies the add-ons' QML and serves their tabs from their code.
+    Player (step 4 of the cleanup): an addon's part of stream-box.lua is `addons/<id>/player.lua` (`{contract, load}`:
+    `load` is given `api.mine(path)`, the video was started for this addon; it registers its own mpv events and
+    returns `{failed()}`: "retry" when it reloaded a video that failed, or the message to show), loaded by
+    stream-box.lua from the add-ons' folder (YouTube: automatic subtitles, yt-dlp client rotation, "not a robot"
+    message).
+    Step 5: the contract's version, `addons.CONTRACT` (= `ADDON_CONTRACT` of stream-box.lua, a test checks): each
+    add-on gives the one it was written for (`Addon(contract=…)`, its player part's `contract`), one written for
+    another is left out (logged); raise it when a change breaks the add-ons written for the previous one. An add-on's
+    `home()` gives its lists to the quick menu ([{title, videos}, {note}], a video's `by` beside it; the libraries use
+    `library`), `services` its user services for the box status (`health` → `services`, `service_names`; YouTube:
+    stream-box-pot), `files` its settings kept in the backups (`backup.paths()`; Jellyfin: jellyfin-mpv-shim's).
+    `EXTERNAL_APP_PID` (common.py): a program that takes the screen and the keys (the PC link's Moonlight).
+    `tests/test_addons.py` `CoreNamesNoAddon`: the core's code (app/player/*.py, app/system, lua/, qml/; not
+    comments) names no add-on but Twitch: the companion app (web/), cast/ and the packaging are not checked yet.
+    `addons.play_video(…, key)` gives the video's stable key (`media_key`, "<kind>:<id>") with streambox-play's 7th
+    argument: the remembered subtitles' key. `user-data/streambox/meta` {details, overview, thumb}: `details` a list
+    of texts or {views}, {rating}, {text, info} (info: the Info panel only), formatted by `Fmt.details` (InfoBar,
+    InfoPanel). `next_up` {id, of, title, episode, thumb, post, path}: shown while `path` plays, `POST /api/<post>`
+    {id, from_start} starts it.
+    Step 4: the playback bar's buttons of an addon, for the video it plays (`addons.publish_actions(url, items)` →
+    `user-data/streambox/actions` {url, items}; stream-box.lua shows them only while that url plays, after −10 s /
+    Pause / +10 s, as `addon:<n>`; InfoBar draws `icon`): items [{label, label_on, icon, on, group, post, body,
+    off_body, panel}], OK posts `post` (body, or off_body when on) and lights the button at once (its group's others
+    off), or opens the panel (`comments`: CommentsPanel, its pages read by `post`); `playback.play` clears them, the
+    addon publishes its own (YouTube: 👍 👎 when connected, Comments: `publish_actions` of addons/youtube);
+  - `addons/twitch/service.py` (Twitch, the base: the core's modules use it directly): streamers.txt, who is live (`live_now`), polls and predictions, replays, GQL, followed channels,
+    Twitch account; `addons/youtube/service.py`: channels, feeds, search, auto subtitles (`/subs`), storyboard, TV app progress,
+    Google account and subscriptions; `addons/jellyfin/service.py`: server, home, search, series, play, subtitles,
+    progress; `addons/plex/service.py`: the same for Plex;
   - `playback.py`: `play()`, `history_loop`; `history.py`: history.json, `media_key`, `now_playing`;
   - `ambient.py`: weather, Twitch schedules, companion app URL and QR code, first setup, `ambient_loop`;
   - `images.py`: TV preview; `settings.py`: player, power button action, backdrop; `system.py`: power, power key
@@ -167,7 +252,8 @@ Below, file names without a folder are in these folders.
   **Automatic** subtitles (`kind=asr`) have overlapping lines (two always on screen):
   at `file-loaded` in media mode, stream-box.lua replaces them with `http://127.0.0.1:8080/subs?u=<url>` (remote.py cuts
   each line at the start of the next one), as EDL `delay_open` so that only the chosen track is downloaded: YouTube
-  answers 429 to bursts, especially for automatic translations (`tlang`). yt-dlp and jellyfin-mpv-shim are in `~media/.local/share/media-venv` (links in
+  answers 429 to bursts, especially for automatic translations (`tlang`); this lives in addons/youtube/player.lua,
+  with the yt-dlp client changed when YouTube refuses a stream (403). yt-dlp and jellyfin-mpv-shim are in `~media/.local/share/media-venv` (links in
   `~/.local/bin`, update: `…/media-venv/bin/pip install -U yt-dlp jellyfin-mpv-shim`).
 - Page: collapsed "Play a link on the TV" block (`POST /api/play {url}`, `/api/twitch`) and Android share target
   (`share_target` of the manifest → `GET /share?title&text&url`, first http(s) link found, then redirect to `/`).
@@ -206,6 +292,15 @@ Below, file names without a folder are in these folders.
   away); back to live → 750 KiB. Bluetooth remote: ←/→ ±10 s. Page: −30 s / +30 s / Live
   (`POST /api/live_seek {delta|"live"}` → script-message `streambox-live-seek`), delay in `/api/state` (`delay`).
   The playback bar shows "−0:42" or "● LIVE".
+- **Counted as a viewer** (addons/twitch `presence_loop`): with a Twitch account connected and a live playing, the box
+  sends every minute the "minute-watched" event the twitch.tv player sends (`minute_watched`: channel_id,
+  broadcast_id, user_id, player "site", live, base64 JSON posted as `data` to the site's spade address, read from
+  the settings script a channel page names, kept a day); streamlink reads the video with the account's playback
+  token already. Without it the account was not in the viewer count (it also earns the channel's watch points).
+  The chat readers (chat_qt.py, chat_overlay.py) log in with the same account (`chat_login.py`: its token from
+  streamlink's config, its login from `oauth2/validate`; the TV app's token is taken by the chat although its only
+  scope is user:read:follows), so it shows among the channel's chatters; still read-only (only PONG is sent).
+  Without an account, or the chat's NOTICE "Login authentication failed": anonymous (justinfanNNNN).
 - **Live notification**: `remote.py` spots the streamers who have just gone live (not at the first poll)
   → script-message `streambox-went-live <login>` → banner at the top right for 12 s; OK goes there, Back closes it.
 - **Replays and clips**: `GET /api/replays?login=` (GQL, 8 VODs + 6 clips of the week, 5 min cache), collapsed
@@ -241,7 +336,7 @@ Below, file names without a folder are in these folders.
   Adjustable display (Settings → Network, "Companion app QR code", `POST /api/qr {mode}`, MQTT select, script-message `streambox-qr`, state
   file `qr`): `always`, `timed` (`QR_SECONDS` = 30 s each time the ambient screen appears and the menu opens),
   `never`; the check is done in `qr_code()`.
-- **Polls and predictions** (`twitch.events_loop` / `fetch_events`): no more PubSub for a viewer, so
+- **Polls and predictions** (addons/twitch `events_loop` / `fetch_events`): no more PubSub for a viewer, so
   GQL polling every 10 s, only during a live stream from the list with the panel enabled, every 3 s while the page
   shows the card (`events_for_page`, `PAGE_EVENTS_EVERY`: it updates the TV's panel too; one `poll_events` and its
   `events_seen` for both): `user.viewablePoll`
@@ -418,7 +513,7 @@ on that section (`leaveSection`, `rootSel`). The simplified version has its own 
 Companion app, Settings tab: the same grouping, folded groups (`.group`, `data-group`: channels, accounts, picture,
 look, network, updates, backup, playback; `openGroup(id)`, the open ones remembered in localStorage `groups`).
 Structure: `TvMenu.qml` keeps the data, the API calls, the timers, open / close, the computed rows (`settingsRows`,
-`ytRows`…), the dialog builders and all the key handling; the drawing lives in `qml/menu/`, one component per part,
+`mediaRows`…), the dialog builders and all the key handling; the drawing lives in `qml/menu/`, one component per part,
 each taking the menu as `required property var menu` (`LiveTab { menu: menu }`; no id lookups across files): `Rail`,
 `Header`, `LiveTab`, `FollowsTab`, `ReplaysTab`, `MediaTab` (YouTube and Jellyfin page), `HistoryTab`, `RowsTab`
 (Settings list), `SystemStatus` (QR code and status tiles, beside the list of sections), `SearchKeyboard`, `YtAuthDialog`,
@@ -430,7 +525,7 @@ re-applied), and its sizes are literal numbers, not bindings to `layout.js` (the
 before, `fits` was then -1 and the first scroll was lost).
 While a tab's or a row's videos load, `SkeletonRows` (qml/menu/) shows skeleton cards (`qml/SkeletonCard.qml`: the
 shapes of VideoCard, breathing, the pulse travelling along the row) where the cards will be, not a "Loading…" text:
-YouTube / Jellyfin / Plex before their lists (`!menu.yt`, `!menu.lib.home`), a row still loading or a search under
+YouTube / Jellyfin / Plex before their lists (`!menu.lib.home`), a row still loading or a search under
 way, Replays (`replays[login] === "loading"`), History (`history === null`). `QMLSHOTS_PENDING` shows them.
 YouTube card previews (the focused card playing its video) were tried and dropped on 2026-10-27: resolving links with
 yt-dlp, in advance for the neighboring cards, got the box taken for a robot by YouTube within two hours ("Sign in to
@@ -438,10 +533,15 @@ confirm you're not a bot" for every video, the player's included). Do not add re
 Live and Following tabs, live in the background: after 0.9 s on a live channel (`menu.bgLive`: Live or Following
 tab, content, no dialog nor keyboard, and nothing playing behind the menu, `box.videoActive` false), its live plays muted behind the whole menu,
 above the backdrop and under a black veil (0.55) that keeps the cards readable; moving to another streamer stops it
-and restarts the 0.9 s. The video is `qml/menu/LivePreview.qml` (third libmpv player `preview_player` of ui.py,
-"livePreview"; never fully invisible, opacity 0.001: libmpv needs its render context before a video starts):
-`startPreview(login)`; ui.py starts its own streamlink (`PREVIEW_PORT` 34591,
-720p) and loads it once served (retries every 1.5 s while the player is idle, 6 at most). (Tried before: a banner
+and restarts the 0.9 s. The live plays in the main player itself (`box.preview(login)` → script-message
+`streambox-preview <login>` of stream-box.lua, `""` stops it: only in home mode, the menu being the main page; its own
+streamlink as for a channel, mute on and given back after, a few tries while streamlink starts; published in
+`user-data/streambox/preview`): `box.videoActive` leaves it out, `box.previewActive` says its picture is there (the
+menu's opaque veil and background then step aside). Chosen (`watchChannel`: OK, ▶ Watch), the menu is `adopting`:
+start_channel sees the channel previewed and goes on with it (sound back, twitch mode, no reload nor loading screen)
+while the menu fades out over it (500 ms) and the home screen stays aside: no cut. (Until 2026-11-04 a third libmpv
+player played it, then handed over to the main player: the swap always showed, two connections never at the same
+point of the live.) (Tried before: a banner
 above the grid took too much room; a card growing over its neighbors hid them; a full-screen peek on ▶.)
 Video cards (`VideoCard`: 456 px wide, 16:9 thumbnail, height from the width): 3 per row in Replays, YouTube,
 Jellyfin (step 482) and History (3 columns, 2 rows); the Replays and YouTube/Jellyfin rows scroll vertically (one full
@@ -548,8 +648,9 @@ YouTube preview: at each YouTube playback, remote.py reads the `yt-dlp -J` resul
 "not a bot" check) and publishes the thumbnail sheet
 (`storyboard`: image fragments in a rows × columns grid, each covering `duration` s); the cell shown is
 chosen from the position. QML pitfall again: `left` (FINAL) cannot be used as a property name.
-Bar color depending on the source (`InfoBar.source`, from `path` relayed by ui.py): red for YouTube, blue
-for Jellyfin (server link: `/Videos/…`, `api_key=`, `MediaSourceId=`), purple otherwise and for live.
+Bar color depending on the source (`InfoBar.source`, from `path` relayed by ui.py): the add-on whose `urls`
+(`osd.addons`, their identity) match it, its `colors.bar` (red YouTube, blue Jellyfin, amber Plex); purple otherwise
+and for live.
 
 ### Box status (page, Settings → Status and updates)
 
@@ -599,10 +700,10 @@ app" access of `cast/youtube_tv.js` (below), signed in with a code on google.com
 are one per channel) and the next page of its section list (`feedNext`), video tiles only (`TILE_CONTENT_TYPE_SHORTS`
 left out): channel from the tile's long-press menu (`browseId` UC…), date from "… ago" (`age`), duration and views
 from the overlay and the lines, lives ("… watching") first, then newest first, 60 at most, kept 15 min (`?fresh=1`:
-reread, "Reload my subscriptions"); `subscriptionVideos(pages)` is the pure parsing. `youtube.yt_subscriptions()` with
+reread, "Reload my subscriptions"); `subscriptionVideos(pages)` is the pure parsing. `yt_subscriptions()` (addons/youtube/service.py) with
 the progress. `GET /api/youtube` → `subs` {authorized, pending, unavailable, videos}; `GET /api/youtube_account` →
 {authorized, pending, unavailable}; `POST /api/youtube_login|youtube_logout|youtube_sync`. TV: "Connect my account"
-card in the Subscriptions row as long as the box is not connected → code popup and QR code (`ytAuth`, reread every
+card in the Subscriptions row as long as the box is not connected → code popup and QR code (the add-on's account dialogs, reread every
 3 s); "YouTube account" row of Settings → Accounts and links (reload subscriptions, disconnect). Page: "YouTube
 account" section of Settings (code, status). Video title and duration (`yt_meta`: a video cast from the YouTube app,
 resume at the account's percentage): `GET /meta?id=` of youtube_tv.js (`/player`), oEmbed (title only) otherwise.
@@ -613,7 +714,7 @@ Recommended for you (first row under the search): the account's YouTube home thr
 (cast/youtube_tv.js `GET /recommended`: `/browse` FEwhat_to_watch with the TV client, first two pages, video tiles
 only — `tileRenderer` with `TILE_CONTENT_TYPE_VIDEO`: contentId, title, first line = channel, duration and views from
 the overlay and the lines, "LIVE" overlay — without duplicates, 30 at most, kept 30 min; `recommendedVideos(data)` is
-the pure parsing), `youtube.yt_tv_recommended`, `youtube_home()["recommended"]` with the progress (`with_progress`).
+the pure parsing), `yt_tv_recommended`, `youtube_home()["recommended"]` with the progress (`with_progress`).
 Authenticated requests as the TV app makes them, not yt-dlp extractions: no bot check. Row kind `rec` in the QML menu,
 "Recommended for you" in the quick menu; not in the companion app (it shows no video rows).
 Favorites (`youtube.json` list, one row per channel): Options on a subscription video → "Add to favorites"
@@ -630,7 +731,7 @@ system; background, glows, rail, focus glows (`FocusFrame.glow`), `VideoCard.acc
 dark knob in neutral), actions popup, keyboard. Blue is left free for Jellyfin. Logo (`qml/Logo.qml`, icons `icon-*.png`): white tile, rounded charcoal triangle, neutral on a purple background as well as on red.
 
 ### Plex (QML menu tab and page)
-`plex.py`: a Plex server of the local network, chosen in the companion app (Settings → Plex, `POST /api/plex
+`addons/plex/service.py`: a Plex server of the local network, chosen in the companion app (Settings → Plex, `POST /api/plex
 {address, token?}`, checked with `/identity` and `/library/sections` before being kept; empty address: forget it), in
 `~/.config/stream-box/plex.json` (600, with the box's `X-Plex-Client-Identifier`). Without a token, Plex must let the
 box's network in (Plex setting "List of IP addresses and networks that are allowed without auth"). Same card fields
@@ -638,17 +739,19 @@ as Jellyfin (`px_item`), same API shape: `/api/plex` (On Deck split into resume 
 library), `/api/plex_search` (`/hubs/search`), `/api/plex_series` (`allLeaves`), `POST /api/plex_play` (direct play
 of the file, `/library/parts/…`, no transcoding). Progress: `/:/timeline` and `/:/progress` every 10 s
 (`playback.history_loop`), `/:/scrobble` at the end (`px_report`); links `plex:<ratingKey>` in the history. Next
-episode: `next_up` with `service: "plex"` and the `path` being played (Plex files hold no item id). Colors: amber
+episode: `next_up` with `post: "plex_play"` and the `path` being played. Colors: amber
 (`#e5a00d`), bar and loading screen too.
 Sign-in with a Plex account by code: `POST /api/plex_link` (`plex.link_start`: plex.tv PIN, 4 characters, 15 min),
 `GET /api/plex_link` (`link_state`: configured, name, account, pending {code, error}); a thread polls the PIN every
 3 s, then reads the account's servers (`/resources`), owned ones first, and keeps the first the box reaches (local
 connections first, plain `http://<LAN address>:<port>` before the plex.direct https one) through `set_plex`, with the
-server's access token and the account name. TV: "Plex" row of the System menu (`plexMenu`: sign in, disconnect), code
-dialog `CodeDialog` (shared with the YouTube account: `menu.codeDialog` gives its texts, QR code of plex.tv/link);
+server's access token and the account name. TV: "Plex" row of Settings → Accounts and links (addons/plex/account.py: sign in, disconnect), code
+dialog `CodeDialog` (every add-on's code dialog: `menu.codeDialog` gives its texts, QR code of plex.tv/link);
 companion app: "Sign in with a Plex account" button in the Plex section (polls while a code is shown).
-TV menu: Jellyfin and Plex share the code of the library tabs (`libs[id]`: home, results, preview, searching, row, sel;
-`libRows`, `libChoose`, `libPlay`; `/api/<id>…`). A library tab only shows when it is connected (`st.libraries`);
+TV menu: YouTube, Jellyfin and Plex share the code of the rows tabs (`libs[id]`: home, search, preview, row, sel;
+`loadRows`, `mediaSearch`, `openTarget`, `mediaRows`, `cardChoose`, `playCard`, `cardOption`; the rows from
+`GET /api/rows`, step 2 of the addons). OK on a card: what it declares (connect, open, play); plays at once when there
+is one choice (not resumable), otherwise Resume / From the beginning and its options; ≡: always the dialog. A library tab only shows when it is connected (`st.libraries`);
 while none is, a "Libraries" tab (`LibrariesTab`) tells how to connect Jellyfin or Plex, with the QR code. `tabs` is
 filtered from `allTabs`; `tabKept` keeps the same tab when the list changes; `railStep` 70 instead of 76 with 9 tabs.
 Test server: Docker `plexinc/pms-docker`, port published with `-p` (it then gets past ufw, `--network host` does
@@ -665,12 +768,12 @@ server's position, title passed to mpv (`streambox-play url start title` → `fo
 %n% prefix). Progress reported to the server: `Sessions/Playing` at start, `/Progress` every 10 s by
 history_loop, `/Stopped` on stop (the server decides what is "watched"). Entry in the box's history as
 "jellyfin:ID" (without token; `play()` restarts it through jellyfin_play), also for playbacks started by the shim
-("Play on…", `shim_video`: the shim reports on its own). External subtitles (.srt next to the file) missing from the
+("Play on…", `shim_video` of addons/jellyfin, the addon's `outside_video`: the shim reports on its own). External subtitles (.srt next to the file) missing from the
 direct stream: added by `sub-add` once the video is open (`jf_add_subtitles`). The
 server's images are public (no token in their links).
 TV: "Jellyfin" tab (blue theme) on the same page as YouTube (`mediaRows`, `mRow`/`mSel`, `keyMedia`, its own
-state `jfRow`/`jfSel`): search with the on-screen keyboard, episodes of an open series, Continue watching, Next
-up, recently added; OK on a movie or an episode: Resume / From the beginning / All episodes. Rail
+state in `libs.jellyfin`): search with the on-screen keyboard, episodes of an open series, Continue watching, Next
+up, recently added; OK on a movie or an episode: plays (or Resume / From the beginning), ≡ adds All episodes. Rail
 tightened (step of 76) for 9 tabs. Horizontal
 rows: card-by-card scrolling aligned to the left (`first`, `fits`), row clipped 28 px before the content
 (`clip` on a wrapper taller than the cards, for the glow) and cards shown according to the targeted window, not
@@ -680,7 +783,7 @@ around for the glow) that stops under the title and above the help at the bottom
 according to the targeted row. QML pitfall: a function must not reuse the name of a property
 (`setSel` existed: the tab's keys failed silently, except in the log).
 Page: Jellyfin block of the Remote tab (chips per row, search, episodes of a series).
-Sign-in by Quick Connect (`jellyfin.py`, the shim does it): `POST /api/jellyfin_link {address}` (`qc_start`: address
+Sign-in by Quick Connect (`addons/jellyfin/service.py`, the shim does it): `POST /api/jellyfin_link {address}` (`qc_start`: address
 completed with `http://` and `:8096`, checked with `/System/Info/Public`, `users.json` saved as
 `users.json.before-quick-connect`, then `jellyfin-mpv-shim --no-gui --server <address> --quick-connect clear`, which
 prints the 6-digit code alone on a line, writes `users.json` once approved and goes on as the usual player; it needs
@@ -689,8 +792,8 @@ signing in, or on `{action: "cancel"}` (`qc_cancel`: terminate, kill after 3 s),
 and the usual shim restarted (`qc_restore`); given up after 5 min. `{action: "forget"}` removes `users.json` and stops
 the shim. `GET /api/jellyfin_link[?find=1]` (`link_state`: configured, address, name, pending {server, name, code,
 error}, `servers` found by UDP broadcast "who is JellyfinServer?" on 7359, address = the IP that answered: the one
-announced can be a Docker one). TV: "Jellyfin" row of the System menu (`jellyfinMenu`: servers found, disconnect;
-none found: the companion app), code in `CodeDialog` (`jfLink`, polled every 2 s, Back cancels); companion app:
+announced can be a Docker one). TV: "Jellyfin" row of Settings → Accounts and links (addons/jellyfin/account.py: servers found,
+disconnect; none found: the companion app), code in `CodeDialog` (polled every 2 s, Back cancels); companion app:
 Jellyfin section of Settings (address, Connect, code, Cancel, Disconnect). Test server: Docker `jellyfin/jellyfin`,
 `-p 8096:8096 -p 7359:7359/udp` (broadcasts do not reach it through Docker's NAT: give the address).
 
@@ -717,7 +820,8 @@ Menu background: two blurred glows (RectangularShadow, no sharp shape) in the ta
 stream-box.lua (`set_loading`) publishes `user-data/streambox/loading` {title, thumb} when a video starts
 (`play_media url start forced_title image shown_title`) or a channel starts (`start_channel`), and clears it at the first
 frame (`playback-restart`), on error, on the home screen or after 45 s. `qml/LoadingOverlay.qml` (relay
-`osd.loading`, `kind`: twitch, youtube, jellyfin, video): blurred thumbnail, box logo that breathes, glow in the
+`osd.loading`, `kind`: the add-on of what loads, given by remote.py (`addons.play_video` → streambox-play's 6th
+argument; "twitch" for a channel, "video" for a link of none), its accent and name from `osd.addons`): blurred thumbnail, box logo that breathes, glow in the
 source's color running along the triangle's outline (dashed ShapePath, animated `dashOffset`), ripples;
 drop shadow under the texts; fade in and out. With mpv alone
 (`vo` ≠ libmpv): "Loading {title}…" as the centered status message (the only one, also for a Twitch channel). Title and image come from remote.py (history, Jellyfin)
@@ -762,10 +866,10 @@ title over a light image.
   read by ui.py with the position: marks on the bar, current chapter in the info line. Time left
   and end time ("−21:26 · ends at 02:30").
 - Pause screen (`qml/PauseScreen.qml`): dimmed image, pause icon in the center of the screen (no more overview here).
-- Next episode (Jellyfin): remote.py publishes `user-data/streambox/next_up` {id, of, title, episode, thumb}
-  (`Shows/{series}/Episodes?AdjacentTo=`); in the last 20 seconds, stream-box.lua publishes `next_card`
-  {seconds, …} → `qml/NextUp.qml` (OK: play, Back: stay); at the end of the file, the next episode starts
-  (POST /api/jellyfin_play). `of`: only during the episode it follows (not for a playback from the shim).
+- Next episode (Jellyfin, Plex): the add-on publishes `user-data/streambox/next_up` {id, of, title, episode, thumb,
+  post, path} (Jellyfin: `Shows/{series}/Episodes?AdjacentTo=`); in the last 20 seconds, stream-box.lua publishes
+  `next_card` {seconds, …} → `qml/NextUp.qml` (OK: play, Back: stay); at the end of the file, the next episode starts
+  (POST /api/<post>). Only while `path` (the episode it follows) plays, not for a playback from the shim.
 
 ### Home Assistant: "Powered on" state
 
@@ -781,8 +885,11 @@ so `off` and never `unavailable`. The other entities: available if `status` = on
 `bash image/build.sh xz`: stream-box.raw.xz, ~1.6 GB, the version to download; built and published as a GitHub
 release with its sha256 by `.github/workflows/image.yml` on every `v*` tag, release files being limited to 2 GB; the
 release text is the version's section of CHANGELOG.md (`## [x.y.z]`, important changes only, written before tagging),
-then how to install; `.github/workflows/release-notes.yml` (run by hand from the Actions tab) rewrites the text of an
-existing release from main's CHANGELOG.md without rebuilding; versions are SemVer: tags vX.Y.Z)
+then how to install; a version tag publishes a pre-release, which no box sees (they read releases/latest): tried on
+a box first through a local update of its files, then made the latest release by hand, `gh release edit vX.Y.Z
+--prerelease=false --latest`, under the same number (a box sorts X.Y.Z-rc1 after X.Y.Z); the monthly rebuild is
+published as the latest release at once; `.github/workflows/release-notes.yml` (run by hand from the Actions tab)
+rewrites the text of an existing release from main's CHANGELOG.md without rebuilding; versions are SemVer: tags vX.Y.Z)
 in an Arch Docker container with mkosi 27 (nothing installed on the machine); `bash image/build.sh vm` boots it
 in QEMU. Arch base (not CachyOS), UEFI, systemd-boot + UKI. greetd starts media's cage session at boot
 (no keyboard/login screen choice like boot-mode.py). `mkosi.prepare.chroot` (with network): user
@@ -895,7 +1002,8 @@ BTN_* and ABS_HAT pad of gamepads), translated into actions (DEFAULTS, then keym
 5 s, and as long as that is fresh (15 s) stream-box.lua and ui.py ignore keys received by mpv / Qt (otherwise doubled).
 Without permissions on /dev/input, it stops: old path (mpv names and 0x21… keysyms, KEYS of stream-box.lua) as
 fallback. Actions: up down left right ok back home menu corner power volume_up volume_down mute (homescreen: no key by
-default any more, kept for keys learned before). Gamepads: the middle button, Select and the Deck's "…" = TV menu, Start = options. The
+default any more, kept for keys learned before). Gamepads: the middle button, Select and the Deck's "…" = TV menu (sent on release, as on a console:
+`pad_home`; pressed during a game stream, its release does nothing), Start = options. The
 page's virtual remote also sends actions (`streambox-input VIRTUAL <action>`, never learned).
 Held key: repeated by input.py itself (`REPEATABLE`: arrows, volume; 400 ms then every 80 ms, the gamepad d-pad
 too), the kernel's repeats (value 2) are ignored: the Xiaomi remote's "Consumer Control" entry (arrows, OK, volume)
@@ -905,8 +1013,15 @@ stream-box.lua, the actions one by one (8 s each, without a key it keeps its own
 refused), learned keys added to `~/.config/stream-box/keymap.json` ({name: action}, Linux names via input.py or
 mpv names as fallback), state in `user-data/streambox/learn` → `qml/KeyWizard.qml` (on-screen message with mpv alone).
 ui.py also applies keymap.json to the open QML menu. Bluetooth (btsetup.py, `GET/POST /api/bluetooth`): list of
-paired devices, 20 s scan, pairing without a code (NoInputNoOutput agent) + trust + connect, unpairing;
-"Remotes and controllers" popup of the System menu (QML: `btMenu`, `btScan`, reread every 2 s).
+paired devices, 60 s scan read as bluetoothctl's events come (`parse`: the devices show up at once), the first remote,
+gamepad or keyboard seen paired by itself (`scan(auto=True)`, the TV's: an Xbox controller stays in pairing mode
+~20 s), pairing without a code (NoInputNoOutput agent; the scan stopped first, some adapters don't connect while
+scanning) + trust + connect, its steps in `message`; a device already paired here but seen in the scan (its bond lost:
+paired with a console or a PC since) offered "pair again": removed, looked for again, paired; a failed pairing tried
+a second time the same way; unpairing. Image: /etc/bluetooth/main.conf `JustWorksRepairing = always` (such a device
+pairs again by itself). "Remotes and controllers" popup of the System menu (QML: `btMenu`, `btScan`, reread every 2 s,
+how to put an Xbox controller or the Xiaomi remote in pairing mode in the dialog's `help` line).
+tests/test_btsetup.py runs it against a fake bluetoothctl.
 Reboot: `POST /api/reboot` (`systemctl reboot`, polkit login1.reboot* added), "Restart the box" in the System menu
 (second OK within 4 s), button in Settings → Status and updates of the page, "Restart" button in Home Assistant.
 Power held for 1 s → "Box" popup ("☾  Sleep", "↻  Restart", "⏻  Shut down", "Cancel"; QML menu `powerMenu`,
@@ -922,7 +1037,14 @@ The popup is shown alone over the video, without the menu behind it (`powerOnly`
 YouTube app's Cast button (DIAL / SSDP discovery on the local network, TCP port 3000, UDP 1900; firewall to
 open if there is one). Cast video → `POST /api/play` {url, start} (position set by the app, `play(at=)`);
 pause, resume, seek, volume → mpv IPC; state changed from the remote sent back to the app (`notifyExternalStateChange`),
-end of video → next in the queue; "Stop casting" → back to the stream (`/api/twitch`). Pairings in
+end of video → next in the queue; "Stop casting" → the video left, back to the menu (`/api/home`, 1.5 s later and
+only if no other video was asked for meanwhile: the app stops a video before playing the next one; the phone asleep or
+the app closed leave it playing, `ALL_EXPLICITLY_DISCONNECTED`). A YouTube video started on the box (TV menu, history)
+is adopted at its first frame (`adopt`: the receiver's current video, playing or paused): a phone that connects sees it
+and drives it; it ending with no phone connected leaves the receiver stopped. The app shows "loading"
+until the player's `doPlay` / `doSeek` resolve, then counts the time itself: they resolve once mpv shows the video's
+picture (`shown`: `playback-restart` with its id in `path`; an error not followed by another try within 5 s fails it),
+the position meanwhile the one asked for. Pairings in
 `~/.config/stream-box/cast-receiver.json`. Started by start.sh if `cast/node_modules` exists; modules installed by
 `npm ci --omit=dev` in `cast/` (versions from `cast/package-lock.json`, ~40 MB) by install.sh, the image
 (mkosi.prepare.chroot) and update.sh (if the versions file has changed). Loading screen title: the app only
@@ -1014,7 +1136,7 @@ restore`), media's SSH password and sshd enabled (`ssh-access restore`, start --
 there would wait for itself); SSH host keys in /etc/ssh/keys (sshd_config.d/40-stream-box-keys.conf), copied from
 /etc/ssh the first time (same identity) or made. Without a data partition (box installed before), persist mount does
 nothing and the settings stay on the system partition. The streamer list moved to ~/.config/stream-box/streamers.txt
-(the code folder is replaced with the system): twitch.py moves a list still next to the code there at its start
+(the code folder is replaced with the system): addons/twitch/service.py moves a list still next to the code there at its start
 (also one restored from an older backup), stream-box.lua reads the old place until then. The installer copies the USB
 drive's /data to the disk's. The data partition is found with `blkid -p` on the disk of / (persist runs before udev
 has read the labels: lsblk returned nothing on the installed disk). Tested in QEMU with the test image: stick (first
@@ -1133,6 +1255,30 @@ restart, the whole chain from `POST /api/update`. The service does not wait for 
 systemd-networkd-wait-online, which gives up after 2 min on a NetworkManager box). update.sh lists the changed packages with `comm` (the image has
 no diffutils: `diff` made it log "failed").
 
+### System extensions (image: Moonlight, Node.js)
+The image ships without Moonlight (the PC link) and Node.js (YouTube: its token server, the Cast receiver, yt-dlp's
+JavaScript, npm for update.sh): at the end of its build, `image/split-extensions.py` (mkosi.finalize.chroot, in the
+image: `pacman -Rsp` gives each one's packages with the dependencies nothing else needs; a guard stops on essential
+ones) packs their files into `stream-box-<name>.tar.xz` ($OUTPUTDIR; usr/ and
+usr/lib/extension-release.d/extension-release.stream-box-<name>, ID=arch) and removes them; `build.sh release` publishes
+them as `stream-box-<name>_<version>.tar.xz` in SHA256SUMS (signed with the rest). Moonlight takes the system's Qt with
+it (the interface has PySide6's own). On the box: `/usr/local/lib/stream-box/extensions` — `link` (early,
+stream-box-extensions-link.service, before systemd-sysext.service): those wanted and there for the running version
+linked into /run/extensions; `sync` (stream-box-extensions.service: at boot, and started by remote.py when an add-on is
+turned on or off, polkit rule 59): wanted = the add-ons on (media's addons.json; addon → extension: gamestream →
+moonlight, youtube → node), the missing ones downloaded for the running IMAGE_VERSION from its release (network waited
+for, 15 min), checked (gpgv with the release key, sha256; unsigned only in developer mode), unpacked into
+/var/lib/stream-box/extensions/stream-box-<name>_<version> (data partition: an A/B update brings a new version, its
+extensions are downloaded after the boot onto it), the others removed, `systemd-sysext refresh`; state in
+/run/stream-box-extensions.json, shown in Settings → Add-ons (`extension` of `/api/addons`, app/system/extensions.py).
+A build of your own: its base URL in /var/lib/stream-box/extensions/source. Moonlight is looked up at each use
+(gamestream `moonlight()`), start.sh's Cast receiver waits for node, the token server's restarts find it. Also removed
+from the image: binutils and gettext's tools, Qt's translations other than French and English. Measured on a test image:
+extensions 254 MB (Moonlight) and 101 MB (Node.js) installed, 40 and 21 MB compressed; the system partition's xz 1365 MB
+(1462 MB for 0.7.0). Tested in QEMU: the box runs without them (the interface, its server), the PC link hidden; the sync
+downloads, checks and merges both in 15 s, the Cast receiver and the token server start by themselves; the PC link off
+removes Moonlight; after a reboot Node.js is merged from the start.
+
 ### On a USB drive (flash-mode, image)
 `/usr/local/lib/stream-box/flash-mode` (`stream-box-flash-mode.service`, at each boot before greetd): when `/` is on a
 USB disk (`lsblk -dno TRAN` = usb: the image on a stick, before "Install on this PC" or kept there), fewer writes to
@@ -1229,7 +1375,7 @@ run, never published: `/etc/ssh/stream-box-test-keys`). QEMU in the mkosi contai
 `usb-storage` + blank NVMe for the installer, `-vga std`, QEMU monitor for screenshots (`screendump`).
 
 ### PC link (games streamed from PCs)
-`gamestream.py`: pairing and streaming through moonlight-qt's command line (in the image; `moonlight pair <pc> --pin`
+`addons/gamestream/service.py`: pairing and streaming through moonlight-qt's command line (in the image; `moonlight pair <pc> --pin`
 with a code the box picks, `moonlight stream <pc> <app>`; pairing runs with Qt's offscreen platform, or moonlight-qt
 opens its own full-screen window over the menu). The games, their box art (`/api/gamestream_art?host=&id=`, cached in
 `~/.cache/stream-box/gamestream/<PC>`) and closing a game go to Sunshine directly (HTTPS 47984, Moonlight's client
@@ -1239,11 +1385,11 @@ the background every 30 s) and the paired ones (`~/.config/stream-box/gamestream
 form `{"host"}` is still read). `GET /api/gamestream` → `{pcs: [{host, name, online, playing, paired, loading,
 unpaired_on_pc, apps}], pairing: {pin, host, name, page} | {error}, searching, streaming}`; actions (with `host`)
 `gamestream_pair`, `_pair_cancel`, `_search`, `_forget`, `_launch` (+ `app`), `_stop`, `_quit`; `/api/features` has
-`gamestream` (Moonlight installed). TV menu tab "PC link" (`games`, menu/GamesTab.qml): chips of the PCs (green paired,
+`gamestream` (Moonlight installed). TV menu tab "PC link" (`games`, the add-on's own addons/gamestream/GamesTab.qml): chips of the PCs (green paired,
 amber to pair, grey off; OK pairs, ≡ the PC's choices), the chosen PC's games as 3:4 posters (5 per row, ▲ back to the
 chips); the pairing code in CodeDialog. Settings → Accounts and links → PC (Sunshine): the PCs, each to pair (again)
 or forget, and "Search again". During a stream Moonlight covers the screen; its PID is in
-`/tmp/stream-box-gamestream.pid` and input.py then leaves every key to it, except Home held 1 s (remote or the
+`/tmp/stream-box-external-app.pid` and input.py then leaves every key to it, except Home held 1 s (remote or the
 gamepad's middle button) which ends the stream; when it ends the TV menu opens again.
 
 ### Regular keyboard
@@ -1271,8 +1417,9 @@ id; Items by DateCreated with StartIndex: Items/Latest has no paging), `plex_lib
 X-Plex-Container-Start), `yt_recommended` / `yt_subscriptions` (youtube_tv.js `/recommended?offset=` and
 `/subscriptions?offset=`: `feeds` keeps every video read and the next page's token, `feedMore` reads up to 4 more
 pages), `jellyfin_resume` / `_nextup` / `_search` (StartIndex), `plex_resume` / `_nextup` (On Deck read whole, split)
-and `plex_search` (a larger limit, the start cut off). TV menu: `moreSource(row)` says where a row's next items come from, `withMore` (applied to
-ytRows, libRows, replayRows) appends the items already loaded (`moreRows`, by "<source>|<key>|<query>", duplicates
+and `plex_search` (a larger limit, the start cut off). TV menu: `moreSource(row)` says where a row's next items come
+from (an addon's row says it, `more`, read through `GET /api/rows?…&more=`, already as cards; the replays here),
+`withMore` (applied to mediaRows and replayRows) appends the items already loaded (`moreRows`, by "<source>|<key>|<query>", duplicates
 dropped) and a "Load more" card (`more: true`, glyph "+") while there may be more; OK on it → `loadMore` (focus stays
 on the place, which becomes the first new item); ≡ does nothing there. Every video row has it, except the found
 channels and a series' episodes (all there already). qmlshots: fake `/api/more`, steps at the end of a Replays row.
@@ -1282,10 +1429,14 @@ channels and a series' episodes (all there already). qmlshots: fake `/api/more`,
 observes `paused-for-cache`, `seeking`, `core-idle` (after a seek mpv waits for data without paused-for-cache:
 `cache-pause-initial` is off), `cache-buffering-state` and `pause` into `osd.waiting` ({cache, seeking, idle, pct,
 pause}); shown after 0.4 s of waiting, not while paused (PauseScreen has the center) nor during the loading screen.
-TV menu: ≡ on any YouTube video card → `ytVideoOptions` (play or resume / from the beginning, and when the channel is
-known "See latest videos of {channel}" and the favorite toggle); the channel comes from the row (favorites' rows,
-the found channel's preview) or the card's `channel_id`: youtube_tv.js gives it for Recommended too (the tile's
-long-press menu, as for subscriptions) and the search results carry yt-dlp's.
+TV menu: ≡ on any YouTube video card → play or resume / from the beginning, and when the channel is known "See latest
+videos of {channel}" and the favorite toggle (the card's `options`, addons/youtube `channel_options`); the channel comes
+from the row (favorites' rows, the opened channel) or the video's `channel_id` (search results: yt-dlp's). Since
+2026-10-31 the TV home tiles no longer name their channel (their long-press menu is an engagement panel read apart):
+those cards carry `more_options` ({target: "video:<id>"}) and ≡ opens their dialog at once with "Loading…", then
+`GET /api/rows?addon=youtube&options=video:<id>` (addons/youtube `card_options` → youtube_tv.js `GET /channel?id=`: the
+TV `/next`'s byline, `shortBylineText`) completes it: one request for that card, never per card. The subscriptions'
+tiles still name it.
 
 ### Inlet app window
 The TV menu stays driven by keys only (remote, gamepad, keyboard; no mouse navigation, the user's choice). Inlet app
@@ -1317,8 +1468,8 @@ boot on the Dell: 13.6 s. To try a boot option without rebuilding the kernel: sy
 
 ### Remembered subtitles (per video)
 The choice made in the Subtitles / audio panel (Qt app) is kept for the current video in
-`~/.local/state/stream-box/sub_prefs.json` (key: YouTube id `v=`, Jellyfin id from `/Videos/<id>/`,
-otherwise the link; {lang, t}, 300 videos at most, the oldest go; `no` for off) and restored when it is
+`~/.local/state/stream-box/sub_prefs.json` (key: the one its add-on gave, `youtube:<id>`, `jellyfin:<id>`…,
+otherwise the link; the bare ids written until 0.7 are still read; {lang, t}, 300 videos at most, the oldest go; `no` for off) and restored when it is
 resumed (stream-box.lua `apply_sub_pref`, on `file-loaded` in media mode, then on each `track-list` change
 for 20 s: Jellyfin's external subtitles arrive after opening; same language on the first two
 letters, "forced" tracks last). A video without a choice keeps mpv's.
@@ -1338,17 +1489,17 @@ bar, Back leaves the title without stopping the video; stream-box.lua `info_open
 length of the text), Back / OK / ≡ close; closed at the end of the file.
 
 ### YouTube rating and comments (video)
-Like / Dislike buttons of the playback bar: youtube.py `yt_rating_fetch` at the start of a YouTube video (youtube_tv.js
-`GET /rating?id=`: `likeStatus` of the TV `/next`) → `user-data/streambox/rating` {id, status: LIKE | DISLIKE |
-INDIFFERENT}, empty when not connected (no buttons then). OK: stream-box.lua `rate` lights the button up at once and
-`POST /api/yt_rate` {rating: like | dislike | none} (the same button again: none); youtube_tv.js `POST /rate` calls
+Like / Dislike buttons of the playback bar: addons/youtube `yt_rating_fetch` at the start of a YouTube video (youtube_tv.js
+`GET /rating?id=`: `likeStatus` of the TV `/next`) → `publish_actions` (the addon's buttons, step 4 of the addons:
+👍 👎 in the group "rating" when connected, Comments always). OK: stream-box.lua lights the button up at once and
+`POST /api/yt_rate` {rating: like | dislike | none} (the same button again: its off_body, none); youtube_tv.js `POST /rate` calls
 `/like/like`, `/like/dislike` or `/like/removelike` with the params the TV `/next` gives (`likeParams`…, read again each
 time: they carry a time). youtubei.js's `interact.like` is refused (400). The state YouTube confirms is published again.
 Comments: the Comments button opens `qml/CommentsPanel.qml` (right side, like the Info panel); `POST /api/yt_comments`
-({more: true}: next page; {replies: n}: the replies of comment n, with {more: true} their next page) → youtube.py reads
+({more: true}: next page; {replies: n}: the replies of comment n, with {more: true} their next page) → addons/youtube reads
 youtube_tv.js `GET /comments?id=&hl=&token=` and publishes `user-data/streambox/comments` {id, items, more, loading,
 error, thread: {index, items, more, loading}} (kept for the video: reopening reads nothing; the reply tokens stay in
-youtube.py). youtube_tv.js: anonymous web session per language (dates "il y a 6 ans"), raw `/next`: the continuation
+addons/youtube). youtube_tv.js: anonymous web session per language (dates "il y a 6 ans"), raw `/next`: the continuation
 near `comment-item-section`, then its pages (20, by relevance); `commentPage` reads a page of comments or of replies
 (same shape): its items in order (`onResponseReceivedEndpoints` continuation items), texts in
 `frameworkUpdates…commentEntityPayload` by the item's `commentKey`, each thread's `replies_token`, `next` from the last

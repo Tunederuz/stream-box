@@ -73,7 +73,12 @@ Item {
 
     Fit {   // (the interface's drawing area, stretched to the screen's shape: qml/Fit.qml)
         // background changed in the menu: right away here too
-        AmbientScreen { backdrop: tvMenu.st.backdrop || null; covered: tvMenu.isOpen && !tvMenu.powerOnly }
+        // Stepping aside over a video and the menu's live preview too: its state from stream-box.lua is read every 2 s,
+        // it would come back for a moment when the menu closes onto the live it previewed
+        AmbientScreen {
+            backdrop: tvMenu.st.backdrop || null
+            covered: (tvMenu.isOpen && !tvMenu.powerOnly) || box.videoActive || box.previewActive || tvMenu.adopting
+        }
         ChatOverlay {}
         PollsOverlay {}
         LoadingOverlay {}

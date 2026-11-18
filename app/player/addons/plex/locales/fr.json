@@ -1,0 +1,19 @@
+{
+ "+  Sign in with a Plex account": "+  Se connecter avec un compte Plex",
+ "+  Sign in with another Plex account": "+  Se connecter avec un autre compte Plex",
+ "No Plex server of this account answers the box": "Aucun serveur Plex de ce compte ne répond à la box",
+ "On your phone, open plex.tv/link and enter:": "Sur ton téléphone, ouvre plex.tv/link et saisis :",
+ "Or in the companion app (QR code below): Settings → Plex, a server's address.": "Ou dans l'app compagnon (QR code ci-dessous) : Réglages → Plex, l'adresse d'un serveur.",
+ "Plex is not connected to the box.": "Plex n'est pas connecté à la box.",
+ "Plex refuses the box ({code}): give a token, or allow the network in Plex's settings": "Plex refuse la box ({code}) : donne un jeton, ou autorise le réseau dans les réglages de Plex",
+ "Plex unreachable: {error}": "Plex injoignable : {error}",
+ "plex.tv unreachable: {error}": "plex.tv injoignable : {error}",
+ "Plex: {server}": "Plex : {server}",
+ "Settings → Accounts and links → Plex: sign in with your Plex account, with a code to type on plex.tv/link.": "Réglages → Comptes et liens → Plex : connecte-toi avec ton compte Plex, avec un code à taper sur plex.tv/link.",
+ "The box then takes the first server of the account it reaches, local ones first.": "La box prend ensuite le premier serveur du compte qu'elle arrive à joindre, les serveurs locaux d'abord.",
+ "The Plex tab then shows here, with your library.": "L'onglet Plex apparaît alors ici, avec ta bibliothèque.",
+ "This Plex account has no server": "Ce compte Plex n'a pas de serveur",
+ "Your movies and series of a Plex server": "Tes films et séries d'un serveur Plex",
+ "Your Plex server's movies and series": "Les films et séries de ton serveur Plex",
+ "✕  Disconnect Plex": "✕  Déconnecter Plex"
+}

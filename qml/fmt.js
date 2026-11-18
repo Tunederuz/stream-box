@@ -51,6 +51,18 @@ function big(v, tr) {
     return viewers(v, tr)
 }
 
+// The details line of a video (user-data/streambox/meta's details, from its add-on): each item a text, or {views: n},
+// {rating: x}; "info": only in the info panel (the playback bar's title already says it: series, episode)
+function details(meta, tr, panel) {
+    return (meta.details || []).map(function (d) {
+        if (typeof d === "string") return d
+        if (d.info && !panel) return ""
+        if (d.views) return _t(tr, "{n} views", { n: big(d.views, tr) })
+        if (d.rating) return "★ " + decimal(d.rating, tr)
+        return d.text || ""
+    }).filter(function (t) { return !!t })
+}
+
 // Duration of a live: "2h 14m", "35 min"
 function since(epochSeconds, tr) {
     var s = Math.max(0, Date.now() / 1000 - (Number(epochSeconds) || 0))

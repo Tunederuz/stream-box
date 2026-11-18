@@ -20,10 +20,16 @@ from i18n import tr
 
 HOME = os.path.expanduser("~")
 # Relative to the home directory; in the archive: home/<user>/… like backup.sh
-PATHS = (".local/state/stream-box", ".config/stream-box", ".config/streamlink/config.twitch",
-         ".config/jellyfin-mpv-shim", ".local/state/wireplumber")
-# Also restored: the streamer list of older backups, next to the code (twitch.py moves it into the settings)
-RESTORED = PATHS + ("stream-box/streamers.txt",)
+# (plus the add-ons' settings: addons.backup_files())
+CORE_PATHS = (".local/state/stream-box", ".config/stream-box", ".config/streamlink/config.twitch",
+              ".local/state/wireplumber")
+# Also restored: the streamer list of older backups, next to the code (addons/twitch/service.py moves it into the settings)
+OLD_PATHS = ("stream-box/streamers.txt",)
+
+
+def paths():
+    import addons
+    return CORE_PATHS + addons.backup_files()
 SKIP = re.compile(r"(^|/)(fonts|scripts|offline)(/|$)|\.lock|\.bak$|(^|/)update\.log$|(^|/)before-restore\.tar\.gz$")
 MANIFEST = "stream-box-backup.json"
 WIFI = "stream-box-wifi.json"
@@ -77,7 +83,7 @@ def create():
         wifi = wifi_profiles()
         if wifi:
             add_json(tar, WIFI, wifi)
-        for p in PATHS:
+        for p in paths():
             if os.path.exists(os.path.join(HOME, p)):
                 tar.add(os.path.join(HOME, p), arcname=f"{home}/{p}",
                         filter=lambda m: None if SKIP.search(m.name) or not (m.isfile() or m.isdir()) else m)
@@ -96,7 +102,7 @@ def restore(data):
     except (tarfile.TarError, EOFError, OSError):
         raise ValueError(tr("This file is not an Inlet backup."))
     with tar:
-        members, wifi = [], []
+        members, wifi, restored = [], [], paths() + OLD_PATHS
         for m in tar.getmembers():
             if m.name == WIFI and m.isfile():
                 try:
@@ -108,7 +114,7 @@ def restore(data):
             rel = re.match(r"home/[^/]+/(.+)$", m.name)
             rel = rel and rel.group(1)
             if not rel or SKIP.search(rel) or not (m.isfile() or m.isdir()) \
-                    or not any(rel == p or rel.startswith(p + "/") for p in RESTORED):
+                    or not any(rel == p or rel.startswith(p + "/") for p in restored):
                 continue
             m.name = f"{HOME.lstrip('/')}/{rel}"
             members.append(m)

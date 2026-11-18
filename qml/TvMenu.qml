@@ -17,47 +17,67 @@ Item {
     property bool isOpen: false
     // Closing with the home screen: it fades in over the menu (600 ms), the menu stays shown under it meanwhile
     property bool underHome: false
-    onIsOpenChanged: if (!isOpen && box.ambientOn) { underHome = true; underHomeEnd.restart() }
+    onIsOpenChanged: if (!isOpen && box.ambientOn && !adopting) { underHome = true; underHomeEnd.restart() }
     Timer { id: underHomeEnd; interval: 650; onTriggered: menu.underHome = false }
     opacity: isOpen || underHome ? 1 : 0
     visible: opacity > 0
-    Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+    // (longer onto the previewed live it leaves playing)
+    Behavior on opacity { NumberAnimation { duration: menu.adopting ? 500 : 220; easing.type: Easing.OutCubic } }
     function tr(s, a) { return I18n.t(i18n.dict, s, a) }
 
     readonly property string api: "http://127.0.0.1:8080"
-    readonly property var allTabs: [
-        { id: "live", label: "Live" }, { id: "follows", label: "Following" },
-        { id: "replays", label: "Replays" }, { id: "youtube", label: "YouTube" },
-        { id: "jellyfin", label: "Jellyfin", library: true }, { id: "plex", label: "Plex", library: true },
-        { id: "libraries", label: "Libraries" },
-        { id: "games", label: "PC link" },
-        { id: "history", label: "History" },
-        { id: "settings", label: "Settings" }]
+    // The tabs: the add-ons' (/api/features tabs, their order: Twitch's first, the base; until it is read, those of
+    // Twitch), the "Libraries" tab after the library ones, then History and Settings. kind: how the menu draws it
+    // (rows, library: menu/MediaTab.qml; custom: its add-on's own component, customTabs; the base's and the core's)
+    readonly property var addonTabs: features.tabs || [
+        { id: "live", label: "Live", kind: "live", addon: "twitch" },
+        { id: "follows", label: "Following", kind: "follows", addon: "twitch" },
+        { id: "replays", label: "Replays", kind: "replays", addon: "twitch", kinds: ["twitch-vod", "twitch-clip"] }]
+    readonly property var libraryTabs: addonTabs.filter(function (t) { return t.kind === "library" && addonOn(t.addon) })
+    readonly property var allTabs: {
+        var out = [], last = libraryTabs[libraryTabs.length - 1]
+        addonTabs.forEach(function (t) {
+            out.push(t)
+            if (last && t.id === last.id) out.push({ id: "libraries", label: "Libraries", kind: "libraries" })
+        })
+        return out.concat([{ id: "history", label: "History", kind: "history" }, { id: "settings", label: "Settings", kind: "settings" }])
+    }
     // Video libraries only when connected to the box (/api/state libraries), otherwise one "Libraries" tab that tells how
     // to connect them; the chosen tab stays the same one
-    readonly property bool anyLibrary: !!((st.libraries || {}).jellyfin || (st.libraries || {}).plex)
+    readonly property bool anyLibrary: libraryTabs.some(function (t) { return !!(st.libraries || {})[t.id] })
+    // An add-on turned off (Settings → Add-ons; /api/state addons: those on, everything until the state is read): its
+    // tab and its rows hide
+    function addonOn(id) { return !st.addons || st.addons.indexOf(id) >= 0 }
     readonly property var tabs: allTabs.filter(function (t) {
-        if (t.id === "games") return !!features.gamestream   // (Moonlight installed: the box's image)
-        return t.library ? !!(st.libraries || {})[t.id] : t.id !== "libraries" || !anyLibrary })
+        if (t.addon && (!addonOn(t.addon) || t.available === false)) return false   // (the PC link: Moonlight there)
+        if (t.kind === "library") return !!(st.libraries || {})[t.id]
+        if (t.kind === "libraries") return !anyLibrary && libraryTabs.length > 0
+        return true })
+    readonly property var tabInfo: tabs[tab] || ({})
+    readonly property string tabKind: tabInfo.kind || ""
+    function tabById(id) { return allTabs.find(function (t) { return t.id === id }) || ({}) }
+    // Tabs an add-on draws itself (kind custom: its qml, from app/player), each loaded once (customTabs below)
+    readonly property var customTabs: addonTabs.filter(function (t) { return t.kind === "custom" })
+    function customItem(id) {
+        for (var i = 0; i < customRepeater.count; i++) {
+            var l = customRepeater.itemAt(i)
+            if (l && l.tabId === id) return l.item
+        }
+        return null
+    }
     property string tabKept: "live"
     onTabsChanged: tab = Math.max(0, tabs.findIndex(function (t) { return t.id === tabKept }))
     readonly property var corners: ({ tl: "↖ top left", tr: "↗ top right", br: "↘ bottom right", bl: "↙ bottom left" })
     readonly property var qrModes: [["always", "Always"], ["timed", "30 seconds"], ["never", "Never"]]
-    readonly property var kinds: ({ youtube: "YouTube", "twitch-vod": "Twitch replay", "twitch-clip": "Twitch clip", link: "Link", jellyfin: "Jellyfin",
-                                    plex: "Plex" })
 
     // Data (reloaded on open; reassigned as a whole so bindings follow)
     property var st: ({})
+    property var addons: null   // GET /api/addons: each add-on, its description, on or off (Settings → Add-ons)
     property var follows: null
     property var replays: ({})
     property var history: null
     // "Load more" at the end of rows (/api/more): id "<source>|<key>|<query>" → {items, loading, done}
     property var moreRows: ({})
-    property var gs: null      // games streamed from PCs (/api/gamestream: the PCs, pairing, their games)
-    property int gsPc: 0       // PC link tab: the chosen PC (chips above), focus on the chips (gsRow 0) or its games
-    property int gsRow: 0
-    property int gsSel: 0
-    readonly property var gsCur: gs && gs.pcs && gs.pcs.length ? gs.pcs[Math.min(gsPc, gs.pcs.length - 1)] : null
     property var display: null
     property var account: null
     property var followsQr: null
@@ -72,18 +92,12 @@ Item {
     property var localUpd: null              // /api/local_update: A/B box?, images on USB sticks, copy and progress
     property string btPhase: ""              // Bluetooth dialog: "" (list), "scan", "pair" (its 2 s refresh runs while not "")
     // YouTube: channels of the list (/api/youtube), search results, row and choice per row
-    property var yt: null
-    // YouTube account: dialog with the code to enter on google.com/device (/api/youtube_account), and its QR code
-    property var ytAuth: null
     property var twAuth: null                // Twitch account: sign-in by code on twitch.tv/activate (/api/account pending)
     property var twAuthQr: null
-    property var ytAuthQr: null
-    property var ytAccount: null             // same state, for the "YouTube account" row (Settings → Accounts and links)
-    // Plex account: code to enter on plex.tv/link (/api/plex_link: { pending: { code, error }, configured, name }), QR
-    property var plexLink: null
-    property var plexLinkQr: null
-    // Jellyfin by Quick Connect: code to approve in Jellyfin (/api/jellyfin_link: { pending: { name, code, error } })
-    property var jfLink: null
+    // The add-ons' accounts (Settings → Accounts and links, /api/accounts: their rows), and the code dialog of one
+    // (/api/account_code: { addon, d: { title, where, code, error, help, qr }, qr: its QR code })
+    property var accounts: []
+    property var code: null
     // Dialog of the sign-ins by code (menu/CodeDialog.qml): title, where to go, code, error, help, QR code of the page
     readonly property var codeDialog: {
         if (twAuth) {
@@ -95,77 +109,37 @@ Item {
                      help: tr("The box presents itself as the Twitch app for TVs: your subscriptions without ads, and your followed channels."),
                      qr: twAuthQr }
         }
-        if (ytAuth) {
-            var p = ytAuth.pending
-            return { title: tr("Connect my YouTube account"),
-                     where: tr("On your phone, open google.com/device and enter:"),
-                     code: p && p.user_code && !p.error ? p.user_code : "",
-                     error: p && p.error ? tr("Authorization denied: {error}", { error: p.error }) : "",
-                     help: tr("Google shows \"YouTube on TV\": the box presents itself as the YouTube app for TVs (subscriptions, recommendations, progress)."),
-                     qr: ytAuthQr }
-        }
-        if (jfLink) {
-            var j = jfLink.pending
-            return { title: tr("Connect Jellyfin"), where: tr("In Jellyfin (app or website): your user menu, Quick Connect, then enter:"),
-                     code: j && j.code && !j.error ? j.code : "",
-                     error: j && j.error ? tr("Failed: {error}", { error: j.error }) : "",
-                     help: j && j.name ? tr("Server: {server}.", { server: j.name }) : "", qr: null }
-        }
-        if (gs && gs.pairing) {   // pairing with the PC: the code to type in Sunshine
-            return { title: tr("Pair with {name}", { name: gs.pairing.name || "" }),
-                     where: tr("On the PC, open Sunshine (https://localhost:47990), PIN tab, and enter:"),
-                     code: gs.pairing.pin || "", error: gs.pairing.error || "",
-                     help: gs.pairing.page ? tr("From a phone: {page}", { page: gs.pairing.page }) : "", qr: null }
-        }
-        if (plexLink) {
-            var q = plexLink.pending
-            return { title: tr("Sign in with a Plex account"), where: tr("On your phone, open plex.tv/link and enter:"),
-                     code: q && q.code && !q.error ? q.code : "",
-                     error: q && q.error ? tr("Failed: {error}", { error: q.error }) : "",
-                     help: tr("The box then takes the first server of the account it reaches, local ones first."),
-                     qr: plexLinkQr }
+        if (code) {
+            var c = code.d || {}
+            return { title: c.title || "", where: c.where || "", code: c.code || "", error: c.error || "", help: c.help || "",
+                     qr: c.qr ? code.qr : null }
         }
         return null
     }
     // Colors per tab: purple for Twitch (live, following, replays), red for YouTube, neutral (charcoal, white glow)
     // for what belongs to no service (history, settings, system), blue for Jellyfin, amber for Plex
-    readonly property string theme: ["youtube", "jellyfin", "plex"].indexOf(tabId) >= 0 ? tabId
-        : ["live", "follows", "replays"].indexOf(tabId) >= 0 ? "twitch" : "neutral"
-    readonly property var pal: theme === "youtube"
-        ? { accent: "#ff0033", veil: "#180407", rail: "#1a0709", sheet: "#261216", key: "#3a1f24",
-            surface: "#33171c", surfaceFocus: "#4a2027", label: "#c9a3aa" }
-        : theme === "jellyfin"
-        ? { accent: "#1565c0", veil: "#030f17", rail: "#06131c", sheet: "#0f202c", key: "#173244",
-            surface: "#12293a", surfaceFocus: "#1b3c54", label: "#9cc3d8" }
-        : theme === "plex"
-        ? { accent: "#e5a00d", veil: "#120d03", rail: "#181105", sheet: "#2a200d", key: "#3e3015",
-            surface: "#2d2310", surfaceFocus: "#46361a", label: "#d6bf8f" }
-        : theme === "twitch"
-        ? { accent: "#9146ff", veil: "#0a0612", rail: "#100b17", sheet: "#21182c", key: "#33283f",
-            surface: "#2a2034", surfaceFocus: "#3a2c4e", label: "#a99fc0" }
+    // Colors of the tab: its add-on's palette (colors.palette and accent), neutral otherwise (History, Settings…)
+    readonly property var pal: tabInfo.palette && tabInfo.palette.veil ? Object.assign({ accent: tabInfo.accent }, tabInfo.palette)
         : { accent: "#e8e8ee", veil: "#0b0b0d", rail: "#121214", sheet: "#1e1e22", key: "#2f2f35",
             surface: "#232327", surfaceFocus: "#35353c", label: "#a3a3ad" }
     readonly property color accent: pal.accent
-    property var ytResults: null             // { query, results, channels } or null
-    property var ytPreview: null             // found channel, opened: { id, name, avatar, followers, videos, saved }
-    property bool ytSearching: false
-    property int ytRow: 0                    // 0: search row, then results (if any) and channels
-    property var ytSel: ({})
-    // Video libraries (Jellyfin, Plex: same API, /api/<id>, /api/<id>_search, _series, _play), per library: home,
-    // search results ({ query, results }), opened series ({ id, name, episodes, first }), row and choice per row
-    property var libs: ({})                  // id → { home, results, preview, searching, row, sel }
-    readonly property bool libTab: tabId === "jellyfin" || tabId === "plex"
+    // Tabs of rows built by the addons (YouTube, Jellyfin, Plex: GET /api/rows, app/player/addons/cards.py), per tab:
+    // home ({rows, …}, null until read), search ({query, searching, rows}), preview (something opened, a channel or a
+    // series: {target, name, row}), the row chosen and the card chosen in each row
+    property var libs: ({})                  // id → { home, search, preview, row, sel }
+    readonly property bool libTab: tabKind === "library"
+    readonly property bool rowsTab: tabKind === "rows" || libTab   // (mediaTab() is the tab of the current media)
     readonly property var lib: libs[tabId] || ({})
-    readonly property string libName: tabId === "plex" ? "Plex" : "Jellyfin"
+    readonly property string serviceName: tr(tabInfo.label || "")
     // Changing tab from the rail: every tab's rows and grids start again from their first card (within a tab, a row
     // keeps its place). Not when the menu opens on the current media's tab: that one keeps the card being played
     function resetRows() {
-        ytSel = ({}); ytRow = 0
         var all = Object.assign({}, libs)
         for (var id in all) all[id] = Object.assign({}, all[id], { sel: {}, row: 0 })
         libs = all
         rpRow = 0; rpSel = [rpSel[0], 0, 0]
-        liveSel = 0; followSel = 0; histSel = 0; gsSel = 0; gsRow = 0
+        liveSel = 0; followSel = 0; histSel = 0
+        customTabs.forEach(function (t) { var it = customItem(t.id); if (it && it.reset) it.reset() })
     }
     function setLib(id, changes) {
         var all = Object.assign({}, libs)
@@ -173,16 +147,16 @@ Item {
         libs = all
     }
     // Row-based tabs (YouTube, libraries): same page, same keyboard, separate state for each
-    readonly property int mRow: libTab ? lib.row || 0 : ytRow
-    readonly property var mSel: libTab ? lib.sel || ({}) : ytSel
-    readonly property bool mSearching: libTab ? !!lib.searching : ytSearching
-    readonly property var mResults: libTab ? lib.results || null : ytResults
+    readonly property int mRow: lib.row || 0
+    readonly property var mSel: lib.sel || ({})
+    readonly property bool mSearching: !!(lib.search && lib.search.searching)
+    readonly property var mResults: lib.search || null
     // On-screen keyboard (search): text, chosen row and column
     property bool kbOpen: false
     property string kbText: ""
     // Keyboard opened or closed: reported to the box, the companion app then offers to type the text
     onKbOpenChanged: {
-        call("POST", "/api/keyboard", { open: kbOpen, text: kbText, target: libTab ? libName : "YouTube" })
+        call("POST", "/api/keyboard", { open: kbOpen, text: kbText, target: serviceName })
         box.setTyping(kbOpen)
     }
     property int kbRow: 0
@@ -277,34 +251,36 @@ Item {
             var r2 = Object.assign({}, replays); r2[login] = d && d.vods ? d : false; replays = r2
         })
     }
-    function loadYoutube() {
-        call("GET", "/api/youtube", undefined, function (d) { if (d && d.channels) yt = d; else if (!yt) yt = { channels: [] } })
+    // Home rows of a tab (GET /api/rows?addon=…; the previous ones stay shown meanwhile)
+    function loadRows(id) {
+        call("GET", "/api/rows?addon=" + id, undefined, function (d) { setLib(id, { home: d || { error: true, rows: [] } }) })
     }
-    function ytSearch(q) {
+    function mediaSearch(q) {
         q = q.trim()
-        if (!q) return
-        ytResults = { query: q, results: [], channels: [] }   // before ytSearching: the search row text reads query
-        ytSearching = true
-        ytPreview = null
-        call("GET", "/api/youtube_search?q=" + encodeURIComponent(q), undefined, function (d) {
-            ytSearching = false
-            ytResults = { query: q, results: d && d.results ? d.results : [], channels: d && d.channels ? d.channels : [], error: !d }
-            ytRow = 1; var s = Object.assign({}, ytSel); s["search"] = 0; ytSel = s
+        var id = tabId
+        if (!q || !rowsTab) return
+        // the search row reads the query while it runs, skeleton cards where the results will be
+        setLib(id, { search: { query: q, searching: true, rows: [] }, preview: null })
+        call("GET", "/api/rows?addon=" + id + "&q=" + encodeURIComponent(q), undefined, function (d) {
+            var rows = d && d.rows ? d.rows : [{ key: "search", title: tr("Results for \"{query}\"", { query: q }), items: [] }]
+            var sel = Object.assign({}, (libs[id] || {}).sel)
+            rows.forEach(function (r) { sel[r.key] = 0 })
+            setLib(id, { search: { query: q, rows: rows }, row: 1, sel: sel })
         })
     }
-    // Rows of the YouTube tab: search, results, one per channel
-    // Where a row's next items come from (/api/more), or null: search results, a YouTube channel, a library's recent
-    // additions, a streamer's replays and clips
+    // The search's rows read again in place (a favorite added or removed: its mark), the focus left where it is
+    function refreshSearch(id) {
+        var sr = (libs[id] || {}).search
+        if (!sr || sr.searching) return
+        call("GET", "/api/rows?addon=" + id + "&q=" + encodeURIComponent(sr.query), undefined, function (d) {
+            var now = (libs[id] || {}).search
+            if (d && d.rows && now && now.query === sr.query) setLib(id, { search: Object.assign({}, now, { rows: d.rows }) })
+        })
+    }
+    // Where a row's next items come from, or null: the addons' rows say it (more: {addon, source, key, q}, read from
+    // GET /api/rows), a streamer's replays and clips here (GET /api/more)
     function moreSource(row) {
-        if (row.kind === "results" && !libTab && ytResults) return { source: "yt_search", key: "", q: ytResults.query }
-        if (row.kind === "results" && libTab && lib.results) return { source: tabId + "_search", key: "", q: lib.results.query }
-        if (row.kind === "rec") return { source: "yt_recommended", key: "" }
-        if (row.kind === "subs") return { source: "yt_subscriptions", key: "" }
-        if (row.kind === "lib" && (row.key === "resume" || row.key === "nextup")) return { source: tabId + "_" + row.key, key: "" }
-        if (row.kind === "channel") return { source: "yt_channel", key: row.key }
-        if (row.kind === "preview" && !libTab && ytPreview) return { source: "yt_channel", key: ytPreview.id }
-        if (row.kind === "lib" && row.key.indexOf("lib:") === 0)
-            return { source: tabId === "plex" ? "plex_lib" : "jellyfin_lib", key: row.key.slice(4) }
+        if (row.more) return row.more
         if (row.kind === "vods" || row.kind === "clips") return { source: "twitch_" + row.kind, key: rpLogin }
         return null
     }
@@ -315,7 +291,7 @@ Item {
         var id = src.source + "|" + src.key + "|" + (src.q || ""), m = moreRows[id] || {}
         var seen = {}, items = []
         row.items.concat(m.items || []).forEach(function (it) {
-            var k = it.url || it.id || JSON.stringify(it)
+            var k = it.key || it.url || it.id || JSON.stringify(it)
             if (!seen[k]) { seen[k] = true; items.push(it) }
         })
         if (!m.done) items.push({ more: true, loading: !!m.loading, title: tr("Load more"), moreId: id, src: src, offset: items.length })
@@ -326,75 +302,12 @@ Item {
         if (m.loading || m.done) return
         var set = function (v) { var all = Object.assign({}, moreRows); all[card.moreId] = Object.assign({}, moreRows[card.moreId] || {}, v); moreRows = all }
         set({ loading: true })
-        call("GET", "/api/more?source=" + card.src.source + "&key=" + encodeURIComponent(card.src.key) + "&q="
+        var url = card.src.addon ? "/api/rows?addon=" + card.src.addon + "&more=" + card.src.source : "/api/more?source=" + card.src.source
+        call("GET", url + "&key=" + encodeURIComponent(card.src.key) + "&q="
              + encodeURIComponent(card.src.q || "") + "&offset=" + card.offset, undefined, function (d) {
             var have = (moreRows[card.moreId] || {}).items || []
             if (!d || !d.items) set({ loading: false, done: true })   // (nothing more, or unreachable: the card goes)
             else set({ loading: false, items: have.concat(d.items), done: !d.more || !d.items.length })
-        })
-    }
-    function ytRows() {
-        var rows = [{ kind: "search" }]
-        if (ytResults && ytResults.channels.length)
-            rows.push({ kind: "chans", key: "chans", title: tr("Channels"), items: ytResults.channels })
-        if (ytPreview)
-            rows.push({ kind: "preview", key: "preview", title: tr("{name} · latest videos", { name: ytPreview.name }), avatar: ytPreview.avatar,
-                        items: ytPreview.videos || [], loading: ytPreview.videos === null })
-        if (ytResults) rows.push({ kind: "results", key: "search", title: tr("Results for \"{query}\"", { query: ytResults.query }), items: ytResults.results })
-        // The account's YouTube home ("YouTube TV app" access): its recommended videos, first
-        var rec = yt && yt.recommended
-        if (rec && rec.length) rows.push({ kind: "rec", key: "rec", title: tr("Recommended for you"), items: rec })
-        var subs = yt && yt.subs
-        if (subs && subs.authorized)
-            rows.push({ kind: "subs", key: "subs", title: tr("Subscriptions"), items: subs.videos || [], loading: subs.videos === null })
-        else if (subs && !subs.unavailable)
-            rows.push({ kind: "connect", key: "connect", title: tr("Subscriptions"),
-                        items: [{ title: tr("Connect my account"), connect: true }] })
-        var chans = yt ? yt.channels : []
-        for (var i = 0; i < chans.length; i++)
-            rows.push({ kind: "channel", key: chans[i].id, title: chans[i].name, avatar: chans[i].avatar, items: chans[i].videos || [] })
-        return rows.map(withMore)
-    }
-    // Channel found by the search: see its videos (row just below the channels), add or remove it
-    function ytChannelMenu(c) {
-        openModal(c.name + (c.followers ? " · " + tr("{n} subscribers", { n: Fmt.big(c.followers, tr) }) : ""), [
-            { label: tr("▶  See latest videos"), ok: function () { ytOpenChannel(c) } },
-            { label: tr(c.saved ? "✕  Remove from favorites" : "★  Add to favorites"), danger: !!c.saved, ok: function () { ytToggleSaved(c) } },
-            { label: tr("Cancel"), ok: function () {} }])
-    }
-    function ytOpenChannel(c) {
-        ytPreview = { id: c.id, name: c.name, avatar: c.avatar, videos: null }
-        var s = Object.assign({}, ytSel); s["preview"] = 0; ytSel = s
-        ytRow = Math.max(1, ytRows().findIndex(function (r) { return r.kind === "preview" }))   // just below the found channels
-        call("GET", "/api/youtube_channel?id=" + encodeURIComponent(c.id), undefined, function (d) {
-            if (ytPreview && ytPreview.id === c.id) ytPreview = Object.assign({}, ytPreview, { videos: d ? d.videos : [] })
-        })
-    }
-    // YouTube account ("YouTube TV app" access, cast/youtube_tv.js): code to enter on google.com/device; the dialog
-    // reloads every 3 s until authorized
-    function ytConnect() {
-        ytAuth = { pending: null }
-        call("POST", "/api/youtube_login", {}, function (d) {
-            if (!d) ytAuth = { pending: { error: tr("YouTube unreachable") } }
-            else loadYtAuth()
-        })
-    }
-    function loadYtAccount() { call("GET", "/api/youtube_account", undefined, function (d) { if (d) ytAccount = d }) }
-    function loadYtAuth() {
-        if (!ytAuth) return
-        call("GET", "/api/youtube_account", undefined, function (d) {
-            if (!ytAuth || !d) return
-            ytAccount = d
-            if (d.authorized) { ytAuth = null; yt = null; loadYoutube(); return }
-            var p = d.pending
-            ytAuth = { pending: p }
-            if (p && p.verification_uri && !p.error) {
-                if (!ytAuthQr || ytAuthQr.text !== p.verification_uri)
-                    call("GET", "/api/qr?text=" + encodeURIComponent(p.verification_uri), undefined, function (q) {
-                        ytAuthQr = q ? { text: p.verification_uri, rows: q.rows } : null
-                    })
-                ytAuthPoll.restart()
-            }
         })
     }
     // Twitch account: code to enter on twitch.tv/activate; the dialog reloads every 3 s until signed in
@@ -422,82 +335,80 @@ Item {
             }
         })
     }
-    function plexConnect() {
-        plexLink = { pending: null }
-        call("POST", "/api/plex_link", {}, function (d) {
-            if (!d) plexLink = { pending: { error: tr("plex.tv unreachable") } }
-            else loadPlexLink()
-        })
-        if (!plexLinkQr)
-            call("GET", "/api/qr?text=" + encodeURIComponent("https://plex.tv/link"), undefined, function (q) {
-                plexLinkQr = q ? { rows: q.rows } : null
+    // An add-on's account (Settings → Accounts and links): its dialogs, built by the add-on (/api/account_menu: title,
+    // items); an item opens another of its dialogs, or runs one of its actions (asked first if it says so), then its
+    // code dialog, its first dialog again, or a result
+    function accountMenu(addon, target, opening) {
+        loadingModal("account", opening || tr("Loading…"))
+        var opened = modal
+        call("GET", "/api/account_menu?addon=" + addon + "&target=" + encodeURIComponent(target || ""), undefined, function (d) {
+            if (modal !== opened) return   // closed in the meantime
+            if (!d) { openModal(tr("Unavailable for now"), [{ label: tr("Close"), ok: function () {} }]); return }
+            var items = (d.items || []).map(function (it) {
+                return { label: it.label, danger: !!it.danger, ok: function () { accountItem(addon, it) } }
             })
-    }
-    function loadPlexLink() {
-        if (!plexLink) return
-        call("GET", "/api/plex_link", undefined, function (d) {
-            if (!plexLink || !d) return
-            if (!d.pending && d.configured) { plexLink = null; refresh(); return }   // done: the Plex tab shows
-            plexLink = d
-            if (d.pending && !d.pending.error) plexLinkPoll.restart()
-        })
-    }
-    function closePlexLink() {
-        if (plexLink && plexLink.pending && !plexLink.pending.error) call("POST", "/api/plex_link", { action: "cancel" })
-        plexLink = null
-    }
-    // "Jellyfin" row (Settings → Accounts and links): the servers that answer on the network (Quick Connect), or forget the server
-    function jellyfinMenu() {
-        var on = !!(st.libraries || {}).jellyfin
-        openModal(tr("Looking for Jellyfin servers on the network…"), [{ label: tr("Cancel"), ok: function () {} }])
-        var searching = modal
-        call("GET", "/api/jellyfin_link?find=1", undefined, function (d) {
-            if (modal !== searching || !d) return   // closed in the meantime
-            var items = (d.servers || []).map(function (srv) {
-                return { label: "+  " + srv.name + "  ·  " + srv.address.replace(/^https?:\/\//, ""), ok: function () { jfConnect(srv.address) } }
-            })
-            var found = items.length
-            if (on) items.push({ label: tr("✕  Disconnect Jellyfin"), danger: true, ok: function () {
-                confirmModal(tr("Disconnect Jellyfin? Its tab goes away"), tr("✕  Disconnect Jellyfin"), function () {
-                    st = Object.assign({}, st, { libraries: Object.assign({}, st.libraries, { jellyfin: false }) })   // at once
-                    call("POST", "/api/jellyfin_link", { action: "forget" }, function () { refresh() }) }) } })
             items.push({ label: tr("Close"), ok: function () {} })
-            openModal(found ? tr("Connect to which Jellyfin server?")
-                      : tr("No Jellyfin server found on the network: give its address in the companion app (Settings → Jellyfin)."), items)
+            openModal(d.title, items)
         })
     }
-    function jfConnect(address) {
-        jfLink = { pending: null }
-        call("POST", "/api/jellyfin_link", { address: address }, function (d) {
-            if (!d) jfLink = { pending: { error: tr("Jellyfin unreachable") } }
-            else loadJfLink()
+    function accountItem(addon, it) {
+        if (it.open !== undefined) return accountMenu(addon, it.open)
+        var run = function () {
+            if (it.then === "code") return openCode(addon, it.action, it.body)
+            if (it.wait) loadingModal("", it.wait)
+            call("POST", "/api/" + it.action, it.body || {}, function (d) {
+                accountUpdated(addon)
+                if (it.then === "menu") accountMenu(addon, "")
+                else if (it.wait || it.done)
+                    openModal(d ? (it.done || tr("Done")) : (it.fail || tr("Unavailable for now")), [{ label: tr("OK"), ok: function () {} }])
+            })
+        }
+        if (it.confirm) confirmModal(it.confirm, it.label, run); else run()
+    }
+    // A card that asks to connect (YouTube's subscriptions): the add-on's first choice when it is a sign-in by code,
+    // otherwise its dialog
+    function accountConnect(addon) {
+        call("GET", "/api/account_menu?addon=" + addon, undefined, function (d) {
+            var first = d && d.items && d.items[0]
+            if (first && first.then === "code" && !first.confirm) accountItem(addon, first)
+            else accountMenu(addon, "")
         })
     }
-    function loadJfLink() {
-        if (!jfLink) return
-        call("GET", "/api/jellyfin_link", undefined, function (d) {
-            if (!jfLink || !d) return
-            if (!d.pending && d.configured) { jfLink = null; refresh(); return }   // signed in: the Jellyfin tab shows
-            jfLink = d
-            if (d.pending && !d.pending.error) jfLinkPoll.restart()
+    function loadAccounts() { call("GET", "/api/accounts", undefined, function (d) { if (d) accounts = d.accounts || [] }) }
+    function accountUpdated(addon) {   // signed in or out: the rows, its tab, the state
+        refresh(); loadAccounts()
+        if (libs[addon]) loadRows(addon)
+        customTabs.forEach(function (t) { var c = customItem(t.id); if (t.addon === addon && c && c.load) c.load() })
+    }
+    // Its code dialog (menu/CodeDialog.qml): the action that asks for the code, then /api/account_code every 2 s
+    // until done (closes) or closed (Back: its account_code_cancel)
+    function openCode(addon, action, body) {
+        code = { addon: addon, d: {}, qr: null }
+        if (!action) return loadCode()
+        call("POST", "/api/" + action, body || {}, function (d) {
+            if (!code || code.addon !== addon) return
+            if (!d) code = Object.assign({}, code, { d: { error: tr("Unavailable for now") } })
+            else loadCode()
         })
     }
-    function closeJfLink() {
-        if (jfLink && jfLink.pending && !jfLink.pending.error) call("POST", "/api/jellyfin_link", { action: "cancel" })
-        jfLink = null
+    function loadCode() {
+        if (!code) return
+        var addon = code.addon
+        call("GET", "/api/account_code?addon=" + addon, undefined, function (d) {
+            if (!code || code.addon !== addon || !d) return
+            if (d.done) { code = null; accountUpdated(addon); return }
+            var qr = code.qr && code.qr.text === d.qr ? code.qr : null
+            code = { addon: addon, d: d, qr: qr }
+            if (d.qr && !qr)
+                call("GET", "/api/qr?text=" + encodeURIComponent(d.qr), undefined, function (q) {
+                    if (code && code.addon === addon && q) code = Object.assign({}, code, { qr: { text: d.qr, rows: q.rows } })
+                })
+            if (!d.error) codePoll.restart()
+        })
     }
-    // "Plex" row (Settings → Accounts and links): sign in by code, or forget the server
-    function plexMenu() {
-        var on = !!(st.libraries || {}).plex
-        var items = [{ label: tr(on ? "+  Sign in with another Plex account" : "+  Sign in with a Plex account"),
-                       ok: function () { plexConnect() } }]
-        if (on)
-            items.push({ label: tr("✕  Disconnect Plex"), danger: true, ok: function () {
-                confirmModal(tr("Disconnect Plex? Its tab goes away"), tr("✕  Disconnect Plex"), function () {
-                    st = Object.assign({}, st, { libraries: Object.assign({}, st.libraries, { plex: false }) })   // at once
-                    call("POST", "/api/plex", { address: "" }, function () { refresh() }) }) } })
-        items.push({ label: tr("Close"), ok: function () {} })
-        openModal(on ? tr("Plex: {server}", { server: st.plex_server }) : "Plex", items)
+    function closeCode() {
+        if (code) call("POST", "/api/account_code_cancel", { addon: code.addon })
+        code = null
     }
     function twitchAccountMenu() {
         var login = account && account.login
@@ -513,162 +424,92 @@ Item {
         items.push({ label: tr("Close"), ok: function () {} })
         openModal(login ? tr("Twitch account: {login}", { login: login }) : tr("Twitch account"), items)
     }
-    function ytAccountMenu() {
-        var a = ytAccount
-        if (!a || a.unavailable) return
-        var items = []
-        if (!a.authorized)
-            items.push({ label: tr("+  Connect my YouTube account"), ok: function () { ytConnect() } })
-        else {
-            items.push({ label: tr("↻  Reload my subscriptions"), ok: function () {
-                loadingModal("", tr("Reloading your subscriptions…"))
-                call("POST", "/api/youtube_sync", {}, function (d) {
-                    yt = null; loadYoutube(); loadYtAccount()
-                    openModal(d ? tr("Subscriptions reloaded") : tr("YouTube unreachable for now"), [{ label: tr("OK"), ok: function () {} }])
-                }) } })
-            items.push({ label: tr("✕  Disconnect YouTube"), danger: true, ok: function () {
-                confirmModal(tr("Disconnect your YouTube account? Subscriptions, recommendations and progress sync stop"),
-                             tr("✕  Disconnect YouTube"), function () {
-                    ytAccount = Object.assign({}, ytAccount, { authorized: false })   // at once
-                    call("POST", "/api/youtube_logout", {}, function () { yt = null; loadYtAccount() }) }) } })
-        }
-        items.push({ label: tr("Close"), ok: function () {} })
-        openModal(tr("YouTube account"), items)
-    }
-    // Options on a subscription video: play, channel as favorite (a row of its own)
-    // ≡ on any YouTube video card (recommended, subscriptions, search, channel rows): play or resume, and when its
-    // channel is known, see its latest videos and add it to the favorites or remove it
-    function ytVideoOptions(v) {
-        var items = []
-        if (Fmt.resumable(v.position, v.seconds, v.finished)) {
-            items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(v.position) }), ok: function () { play(v.url, false, v) } })
-            items.push({ label: tr("↺  From the beginning"), ok: function () { play(v.url, true, v) } })
-        } else items.push({ label: tr(v.finished ? "↺  Watch again" : "▶  Play"), ok: function () { play(v.url, true, v) } })
-        if (v.channel_id) {
-            var fav = (yt ? yt.channels : []).some(function (c) { return c.id === v.channel_id })
-            var c = { id: v.channel_id, name: v.channel, avatar: v.avatar, saved: fav }
-            if (!(ytPreview && ytPreview.id === v.channel_id))   // (its row is already open)
-                items.push({ label: tr("▶  See latest videos of {channel}", { channel: v.channel || tr("the channel") }), ok: function () { ytOpenChannel(c) } })
-            items.push({ label: tr(fav ? "✕  Remove from favorites" : "★  Add to favorites"), danger: fav, ok: function () { ytToggleSaved(c) } })
-        }
-        items.push({ label: tr("Cancel"), ok: function () {} })
-        openModal(v.title, items)
-    }
-    // Favorite on or off: the mark changes at once (back if the box refuses), the channel rows follow
-    function ytToggleSaved(c) {
-        function mark(saved) {
-            if (ytResults)
-                ytResults = Object.assign({}, ytResults, { channels: ytResults.channels.map(function (x) {
-                    return x.id === c.id ? Object.assign({}, x, { saved: saved }) : x }) })
-        }
-        mark(!c.saved)
-        call("POST", "/api/youtube_channels", { action: c.saved ? "remove" : "add", channel: c.id }, function (d) {
-            if (!d) mark(c.saved)
-            loadYoutube()
-        })
-    }
-    function ago(iso) {
-        var days = Math.floor((Date.now() - new Date(iso)) / 86400000)
-        return days <= 0 ? tr("today") : days === 1 ? tr("yesterday") : days < 7 ? tr("{n} d ago", { n: days })
-            : days < 31 ? tr("{n} wk ago", { n: Math.floor(days / 7) })
-            : new Date(iso).toLocaleDateString(Qt.locale(i18n.lang === "fr" ? "fr_FR" : "en_US"), "d MMM")
-    }
-    function loadLibrary(id) {
-        call("GET", "/api/" + id, undefined, function (d) { setLib(id, { home: d || { error: true } }) })
-    }
-    function libSearch(q) {
-        q = q.trim()
+    // Rows of a tab, top to bottom: the search, the channels found, what is opened, the other rows of the search (its
+    // results), the home rows; each with its next cards ("Load more") when it says where they come from
+    function mediaRows() {
+        var L = lib, rows = [{ kind: "search", key: "" }]
+        var found = L.search && L.search.rows ? L.search.rows : []
+        rows = rows.concat(found.filter(function (r) { return r.style === "channels" }))
+        if (L.preview) rows.push(L.preview.row ? Object.assign({}, L.preview.row, { key: "preview" })
+                                                : { key: "preview", title: L.preview.name, items: [], loading: true })
+        if (L.search && L.search.searching)
+            rows.push({ key: "search", title: tr("Results for \"{query}\"", { query: L.search.query }), items: [], loading: true })
+        rows = rows.concat(found.filter(function (r) { return r.style !== "channels" }))
+        rows = rows.concat(L.home && L.home.rows ? L.home.rows : [])
         var id = tabId
-        if (!q || !libTab) return
-        // results before searching: the search row text reads query
-        setLib(id, { results: { query: q, results: [] }, searching: true, preview: null })
-        call("GET", "/api/" + id + "_search?q=" + encodeURIComponent(q), undefined, function (d) {
-            setLib(id, { searching: false, results: { query: q, results: d && d.results ? d.results : [], error: !d },
-                         row: 1, sel: Object.assign({}, (libs[id] || {}).sel, { search: 0 }) })
-        })
+        return rows.map(function (r) { return r.more ? withMore(Object.assign({}, r, { more: Object.assign({ addon: id }, r.more) })) : r })
     }
-    // Rows of a library tab: search, opened series, results, resume, next episodes, recently added
-    function libRows() {
-        var rows = [{ kind: "search" }], home = lib.home, preview = lib.preview, results = lib.results
-        if (preview)
-            rows.push({ kind: "preview", key: "preview", title: tr("{name} · episodes", { name: preview.name }), items: preview.episodes || [],
-                        loading: preview.episodes === null })
-        if (results) rows.push({ kind: "results", key: "search", title: tr("Results for \"{query}\"", { query: results.query }), items: results.results })
-        if (home && home.configured) {
-            if (home.resume.length) rows.push({ kind: "lib", key: "resume", title: tr("Resume"), items: home.resume })
-            if (home.nextup.length) rows.push({ kind: "lib", key: "nextup", title: tr("Next episodes"), items: home.nextup })
-            for (var i = 0; i < home.libraries.length; i++)
-                rows.push({ kind: "lib", key: "lib:" + home.libraries[i].id, title: tr("{name} · recently added", { name: home.libraries[i].name }), items: home.libraries[i].items })
-        }
-        return rows.map(withMore)
-    }
-    function mediaRows() { return libTab ? libRows() : ytRows() }
-    // Chosen series (or season): its episodes in a row just below the search, focus on the first unwatched
-    function libOpenSeries(item) {
+    // Something opened (a channel's latest videos, a series' episodes): a row of its own right below the search and the
+    // channels found, focused, on the card the box chooses (a series: the first episode not watched)
+    function openTarget(o) {
         var id = tabId
-        setLib(id, { preview: { id: item.series, name: item.title, episodes: null }, row: 1 })
-        call("GET", "/api/" + id + "_series?id=" + encodeURIComponent(item.series), undefined, function (d) {
-            var preview = (libs[id] || {}).preview
-            if (!preview || preview.id !== item.series) return
-            setLib(id, { preview: Object.assign({}, preview, { episodes: d ? d.episodes : [] }),
-                         sel: Object.assign({}, (libs[id] || {}).sel, { preview: d ? d.first : 0 }) })
+        setLib(id, { preview: { target: o.target, name: o.name, row: null },
+                     sel: Object.assign({}, (libs[id] || {}).sel, { preview: 0 }) })
+        setRow(Math.max(1, mediaRows().findIndex(function (r) { return r.key === "preview" })))
+        call("GET", "/api/rows?addon=" + id + "&open=" + encodeURIComponent(o.target) + "&name=" + encodeURIComponent(o.name || ""),
+             undefined, function (d) {
+            var p = (libs[id] || {}).preview
+            if (!p || p.target !== o.target) return
+            var row = d && d.rows && d.rows[0] ? d.rows[0] : { key: "preview", title: o.name || "", items: [], error: true }
+            setLib(id, { preview: Object.assign({}, p, { row: row }), sel: Object.assign({}, (libs[id] || {}).sel, { preview: row.sel || 0 }) })
         })
     }
-    function libPlay(item, fromStart) {
-        call("POST", "/api/" + tabId + "_play", { id: item.id, from_start: !!fromStart }, function () { refreshSoon.restart() })
+    // A card's play: a link (POST /api/play), or its addon's action (POST /api/<action> {id, from_start})
+    function playCard(it, fromStart) {
+        if (it.play.url) return play(it.play.url, fromStart, it)
+        call("POST", "/api/" + it.play.action, { id: it.play.id, from_start: !!fromStart }, function () { refreshSoon.restart() })
         close()
     }
-    // OK on a card: plays at once when there is a single choice, otherwise a dialog; always (≡): the dialog
-    function libChoose(item, always) {
-        if (item.type === "Series" || item.type === "Season") return libOpenSeries(item)
-        var name = item.episode ? item.title + " · " + item.episode : item.title
+    // An option of a card's ≡ dialog: open something, or an action of its addon (a favorite…), the rows read again after
+    function cardOption(o) {
+        return { label: o.label, danger: !!o.danger, ok: function () {
+            if (o.open) return openTarget(o.open)
+            var id = tabId
+            call("POST", "/api/" + o.action, o.body || {}, function () { loadRows(id); refreshSearch(id) })
+        } }
+    }
+    // OK on a card: what it declares (connect, open, play); plays at once when there is a single choice, otherwise a
+    // dialog (resume or from the beginning, then its options); ≡ (always): the dialog
+    function cardChoose(it, always) {
+        if (it.connect) return accountConnect(it.connect)
+        var options = (it.options || []).map(cardOption)
+        if (!it.play) {
+            if (it.open) return openTarget(it.open)
+            return openModal(it.label || it.title, options.concat([{ label: tr("Cancel"), ok: function () {} }]))
+        }
         var items = []
-        if (Fmt.resumable(item.position, item.seconds, item.finished)) {
-            items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(item.position) }), ok: function () { libPlay(item) } })
-            items.push({ label: tr("↺  From the beginning"), ok: function () { libPlay(item, true) } })
-        } else items.push({ label: tr(item.finished ? "↺  Watch again" : "▶  Play"), ok: function () { libPlay(item, true) } })
-        if (item.type === "Episode" && item.series && !(lib.preview && lib.preview.id === item.series))
-            items.push({ label: tr("☰  All episodes"), ok: function () { libOpenSeries({ series: item.series, title: item.title }) } })
+        if (Fmt.resumable(it.position, it.seconds, it.finished)) {
+            items.push({ label: tr("▶  Resume at {time}", { time: Fmt.clock(it.position) }), ok: function () { playCard(it, false) } })
+            items.push({ label: tr("↺  From the beginning"), ok: function () { playCard(it, true) } })
+        } else items.push({ label: tr(it.finished ? "↺  Watch again" : "▶  Play"), ok: function () { playCard(it, true) } })
         if (items.length === 1 && !always) return items[0].ok()
-        openModal(name, items.concat([{ label: tr("Cancel"), ok: function () {} }]))
+        var cancel = [{ label: tr("Cancel"), ok: function () {} }]
+        if (!always || !it.more_options) return openModal(it.label || it.title, items.concat(options, cancel))
+        // ≡ on a card whose options the box looks up (a YouTube video's channel): the dialog at once, completed after
+        openModal(it.label || it.title, items.concat([{ label: tr("Loading…"), ok: function () {} }], cancel))
+        var opened = modal, id = tabId
+        call("GET", "/api/rows?addon=" + id + "&options=" + encodeURIComponent(it.more_options.target), undefined, function (d) {
+            if (modal === opened) openModal(it.label || it.title, items.concat((d && d.options || []).map(cardOption), cancel))
+        })
     }
-    // Info line of a card in the row-based tabs
-    function hm(t) {
-        var h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60
-        return h > 0 ? h + " h " + (m < 10 ? "0" : "") + m : m + " min"
-    }
+    // Info line of a card: its own (the addons' cards bring it translated), "Loading…" on a "Load more" card
     function cardMeta(row, it) {
         if (it.more) return it.loading ? tr("Loading…") : ""
-        var parts
-        if (libTab)
-            parts = it.type === "Series" ? [it.unplayed ? tr("{n} unwatched", { n: it.unplayed }) : tr("Series"), it.year]
-                : it.episode ? [it.episode] : [it.year, it.seconds ? hm(it.seconds) : ""]
-        else if (row.kind === "subs")
-            parts = [it.channel, it.live ? tr("● LIVE") : ago(it.date), it.seconds ? Fmt.clock(it.seconds) : ""]
-        else if (row.kind === "connect")
-            parts = [tr("Your YouTube subscriptions")]
-        else if (row.kind === "results" || row.kind === "rec")
-            parts = [it.channel, it.live ? tr("● LIVE") : it.seconds ? Fmt.clock(it.seconds) : "",
-                     it.views ? tr("{n} views", { n: Fmt.big(it.views, tr) }) : ""]
-        else
-            parts = [ago(it.date), it.views ? tr("{n} views", { n: Fmt.big(it.views, tr) }) : ""]
-        return parts.filter(function (t) { return !!t }).join(" · ") + (it.finished ? " · " + tr("watched") : "")
+        return it.meta || ""
     }
     function searchLabel() {
         var r = mResults
         return mSearching ? tr("Searching for \"{query}\"…", { query: r.query })
             : r ? tr("New search  (\"{query}\")", { query: r.query })
-            : tr("Search {service}", { service: libTab ? libName : "YouTube" })
-    }
-    function loadGames() { call("GET", "/api/gamestream", undefined, function (d) { if (d) gs = d; checkArea() }) }
-    function gsPairClose() {
-        if (gs && gs.pairing && gs.pairing.pin) call("POST", "/api/gamestream_pair_cancel", {})
-        gs = Object.assign({}, gs, { pairing: null })
+            : tr("Search {service}", { service: serviceName })
     }
     function loadHistory() { call("GET", "/api/history", undefined, function (d) { history = d || []; checkArea() }) }
-    function play(url, fromStart, item) {   // item: title and image for the loading screen and the history
+    // item: title and image for the loading screen and the history; resumed, at the position its card shows (the
+    // server would compute it again: the account's progress, read again with a timeout, could start it from 0)
+    function play(url, fromStart, item) {
+        var at = !fromStart && item && item.position > 0 ? Math.floor(item.position) : undefined
         call("POST", "/api/play", { url: url, from_start: !!fromStart, title: item ? item.title : undefined,
-                                    thumb: item ? item.thumb : undefined }, function () { refreshSoon.restart() })
+                                    thumb: item ? item.thumb : undefined, start: at }, function () { refreshSoon.restart() })
         close()
     }
 
@@ -679,14 +520,13 @@ Item {
         onTriggered: menu.readBox()
     }
     Timer { interval: 4000; repeat: true; running: menu.isOpen; onTriggered: menu.refresh() }
-    Timer { id: ytAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadYtAuth() }
+    Timer { id: codePoll; interval: 2000; onTriggered: if (menu.isOpen) menu.loadCode() }
     Timer { id: twAuthPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadTwAuth() }
     // PC link tab open, or a pairing under way (from Settings too): the PC's state followed
-    Timer { interval: 3000; repeat: true; running: menu.isOpen && (menu.tabId === "games" || !!(menu.gs && menu.gs.pairing && menu.gs.pairing.pin))
-            onTriggered: menu.loadGames() }
-    Timer { id: gsSoon; interval: 4000; onTriggered: menu.loadGames() }   // (a search takes a few seconds)
-    Timer { id: plexLinkPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadPlexLink() }
-    Timer { id: jfLinkPoll; interval: 2000; onTriggered: if (menu.isOpen) menu.loadJfLink() }
+    // Settings → Add-ons open while an extension downloads: its state followed
+    Timer { interval: 3000; repeat: true
+            running: menu.isOpen && menu.section === "addons" && (menu.addons || []).some(function (a) { return a.enabled && a.extension && ["ready", "error", "builtin", "off"].indexOf(a.extension.state) < 0 })
+            onTriggered: menu.loadAddons() }
     Timer { id: followsPoll; interval: 3000; onTriggered: if (menu.isOpen) menu.loadFollows() }
     Timer { interval: 10000; repeat: true; running: menu.isOpen; triggeredOnStart: true; onTriggered: menu.now = new Date() }
     Timer { id: idleClose; interval: 90000; onTriggered: menu.close() }   // TV screen: no still image
@@ -701,20 +541,23 @@ Item {
     function mediaTab(d) {
         if (d.mode === "twitch") return "live"
         if (d.mode !== "media") return ""
-        return { youtube: "youtube", jellyfin: "jellyfin", plex: "plex", "twitch-vod": "replays", "twitch-clip": "replays" }[d.media_kind] || "history"
+        var t = allTabs.find(function (t) { return (t.kinds || []).indexOf(d.media_kind) >= 0 })   // (the add-ons' tabs say theirs)
+        return t ? t.id : "history"
     }
     function open() {
         powerOnly = false
         if (isOpen) return
+        adopting = false
         // Tab of the current media once the state arrives (refresh, startFocus: st may be from the last opening),
         // otherwise the tab it was on; YouTube and Jellyfin keep their row and their card; the data is reloaded
         var t = tabs[tab].id
         area = "rail"; railHome = false
         shortcut = -1; modal = null; pendingDisplay = ""; poweroffUntil = 0; rebootUntil = 0
         follows = null; replays = ({}); history = null; rpLogin = ""; rpRow = 0; rpSel = [0, 0, 0]
-        // libraries reloaded; search results stay from one opening to the next; yt too (reloaded in the background)
+        // libraries reloaded; search results stay from one opening to the next; YouTube's rows too (reloaded in the
+        // background)
         var all = {}
-        for (var id in libs) all[id] = Object.assign({}, libs[id], { home: null })
+        for (var id in libs) all[id] = tabById(id).kind !== "library" ? libs[id] : Object.assign({}, libs[id], { home: null })
         libs = all
         kbOpen = false
         var list = st.streamers || []
@@ -764,9 +607,7 @@ Item {
     function close() {
         if (!isOpen) return
         stopPreview()
-        closePlexLink()
-        closeJfLink()
-        ytAuth = null   // (Google's code expires by itself; reopening the menu must not show a stale one)
+        closeCode()   // (a code expires by itself; reopening the menu must not show a stale one)
         twAuth = null
         isOpen = false
         modal = null
@@ -796,7 +637,7 @@ Item {
         }
     }
     function kbSubmit() {
-        if (kbText.trim()) { kbOpen = false; if (libTab) libSearch(kbText); else ytSearch(kbText) }
+        if (kbText.trim()) { kbOpen = false; mediaSearch(kbText) }
     }
     Component.onCompleted: refresh()
 
@@ -816,7 +657,7 @@ Item {
     }
     // ≡ menu on a streamer: watch it, or add it as a second stream next to the current one
     function streamerOptions(name, addToList, isLive) {
-        var watch = function () { act("channel", { name: name }); close() }
+        var watch = function () { watchChannel(name) }
         var items = [{ label: tr("▶  Watch"), ok: watch }]
         // Second stream: only a live channel (otherwise a black frame that waits), next to a live stream
         if (isLive && st.mode === "twitch" && st.channel && name !== st.channel) {
@@ -843,13 +684,13 @@ Item {
     // Settings tab: sections (one page each, Back or ◀ returns to the list), each with what it holds and an alert when
     // something needs attention (update ready, no network…); the
     // power actions stay on the list itself. Box status and the companion app's QR code beside the list
-    readonly property var sectionIds: ["picture", "playback", "chat", "look", "accounts", "network", "devices", "updates",
-                                       "backup", "advanced"].filter(function (id) {
+    readonly property var sectionIds: ["picture", "playback", "chat", "look", "accounts", "addons", "network", "devices",
+                                       "updates", "backup", "advanced"].filter(function (id) {
         return sysOn || (id !== "updates" && id !== "backup")   // (the Inlet app: its OS and its format update it)
     })
     function sectionTitle(id) {
         return tr(({ picture: "Picture and sound", playback: "Playback", chat: "Chat", look: "Appearance",
-                     accounts: "Accounts and links", network: "Network", devices: "Devices", updates: "Updates",
+                     accounts: "Accounts and links", addons: "Add-ons", network: "Network", devices: "Devices", updates: "Updates",
                      backup: "Backup and installation", advanced: "Advanced" })[id] || "")
     }
     // What a section holds (grey line under its title)
@@ -859,10 +700,17 @@ Item {
                            advanced: "Full or simplified version" }[id]
             if (player) return tr(player)
         }
+        // the add-ons (their tabs' names, Twitch the base aside)
+        var names = [], seen = {}
+        addonTabs.forEach(function (t) {
+            if (t.addon && t.addon !== "twitch" && !seen[t.addon]) { seen[t.addon] = true; names.push(tr(t.label)) }
+        })
+        if (id === "accounts") return ["Twitch"].concat(names).join(", ")
+        if (id === "addons") return tr("{names}: on or off", { names: names.join(", ") })
         return tr(({ picture: "Resolution, audio output, volume, night mode",
                      playback: "Subtitles, auto switch, polls and predictions",
                      chat: "Chat on the TV, corner, background, text size", look: "Background, colors, language",
-                     accounts: "Twitch, YouTube, Jellyfin, Plex, PC", network: "Wi-Fi, companion app QR code",
+                     network: "Wi-Fi, companion app QR code",
                      devices: "Remotes, controllers, keys, power button", updates: "Version, check for updates, USB stick",
                      backup: "Settings backup, installation on this PC", advanced: "Version, SSH, developer mode, dependencies" })[id] || "")
     }
@@ -883,6 +731,7 @@ Item {
         return ""
     }
     function openSection(id) { section = id; rootSel = setSel; setSel = 0; pendingDisplay = ""; pendingPlayer = ""; pendingLang = ""; pendingBranch = ""
+        if (id === "addons") loadAddons()
         if (id === "updates" && dev && dev.enabled)
             call("GET", "/api/branches", undefined, function (d) { if (d && d.branches && d.branches.length) branches = d.branches })
     }
@@ -1025,23 +874,16 @@ Item {
                 { open: true, label: tr("Twitch account"), value: login ? tr("Connected: {login}", { login: login }) : tr("Not connected"),
                   hint: login ? tr("No ads on the channels you're subscribed to") : tr("Subscriptions without ads, and your followed channels"),
                   ok: function () { twitchAccountMenu() } },
-                { open: true, label: tr("YouTube account"), visible: !!(ytAccount && !ytAccount.unavailable),
-                  value: ytAccount && ytAccount.authorized ? tr("Connected") : tr("Not connected"),
-                  hint: tr("Subscriptions, recommendations, and progress synced with your account"),
-                  ok: function () { ytAccountMenu() } },
-                { open: true, label: "Jellyfin", value: (s.libraries || {}).jellyfin ? tr("Connected") : tr("Not connected"),
-                  hint: (s.libraries || {}).jellyfin ? String(s.jellyfin_server || "").replace(/^https?:\/\//, "")
-                                                     : tr("Your movies and series of a Jellyfin server"),
-                  ok: function () { jellyfinMenu() } },
-                { open: true, label: "Plex", value: (s.libraries || {}).plex ? tr("Connected") : tr("Not connected"),
-                  hint: (s.libraries || {}).plex ? String(s.plex_server || "").replace(/^https?:\/\//, "")
-                                                 : tr("Your movies and series of a Plex server"),
-                  ok: function () { plexMenu() } },
-                { open: true, label: tr("PC (Sunshine)"), visible: !!features.gamestream,   // (Moonlight: the box's image)
-                  value: gsSummary(),
-                  hint: gsPaired().length ? tr("Their games in the PC link tab") : tr("Play the games of a PC running Sunshine"),
-                  ok: function () { gamestreamMenu() } },
-            ]
+            ].concat(accounts.map(function (a) {   // the add-ons' (their rows and dialogs: built by each add-on)
+                return { open: true, label: a.label, value: a.value || "", hint: a.hint || "",
+                         ok: function () { accountMenu(a.addon, "", a.opening) } }
+            }))
+        case "addons":   // each add-on on or off (Twitch, the base: always on); the tab and the rows follow at once
+            return (addons || []).map(function (a) {
+                return a.base ? { label: a.name, hint: a.description, value: tr("Always on") }
+                    : { label: a.name, hint: [a.description, addonStatus(a)].filter(function (t) { return !!t }).join("  ·  "),
+                        toggle: a.enabled, ok: function () { setAddon(a.id, !a.enabled) } }
+            })
         case "network":
             var qi = 0
             for (var i = 0; i < qrModes.length; i++) if (qrModes[i][0] === s.qr) qi = i
@@ -1282,8 +1124,10 @@ Item {
              h.disk.system ? tr("of {total} · system {n} free", { total: bytes(h.disk.total), n: bytes(h.disk.system.free) })
                            : tr("of {total}", { total: bytes(h.disk.total) }), h.disk.free < 2e9 ? "warn" : ""],
             [tr("Network"), "↓ " + bits(net.rx), "↑ " + bits(net.tx) + (net.speed > 0 ? " · " + tr("link {speed}", { speed: net.speed >= 1000 ? net.speed / 1000 + " Gbit/s" : net.speed + " Mbit/s" }) : ""), ""],
-            [tr("Up for"), since(h.uptime), "MQTT " + ok(h.services.mqtt) + " · " + tr("YouTube tokens {ok}", { ok: ok(h.services.youtube_tokens) }),
-             h.services.mqtt !== "active" || h.services.youtube_tokens !== "active" ? "warn" : ""],
+            // the services: the core's (MQTT) and those of the add-ons on
+            [tr("Up for"), since(h.uptime), Object.keys(h.services).map(function (k) {
+                return ((h.service_names || {})[k] || k) + " " + ok(h.services[k]) }).join(" · "),
+             Object.keys(h.services).some(function (k) { return h.services[k] !== "active" }) ? "warn" : ""],
             [tr("Playback"), (p.running === "qt" ? tr("Full version") : tr("Simplified version")) + (p.hwdec && p.hwdec !== "no" ? " · " + p.hwdec : p.size ? " · " + tr("CPU") : ""),
              p.size ? tr("{size} · {fps} fps · {dropped} dropped", { size: p.size.replace("x", " × "), fps: Math.round(p.fps || 0), dropped: p.dropped || 0 })
                     : tr("nothing playing"),
@@ -1311,6 +1155,18 @@ Item {
         openModal(title, [{ label: label, danger: true, ok: action }, { label: tr("Cancel"), ok: function () {} }])
     }
     // Settings switches: the new value on screen at once, the box's state read again right after (act → refreshSoon)
+    function loadAddons() { call("GET", "/api/addons", undefined, function (d) { if (d && d.addons) addons = d.addons }) }
+    // Its system extension, on the box's image (Moonlight, Node.js), while it is on and not ready
+    function addonStatus(a) {
+        var x = a.enabled && a.extension
+        return !x ? "" : x.state === "downloading" || x.state === "pending" ? tr("Downloading…")
+             : x.state === "error" ? tr("Download failed: {error}", { error: x.error || "" }) : ""
+    }
+    function setAddon(id, on) {
+        addons = addons.map(function (a) { return a.id === id ? Object.assign({}, a, { enabled: on }) : a })   // at once
+        st = Object.assign({}, st, { addons: addons.filter(function (a) { return a.enabled }).map(function (a) { return a.id }) })
+        call("POST", "/api/addon", { id: id, enabled: on }, function () { loadAddons(); refresh() })
+    }
     function setFlag(name, body, change) {
         st = Object.assign({}, st, change)
         act(name, body)
@@ -1343,6 +1199,9 @@ Item {
     }
     function subtitle() {
         var live = st.live || {}
+        // an add-on's rows say their line (GET /api/rows: hint); its own tab, its component (hint())
+        if (rowsTab) return !lib.home ? tr("Loading…") : lib.home.hint || ""
+        if (tabKind === "custom") { var c = customItem(tabId); return c && c.hint ? c.hint() : "" }
         switch (tabId) {
         case "live":
             var n = (st.streamers || []).filter(function (s) { return !!live[s] }).length
@@ -1358,33 +1217,10 @@ Item {
             return d === "loading" ? tr("{login} · loading…", { login: rpLogin }) : d === false ? tr("Twitch unreachable for now")
                 : (d && replayRows().length === 1) ? tr("{login}: nothing this week", { login: rpLogin })
                 : tr("{login} · replays and clips of the week", { login: rpLogin })
-        case "games":
-            if (!gs) return tr("Loading…")
-            var pc = gsCur
-            if (!pc) return gs.searching ? tr("Looking for PCs on the network…") : tr("No PC with Sunshine found on the network")
-            if (!pc.online) return tr("{name} is off or unreachable", { name: pc.name })
-            if (!pc.paired) return tr("OK on {name} to pair the box", { name: pc.name })
-            if (pc.loading) return tr("Loading…")
-            if (pc.unpaired_on_pc) return tr("{name} no longer knows the box: pair it again (≡)", { name: pc.name })
-            return tr("{name} · {n} games", { name: pc.name, n: pc.apps.length }) + (pc.playing ? "  ·  " + tr("a game is running") : "")
         case "history":
             return history === null ? tr("Loading…") : history.length === 0 ? tr("Videos played on the TV will show up here")
                 : (history.length === 1 ? tr("1 video") : tr("{n} videos", { n: history.length })) + " · " + tr("OK to resume or remove")
-        case "youtube":
-            if (!yt) return tr("Loading…")
-            var nc = yt.channels.length
-            if (yt.subs && yt.subs.authorized)
-                return !nc ? tr("Your subscriptions · latest videos")
-                    : tr(nc === 1 ? "Your subscriptions and 1 channel · latest videos" : "Your subscriptions and {n} channels · latest videos", { n: nc })
-            return nc ? tr(nc === 1 ? "1 channel · latest videos" : "{n} channels · latest videos", { n: nc })
-                : tr("Search for a video, or add channels from the companion app")
-        case "jellyfin": case "plex":
-            var home = lib.home
-            if (!home) return tr("Loading…")
-            if (home.error) return tr("{service} unreachable for now", { service: libName })
-            if (!home.configured) return tr("Your {service} library", { service: libName })
-            return tr("{server} · progress follows on all your devices", { server: home.server })
-        case "libraries": return tr("Your movies and series from Jellyfin or Plex")
+        case "libraries": return tr("Your movies and series, once one of your media servers is connected")
         case "settings": return section ? tr("◀ ▶ to change a value  ·  Back: the sections") : tr("The box and its settings")
         }
         return ""
@@ -1399,8 +1235,9 @@ Item {
         loadTab(tabs[tab].id)   // tabs[tab] and not tabId: the tabId binding is not recomputed yet here
     }
     // Live preview in the background: on the Live and Following tabs, after a moment on a live channel, its live plays
-    // muted behind the whole menu, under a dark veil (livePreview of ui.py: streamlink and a third player, drawn by
-    // menu/LivePreview.qml). Only when the menu is the main page: nothing plays behind it
+    // muted behind the whole menu, under a dark veil, in the main player itself (box.preview → stream-box.lua's
+    // streambox-preview). Only when the menu is the main page: nothing plays behind it. Chosen (watchChannel), the same
+    // live goes on with its sound while the menu fades out (adopting): no reload, no cut
     readonly property string bgLive: {
         if (!isOpen || area !== "content" || modal || kbOpen || box.videoActive) return ""
         if (tabId === "live") {
@@ -1417,15 +1254,25 @@ Item {
     }
     Timer { id: bgDwell; interval: 900; onTriggered: if (menu.bgLive) menu.startPreview(menu.bgLive) }
     property string previewFor: ""   // login whose live plays in the background
+    property bool adopting: false    // the previewed live chosen: it plays on, the menu fades out over it
+    // The preview's picture there (or the live it became, while the menu fades out): the menu's background steps aside
+    readonly property bool previewShown: (box.previewActive && !!previewFor) || adopting
+    readonly property bool videoBehind: box.videoActive && !adopting   // (the menu's veil over a video)
     function startPreview(login) {
         stopPreview()
         previewFor = login
-        livePreview.play(login)
+        box.preview(login)
     }
     function stopPreview() {
         if (!previewFor) return
         previewFor = ""
-        livePreview.stop()
+        if (!adopting) box.preview("")
+    }
+    // Watch a streamer: its live previewed behind the menu goes on with its sound (stream-box.lua's start_channel)
+    function watchChannel(name) {
+        if (previewFor === name && box.previewActive) adopting = true
+        act("channel", { name: name })
+        close()
     }
     function loadBt(cb) { call("GET", "/api/bluetooth", undefined, function (d) { if (d) { bt = d; if (cb) cb(d) } }) }
     // "Remotes and controllers" dialog: paired devices (OK: unpair), "Pair a device"
@@ -1447,17 +1294,29 @@ Item {
             if (d.message) modal = Object.assign({}, modal, { title: d.message })
         })
     }
-    // Search: the dialog fills up for 20 s (remotes and controllers first); OK on a device pairs it
+    // Search: the devices show up as they are seen (remotes and controllers first); the first remote, gamepad or
+    // keyboard seen is paired by itself (auto), OK on another one pairs it
     function btScan() {
         btPhase = "scan"
-        call("POST", "/api/bluetooth", { action: "scan" })
-        openModal(tr("Searching… put the remote in pairing mode"), [{ label: tr("Cancel"), ok: function () { btPhase = "" } }])
+        call("POST", "/api/bluetooth", { action: "scan", auto: true })
+        modal = { title: tr("Searching… put the remote or controller in pairing mode"), help: btHelp(),
+                  items: [{ label: tr("Cancel"), ok: function () { btPhase = "" } }] }
+        modalSel = 0
+    }
+    function btHelp() {
+        return tr("Xbox controller: hold its pairing button (top, next to the cable) until the logo blinks fast. Xiaomi remote: Home + Back.")
     }
     function btRefresh() {
         loadBt(function (d) {
             if (btPhase === "scan") {
+                if (d.busy) {   // a device seen got paired by itself
+                    btPhase = "pair"
+                    modal = { title: d.message || tr("Pairing…"), items: [{ label: tr("Close"), ok: function () { btPhase = "" } }] }
+                    modalSel = 0
+                    return
+                }
                 var items = d.found.map(function (f) {
-                    return { label: f.name, ok: function () {
+                    return { label: f.paired ? tr("{name} (pair again)", { name: f.name }) : f.name, ok: function () {
                         btPhase = "pair"
                         call("POST", "/api/bluetooth", { action: "pair", mac: f.mac })
                         openModal(tr("Pairing {name}…", { name: f.name }), [{ label: tr("Close"), ok: function () { btPhase = "" } }])
@@ -1465,14 +1324,18 @@ Item {
                 })
                 if (!d.scanning) items.push({ label: tr("↻  Search again"), ok: btScan })
                 items.push({ label: tr("Cancel"), ok: function () { btPhase = "" } })
-                var title = d.scanning ? tr("Searching… put the remote in pairing mode")
+                var title = d.scanning ? tr("Searching… put the remote or controller in pairing mode")
                           : d.found.length ? tr("Devices found") : tr("No device found")
                 var sel = modalSel
-                modal = { title: title, items: items }
+                modal = { title: title, items: items, help: d.found.length ? "" : btHelp() }
                 modalSel = Math.min(sel, items.length - 1)
-            } else if (btPhase === "pair" && !d.busy) {
+            } else if (btPhase === "pair" && d.busy) {   // its steps: pairing, second try, connecting
+                if (d.message && modal.title !== d.message) modal = Object.assign({}, modal, { title: d.message })
+            } else if (btPhase === "pair") {
                 btPhase = ""
-                openModal(d.message || tr("Pairing finished"), [{ label: tr("OK"), ok: btMenu }])
+                openModal(d.message || tr("Pairing finished"), d.error
+                    ? [{ label: tr("↻  Search again"), ok: btScan }, { label: tr("Close"), ok: btMenu }]
+                    : [{ label: tr("OK"), ok: btMenu }])
             }
         })
     }
@@ -1613,8 +1476,7 @@ Item {
     function loadAudio() { call("GET", "/api/audio", undefined, function (d) { if (d && d.outputs) audioOut = d }) }
     function loadTab(id) {
         if (id === "settings") {
-            loadYtAccount()
-            if (features.gamestream) loadGames()
+            loadAccounts()
             if (sysOn) {   // (sound outputs, Bluetooth, SSH, developer mode, installation, local update: the system part)
                 loadAudio(); loadBt(); loadSsh()
                 call("GET", "/api/install", undefined, function (d) { if (d) install = d })
@@ -1623,9 +1485,10 @@ Item {
         }
         if (id === "follows" && follows === null) loadFollows()
         if (id === "history" && history === null) loadHistory()
-        if (id === "games") loadGames()
-        if (id === "youtube") loadYoutube()   // previous rows shown in the meantime
-        if ((id === "jellyfin" || id === "plex") && !(libs[id] || {}).home) loadLibrary(id)
+        var kind = tabById(id).kind
+        if (kind === "custom") { var c = customItem(id); if (c && c.load) c.load() }
+        if (kind === "rows") loadRows(id)   // previous rows shown in the meantime
+        if (kind === "library" && !(libs[id] || {}).home) loadRows(id)
         if (id === "replays") {
             if (!rpLogin) rpLogin = st.channel || (st.streamers || [])[0] || ""
             loadReplays(rpLogin)
@@ -1656,11 +1519,8 @@ Item {
             else if (k === "back" || k === "left") { modal = null; btPhase = ""; if (powerOnly) close() }
             return
         }
-        if (ytAuth) { if (k === "back" || k === "left" || k === "ok") ytAuth = null; return }
         if (twAuth) { if (k === "back" || k === "left" || k === "ok") twAuth = null; return }
-        if (plexLink) { if (k === "back" || k === "left" || k === "ok") closePlexLink(); return }
-        if (gs && gs.pairing) { if (k === "back" || k === "left" || k === "ok") gsPairClose(); return }
-        if (jfLink) { if (k === "back" || k === "left" || k === "ok") closeJfLink(); return }
+        if (code) { if (k === "back" || k === "left" || k === "ok") closeCode(); return }
         if (area === "rail") {
             if (railHome) {   // "Home screen": global, above the tabs
                 if (k === "down") railHome = false
@@ -1680,13 +1540,13 @@ Item {
         }
         if (k === "back" && tabId === "settings" && section) return leaveSection()   // a section: back to the list
         if (k === "back") return toRail()   // Back: to the tabs, then (from the rail) closes the menu
+        if (rowsTab) return keyMedia(k)
+        if (tabKind === "custom") { var c = customItem(tabId); if (c && c.key) c.key(k); return }
         switch (tabId) {
         case "live": return keyLive(k)
         case "follows": return keyFollows(k)
         case "replays": return keyReplays(k)
-        case "youtube": case "jellyfin": case "plex": return keyMedia(k)
         case "history": return keyHistory(k)
-        case "games": return keyGames(k)
         case "settings": return keyRows(k, settingsRows())
         }
     }
@@ -1698,7 +1558,7 @@ Item {
         if (id === "replays") return !list || list.length > 0
         if (id === "follows") return true
         if (id === "history") return !history || history.length > 0
-        if (id === "games") return !!(gs && gs.pcs && gs.pcs.length)
+        if (tabById(id).kind === "custom") { var c = customItem(id); return !c || !c.canEnter || c.canEnter() }
         if (id === "libraries") return false   // explanations only
         return true
     }
@@ -1713,11 +1573,12 @@ Item {
         var id = tabs[tab].id   // and not tabId: right after a tab change, its binding may not be recomputed yet
         if (!canEnter(id)) return
         // YouTube, Jellyfin, Plex: on the first row of videos (the search above it, ▲), the search when there is none yet
-        if (id === "youtube" || id === "jellyfin" || id === "plex") { area = "content"; setRow(mediaRows().length > 1 ? 1 : 0); return }
+        var kind = tabById(id).kind
+        if (kind === "rows" || kind === "library") { area = "content"; setRow(mediaRows().length > 1 ? 1 : 0); return }
         area = "content"
         checkArea()
         if (id === "replays") { rpRow = 0; rpSel = [Math.max(0, (st.streamers || []).indexOf(rpLogin)), rpSel[1], rpSel[2]] }
-        if (id === "games") gsRow = gsCur && gsCur.paired && gsCur.apps.length ? 1 : 0   // the games, or the PCs to pair
+        if (kind === "custom") { var c = customItem(id); if (c && c.enter) c.enter() }
     }
     function keyLive(k) {
         var list = st.streamers || []
@@ -1730,7 +1591,7 @@ Item {
             else if (k === "ok") sc[shortcut].ok()
             return
         }
-        if (k === "ok") { if (list[liveSel]) { act("channel", { name: list[liveSel] }); close() } return }
+        if (k === "ok") { if (list[liveSel]) watchChannel(list[liveSel]); return }
         if (k === "menu") { if (list[liveSel]) streamerOptions(list[liveSel], false, !!(st.live || {})[list[liveSel]]); return }
         if (k === "up" && liveSel < 4) { if (shortcuts().length) shortcut = 0; return }
         var n = grid(liveSel, list.length, 4, k)
@@ -1752,7 +1613,7 @@ Item {
         var list = followList()
         if ((k === "ok" || k === "menu") && list[followSel]) {
             var name = list[followSel].login
-            if (k === "ok" && inList(name)) { act("channel", { name: name }); close(); return }
+            if (k === "ok" && inList(name)) { watchChannel(name); return }
             streamerOptions(name, !inList(name), list[followSel].viewers !== undefined && list[followSel].viewers !== null)
             return
         }
@@ -1780,8 +1641,8 @@ Item {
         }
         else if (k === "menu" && row.kind !== "chips" && row.items[sel]) chooseVideo(row.items[sel], true)
     }
-    function setRow(v) { if (libTab) setLib(tabId, { row: v }); else ytRow = v }
-    function setMediaSel(s) { if (libTab) setLib(tabId, { sel: s }); else ytSel = s }   // (setSel is the chosen row of Settings)
+    function setRow(v) { setLib(tabId, { row: v }) }
+    function setMediaSel(s) { setLib(tabId, { sel: s }) }   // (setSel is the chosen row of Settings)
     function keyMedia(k) {
         var rows = mediaRows()
         var r = Math.min(mRow, rows.length - 1)
@@ -1807,24 +1668,7 @@ Item {
         else if ((k === "ok" || k === "menu") && row.items[sel] && row.items[sel].more) {   // "Load more" (no options)
             if (k === "ok") loadMore(row.items[sel])
         }
-        else if (k === "menu" && row.items[sel]) {   // ≡: the options of the card, whatever the row
-            var it = row.items[sel]
-            if (row.kind === "chans") ytChannelMenu(it)
-            else if (row.kind === "connect") ytConnect()
-            else if (libTab) libChoose(it, true)
-            else {   // the channel: the row's own (favorites, the found channel's videos), otherwise the card's
-                var own = row.kind === "channel" ? { id: row.key, name: row.title }
-                        : row.kind === "preview" && ytPreview ? { id: ytPreview.id, name: ytPreview.name } : null
-                ytVideoOptions(Object.assign({}, it, { channel_id: own ? own.id : it.channel_id || "",
-                                                       channel: it.channel || (own ? own.name : ""), avatar: it.avatar || row.avatar }))
-            }
-        }
-        else if (k === "ok" && row.items[sel]) {
-            if (row.kind === "chans") ytChannelMenu(row.items[sel])
-            else if (row.kind === "connect") ytConnect()
-            else if (libTab) libChoose(row.items[sel])
-            else chooseVideo(row.items[sel])
-        }
+        else if ((k === "ok" || k === "menu") && row.items[sel]) cardChoose(row.items[sel], k === "menu")   // ≡: its dialog
     }
     function keyKeyboard(k) {
         var rows = kbKeys
@@ -1838,68 +1682,9 @@ Item {
             if (key === "Space") kbText += " "
             else if (key === "Delete") kbText = kbText.slice(0, -1)
             else if (key === "Clear all") kbText = ""
-            else if (key === "Search") { if (kbText.trim()) { kbOpen = false; if (libTab) libSearch(kbText); else ytSearch(kbText) } }
+            else if (key === "Search") { if (kbText.trim()) { kbOpen = false; mediaSearch(kbText) } }
             else if (kbText.length < 80) kbText += key
         }
-    }
-    function gsPaired() { return gs && gs.pcs ? gs.pcs.filter(function (p) { return p.paired }) : [] }
-    function gsSummary() {
-        if (!gs) return ""
-        var paired = gsPaired()
-        return paired.length === 1 ? tr("Paired: {name}", { name: paired[0].name })
-             : paired.length ? tr("{n} PCs paired", { n: paired.length })
-             : gs.pcs && gs.pcs.length ? tr("Not paired") : tr("No PC found")
-    }
-    function gsPair(pc) { call("POST", "/api/gamestream_pair", { host: pc.host }, function () { loadGames() }) }
-    // Settings → Accounts and links → PC: the PCs found or paired, each with its own choices; search again
-    function gamestreamMenu() {
-        if (!gs) return
-        var items = (gs.pcs || []).map(function (pc) {
-            return { label: pc.name + "  ·  " + (pc.paired ? tr("paired") : pc.online ? tr("not paired") : tr("off")),
-                     ok: function () { gsPcMenu(pc) } }
-        })
-        items.push({ label: tr("↻  Search again"), ok: function () {
-            call("POST", "/api/gamestream_search", {}, function () { gsSoon.restart() }) } })
-        items.push({ label: tr("Close"), ok: function () {} })
-        openModal((gs.pcs || []).length ? tr("PCs with Sunshine") : tr("No PC with Sunshine found on the network"), items)
-    }
-    function gsPcMenu(pc) {   // one PC: pair (again), forget
-        var items = []
-        if (pc.online) items.push({ label: pc.paired ? tr("↻  Pair again") : tr("+  Pair with {name}", { name: pc.name }),
-                                    ok: function () { gsPair(pc) } })
-        if (pc.paired) items.push({ label: tr("✕  Forget this PC"), danger: true, ok: function () {
-            call("POST", "/api/gamestream_forget", { host: pc.host }, function () { loadGames() }) } })
-        items.push({ label: tr("Close"), ok: function () {} })
-        openModal(!pc.online ? tr("{name} is off or unreachable", { name: pc.name })
-                  : pc.paired ? tr("Paired with {name}", { name: pc.name }) : tr("{name} found on the network", { name: pc.name }), items)
-    }
-    function keyGames(k) {
-        var pcs = gs && gs.pcs || []
-        if (!pcs.length) { if (k === "left") area = "rail"; return }
-        gsPc = Math.min(gsPc, pcs.length - 1)
-        var pc = pcs[gsPc]
-        if (k === "menu" && gsRow === 0) return gsPcMenu(pc)
-        if (gsRow === 0) {   // the PCs' chips
-            if (k === "left") { if (gsPc === 0) area = "rail"; else { gsPc--; gsSel = 0 } }
-            else if (k === "right") { gsPc = Math.min(pcs.length - 1, gsPc + 1); gsSel = 0 }
-            else if ((k === "down" || k === "ok") && pc.paired && pc.apps.length) gsRow = 1
-            else if (k === "ok" && !pc.paired && pc.online) gsPair(pc)
-            else if (k === "ok" && pc.paired && pc.unpaired_on_pc) gsPair(pc)
-            return
-        }
-        var list = pc.apps, a = list[gsSel]
-        if (k === "ok" && a) { call("POST", "/api/gamestream_launch", { host: pc.host, app: a.name }); close(); return }
-        if (k === "menu" && a) {
-            var items = [{ label: tr("▶  Play"), ok: function () { call("POST", "/api/gamestream_launch", { host: pc.host, app: a.name }); close() } }]
-            if (pc.playing) items.push({ label: tr("✕  Close the game on the PC"), danger: true,
-                                         ok: function () { call("POST", "/api/gamestream_quit", { host: pc.host }, function () { loadGames() }) } })
-            items.push({ label: tr("Cancel"), ok: function () {} })
-            openModal(a.name, items)
-            return
-        }
-        if (k === "up" && gsSel < 5) { gsRow = 0; return }   // (5 posters per row: menu/GamesTab.qml)
-        var n = grid(gsSel, list.length, 5, k)
-        if (n < 0) area = "rail"; else gsSel = n
     }
     function keyHistory(k) {
         var list = history || []
@@ -1941,19 +1726,20 @@ Item {
     Item {   // the whole menu; hidden when only the "Box" dialog (power held) is shown
         anchors.fill: parent
         visible: !menu.powerOnly
-        Rectangle {   // veil over the video; opaque without video, to hide the ambient screen
+        Rectangle {   // veil over the video; opaque without video, to hide the ambient screen (not over the live preview)
             anchors.fill: parent
             color: menu.pal.veil
-            opacity: box.videoActive ? 0.89 : 1
+            opacity: menu.videoBehind ? 0.89 : menu.previewShown ? 0 : 1
+            Behavior on opacity { NumberAnimation { duration: 400 } }
             Behavior on color { ColorAnimation { duration: 400 } }
         }
         // Without video behind (the menu is then the main page): animated background in the tab's colors, softened
         Backdrop {
             anchors.fill: parent
             visible: opacity > 0
-            opacity: box.videoActive ? 0 : 1
+            opacity: menu.videoBehind || menu.previewShown ? 0 : 1
             Behavior on opacity { NumberAnimation { duration: 500 } }
-            running: menu.isOpen && !box.videoActive
+            running: menu.isOpen && !menu.videoBehind && !menu.previewShown
             base: menu.bd.base
             overlay: menu.bd.overlay
             overlayOpacity: 0.6
@@ -1962,11 +1748,10 @@ Item {
             c2: menu.hueShift(menu.accent, 0.10, 0.8)
             c3: menu.hueShift(menu.accent, -0.12, 0.9)
         }
-        Rectangle { anchors.fill: parent; color: menu.pal.veil; opacity: box.videoActive ? 0 : 0.30 }
-        LivePreview { menu: menu }   // live of the chosen streamer, in the background (bgLive)
-        Rectangle {   // dark veil over it: the cards and texts stay readable
+        Rectangle { anchors.fill: parent; color: menu.pal.veil; opacity: menu.videoBehind || menu.previewShown ? 0 : 0.30 }
+        Rectangle {   // dark veil over the live preview (bgLive, the main player behind): the cards and texts stay readable
             anchors.fill: parent; color: "black"
-            opacity: livePreview.ready && menu.previewFor ? 0.55 : 0
+            opacity: menu.previewShown ? 0.55 : 0
             Behavior on opacity { NumberAnimation { duration: 300 } }
         }
         Rail { menu: menu }   // (menu: the id of this object, looked up before the property of the same name)
@@ -1987,7 +1772,15 @@ Item {
             MediaTab { menu: menu }   // YouTube, Jellyfin and Plex
             LibrariesTab { menu: menu }
             HistoryTab { menu: menu }
-            GamesTab { menu: menu }
+            Repeater {   // the add-ons' own tabs (kind custom): their component, from app/player (the PC link's games)
+                id: customRepeater
+                model: menu.customTabs
+                Loader {
+                    readonly property string tabId: modelData.id
+                    anchors.fill: parent
+                    Component.onCompleted: setSource(Qt.resolvedUrl("../app/player/" + modelData.qml), { menu: menu, tabId: modelData.id })
+                }
+            }
             RowsTab { menu: menu }
             SystemStatus { menu: menu }
         }

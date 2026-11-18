@@ -13,12 +13,10 @@ import actions    # actions.py: language, restart
 import ambient    # ambient.py: companion app address
 import history    # history.py: history file, resume thresholds
 import i18n       # i18n.py: interface language
-import jellyfin   # jellyfin.py: library, playback
+import addons     # addons/: their lists (home), the media libraries: home, series, playback
 import playback   # playback.py: links, history entries
-import plex       # plex.py: library, playback
 import settings   # settings.py: back to the full version
-import twitch     # twitch.py: streamers, who is live, followed channels, replays
-import youtube    # youtube.py: favorites, subscriptions
+from addons.twitch import service as twitch   # Twitch, the base: streamers, who is live, followed channels, replays
 from common import MPV_SOCKET, mpv
 from i18n import tr
 # The box's system part (sound outputs, screen resolution, sleep, shutdown, system update): None in the Inlet app,
@@ -92,7 +90,7 @@ def choose(name, position, duration, finished, play, more=()):
 
 
 def video_items(videos, extra=lambda v: ""):
-    """YouTube videos, replays, history: {title, url, thumb, seconds, position, finished}"""
+    """Videos (an add-on's lists, replays, history): {title, url, thumb, seconds, position, finished}"""
     out = []
     for v in videos:
         dur = v.get("seconds") or v.get("duration") or 0
@@ -145,36 +143,31 @@ def replays_screen():
     return screen(tr("Replays"), build)
 
 
-# YouTube
+# An add-on's own lists (its home(): [{title, videos}, {note}]; the videos' "by" shown beside them)
 
-def youtube_screen():
+def home_screen(a):
     def build():
-        d = youtube.youtube_home()
         out = []
-        rec = d.get("recommended") or []
-        if rec:
-            out.append(item(tr("Recommended for you"), lambda: screen(tr("Recommended for you"), lambda: video_items(
-                rec, lambda v: v.get("channel") or "")), str(len(rec))))
-        subs = d.get("subs") or {}
-        if subs.get("videos"):
-            out.append(item(tr("Subscriptions"), lambda: screen(tr("Subscriptions"), lambda: video_items(
-                subs["videos"], lambda v: v.get("channel") or "")), str(len(subs["videos"]))))
-        for c in d.get("channels") or []:
-            out.append(item(c["name"], lambda c=c: screen(c["name"], lambda: video_items(c.get("videos") or [])),
-                            str(len(c.get("videos") or []))))
-        out.append(item(tr("Search: from the companion app"), dim=True))
-        return out
-    return screen("YouTube", build)
+        for l in a.home():
+            if l.get("note"):
+                out.append(item(l["note"], dim=True))
+                continue
+            videos = l.get("videos") or []
+            out.append(item(l["title"], lambda l=l, videos=videos: screen(l["title"], lambda: video_items(
+                videos, lambda v: v.get("by") or "")), str(len(videos))))
+        return out or [item(tr("Nothing here"), dim=True)]
+    return screen(a.name, build)
 
 
-# Jellyfin and Plex: same card fields (jellyfin.py, plex.py)
+# Media libraries (add-ons with a library): the same card fields
 
-LIBS = {"jellyfin": (jellyfin.jellyfin_home, jellyfin.jellyfin_series, jellyfin.jellyfin_play),
-        "plex": (plex.plex_home, plex.plex_series, plex.plex_play)}
+def lib(service):
+    """(home, series, play) of the library addon"""
+    return addons.get(service).library
 
 
 def lib_items(service, cards, series_id=None):
-    _, series, play = LIBS[service]
+    _, series, play = lib(service)
     out = []
     for c in cards:
         name = f"{c['title']} · {c['episode']}" if c.get("episode") else c["title"]
@@ -196,7 +189,7 @@ def series_screen(service, series_id, title):
     s = screen(title, None)
 
     def build():
-        d = LIBS[service][1](series_id)
+        d = lib(service)[1](series_id)
         s["sel"] = d.get("first") or 0   # first episode not watched yet
         return lib_items(service, d.get("episodes") or [], series_id)
     s["build"] = build
@@ -205,7 +198,7 @@ def series_screen(service, series_id, title):
 
 def lib_screen(service, title):
     def build():
-        d = LIBS[service][0]()
+        d = lib(service)[0]()
         rows = [(tr("Continue watching"), d.get("resume")), (tr("Next up"), d.get("nextup"))]
         rows += [(lib["name"], lib.get("items")) for lib in d.get("libraries") or []]
         return [item(name, lambda name=name, cards=cards: screen(name, lambda: lib_items(service, cards)), str(len(cards)))
@@ -217,8 +210,7 @@ def lib_screen(service, title):
 
 def history_screen():
     def build():
-        return video_items(history.read_history()[:100], lambda v: "Twitch" if (v.get("kind") or "").startswith("twitch")
-                           else {"youtube": "YouTube", "jellyfin": "Jellyfin", "plex": "Plex"}.get(v.get("kind"), ""))
+        return video_items(history.read_history()[:100], lambda v: addons.kind_name(v.get("kind")))
     return screen(tr("History"), build)
 
 
@@ -334,11 +326,12 @@ def root():
         out = [item(tr("Live"), live_screen)]
         if twitch.follows_logins():
             out.append(item(tr("Following"), follows_screen))
-        out += [item(tr("Replays"), replays_screen), item("YouTube", youtube_screen)]
-        if jellyfin.jf_server():
-            out.append(item("Jellyfin", lambda: lib_screen("jellyfin", "Jellyfin")))
-        if plex.px_config():
-            out.append(item("Plex", lambda: lib_screen("plex", "Plex")))
+        out.append(item(tr("Replays"), replays_screen))
+        for a in addons.enabled():   # the add-ons' lists, the media libraries set up (add-ons on)
+            if a.home:
+                out.append(item(a.name, lambda a=a: home_screen(a)))
+            elif a.library and a.configured():
+                out.append(item(a.name, lambda a=a: lib_screen(a.id, a.name)))
         out += [item(tr("History"), history_screen),
                 item(tr("⌂ Home screen"), lambda: playing(lambda: mpv(["script-message", "streambox-home"]))),
                 item(tr("Settings"), settings_screen), item(tr("System"), system_screen)]

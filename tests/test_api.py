@@ -100,6 +100,7 @@ class Api(unittest.TestCase):
         self.assertIn(b"<html", page)
         status, fr = self.request("GET", "/locales/fr.json")
         self.assertEqual((status, fr.get("Language")), (200, "Langue"))
+        self.assertEqual(fr.get("YouTube tokens"), "jetons YouTube")   # an add-on's own (addons/youtube/locales)
 
     def test_state(self):
         status, st = self.request("GET", "/api/state")
@@ -133,7 +134,10 @@ class Api(unittest.TestCase):
         self.assertIn("error", body)
 
     def test_features(self):
-        self.assertEqual(self.request("GET", "/api/features"), (200, {"system": self.SYSTEM, "gamestream": False}))   # (no Moonlight here)
+        status, f = self.request("GET", "/api/features")
+        tabs = f.pop("tabs")   # (the add-ons' tabs of the TV menu: Twitch's first, the base)
+        self.assertEqual((status, f), (200, {"system": self.SYSTEM, "gamestream": False}))   # (no Moonlight here)
+        self.assertEqual([t["id"] for t in tabs[:3]], ["live", "follows", "replays"])
 
     def test_unknown_action(self):
         self.assertGreaterEqual(self.request("POST", "/api/no_such_action", {})[0], 400)
@@ -160,8 +164,9 @@ class PlayerOnly(Api):
     @classmethod
     def root(cls):
         cls.copy = tempfile.mkdtemp()
+        # (not image/ either: its builds, gigabytes, outside CI)
         skip = lambda d, names: [n for n in names if n in (".git", "node_modules", "__pycache__")
-                                 or (os.path.basename(d) == "app" and n == "system")]
+                                 or (os.path.basename(d) == "app" and n == "system") or (d == REPO and n == "image")]
         shutil.copytree(REPO, os.path.join(cls.copy, "repo"), ignore=skip, symlinks=True)
         return os.path.join(cls.copy, "repo")
 

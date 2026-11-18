@@ -27,13 +27,21 @@ Item {
     readonly property real span: live ? (pb.window ? pb.window[1] - pb.window[0] : 0) : (pb.duration || 0)
     readonly property real at: live ? (pb.window ? (pb.pos || 0) - pb.window[0] : 0) : scrubbing ? fx.target : (pb.pos || 0)
     readonly property real delay: live && pb.window ? pb.window[1] - (pb.pos || 0) : 0
-    // Bar color depending on the source: YouTube red, Jellyfin blue (link to its server: /Videos/…), Plex amber
-    // (/library/parts/…), otherwise Twitch purple
-    readonly property string source: live ? "twitch" : /youtube\.com|youtu\.be|googlevideo/.test(pb.path || "") ? "youtube"
-        : /\/library\/parts\/\d+\//.test(pb.path || "") ? "plex"
-        : /\/Videos\/|\/videos\/[0-9a-f]{32}|api_key=|MediaSourceId=/i.test(pb.path || "") ? "jellyfin" : "other"
-    readonly property var colors: source === "youtube" ? ["#ff0033", "#ff4e45"]
-        : source === "jellyfin" ? ["#1565c0", "#4a90e2"] : source === "plex" ? ["#e5a00d", "#f5c04a"] : ["#8a3ffc", "#b062ff"]
+    // Bar color: the add-on whose links (osd.addons: their urls, in their order) match what plays, its colors.bar; a
+    // live, Twitch's; otherwise purple
+    readonly property var addons: { try { return JSON.parse(osd.addons || "{}") } catch (e) { return {} } }
+    readonly property string source: {
+        if (live) return "twitch"
+        var path = pb.path || ""
+        for (var id in addons) {
+            var urls = addons[id].urls || []
+            for (var i = 0; i < urls.length; i++) {
+                try { if (new RegExp(urls[i]).test(path)) return id } catch (e) {}
+            }
+        }
+        return "other"
+    }
+    readonly property var colors: ((addons[source] || {}).colors || {}).bar || ["#8a3ffc", "#b062ff"]
     // Video: info (remote.py: channel, series, episode…), chapters (mpv), buttons and seek (stream-box.lua)
     readonly property var meta: { try { return JSON.parse(osd.meta || "{}") } catch (e) { return {} } }
     readonly property var ctl: { try { return JSON.parse(osd.controls || "{}") } catch (e) { return {} } }
@@ -43,9 +51,7 @@ Item {
         var c = chapters[pb.chapter]
         return c && chapters.length > 1 ? tr("Chapter {n}", { n: pb.chapter + 1 }) + (c.title && !/^Chapter \d+$/i.test(c.title) ? " · " + c.title : "") : ""
     }
-    readonly property string details: (meta.source === "youtube" ? [meta.channel, meta.date, meta.views ? tr("{n} views", { n: Fmt.big(meta.views, tr) }) : ""]
-        : meta.source === "jellyfin" || meta.source === "plex" ? [meta.year, meta.rating ? "★ " + Fmt.decimal(meta.rating, tr) : ""]   // series and episode: already in the title
-        : []).concat([chapterTitle]).filter(function (t) { return !!t }).join("  ·  ")
+    readonly property string details: Fmt.details(meta, tr, false).concat([chapterTitle]).filter(function (t) { return !!t }).join("  ·  ")
     // Preview and "+30 s" bubble: only while seeking forward or back (not when the bar is just shown). Scrubbing (← →
     // in a video, stream-box.lua): the video is paused, the cursor, preview and offset stay on the target until OK / Back
     // Progress animated only once the bar shows a video it already showed: on appearing or on another video (another
@@ -339,7 +345,8 @@ Item {
                             anchors.centerIn: parent
                             // −10 / +10: thin circle, enlarged to fill the button like the other icons
                             scale: parent.parent.big ? 1.25 : (parent.parent.it.id === "back" || parent.parent.it.id === "fwd") ? 1.4 : 1
-                            name: parent.parent.it.id === "play" ? (root.pb.pause ? "play" : "pause") : (parent.parent.it.id || "")
+                            // (an add-on's button: its icon, its id is "addon:<n>")
+                            name: parent.parent.it.id === "play" ? (root.pb.pause ? "play" : "pause") : (parent.parent.it.icon || parent.parent.it.id || "")
                             color: parent.parent.foc ? "#17151c" : "white"
                             filled: !!parent.parent.it.on
                         }

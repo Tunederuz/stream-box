@@ -3,6 +3,7 @@ of its videos and progress reports to the server. Standard library only.
 """
 import json, os, re, shutil, socket, subprocess, threading, time, urllib.parse, urllib.request
 
+import addons    # (play_video: the player, with this add-on's identity)
 import history   # history.py: the box's history and the video being played
 from common import mpv, tool
 from i18n import tr
@@ -169,12 +170,12 @@ def jellyfin_play(item_id, from_start=False):
     history.now_playing.clear()
     history.now_playing.update(key=f"jellyfin:{item_id}", url=url, link=f"jellyfin:{item_id}", kind="jellyfin",
                                ident=item_id, title=title, thumb=i["thumb"], position=start)
-    mpv(["script-message", "streambox-play", url, str(start), title, i["thumb"] or ""])
+    addons.play_video("jellyfin", url, start, title, i["thumb"] or "", key=f"jellyfin:{item_id}")
     mpv(["set_property", "user-data/streambox/storyboard", {}])
     # Seek bar and pause screen: series, episode, year, overview; next episode for the end card
     mpv(["set_property", "user-data/streambox/meta",
-         {"source": "jellyfin", "series": raw.get("SeriesName") or "", "episode": i.get("episode") or "",
-          "year": raw.get("ProductionYear") or "", "rating": raw.get("CommunityRating") or 0,
+         {"details": [{"text": raw.get("SeriesName") or "", "info": True}, {"text": i.get("episode") or "", "info": True},
+                      str(raw.get("ProductionYear") or ""), {"rating": raw.get("CommunityRating") or 0}],
           "overview": (raw.get("Overview") or "")[:3000], "thumb": i.get("thumb") or ""}])
     nxt = {}
     if i["type"] == "Episode" and raw.get("SeriesId"):
@@ -184,7 +185,8 @@ def jellyfin_play(item_id, from_start=False):
             ids = [e["Id"] for e in eps]
             if item_id in ids and ids.index(item_id) + 1 < len(eps):
                 n = jf_item(eps[ids.index(item_id) + 1])
-                nxt = {"id": n["id"], "of": item_id, "title": n["title"], "episode": n.get("episode") or "", "thumb": n["thumb"]}
+                nxt = {"id": n["id"], "of": item_id, "title": n["title"], "episode": n.get("episode") or "", "thumb": n["thumb"],
+                       "post": "jellyfin_play", "path": url}
         except (OSError, ValueError, KeyError):
             pass
     mpv(["set_property", "user-data/streambox/next_up", nxt])

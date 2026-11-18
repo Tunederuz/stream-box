@@ -6,6 +6,35 @@ the GitHub release of tag `vx.y.z` (`.github/workflows/image.yml`). Versions fol
 
 ## [Unreleased]
 
+## [0.8.0]
+
+### Changed
+- A lighter system: Moonlight (the PC link) and Node.js (YouTube) are now downloaded when their add-on is on
+  (Settings → Add-ons), and removed when it is turned off; the system partition is about 100 MB smaller to download.
+- Add-ons: YouTube, Jellyfin, Plex and the PC link can be turned off in Settings → Add-ons (TV and companion app):
+  their tab and settings go away.
+- The playback bar's buttons of a video come from its add-on (YouTube: like, dislike, comments).
+- Channel zapping (Up / Down on a live) skips the channels that are offline.
+- Gamepads: the Home button opens the TV menu when it is released, as on a console.
+- A live previewed in the menu's background goes on with its sound when it is chosen: the menu fades out over it,
+  no loading screen, no cut (the preview now plays in the main player).
+- Twitch: with your account connected, you count among the viewers of the live you watch (and earn its watch
+  points) and show among its chatters, as on the website; the box still never writes in the chat.
+- Bluetooth pairing: devices show up as soon as they are seen, the first remote or controller found is paired by
+  itself, the dialog says each step and how to put an Xbox controller in pairing mode; a controller paired with a
+  console or a PC in between can be paired again, and a failed pairing is tried a second time.
+- YouTube Cast: the app shows the video loading until its picture is on the TV, so its time matches the TV's;
+  "Stop casting" leaves the video (back to the menu); a phone that connects while a YouTube video plays on the box
+  sees it and controls it; a video left on the box keeps its position in the app instead of showing as watched.
+
+### Fixed
+- YouTube: "See latest videos of…" and the favorite are back in the options (≡) of the Recommended videos.
+- Twitch replays: the progress bar is purple again (it was taken for a Jellyfin video and turned blue).
+- PC link: the pairing code's dialog closes as soon as the PC accepts the code (it could stay open).
+- TV menu: "Resume" starts the video at the position its card shows (a YouTube video could start from the
+  beginning the first time).
+- Plex: the "Sign in with another Plex account" choice is translated.
+
 ## [0.7.0]
 
 ### Added

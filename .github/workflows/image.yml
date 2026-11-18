@@ -4,11 +4,16 @@
 # manifest (stream-box_<version>.manifest.json), SHA256SUMS and its signature SHA256SUMS.gpg (secret RELEASE_SIGNING_KEY,
 # the private key of image/release-signing-key.asc; the boxes check it with /etc/systemd/import-pubring.pgp). Release
 # files are limited to 2 GB: each .xz is about 1.5 GB.
-#   - version tag pushed (v0.2.0…): that version, release text from its CHANGELOG.md section;
+#   - version tag pushed (v0.2.0…): that version, release text from its CHANGELOG.md section, published as a
+#     PRE-RELEASE: the boxes only look at the latest release (releases/latest, which skips pre-releases), so nobody gets
+#     it yet; tried on a box first (its files from the release page: companion app → "Update from a file", or a USB
+#     stick), then made the latest release by hand: gh release edit v0.2.0 --prerelease=false --latest. Same number for
+#     the pre-release and the release: a box sorts 0.2.0-rc1 after 0.2.0, the final one would never be offered;
 #   - on the 1st of each month (and by hand: Actions → image → Run workflow): the latest release's code rebuilt with the
 #     Arch packages of the day, published as the next patch version (v0.2.0 → v0.2.1) only if packages changed, with
 #     the list of the updated ones: the boxes' daily check offers it (installed once the user accepts), so the
-#     security fixes come without waiting for a release. A severe flaw in the middle of the month: run it by hand.
+#     security fixes come without waiting for a release (published as the latest release at once: the same code as
+#     the one already validated). A severe flaw in the middle of the month: run it by hand.
 name: image
 on:
   push:
@@ -115,15 +120,17 @@ jobs:
             # Monthly rebuild: the same code as $MONTHLY, the Arch packages of the day; its tag is created on that commit
             changes=$(printf 'Monthly rebuild of %s with the latest Arch packages (security and bug fixes): same features.\n\n<details><summary>Updated packages</summary>\n\n%s\n</details>' \
               "$MONTHLY" "$(cat "$RUNNER_TEMP/updated.md")")
-            target=(--target "$(git rev-parse HEAD)")
+            target=(--target "$(git rev-parse HEAD)" --latest)
           else
             # Text: the version's section of CHANGELOG.md (## [0.1.1] for tag v0.1.1), then how to install
             version=${TAG#v}
             changes=$(awk -v v="## [$version]" 'index($0, v) == 1 { on = 1; next } on && /^## \[/ { exit } on' CHANGELOG.md)
             [ -n "$changes" ] || changes="(No CHANGELOG.md section for $version.)"
-            target=()
+            # A pre-release, made the latest release by hand once tried on a box (see the top of this file)
+            target=(--prerelease)
           fi
           notes=$(printf '%s\n\n### Install\n%s\n' "$changes" "$install")
+          # (a release already there keeps its state, pre-release or not)
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" image/mkosi.output/release/* --clobber
             gh release edit "$TAG" --draft=false --title "Inlet $TAG" --notes "$notes"

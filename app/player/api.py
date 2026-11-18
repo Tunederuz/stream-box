@@ -5,17 +5,13 @@ import json, os, time, urllib.parse
 from http.server import BaseHTTPRequestHandler
 
 import actions    # actions.py: POST /api/<name>, TV menu keyboard
+import addons     # addons/: the integrations (Twitch, YouTube, Jellyfin, Plex, PC link): routes, sources, state
 import ambient    # ambient.py: first setup, remote URL, QR codes
-import gamestream # gamestream.py: games streamed from a PC (Moonlight)
 import history    # history.py: history file, kind of the current video
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
 import images     # images.py: TV preview
-import jellyfin   # jellyfin.py: library
-import plex       # plex.py: library
 import playback   # playback.py: videos shared from the phone
 import settings   # settings.py: player, power button, background
-import twitch     # twitch.py: streamers, live, polls, account, followed channels
-import youtube    # youtube.py: channels, search, account, subtitles
 import sysparts   # sysparts.py: the box's system part, absent from the Inlet app
 from common import DIR, mpv
 # (system part: sound outputs, backup, Bluetooth, resolution, installation, local update, Wi-Fi, status / SSH / dev mode)
@@ -31,10 +27,6 @@ STATIC = {
     "/icon-512.png": ("web/icon-512.png", "image/png"),
     "/apple-touch-icon.png": ("web/icon-180.png", "image/png"),
 }
-# Translations (companion app, TV menu): /locales/<lang>.json
-for _code in i18n.LANGUAGES:
-    if _code != "en":
-        STATIC[f"/locales/{_code}.json"] = (f"locales/{_code}.json", "application/json; charset=utf-8")
 
 
 def state():
@@ -49,7 +41,7 @@ def state():
     ranges = (cache or {}).get("seekable-ranges") or []
     delay = max(0.0, ranges[0]["end"] - position) if ranges and position is not None and not media else None
     return {
-        "streamers": twitch.read_streamers(), "channel": user.get("channel"), "avatars": twitch.avatars,
+        "channel": user.get("channel"),
         "chat_visible": user.get("chat_visible", True), "corner": user.get("corner", "bl"),
         "chat_bg": user.get("chat_bg", 60), "chat_size": user.get("chat_size", 32),
         "sub_size": user.get("sub_size", 100), "sub_bg": user.get("sub_bg", 0),
@@ -62,15 +54,14 @@ def state():
         "power_action": settings.power_action(),
         "remote_url": ambient.custom_remote_url(),
         # Video libraries connected to the box: their TV menu tab only shows when they are
-        "libraries": {"jellyfin": jellyfin.jf_server() is not None, "plex": plex.px_config() is not None},
-        "plex_server": (plex.px_config() or {}).get("address", ""),
-        "jellyfin_server": (jellyfin.jf_server() or {}).get("address", ""),
+        "libraries": {a.id: a.configured() for a in addons.enabled() if a.library},
+        **addons.state(),   # (streamers, avatars and live from Twitch; jellyfin_server, plex_server…)
         # TV menu search keyboard open (forgotten after 10 min, menu closed in the meantime)
         "keyboard": (actions.keyboard if actions.keyboard.get("open") and time.time() - actions.keyboard.get("at", 0) < 600
                      else None),
         "pip": user.get("pip") or {"channel": "", "layout": ""},
         "volume": round(volume or 0), "mute": bool(mute), "pause": bool(pause), "playing": bool(video),
-        "live": twitch.live_now, "mode": user.get("mode", "twitch"), "delay": delay, "title": title if media else None,
+        "mode": user.get("mode", "twitch"), "delay": delay, "title": title if media else None,
         "position": position if media else None, "duration": duration if media else None,
         # Kind of the current video (youtube, jellyfin, twitch-vod…): the TV menu opens on the matching tab
         "media_kind": history.media_key(path)[1] if media and path else None,
@@ -92,40 +83,22 @@ def more(query):
     offset = int(query.get("offset", "0") or 0)
     if not 0 <= offset <= 500:
         raise ValueError(tr("not found"))
-    if source == "yt_search":
-        return youtube.yt_search_more(q, offset)
-    if source == "yt_channel":
-        return youtube.yt_channel_more(key, offset)
-    if source in ("twitch_vods", "twitch_clips"):
-        return twitch.replays_more(key, source.split("_")[1], offset)
-    if source in ("yt_recommended", "yt_subscriptions"):
-        return youtube.yt_tv_more(source[3:], offset)
-    if source == "jellyfin_lib":
-        return jellyfin.jellyfin_more(key, offset)
-    if source in ("jellyfin_resume", "jellyfin_nextup"):
-        return jellyfin.jellyfin_more_home(source.split("_")[1], offset)
-    if source == "jellyfin_search":
-        return jellyfin.jellyfin_search_more(q, offset)
-    if source == "plex_lib":
-        return plex.plex_more(key, offset)
-    if source in ("plex_resume", "plex_nextup"):
-        return plex.plex_more_home(source.split("_")[1], offset)
-    if source == "plex_search":
-        return plex.plex_search_more(q, offset)
+    fn = addons.more_source(source)
+    if fn:
+        return fn(key, offset, q)
     raise ValueError(tr("not found"))
 
 
 # GET routes answered with JSON as is (exact path); the others, with parameters or their own errors, are in do_GET
 JSON_ROUTES = {
+    # Translations (companion app): /locales/<lang>.json, the core's and the add-ons' merged
+    **{f"/locales/{code}.json": (lambda code=code: i18n.catalog(code)) for code in i18n.LANGUAGES if code != "en"},
     "/api/state": state,
-    "/api/history": history.read_history,
-    "/api/youtube": youtube.youtube_home,
-    "/api/youtube_channels": lambda: {"channels": youtube.yt_channels()},
-    "/api/youtube_account": youtube.yt_account_status,
-    "/api/plex_link": plex.link_state,   # Plex server, and the sign-in code being waited for
+    # (kind_name: its kind's label, from its add-on: the TV menu's history)
+    "/api/history": lambda: [dict(e, kind_name=addons.kind_name(e.get("kind"))) for e in history.read_history()],
     # what this installation has: system part or not, Moonlight for games streamed from a PC
-    "/api/features": lambda: {**sysparts.features(), "gamestream": gamestream.available()},
-    "/api/gamestream": gamestream.status,   # the PC (Sunshine), pairing, its games, a stream running
+    # (system, gamestream…; the add-ons' tabs of the TV menu)
+    "/api/features": lambda: {**sysparts.features(), **addons.features(), "tabs": addons.tabs()},
 }
 if SYSTEM:   # the box's system (the Inlet app leaves it to its OS: these routes answer 404 there)
     JSON_ROUTES.update({
@@ -166,16 +139,28 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Location", location)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
-            elif self.path.startswith("/subs?"):
-                # Called by stream-box.lua (sub-add) for YouTube automatic subtitles
-                url = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("u", [""])[0]
-                self.send(200, youtube.fetch_auto_subs(url).encode(), "application/x-subrip; charset=utf-8")
             elif self.path.split("?")[0] in STATIC:
                 name, content_type = STATIC[self.path.split("?")[0]]
                 with open(os.path.join(DIR, name), "rb") as f:
                     self.send(200, f.read(), content_type)
             elif self.path in JSON_ROUTES:
                 self.send(200, JSON_ROUTES[self.path]())
+            elif addons.route(self.path.split("?")[0]):   # routes of the addons (addons/)
+                _, r = addons.route(self.path.split("?")[0])
+                query = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).items()}
+                try:
+                    data = r.fn(query)
+                    if not r.content_type:
+                        self.send(200, data)
+                    elif data is None:   # (no box art…)
+                        self.send(404, {"error": tr("not found")})
+                    else:   # text (subtitles) or bytes (images)
+                        self.send(200, data.encode() if isinstance(data, str) else data, r.content_type)
+                except (OSError, ValueError, KeyError) as e:
+                    if r.unreachable:
+                        self.send(503, {"error": r.unreachable(e)})
+                    else:
+                        self.send(400, {"error": str(e)})
             elif self.path.split("?")[0] == "/api/preview":
                 image = images.preview()
                 if image:
@@ -190,62 +175,11 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, more(query))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
-            elif self.path.startswith("/api/replays?"):
-                login = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("login", [""])[0]
-                try:
-                    self.send(200, twitch.replays(login))
-                except ValueError as e:
-                    self.send(400, {"error": str(e)})
             elif SYSTEM and self.path == "/api/display":
                 try:
                     self.send(200, display.info())
                 except OSError as e:
                     self.send(503, {"error": str(e)})
-            elif self.path.startswith("/api/youtube_search?"):
-                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("q", [""])[0]
-                try:
-                    self.send(200, {"query": q, **youtube.yt_search(q)})
-                except ValueError as e:
-                    self.send(400, {"error": str(e)})
-            elif self.path == "/api/jellyfin":
-                try:
-                    self.send(200, jellyfin.jellyfin_home())
-                except (OSError, ValueError, KeyError) as e:
-                    self.send(503, {"error": tr("Jellyfin unreachable: {error}", error=e)})
-            elif self.path.startswith("/api/jellyfin_search?") or self.path.startswith("/api/jellyfin_series?"):
-                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                try:
-                    if self.path.startswith("/api/jellyfin_search?"):
-                        query = q.get("q", [""])[0]
-                        self.send(200, {"query": query, "results": jellyfin.jellyfin_search(query)})
-                    else:
-                        self.send(200, jellyfin.jellyfin_series(q.get("id", [""])[0]))
-                except (OSError, ValueError, KeyError) as e:
-                    self.send(400, {"error": str(e)})
-            elif self.path.split("?")[0] == "/api/jellyfin_link":
-                # Jellyfin server, Quick Connect in progress; ?find=1: the servers that answer on the network
-                self.send(200, jellyfin.link_state(find="find=1" in self.path))
-            elif self.path == "/api/plex":
-                try:
-                    self.send(200, plex.plex_home())
-                except (OSError, ValueError, KeyError) as e:
-                    self.send(503, {"error": tr("Plex unreachable: {error}", error=e)})
-            elif self.path.startswith("/api/plex_search?") or self.path.startswith("/api/plex_series?"):
-                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                try:
-                    if self.path.startswith("/api/plex_search?"):
-                        query = q.get("q", [""])[0]
-                        self.send(200, {"query": query, "results": plex.plex_search(query)})
-                    else:
-                        self.send(200, plex.plex_series(q.get("id", [""])[0]))
-                except (OSError, ValueError, KeyError) as e:
-                    self.send(400, {"error": str(e)})
-            elif self.path.startswith("/api/youtube_channel?"):
-                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("id", [""])[0]
-                try:
-                    self.send(200, youtube.yt_channel_videos(q))
-                except ValueError as e:
-                    self.send(400, {"error": str(e)})
             elif SYSTEM and self.path == "/api/ssh":
                 self.send(200, system.ssh_status(local=self.client_address[0] == "127.0.0.1"))
             elif SYSTEM and self.path.startswith("/api/backup/download"):
@@ -258,30 +192,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 self.wfile.write(data)
-            elif self.path == "/api/events":
-                try:
-                    self.send(200, twitch.events_for_page())
-                except (OSError, ValueError, KeyError) as e:
-                    self.send(503, {"error": tr("Twitch unreachable: {error}", error=e)})
-            elif self.path == "/api/follows":
-                try:
-                    self.send(200, twitch.follows_status())
-                except (OSError, ValueError, KeyError) as e:
-                    self.send(503, {"error": tr("Twitch unreachable: {error}", error=e)})
-            elif self.path.startswith("/api/gamestream_art?"):   # box art of a PC game (PNG, from Sunshine)
-                query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                data = gamestream.art(query.get("host", [""])[0], query.get("id", [""])[0])
-                if data:
-                    self.send(200, data, "image/png")
-                else:
-                    self.send(404, {"error": tr("not found")})
             elif self.path.startswith("/api/qr?"):
                 text = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("text", [""])[0]
                 self.send(200, {"rows": ambient.qr_rows(text)})
             elif SYSTEM and self.path == "/api/branches":   # direct update: the repository's branches
                 self.send(200, {"branches": system.branches()})
-            elif self.path == "/api/account":
-                self.send(200, twitch.account_status())
             else:
                 self.send(404, {"error": tr("not found")})
         except (OSError, ValueError) as e:

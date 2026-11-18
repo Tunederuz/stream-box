@@ -1,0 +1,38 @@
+"""Plex addon: the library of a server of the local network (service.py), chosen by signing in with a Plex account by
+code or by its address, its videos (direct play) and their progress on the server."""
+from addons import Addon, Route, library
+from i18n import tr
+from . import service as px
+from .account import ACCOUNT
+
+
+def report(video, position, duration, paused, stopped):
+    if stopped:
+        px.px_report(video["ident"], video.get("position") or 0, video.get("duration"), "stopped")
+    else:
+        px.px_report(video["ident"], position, duration, "playing", paused)
+
+
+lib = library("plex", px.plex_home, px.plex_search, px.plex_series, px.plex_play,
+              px.plex_more, px.plex_more_home, px.plex_search_more,
+              lambda e: tr("Plex unreachable: {error}", error=e))
+lib["routes"]["/api/plex_link"] = Route(lambda q: px.link_state())   # Plex server, and the sign-in code being waited for
+lib["actions"].update({
+    "plex": lambda body: px.set_plex(str(body.get("address", "")), str(body.get("token", ""))),   # server (empty: forget)
+    # Plex account by code (plex.tv/link): start, or give up
+    "plex_link": lambda body: px.link_cancel() if body.get("action") == "cancel" else px.link_start(),
+})
+
+ADDON = Addon("plex", "Plex", contract=1, order=30, description="Your Plex server's movies and series", configured=lambda: px.px_config() is not None, report=report,
+              colors={"accent": "#e5a00d", "bar": ["#e5a00d", "#f5c04a"],
+                      "palette": {"veil": "#120d03", "rail": "#181105", "sheet": "#2a200d", "key": "#3e3015",
+                                  "surface": "#2d2310", "surfaceFocus": "#46361a", "label": "#d6bf8f"}},
+              tabs=[{"id": "plex", "label": "Plex", "kind": "library", "setup": [
+                  "Settings → Accounts and links → Plex: sign in with your Plex account, with a code to type on plex.tv/link.",
+                  "Or in the companion app (QR code below): Settings → Plex, a server's address.",
+                  "The Plex tab then shows here, with your library."]}],
+              account=ACCOUNT,
+              # its links in the history; its server's files (the item's id is not in their link)
+              urls=[{"re": r"^plex:(\d{1,10})$", "kind": "plex"},
+                    {"re": r"/library/parts/(\d+)/", "kind": "plex", "key": "plex-part", "ident": False}],
+              state=lambda: {"plex_server": (px.px_config() or {}).get("address", "")}, **lib)

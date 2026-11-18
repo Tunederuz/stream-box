@@ -4,16 +4,12 @@ library only.
 """
 import re, subprocess, time
 
+import addons     # addons/: the integrations (Twitch, YouTube, Jellyfin, Plex, PC link) and their actions
 import ambient    # ambient.py: remote URL, first setup
-import gamestream # gamestream.py: games streamed from a PC (Moonlight)
 import history    # history.py: history edits
 import i18n       # i18n.py: interface language (locales/<lang>.json), tr()
-import jellyfin   # jellyfin.py: Jellyfin playback
 import playback   # playback.py: videos started from a link
-import plex       # plex.py: Plex server, playback
 import settings   # settings.py: player, power button, background
-import twitch     # twitch.py: streamers, polls and predictions, account, followed channels
-import youtube    # youtube.py: channels, account, "TV app" access
 from common import mpv
 from i18n import tr
 # The box's system part (sound output, backup, Bluetooth, resolution, installation, local update, Wi-Fi, power, SSH,
@@ -21,13 +17,6 @@ from i18n import tr
 from sysparts import SYSTEM, audio, backup, btsetup, display, installer, localupdate, netsetup, system
 
 keyboard = {}   # TV menu search keyboard: {open, text, target, at}
-
-
-def channel(body):
-    # Streamer from the list, or followed channel (Following tab of the TV menu)
-    if body.get("name") not in twitch.read_streamers() and body.get("name") not in twitch.follows_logins():
-        raise ValueError(tr("unknown streamer"))
-    mpv(["script-message", "streambox-channel", body["name"]])
 
 
 def play_url(body):
@@ -74,19 +63,6 @@ def set_number(body):
     mpv(["script-message", "streambox-set", body["key"], str(int(body.get("value", 0)))])
 
 
-def youtube_login(body):
-    """YouTube account (subscriptions, recommendations, progress): a code to type on google.com/device"""
-    d = youtube.yt_tv("/login", {}, timeout=15)
-    if not d or d.get("error"):
-        raise ValueError(tr("Unable to connect: {error}",
-                            error=(d or {}).get("error") or tr("cast service stopped")))
-
-
-def youtube_logout(body):
-    youtube.yt_tv("/logout", {})
-    youtube.yt_tv_cache.update(at=0.0, data={})
-
-
 def poweroff(body):
     # mode: "suspend" (Sleep), "full" (Turn off the box, TV menu); otherwise the setting
     mode = str(body.get("mode") or "")
@@ -109,8 +85,8 @@ def key(body):
 def bluetooth(body):
     # TV System menu: {"action": "scan"}, {"action": "pair" | "remove", "mac"}
     what, mac = str(body.get("action", "")), str(body.get("mac", "")).upper()
-    if what == "scan":
-        btsetup.scan()
+    if what == "scan":   # auto: the first remote, gamepad or keyboard seen gets paired
+        btsetup.scan(auto=bool(body.get("auto")))
     elif what == "pair":
         btsetup.pair(mac)
     elif what == "remove":
@@ -178,59 +154,25 @@ def reboot(body):
 
 # Name in POST /api/<name> → handler(body)
 ACTIONS = {
-    "channel": channel,
-    "gamestream_pair": gamestream.pair,             # pairing with the PC: a code to type in Sunshine
-    "gamestream_pair_cancel": gamestream.pair_cancel,
-    "gamestream_search": gamestream.search,         # look for the PC on the network again
-    "gamestream_forget": gamestream.forget,         # forget the PC (another one can be chosen)
-    "gamestream_launch": gamestream.launch,         # {app}: stream a game
-    "gamestream_stop": gamestream.stop,             # end the stream (the game keeps running on the PC)
-    "gamestream_quit": gamestream.quit_game,        # close the game on the PC
     "chat": lambda body: mpv(["script-message", "streambox-toggle-chat"]),
     # the next corner clockwise, or {corner: tl | tr | br | bl}
     "corner": lambda body: mpv(["script-message", "streambox-cycle-corner"]
                                + ([body["corner"]] if body.get("corner") in ("tl", "tr", "br", "bl") else [])),
     "play": play_url,
     "history": lambda body: history.edit_history(str(body.get("action", "")), str(body.get("key", ""))),
-    "twitch": lambda body: mpv(["script-message", "streambox-twitch"]),
     "home": lambda body: mpv(["script-message", "streambox-home"]),
-    "streamers": lambda body: twitch.edit_streamers(str(body.get("action", "")), str(body.get("login", "")),
-                                                    int(body.get("delta", 0))),
     "live_seek": live_seek,
     "auto_switch": lambda body: mpv(["script-message", "streambox-auto-switch",
                                      "yes" if body.get("enabled") else "no"]),
     "backdrop": settings.set_backdrop,   # {"base", "overlay", "color"} (one or more)
     "flag": flag,
     "pip": pip,
-    "vote": lambda body: twitch.vote_poll(str(body.get("poll", "")), str(body.get("choice", ""))),
-    "predict": lambda body: twitch.predict(str(body.get("event", "")), str(body.get("outcome", "")),
-                                           int(body.get("points", 0))),
     "player": lambda body: settings.set_player(str(body.get("mode", ""))),
-    "jellyfin_play": lambda body: jellyfin.jellyfin_play(str(body.get("id", "")), bool(body.get("from_start"))),
-    "jellyfin_link": jellyfin.link_action,   # Quick Connect sign-in ({address}), cancel, forget the server
-    "plex_play": lambda body: plex.plex_play(str(body.get("id", "")), bool(body.get("from_start"))),
-    "plex": lambda body: plex.set_plex(str(body.get("address", "")), str(body.get("token", ""))),   # server (empty: forget)
-    # Plex account by code (plex.tv/link): start, or give up
-    "plex_link": lambda body: plex.link_cancel() if body.get("action") == "cancel" else plex.link_start(),
-    "youtube_channels": lambda body: youtube.edit_yt_channels(str(body.get("action", "")),
-                                                              str(body.get("channel", "")), int(body.get("delta", 0))),
     "qr": qr,
     "set": set_number,
     "volume": lambda body: mpv(["add", "volume", max(-20, min(20, int(body.get("delta", 0))))]),
     "mute": lambda body: mpv(["cycle", "mute"]),
     "pause": lambda body: mpv(["cycle", "pause"]),
-    "login": lambda body: twitch.login(str(body.get("token", ""))),
-    "logout": lambda body: twitch.logout(),
-    "login_code": lambda body: twitch.account_start(),   # sign-in by code on twitch.tv/activate
-    "follows_app": lambda body: twitch.set_twitch_app(str(body.get("client_id", "")),
-                                                      str(body.get("client_secret", ""))),
-    "follows_login": lambda body: twitch.follows_start(),
-    "follows_logout": lambda body: twitch.follows_logout(),
-    "youtube_login": youtube_login,
-    "youtube_logout": youtube_logout,
-    "youtube_sync": lambda body: youtube.yt_reload(),
-    "yt_rate": youtube.yt_rate,           # {rating: like | dislike | none}: the video being played (playback bar)
-    "yt_comments": youtube.yt_comments,   # its comments ({more: true}: the next page), published for the panel
     "key": key,
     "language": language,
     "setup": lambda body: ambient.finish_setup(),   # phone page: "Finish" of the first setup
@@ -239,6 +181,8 @@ ACTIONS = {
     "keyboard_input": keyboard_input,
     "remote_url": lambda body: ambient.set_remote_url(str(body.get("url", ""))[:300]),
 }
+ACTIONS.update(addons.actions())   # (channel, vote, youtube_login, yt_rate, jellyfin_play, plex_link…)
+ACTIONS["addon"] = addons.set_enabled   # {id, enabled}: an add-on on or off (Settings → Add-ons)
 if SYSTEM:   # the box's system (the Inlet app leaves it to its OS: these actions are unknown there)
     ACTIONS.update({
         # direct: developer mode, from a branch (main by default)

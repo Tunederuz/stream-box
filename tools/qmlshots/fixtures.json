@@ -1261,7 +1261,8 @@
    "url": "https://example.com/h/0",
    "position": 0,
    "duration": 0,
-   "finished": false
+   "finished": false,
+   "kind_name": "YouTube"
   },
   {
    "key": "h1",
@@ -1271,7 +1272,8 @@
    "url": "https://example.com/h/1",
    "position": 400,
    "duration": 1800,
-   "finished": false
+   "finished": false,
+   "kind_name": "Rediffusion Twitch"
   },
   {
    "key": "h2",
@@ -1281,7 +1283,8 @@
    "url": "https://example.com/h/2",
    "position": 0,
    "duration": 300,
-   "finished": false
+   "finished": false,
+   "kind_name": "Clip Twitch"
   },
   {
    "key": "h3",
@@ -1291,7 +1294,8 @@
    "url": "https://example.com/h/3",
    "position": 90,
    "duration": 3600,
-   "finished": false
+   "finished": false,
+   "kind_name": "Lien"
   },
   {
    "key": "h4",
@@ -1301,7 +1305,8 @@
    "url": "https://example.com/h/4",
    "position": 1000,
    "duration": 1000,
-   "finished": true
+   "finished": true,
+   "kind_name": "Jellyfin"
   },
   {
    "key": "h5",
@@ -1311,7 +1316,8 @@
    "url": "https://example.com/h/5",
    "position": 0,
    "duration": 0,
-   "finished": false
+   "finished": false,
+   "kind_name": "YouTube"
   },
   {
    "key": "h6",
@@ -1321,7 +1327,8 @@
    "url": "https://example.com/h/6",
    "position": 50,
    "duration": 700,
-   "finished": false
+   "finished": false,
+   "kind_name": "Rediffusion Twitch"
   },
   {
    "key": "h7",
@@ -1331,7 +1338,8 @@
    "url": "https://example.com/h/7",
    "position": 0,
    "duration": 1200,
-   "finished": true
+   "finished": true,
+   "kind_name": "Clip Twitch"
   }
  ],
  "/api/display": {
@@ -1377,6 +1385,10 @@
   "services": {
    "mqtt": "active",
    "youtube_tokens": "failed"
+  },
+  "service_names": {
+   "mqtt": "MQTT",
+   "youtube_tokens": "jetons YouTube"
   },
   "player": {
    "running": "qt",
@@ -1944,6 +1956,45 @@
     "date": "2026-09-28",
     "thumb": "http://127.0.0.1:8080/img/ff7a5c.png",
     "url": "https://www.youtube.com/watch?v=olderv00002"
+   }
+  ]
+ },
+ "/api/addons": {
+  "addons": [
+   {
+    "id": "twitch",
+    "name": "Twitch",
+    "description": "Live streams",
+    "base": true,
+    "enabled": true
+   },
+   {
+    "id": "youtube",
+    "name": "YouTube",
+    "description": "Favorite channels",
+    "base": false,
+    "enabled": true
+   },
+   {
+    "id": "jellyfin",
+    "name": "Jellyfin",
+    "description": "Movies and series",
+    "base": false,
+    "enabled": true
+   },
+   {
+    "id": "plex",
+    "name": "Plex",
+    "description": "Movies and series",
+    "base": false,
+    "enabled": false
+   },
+   {
+    "id": "gamestream",
+    "name": "PC link",
+    "description": "Games",
+    "base": false,
+    "enabled": true
    }
   ]
  }

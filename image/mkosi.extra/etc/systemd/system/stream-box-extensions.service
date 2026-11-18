@@ -1,0 +1,14 @@
+# Inlet: the extensions of the add-ons that are on (Moonlight for the PC link, Node.js for YouTube) downloaded for the
+# running version, the others removed, then merged again (see /usr/local/lib/stream-box/extensions). At boot, and
+# started by remote.py when an add-on is turned on or off (media, allowed by
+# /etc/polkit-1/rules.d/59-stream-box-extensions.rules).
+[Unit]
+Description=Inlet: system extensions of the add-ons
+After=network.target NetworkManager.service stream-box-extensions-link.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/stream-box/extensions sync
+
+[Install]
+WantedBy=multi-user.target

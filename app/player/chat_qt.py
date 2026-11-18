@@ -1,6 +1,6 @@
 """Inlet: Twitch chat with emotes for the Qt app (ui.py), shown in QML (qml/ChatOverlay.qml).
 
-Same reading as chat_overlay.py (anonymous IRC, read-only), but each message is split into pieces: words and
+Same reading as chat_overlay.py (IRC, read-only: with the connected account, otherwise anonymous, chat_login.py), but each message is split into pieces: words and
 emotes. Twitch emotes: positions given by the "emotes" tag of the message. 7TV, BTTV and FFZ emotes: by their name,
 global lists loaded once, channel lists loaded as soon as the chat gives its id (ROOMSTATE).
 Images are loaded and animated by Qt (GIF, WebP).
@@ -8,8 +8,10 @@ Images are loaded and animated by Qt (GIF, WebP).
 The player alone (mpv without the app) keeps chat_overlay.py, as text; when the app runs, it writes
 user-data/streambox/chat_ui = "qml" and chat_overlay.py stays quiet.
 """
-import json, random, socket, ssl, threading, time, urllib.request
+import json, socket, ssl, threading, time, urllib.request
 from collections import deque
+
+import chat_login
 
 MAX_MESSAGES = 10
 LIFETIME = 45      # seconds before a message disappears (like chat_overlay.py)
@@ -220,8 +222,8 @@ class Chat:
             try:
                 raw = socket.create_connection(("irc.chat.twitch.tv", 6697), timeout=10)
                 with ctx.wrap_socket(raw, server_hostname="irc.chat.twitch.tv") as s:
-                    nick = f"justinfan{random.randint(1000, 80000)}"   # anonymous connection, read-only
-                    s.sendall(f"CAP REQ :twitch.tv/tags twitch.tv/commands\r\nNICK {nick}\r\nJOIN #{channel}\r\n".encode())
+                    hello, token = chat_login.login()   # the account (among the chatters), or anonymous
+                    s.sendall(f"CAP REQ :twitch.tv/tags twitch.tv/commands\r\n{hello}JOIN #{channel}\r\n".encode())
                     s.settimeout(1)   # to notice a channel change quickly
                     buf, last_data = b"", time.time()
                     while self.channel == channel:
@@ -239,6 +241,8 @@ class Chat:
                             line = line.decode("utf-8", "replace")
                             if line.startswith("PING"):
                                 s.sendall(line.replace("PING", "PONG", 1).encode() + b"\r\n")
+                            elif chat_login.refused(token, line):
+                                raise OSError("token refused by the chat")   # (anonymous at once)
                             elif line:
                                 self._handle(line)
             except OSError:
