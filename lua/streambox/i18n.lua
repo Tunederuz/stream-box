@@ -1,5 +1,6 @@
--- Interface language (see i18n.py): texts written in English, translated from locales/<lang>.json of the repository;
--- the language is in ~/.config/stream-box/language ("en" when missing), reloaded on script-message streambox-language
+-- Interface language (see i18n.py): texts written in English, translated from locales/<lang>.json of the repository
+-- and the add-ons' own (app/player/addons/<id>/locales/<lang>.json, the core's win); the language is in
+-- ~/.config/stream-box/language ("en" when missing), reloaded on script-message streambox-language
 local utils = require "mp.utils"
 
 local M = { dict = {}, lang = "en", dir = "." }
@@ -11,10 +12,17 @@ function M.load(dir)   -- dir: repository (where locales/ is), remembered for th
     if f then lang = (f:read("*l") or "en"):match("^%s*(%a+)") or "en" f:close() end
     M.dict, M.lang = {}, lang
     if lang == "en" then return end
-    local lf = io.open(M.dir .. "/locales/" .. lang .. ".json")
-    if lf then
-        M.dict = utils.parse_json(lf:read("*a") or "") or {}
-        lf:close()
+    local addons = M.dir .. "/app/player/addons"
+    local files = {}
+    for _, id in ipairs(utils.readdir(addons, "dirs") or {}) do files[#files + 1] = addons .. "/" .. id .. "/locales/" .. lang .. ".json" end
+    table.sort(files)
+    files[#files + 1] = M.dir .. "/locales/" .. lang .. ".json"   -- last: the core's win
+    for _, path in ipairs(files) do
+        local lf = io.open(path)
+        if lf then
+            for k, v in pairs(utils.parse_json(lf:read("*a") or "") or {}) do M.dict[k] = v end
+            lf:close()
+        end
     end
 end
 

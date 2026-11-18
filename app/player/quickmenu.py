@@ -13,7 +13,7 @@ import actions    # actions.py: language, restart
 import ambient    # ambient.py: companion app address
 import history    # history.py: history file, resume thresholds
 import i18n       # i18n.py: interface language
-import addons     # addons/: YouTube's lists, the media libraries (Jellyfin, Plex): home, series, playback
+import addons     # addons/: their lists (home), the media libraries: home, series, playback
 import playback   # playback.py: links, history entries
 import settings   # settings.py: back to the full version
 from addons.twitch import service as twitch   # Twitch, the base: streamers, who is live, followed channels, replays
@@ -90,7 +90,7 @@ def choose(name, position, duration, finished, play, more=()):
 
 
 def video_items(videos, extra=lambda v: ""):
-    """YouTube videos, replays, history: {title, url, thumb, seconds, position, finished}"""
+    """Videos (an add-on's lists, replays, history): {title, url, thumb, seconds, position, finished}"""
     out = []
     for v in videos:
         dur = v.get("seconds") or v.get("duration") or 0
@@ -143,29 +143,23 @@ def replays_screen():
     return screen(tr("Replays"), build)
 
 
-# YouTube
+# An add-on's own lists (its home(): [{title, videos}, {note}]; the videos' "by" shown beside them)
 
-def youtube_screen():
+def home_screen(a):
     def build():
-        d = addons.get("youtube").home()
         out = []
-        rec = d.get("recommended") or []
-        if rec:
-            out.append(item(tr("Recommended for you"), lambda: screen(tr("Recommended for you"), lambda: video_items(
-                rec, lambda v: v.get("channel") or "")), str(len(rec))))
-        subs = d.get("subs") or {}
-        if subs.get("videos"):
-            out.append(item(tr("Subscriptions"), lambda: screen(tr("Subscriptions"), lambda: video_items(
-                subs["videos"], lambda v: v.get("channel") or "")), str(len(subs["videos"]))))
-        for c in d.get("channels") or []:
-            out.append(item(c["name"], lambda c=c: screen(c["name"], lambda: video_items(c.get("videos") or [])),
-                            str(len(c.get("videos") or []))))
-        out.append(item(tr("Search: from the companion app"), dim=True))
-        return out
-    return screen("YouTube", build)
+        for l in a.home():
+            if l.get("note"):
+                out.append(item(l["note"], dim=True))
+                continue
+            videos = l.get("videos") or []
+            out.append(item(l["title"], lambda l=l, videos=videos: screen(l["title"], lambda: video_items(
+                videos, lambda v: v.get("by") or "")), str(len(videos))))
+        return out or [item(tr("Nothing here"), dim=True)]
+    return screen(a.name, build)
 
 
-# Media libraries (addons with a library: Jellyfin, Plex): the same card fields
+# Media libraries (add-ons with a library): the same card fields
 
 def lib(service):
     """(home, series, play) of the library addon"""
@@ -333,10 +327,10 @@ def root():
         if twitch.follows_logins():
             out.append(item(tr("Following"), follows_screen))
         out.append(item(tr("Replays"), replays_screen))
-        if addons.get("youtube") in addons.enabled():
-            out.append(item("YouTube", youtube_screen))
-        for a in addons.enabled():   # the media libraries set up (add-ons on)
-            if a.library and a.configured():
+        for a in addons.enabled():   # the add-ons' lists, the media libraries set up (add-ons on)
+            if a.home:
+                out.append(item(a.name, lambda a=a: home_screen(a)))
+            elif a.library and a.configured():
                 out.append(item(a.name, lambda a=a: lib_screen(a.id, a.name)))
         out += [item(tr("History"), history_screen),
                 item(tr("⌂ Home screen"), lambda: playing(lambda: mpv(["script-message", "streambox-home"]))),

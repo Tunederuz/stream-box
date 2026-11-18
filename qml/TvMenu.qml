@@ -700,10 +700,16 @@ Item {
                            advanced: "Full or simplified version" }[id]
             if (player) return tr(player)
         }
+        // the add-ons (their tabs' names, Twitch the base aside)
+        var names = [], seen = {}
+        addonTabs.forEach(function (t) {
+            if (t.addon && t.addon !== "twitch" && !seen[t.addon]) { seen[t.addon] = true; names.push(tr(t.label)) }
+        })
+        if (id === "accounts") return ["Twitch"].concat(names).join(", ")
+        if (id === "addons") return tr("{names}: on or off", { names: names.join(", ") })
         return tr(({ picture: "Resolution, audio output, volume, night mode",
                      playback: "Subtitles, auto switch, polls and predictions",
                      chat: "Chat on the TV, corner, background, text size", look: "Background, colors, language",
-                     accounts: "Twitch, YouTube, Jellyfin, Plex, PC", addons: "YouTube, Jellyfin, Plex, PC link: on or off",
                      network: "Wi-Fi, companion app QR code",
                      devices: "Remotes, controllers, keys, power button", updates: "Version, check for updates, USB stick",
                      backup: "Settings backup, installation on this PC", advanced: "Version, SSH, developer mode, dependencies" })[id] || "")
@@ -1118,8 +1124,10 @@ Item {
              h.disk.system ? tr("of {total} · system {n} free", { total: bytes(h.disk.total), n: bytes(h.disk.system.free) })
                            : tr("of {total}", { total: bytes(h.disk.total) }), h.disk.free < 2e9 ? "warn" : ""],
             [tr("Network"), "↓ " + bits(net.rx), "↑ " + bits(net.tx) + (net.speed > 0 ? " · " + tr("link {speed}", { speed: net.speed >= 1000 ? net.speed / 1000 + " Gbit/s" : net.speed + " Mbit/s" }) : ""), ""],
-            [tr("Up for"), since(h.uptime), "MQTT " + ok(h.services.mqtt) + " · " + tr("YouTube tokens {ok}", { ok: ok(h.services.youtube_tokens) }),
-             h.services.mqtt !== "active" || h.services.youtube_tokens !== "active" ? "warn" : ""],
+            // the services: the core's (MQTT) and those of the add-ons on
+            [tr("Up for"), since(h.uptime), Object.keys(h.services).map(function (k) {
+                return ((h.service_names || {})[k] || k) + " " + ok(h.services[k]) }).join(" · "),
+             Object.keys(h.services).some(function (k) { return h.services[k] !== "active" }) ? "warn" : ""],
             [tr("Playback"), (p.running === "qt" ? tr("Full version") : tr("Simplified version")) + (p.hwdec && p.hwdec !== "no" ? " · " + p.hwdec : p.size ? " · " + tr("CPU") : ""),
              p.size ? tr("{size} · {fps} fps · {dropped} dropped", { size: p.size.replace("x", " × "), fps: Math.round(p.fps || 0), dropped: p.dropped || 0 })
                     : tr("nothing playing"),

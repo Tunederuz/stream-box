@@ -74,6 +74,17 @@ class QuickMenu(unittest.TestCase):
         qm.on_message(["streambox-qm", "key", "back"])
         self.assertEqual(self.shown, {})   # root: Back closes
 
+    def test_addon_lists(self):   # an add-on's home(): its lists, a dim note, the videos' "by" beside them
+        self.patch(addons.get("youtube"), home=lambda: [
+            {"title": "Picks", "videos": [{"title": "V", "url": "https://example.com/v", "seconds": 90, "by": "Chan"}]},
+            {"note": "Search elsewhere"}])
+        qm.on_message(["streambox-qm", "open"])
+        self.go("YouTube")
+        self.assertEqual(self.labels(), ["Picks", "Search elsewhere"])
+        self.assertTrue(self.shown["items"][1]["dim"])
+        self.go("Picks")
+        self.assertEqual((self.labels(), self.shown["items"][0]["info"]), (["V"], "Chan · 1:30"))
+
     def test_live_plays_channel(self):
         qm.on_message(["streambox-qm", "open"])
         self.go("Live")

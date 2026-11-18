@@ -1,6 +1,6 @@
 """Inlet: screenshots of the QML TV menu (qml/TvMenu.qml), without a box, mpv or GPU (Xvfb, Mesa).
 
-Mocks the context properties of ui.py (box, pip, i18n with locales/fr.json), serves fixed JSON fixtures on
+Mocks the context properties of ui.py (box, pip, i18n with the French locales), serves fixed JSON fixtures on
 127.0.0.1:8080 (the remote.py API the menu calls), opens the menu in a 1920x1080 window and plays a scripted key
 sequence through box.keyPressed, grabbing the window after each step. Also writes to console.log the Qt console
 (warnings), the state of the menu after each step and the requests made. Meant to run in Docker (see run.sh):
@@ -8,6 +8,7 @@ sequence through box.keyPressed, grabbing the window after each step. Also write
     qmlshots.py diff <dir A> <dir B>           pixel comparison of two sets of screenshots
 """
 import datetime
+import glob
 import json
 import re
 import os
@@ -348,7 +349,11 @@ def shoot(qml_dir, out):
     box = Box()
     pip = Pip()
     qmlRegisterType(FakeVideo, "StreamBox", 1, 0, "MpvVideo")
-    i18n = I18n(json.load(open(os.path.join(REPO, "locales", "fr.json"), encoding="utf-8")))
+    fr = {}   # the add-ons' translations, then the core's (app/player/i18n.py)
+    for path in sorted(glob.glob(os.path.join(REPO, "app/player/addons/*/locales/fr.json"))) + [os.path.join(REPO, "locales", "fr.json")]:
+        with open(path, encoding="utf-8") as f:
+            fr.update(json.load(f))
+    i18n = I18n(fr)
     view = QQuickView()
     view.rootContext().setContextProperty("box", box)
     view.rootContext().setContextProperty("pip", pip)

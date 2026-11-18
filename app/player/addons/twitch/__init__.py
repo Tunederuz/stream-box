@@ -55,7 +55,7 @@ def unreachable(e):
 
 
 ADDON = Addon(
-    "twitch", "Twitch", order=0, base=True, kinds=("twitch-vod", "twitch-clip"),
+    "twitch", "Twitch", contract=1, order=0, base=True, kinds=("twitch-vod", "twitch-clip"),
     colors={"accent": "#9146ff", "bar": ["#8a3ffc", "#b062ff"],
             "palette": {"veil": "#0a0612", "rail": "#100b17", "sheet": "#21182c", "key": "#33283f", "surface": "#2a2034",
                         "surfaceFocus": "#3a2c4e", "label": "#a99fc0"}},

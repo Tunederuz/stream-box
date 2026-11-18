@@ -1386,6 +1386,10 @@
    "mqtt": "active",
    "youtube_tokens": "failed"
   },
+  "service_names": {
+   "mqtt": "MQTT",
+   "youtube_tokens": "jetons YouTube"
+  },
   "player": {
    "running": "qt",
    "hwdec": "vaapi",
